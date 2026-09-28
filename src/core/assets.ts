@@ -84,6 +84,11 @@ export const ASSETS: Record<Network, Asset[]> = {
     {symbol: 'TSLA', company: 'Tesla', address: '0x322F0929c4625eD5bAd873c95208D54E1c003b2d', decimals: 18, kind: 'crypto', category: 'mega7'},
     {symbol: 'MSFT', company: 'Microsoft', address: '0xe93237C50D904957Cf27E7B1133b510C669c2e74', decimals: 18, kind: 'crypto', category: 'mega7'},
     {symbol: 'AMZN', company: 'Amazon', address: '0x12f190a9F9d7D37a250758b26824B97CE941bF54', decimals: 18, kind: 'crypto', category: 'mega7'},
+    {symbol: 'cbBTC', address: '0xCEC185eB182c47d1bA1EFc84e6959e18cd620Be4', decimals: 8, kind: 'crypto', category: 'crypto_native'},
+    {symbol: 'UNI', address: '0xF177d86a28b520e3E396E4F3B96cd8e72D7dabd8', decimals: 18, kind: 'crypto', category: 'crypto_native'},
+    {symbol: 'CRCL', company: 'Circle', address: '0xdF0992E440dD0be65BD8439b609d6D4366bf1CB5', decimals: 18, kind: 'crypto', category: 'crypto_stock'},
+    {symbol: 'COST', company: 'Costco', address: '0x4EA005168D7F09a7A0Ba9D1DEf21a479950E44C2', decimals: 18, kind: 'crypto', category: 'stock'},
+    {symbol: 'INTC', company: 'Intel', address: '0xc72b96e0E48ecd4DC75E1e45396e26300BC39681', decimals: 18, kind: 'crypto', category: 'stock'},
   ],
   sepolia: [
     {symbol: 'WETH', address: '0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9', decimals: 18, kind: 'crypto'},

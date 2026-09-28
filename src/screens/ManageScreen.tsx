@@ -4,7 +4,7 @@ import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {ownerVaultAddress} from '@/vault/read';
 import {isAllowlistEnabled, allowedSet, updateAsset, updateProtocol, setAllowlistEnabled} from '@/vault/manage';
-import {ASSETS} from '@/core/assets';
+import {useAssetCatalog} from '@/core/asset-catalog';
 import {TokenIcon} from '@/components/TokenIcon';
 import {PendingSwitch} from '@/components/PendingSwitch';
 import {showTx} from '@/components/Toast';
@@ -33,7 +33,7 @@ export function ManageScreen() {
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
-  const assets = ASSETS[network];
+  const assets = useAssetCatalog(network);
   const stable = assets.find((a) => a.kind === 'stable');
   const vault = owner ? ownerVaultAddress(owner, network) : null;
 
@@ -103,7 +103,7 @@ export function ManageScreen() {
         {assets.map((a, i) => (
           <View key={a.address} style={[styles.row, i === 0 && styles.rowFirst, i === assets.length - 1 && styles.rowLast]}>
             <View style={styles.symRow}>
-              <TokenIcon symbol={a.symbol} size={22} />
+              <TokenIcon symbol={a.symbol} uri={a.icon} size={22} />
               <View style={styles.symText}>
                 <Text style={styles.sym}>{displaySymbol(a.symbol)}</Text>
                 {a.company ? (

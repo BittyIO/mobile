@@ -17,7 +17,8 @@ import {earnedRaw} from '@/vault/flows';
 import {usePrices} from '@/vault/usePrices';
 import {usdValue, fmtUsd} from '@/core/prices';
 import {fmtNum, displaySymbol} from '@/core/format';
-import {ASSETS, ASSET_CATEGORIES, type AssetCategory} from '@/core/assets';
+import {ASSET_CATEGORIES, type AssetCategory} from '@/core/assets';
+import {useAssetCatalog} from '@/core/asset-catalog';
 import {balanceOfSymbol} from '@/vault/read';
 import {formatUnits} from 'viem';
 import {useColors, useStyles, type Colors} from '@/theme';
@@ -76,6 +77,7 @@ const fmt = fmtNum;
 type Row = {
   symbol: string;
   company?: string;
+  icon?: string;
   address: string;
   free: number;
   yielding: number;
@@ -122,7 +124,7 @@ function AssetRow({row, first, last}: {row: Row; first: boolean; last: boolean})
   return (
     <View style={[styles.row, !first && styles.rowSeparator, first && styles.noTop, last && styles.noBottom]}>
       <View style={styles.assetCell}>
-        <TokenIcon symbol={row.symbol} />
+        <TokenIcon symbol={row.symbol} uri={row.icon} />
         <View style={styles.assetText}>
           <View style={styles.symLine}>
             <Text style={styles.sym}>{displaySymbol(row.symbol)}</Text>
@@ -172,9 +174,10 @@ export function VaultHomeScreen() {
   const [hidden, setHidden] = useState(false);
   const [receiveOpen, setReceiveOpen] = useState(false);
 
+  const catalog = useAssetCatalog(network);
   const rows = useMemo<Row[]>(() => {
     // Stablecoins lead the list, then the rest in catalog order.
-    const assets = [...ASSETS[network]].sort((x, y) => Number(y.kind === 'stable') - Number(x.kind === 'stable'));
+    const assets = [...catalog].sort((x, y) => Number(y.kind === 'stable') - Number(x.kind === 'stable'));
     return assets.map((a) => {
       const free = Number(bal.balances ? balanceOfSymbol(bal.balances, a.symbol) : '0');
       const yielding = pos.positions
@@ -193,9 +196,9 @@ export function VaultHomeScreen() {
             }, 0)
         : 0;
       const total = free + yielding + lending;
-      return {symbol: a.symbol, company: a.company, address: a.address, free, yielding, lending, earned, total, usd: usdValue(total, a.symbol, prices), price: usdValue(1, a.symbol, prices), stable: a.kind === 'stable', category: a.category ?? 'crypto_native'};
+      return {symbol: a.symbol, company: a.company, icon: a.icon, address: a.address, free, yielding, lending, earned, total, usd: usdValue(total, a.symbol, prices), price: usdValue(1, a.symbol, prices), stable: a.kind === 'stable', category: a.category ?? 'crypto_native'};
     });
-  }, [bal.balances, pos.positions, flows.flows, network, prices]);
+  }, [catalog, bal.balances, pos.positions, flows.flows, network, prices]);
 
   // Category filter, the web's grouping: whichever categories this network's assets use, Crypto
   // Native first and selected by default.

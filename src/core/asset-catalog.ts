@@ -26,6 +26,14 @@ type ApiItem = {
 // In-memory cache so screens don't refetch on every mount; the catalog changes rarely.
 const cache = new Map<string, Asset[]>();
 
+// The API keeps icons relative (same-origin for the web); mobile has no same origin, so prepend the
+// configured base to make them absolute for remote <Image> loading.
+function iconUrl(icon?: string): string | undefined {
+  if (!icon) return undefined;
+  if (/^https?:\/\//.test(icon)) return icon;
+  return `${CATALOG_API_BASE}${icon}`;
+}
+
 function toAsset(it: ApiItem): Asset {
   return {
     symbol: it.symbol,
@@ -34,7 +42,7 @@ function toAsset(it: ApiItem): Asset {
     kind: (it.kind as AssetKind) ?? 'crypto',
     category: it.category as AssetCategory | undefined,
     company: it.company,
-    icon: it.icon,
+    icon: iconUrl(it.icon),
   };
 }
 

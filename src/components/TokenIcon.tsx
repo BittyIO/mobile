@@ -49,12 +49,15 @@ const ICONS_DARK: Record<string, number> = {
 };
 
 /** Round token icon by symbol, with a lettered fallback for anything unmapped. */
-export function TokenIcon({symbol, size = 28}: {symbol: string; size?: number}) {
+export function TokenIcon({symbol, size = 28, uri}: {symbol: string; size?: number; uri?: string}) {
   const styles = useStyles(makeStyles);
   const dark = useIsDark();
+  const dim = {width: size, height: size, borderRadius: size / 2};
+  // DB-managed icon URL wins when present (see the asset catalog); bundled by-symbol icons are the
+  // offline fallback, then a lettered badge for anything unmapped.
+  if (uri) return <Image source={{uri}} style={dim} resizeMode="contain" />;
   // WETH shows as ETH (see displaySymbol): same icon.
   const src = (dark ? ICONS_DARK[symbol] : undefined) ?? ICONS[symbol] ?? (symbol.toUpperCase() === 'ETH' || symbol.toUpperCase() === 'WETH' ? ICONS.ETH : undefined);
-  const dim = {width: size, height: size, borderRadius: size / 2};
   if (src) return <Image source={src} style={dim} resizeMode="contain" />;
   // No logo asset: draw a colored badge with the ticker, so tokens without an icon (e.g. the Robinhood
   // stocks SPY / GLD / HIMS) read clearly instead of fading into the card.
