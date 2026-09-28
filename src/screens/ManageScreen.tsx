@@ -1,0 +1,191 @@
+import React, {useCallback, useEffect, useState} from 'react';
+import {ScrollView, StyleSheet, Text, View} from 'react-native';
+import {useWallet} from '@/wallet/store';
+import {useNetwork} from '@/core/network-store';
+import {ownerVaultAddress} from '@/vault/read';
+import {isAllowlistEnabled, allowedSet, updateAsset, updateProtocol, setAllowlistEnabled} from '@/vault/manage';
+import {ASSETS} from '@/core/assets';
+import {TokenIcon} from '@/components/TokenIcon';
+import {PendingSwitch} from '@/components/PendingSwitch';
+import {showTx} from '@/components/Toast';
+import {ProtocolIcon} from '@/components/ProtocolIcon';
+import {allAdapters} from '@/core/protocols';
+import {useT} from '@/i18n';
+import {useStyles, type Colors} from '@/theme';
+import {displaySymbol} from '@/core/format';
+
+/**
+ * Allow list management (Settings › Vault › Allow list). Vault / adapter upgrades will return here later. Gasless, Face-ID-gated. The
+ * Bitty allowlist switch first, then the assets and the protocols, each in its own card.
+ */
+/** Which service a protocol category powers, by web translation key. */
+const SERVICE_KEY: Record<string, string> = {
+  staking: 'vault.flexible_yield',
+  lending: 'vault.flexible_lend',
+  amm: 'vault.market_trade',
+  intent: 'vault.limit_trade',
+  unknown: 'mobile.vault.category_unknown',
+};
+
+export function ManageScreen() {
+  const {t} = useT();
+  const styles = useStyles(makeStyles);
+  const getSigner = useWallet((s) => s.signer);
+  const owner = useWallet((s) => s.address);
+  const network = useNetwork((s) => s.network);
+  const assets = ASSETS[network];
+  const stable = assets.find((a) => a.kind === 'stable');
+  const vault = owner ? ownerVaultAddress(owner, network) : null;
+
+  // One adapter per protocol name (canonical address).
+  const protocols = Array.from(
+    new Map(allAdapters(network).map((p) => [p.name, p])).values(),
+  );
+
+  const [restricted, setRestricted] = useState(false);
+  // With the Bitty allowlist on, the vault accepts every asset and protocol in Bitty's catalog, so the
+  // per-item switches all read "on" and cannot be changed; they become editable when the owner takes
+  // the list over (Bitty allowlist off = the vault's own restricted list).
+  const bitty = !restricted;
+  const [assetSet, setAssetSet] = useState<Set<string>>(new Set());
+  const [protoSet, setProtoSet] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    if (!vault) return;
+    isAllowlistEnabled(vault, network).then(setRestricted);
+    allowedSet(vault, network, 'asset', assets.map((a) => a.address)).then(setAssetSet);
+    allowedSet(vault, network, 'protocol', protocols.map((p) => p.address)).then(setProtoSet);
+  }, [vault, network]);
+  useEffect(load, [load]);
+
+  const run = async (key: string, title: string, fn: (acct: Awaited<ReturnType<typeof getSigner>>) => Promise<string>) => {
+    if (!vault || !stable) return;
+    setBusy(key);
+    const tx = showTx(title, network);
+    try {
+      const acct = await getSigner();
+      tx.success(await fn(acct));
+      load();
+    } catch (e) {
+      tx.error(String((e as Error)?.message ?? e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
+      <View style={styles.section}>
+      <View style={styles.group}>
+        <View style={[styles.row, styles.rowFirst, styles.rowLast]}>
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle}>{t('mobile.vault.bitty_allowlist')}</Text>
+          </View>
+          <PendingSwitch
+              value={!restricted}
+              pending={busy === 'allowlist'}
+              disabled={busy !== null}
+              onValueChange={(v) =>
+                run('allowlist', t('mobile.vault.bitty_allowlist'), (acct) =>
+                  setAllowlistEnabled({account: acct, vault: vault!, network, enabled: !v, stableCoin: stable!.address}),
+                )
+              }
+            />
+        </View>
+      </View>
+      <Text style={styles.foot}>{t('mobile.vault.bitty_allowlist_foot')}</Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.groupLabel}>{t('vault.assets')}</Text>
+        <View style={styles.group}>
+        {assets.map((a, i) => (
+          <View key={a.address} style={[styles.row, i === 0 && styles.rowFirst, i === assets.length - 1 && styles.rowLast]}>
+            <View style={styles.symRow}>
+              <TokenIcon symbol={a.symbol} size={22} />
+              <View style={styles.symText}>
+                <Text style={styles.sym}>{displaySymbol(a.symbol)}</Text>
+                {a.company ? (
+                  <Text style={styles.company} numberOfLines={1}>
+                    {a.company}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+            <PendingSwitch
+                value={bitty || assetSet.has(a.address.toLowerCase())}
+                pending={busy === `a-${a.address}`}
+                disabled={busy !== null || bitty}
+                onValueChange={(v) =>
+                  run(`a-${a.address}`, t(v ? 'mobile.actions.asset_added' : 'mobile.actions.asset_removed', {name: displaySymbol(a.symbol)}), (acct) =>
+                    updateAsset({account: acct, vault: vault!, network, asset: a.address, add: v, stableCoin: stable!.address}),
+                  )
+                }
+              />
+          </View>
+        ))}
+        </View>
+      </View>
+
+      {/* Services, as the web names them; the protocol behind each sits at the right of its row. */}
+      <View style={styles.section}>
+        <Text style={styles.groupLabel}>{t('vault.services')}</Text>
+        <View style={styles.group}>
+        {protocols.map((p, i) => (
+          <View key={p.address} style={[styles.row, i === 0 && styles.rowFirst, i === protocols.length - 1 && styles.rowLast]}>
+            <Text style={styles.sym}>{t(SERVICE_KEY[p.category])}</Text>
+            <View style={styles.protoRight}>
+              <ProtocolIcon name={p.name} size={20} />
+              <Text style={styles.protoName}>{p.name}</Text>
+            </View>
+            <PendingSwitch
+                value={bitty || protoSet.has(p.address.toLowerCase())}
+                pending={busy === `p-${p.address}`}
+                disabled={busy !== null || bitty}
+                onValueChange={(v) =>
+                  run(`p-${p.address}`, t(v ? 'mobile.actions.enable_service' : 'mobile.actions.disable_service', {name: p.name}), (acct) =>
+                    updateProtocol({account: acct, vault: vault!, network, protocol: p.address, add: v, stableCoin: stable!.address}),
+                  )
+                }
+              />
+          </View>
+        ))}
+        </View>
+      </View>
+    </ScrollView>
+  );
+}
+
+const makeStyles = (c: Colors) => StyleSheet.create({
+  container: {flex: 1, backgroundColor: c.bg},
+  body: {flexGrow: 1, padding: 20, paddingBottom: 20, gap: 16},
+  // One section card per list, the same card as everywhere else: the card carries the padding, rows
+  // draw a hairline on their top edge, and the first/last rows drop their outer padding so the card
+  // frames the list evenly.
+  section: {gap: 0},
+  groupLabel: {color: c.subtext, fontSize: 15, fontWeight: '600', paddingHorizontal: 16, marginTop: 8, marginBottom: 6},
+  group: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 16},
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    gap: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: c.border,
+  },
+  rowFirst: {borderTopWidth: 0, paddingTop: 16},
+  rowLast: {paddingBottom: 16},
+  rowText: {flex: 1, gap: 2},
+  rowTitle: {color: c.text, fontSize: 15, fontWeight: '600'},
+  symRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
+  protoRight: {flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 'auto'},
+  protoName: {color: c.subtext, fontSize: 13, fontWeight: '600'},
+  symText: {flexShrink: 1, minWidth: 0},
+  sym: {color: c.text, fontSize: 15, fontWeight: '600'},
+  company: {color: c.subtext, fontSize: 12, marginTop: 1},
+  hint: {color: c.subtext, fontSize: 12, marginTop: 2},
+  foot: {color: c.subtext, fontSize: 13, lineHeight: 18, paddingHorizontal: 16, marginTop: 6},
+  busy: {color: c.subtext, fontSize: 16},
+});

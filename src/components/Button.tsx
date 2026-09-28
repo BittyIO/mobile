@@ -1,0 +1,123 @@
+import React from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
+import {useColors, useStyles, type Colors} from '@/theme';
+import {FaceIdIcon} from '@/components/FaceIdIcon';
+import {useT} from '@/i18n';
+
+type Props = {
+  title: string;
+  onPress: () => void;
+  /** A leading Face ID mark before the title. */
+  faceId?: boolean;
+  variant?: 'primary' | 'secondary' | 'danger';
+  loading?: boolean;
+  disabled?: boolean;
+  style?: StyleProp<ViewStyle>;
+};
+
+export function Button({
+  title,
+  onPress,
+  faceId,
+  variant = 'primary',
+  loading,
+  disabled,
+  style,
+}: Props) {
+  const styles = useStyles(makeStyles);
+  const c = useColors();
+  const bg =
+    variant === 'primary'
+      ? c.accent
+      : variant === 'danger'
+        ? 'transparent'
+        : c.buttonSecondary; // a quiet fill that still reads as a button on a white card
+  // Label / spinner colour: a primary fill carries the on-accent colour so it stays legible in light.
+  const fg = variant === 'primary' ? c.onAccent : variant === 'danger' ? c.danger : c.text;
+  const isDisabled = disabled || loading;
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={isDisabled}
+      style={({pressed}) => [
+        styles.base,
+        {backgroundColor: bg, opacity: isDisabled ? 0.5 : pressed ? 0.85 : 1},
+        variant === 'danger' && styles.dangerBorder,
+        style,
+      ]}>
+      {loading ? (
+        <ActivityIndicator color={fg} />
+      ) : faceId ? (
+        <View style={styles.confirmRow}>
+          <FaceIdIcon size={20} color={fg} />
+          <Text style={[styles.label, {color: fg}]}>{title}</Text>
+        </View>
+      ) : (
+        <Text style={[styles.label, {color: fg}]}>{title}</Text>
+      )}
+    </Pressable>
+  );
+}
+
+/**
+ * The one confirm button for every action that signs with Face ID: the Face ID mark and "Confirm".
+ * `color` overrides the fill (Buy / Sell keep their green and red); the label never changes, so the
+ * user learns one control for every signature in the app.
+ */
+export function ConfirmButton({
+  onPress,
+  loading,
+  disabled,
+  color,
+  style,
+}: {
+  onPress: () => void;
+  loading?: boolean;
+  disabled?: boolean;
+  color?: string;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const {t} = useT();
+  const styles = useStyles(makeStyles);
+  const c = useColors();
+  const isDisabled = disabled || loading;
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={isDisabled}
+      accessibilityRole="button"
+      accessibilityLabel={t('vault.confirm')}
+      style={({pressed}) => [styles.base, {backgroundColor: color ?? c.accent, opacity: isDisabled ? 0.5 : pressed ? 0.85 : 1}, style]}>
+      {loading ? (
+        <ActivityIndicator color={c.onAccent} />
+      ) : (
+        <View style={styles.confirmRow}>
+          <FaceIdIcon size={20} color={c.onAccent} />
+          <Text style={[styles.label, {color: c.onAccent}]}>{t('vault.confirm')}</Text>
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
+const makeStyles = (c: Colors) => StyleSheet.create({
+  confirmRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
+  // A full pill, the iOS shape the Buy / Sell buttons already use, so every button in the app matches.
+  base: {
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  dangerBorder: {borderWidth: 1, borderColor: c.danger},
+  label: {color: c.text, fontSize: 16, fontWeight: '600'},
+});
