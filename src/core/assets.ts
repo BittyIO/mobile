@@ -4,8 +4,19 @@ import type {Network} from '@/core/chain';
 export type AssetKind = 'native' | 'crypto' | 'stable';
 
 /** The web's broad grouping of assets (protocol-metadata AssetCategory); the Overview filters by it. */
-export type AssetCategory = 'crypto_native' | 'crypto_stock' | 'mega7' | 'stock' | 'etf';
-export const ASSET_CATEGORIES: AssetCategory[] = ['crypto_native', 'crypto_stock', 'mega7', 'stock', 'etf'];
+export type AssetCategory = 'crypto_native' | 'stock' | 'etf';
+export const ASSET_CATEGORIES: AssetCategory[] = ['crypto_native', 'stock', 'etf'];
+
+/**
+ * The catalog still carries the older, finer buckets. A crypto treasury company (MSTR, COIN) is
+ * a crypto asset to someone browsing, and the Mega 7 are just large stocks, so both fold into the
+ * three groups above — here rather than in the data, so rows served by the assets API fold too.
+ */
+const MERGED: Record<string, AssetCategory> = {crypto_stock: 'crypto_native', mega7: 'stock'};
+export function assetCategory(category?: string): AssetCategory {
+  const c = category ?? 'crypto_native';
+  return MERGED[c] ?? (ASSET_CATEGORIES.includes(c as AssetCategory) ? (c as AssetCategory) : 'crypto_native');
+}
 
 export type Asset = {
   symbol: string;
@@ -38,16 +49,16 @@ export const ASSETS: Record<Network, Asset[]> = {
     {symbol: 'USDT', address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals: 6, kind: 'stable'},
     // Ondo Global Markets tokenized stocks, registered in the mainnet guard without the AMM-liquid bit:
     // limit / TWAP only (no pool to market-swap through), grouped by the web's categories.
-    {symbol: 'CRCL', company: 'Circle Internet Group', address: '0x3632DEa96A953C11dac2f00b4A05a32CD1063fAE', decimals: 18, kind: 'crypto', category: 'crypto_stock'},
-    {symbol: 'COIN', company: 'Coinbase', address: '0xF042cfa86cf1D598a75Bdb55c3507a1F39f9493b', decimals: 18, kind: 'crypto', category: 'crypto_stock'},
-    {symbol: 'SBET', company: 'SharpLink Gaming', address: '0xfDb46864A7C476F0914c5E82CdED3364a9F56F8a', decimals: 18, kind: 'crypto', category: 'crypto_stock'},
-    {symbol: 'AAPL', company: 'Apple', address: '0x14c3abF95Cb9C93a8b82C1CdCB76D72Cb87b2d4c', decimals: 18, kind: 'crypto', category: 'mega7'},
-    {symbol: 'MSFT', company: 'Microsoft', address: '0xB812837b81a3a6b81d7CD74CfB19A7f2784555E5', decimals: 18, kind: 'crypto', category: 'mega7'},
-    {symbol: 'GOOGL', company: 'Alphabet', address: '0xbA47214eDd2bb43099611b208f75E4b42FDcfEDc', decimals: 18, kind: 'crypto', category: 'mega7'},
-    {symbol: 'AMZN', company: 'Amazon', address: '0xbb8774FB97436d23d74C1b882E8E9A69322cFD31', decimals: 18, kind: 'crypto', category: 'mega7'},
-    {symbol: 'NVDA', company: 'NVIDIA', address: '0x2D1F7226Bd1F780AF6B9A49DCC0aE00E8Df4bDEE', decimals: 18, kind: 'crypto', category: 'mega7'},
-    {symbol: 'META', company: 'Meta Platforms', address: '0x59644165402b611b350645555B50Afb581C71EB2', decimals: 18, kind: 'crypto', category: 'mega7'},
-    {symbol: 'TSLA', company: 'Tesla', address: '0xf6b1117ec07684D3958caD8BEb1b302bfD21103f', decimals: 18, kind: 'crypto', category: 'mega7'},
+    {symbol: 'CRCL', company: 'Circle Internet Group', address: '0x3632DEa96A953C11dac2f00b4A05a32CD1063fAE', decimals: 18, kind: 'crypto', category: 'crypto_native'},
+    {symbol: 'COIN', company: 'Coinbase', address: '0xF042cfa86cf1D598a75Bdb55c3507a1F39f9493b', decimals: 18, kind: 'crypto', category: 'crypto_native'},
+    {symbol: 'SBET', company: 'SharpLink Gaming', address: '0xfDb46864A7C476F0914c5E82CdED3364a9F56F8a', decimals: 18, kind: 'crypto', category: 'crypto_native'},
+    {symbol: 'AAPL', company: 'Apple', address: '0x14c3abF95Cb9C93a8b82C1CdCB76D72Cb87b2d4c', decimals: 18, kind: 'crypto', category: 'stock'},
+    {symbol: 'MSFT', company: 'Microsoft', address: '0xB812837b81a3a6b81d7CD74CfB19A7f2784555E5', decimals: 18, kind: 'crypto', category: 'stock'},
+    {symbol: 'GOOGL', company: 'Alphabet', address: '0xbA47214eDd2bb43099611b208f75E4b42FDcfEDc', decimals: 18, kind: 'crypto', category: 'stock'},
+    {symbol: 'AMZN', company: 'Amazon', address: '0xbb8774FB97436d23d74C1b882E8E9A69322cFD31', decimals: 18, kind: 'crypto', category: 'stock'},
+    {symbol: 'NVDA', company: 'NVIDIA', address: '0x2D1F7226Bd1F780AF6B9A49DCC0aE00E8Df4bDEE', decimals: 18, kind: 'crypto', category: 'stock'},
+    {symbol: 'META', company: 'Meta Platforms', address: '0x59644165402b611b350645555B50Afb581C71EB2', decimals: 18, kind: 'crypto', category: 'stock'},
+    {symbol: 'TSLA', company: 'Tesla', address: '0xf6b1117ec07684D3958caD8BEb1b302bfD21103f', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'PLTR', company: 'Palantir Technologies', address: '0x0c666485b02F7A87d21AdD7AEb9F5e64975AA490', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'AMD', company: 'Advanced Micro Devices', address: '0x0C1f3412A44Ff99E40bF14e06e5Ea321aE7B3938', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'TSM', company: 'Taiwan Semiconductor', address: '0x3Cafdbfe682aec17d5acE2f97A2f3ab3dCf6a4A9', decimals: 18, kind: 'crypto', category: 'stock'},
@@ -56,9 +67,8 @@ export const ASSETS: Record<Network, Asset[]> = {
     {symbol: 'SPCX', company: 'SpaceX', address: '0xc9eef266834730340A55B6CC24621B31BAF55581', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'NFLX', company: 'Netflix', address: '0x032deC3372F25C41EA8054B4987a7c4832CDB338', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'HOOD', company: 'Robinhood Markets', address: '0x998f02A9E343EF6E3E6f28700d5A20F839fD74E6', decimals: 18, kind: 'crypto', category: 'stock'},
-    {symbol: 'MSTR', company: 'Strategy', address: '0xCabD955322dfbf94C084929ac5E9Eca3fEB5556F', decimals: 18, kind: 'crypto', category: 'crypto_stock'},
-    {symbol: 'BMNR', company: 'Bitmine Immersion Technologies', address: '0x33483A58079b4225b10e57958Ca28ad7b9CDbAF7', decimals: 18, kind: 'crypto', category: 'crypto_stock'},
-    {symbol: 'SNDK', company: 'Sandisk', address: '0x71E2400CF1Cb83204f33794eD326636A71a9AAfC', decimals: 18, kind: 'crypto', category: 'stock'},
+    {symbol: 'MSTR', company: 'Strategy', address: '0xCabD955322dfbf94C084929ac5E9Eca3fEB5556F', decimals: 18, kind: 'crypto', category: 'crypto_native'},
+    {symbol: 'BMNR', company: 'Bitmine Immersion Technologies', address: '0x33483A58079b4225b10e57958Ca28ad7b9CDbAF7', decimals: 18, kind: 'crypto', category: 'crypto_native'},
     {symbol: 'COST', company: 'Costco', address: '0x0c8276E4FeC072cf7854Be69c70F7773D1610857', decimals: 18, kind: 'crypto', category: 'stock'},
   ],
   base: [
@@ -73,20 +83,20 @@ export const ASSETS: Record<Network, Asset[]> = {
     {symbol: 'USDG', address: '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168', decimals: 6, kind: 'stable'},
     // Tokenized stocks — top holdings by Uniswap TVL on Robinhood Chain (all 18-decimal).
     {symbol: 'SPY', company: 'SPDR S&P 500 ETF Trust', address: '0x117cc2133c37B721F49dE2A7a74833232B3B4C0C', decimals: 18, kind: 'crypto', category: 'etf'},
-    {symbol: 'NVDA', company: 'NVIDIA', address: '0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC', decimals: 18, kind: 'crypto', category: 'mega7'},
+    {symbol: 'NVDA', company: 'NVIDIA', address: '0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'GLD', company: 'SPDR Gold Shares', address: '0xC9a981FEE1F9DEc688bb123ccDeCc63D0deBFC4e', decimals: 18, kind: 'crypto', category: 'etf'},
     {symbol: 'SPCX', company: 'SpaceX', address: '0x4a0E65A3EcceC6dBe60AE065F2e7bb85Fae35eEa', decimals: 18, kind: 'crypto', category: 'stock'},
-    {symbol: 'META', company: 'Meta Platforms', address: '0xc0D6457C16Cc70d6790Dd43521C899C87ce02f35', decimals: 18, kind: 'crypto', category: 'mega7'},
-    {symbol: 'GOOGL', company: 'Alphabet (Google)', address: '0x2e0847E8910a9732eB3fb1bb4b70a580ADAD4FE3', decimals: 18, kind: 'crypto', category: 'mega7'},
-    {symbol: 'AAPL', company: 'Apple', address: '0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9', decimals: 18, kind: 'crypto', category: 'mega7'},
+    {symbol: 'META', company: 'Meta Platforms', address: '0xc0D6457C16Cc70d6790Dd43521C899C87ce02f35', decimals: 18, kind: 'crypto', category: 'stock'},
+    {symbol: 'GOOGL', company: 'Alphabet (Google)', address: '0x2e0847E8910a9732eB3fb1bb4b70a580ADAD4FE3', decimals: 18, kind: 'crypto', category: 'stock'},
+    {symbol: 'AAPL', company: 'Apple', address: '0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'HIMS', company: 'Hims & Hers Health', address: '0xCceE82fE024c36fA15E1005edE3E9e4787e23D09', decimals: 18, kind: 'crypto', category: 'stock'},
-    {symbol: 'MSTR', company: 'Strategy (MicroStrategy)', address: '0xec262a75e413fAfD0dF80480274532C79D42da09', decimals: 18, kind: 'crypto', category: 'crypto_stock'},
-    {symbol: 'TSLA', company: 'Tesla', address: '0x322F0929c4625eD5bAd873c95208D54E1c003b2d', decimals: 18, kind: 'crypto', category: 'mega7'},
-    {symbol: 'MSFT', company: 'Microsoft', address: '0xe93237C50D904957Cf27E7B1133b510C669c2e74', decimals: 18, kind: 'crypto', category: 'mega7'},
-    {symbol: 'AMZN', company: 'Amazon', address: '0x12f190a9F9d7D37a250758b26824B97CE941bF54', decimals: 18, kind: 'crypto', category: 'mega7'},
+    {symbol: 'MSTR', company: 'Strategy (MicroStrategy)', address: '0xec262a75e413fAfD0dF80480274532C79D42da09', decimals: 18, kind: 'crypto', category: 'crypto_native'},
+    {symbol: 'TSLA', company: 'Tesla', address: '0x322F0929c4625eD5bAd873c95208D54E1c003b2d', decimals: 18, kind: 'crypto', category: 'stock'},
+    {symbol: 'MSFT', company: 'Microsoft', address: '0xe93237C50D904957Cf27E7B1133b510C669c2e74', decimals: 18, kind: 'crypto', category: 'stock'},
+    {symbol: 'AMZN', company: 'Amazon', address: '0x12f190a9F9d7D37a250758b26824B97CE941bF54', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'cbBTC', address: '0xCEC185eB182c47d1bA1EFc84e6959e18cd620Be4', decimals: 8, kind: 'crypto', category: 'crypto_native'},
     {symbol: 'UNI', address: '0xF177d86a28b520e3E396E4F3B96cd8e72D7dabd8', decimals: 18, kind: 'crypto', category: 'crypto_native'},
-    {symbol: 'CRCL', company: 'Circle', address: '0xdF0992E440dD0be65BD8439b609d6D4366bf1CB5', decimals: 18, kind: 'crypto', category: 'crypto_stock'},
+    {symbol: 'CRCL', company: 'Circle', address: '0xdF0992E440dD0be65BD8439b609d6D4366bf1CB5', decimals: 18, kind: 'crypto', category: 'crypto_native'},
     {symbol: 'COST', company: 'Costco', address: '0x4EA005168D7F09a7A0Ba9D1DEf21a479950E44C2', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'INTC', company: 'Intel', address: '0xc72b96e0E48ecd4DC75E1e45396e26300BC39681', decimals: 18, kind: 'crypto', category: 'stock'},
   ],
@@ -98,9 +108,86 @@ export const ASSETS: Record<Network, Asset[]> = {
   ],
 };
 
+/**
+ * The assets the guard flags AMM-liquid (category bit 4), mirroring the web's AMM_LIQUID_ASSETS.
+ *
+ * Only these can be market-traded: everything else — the Ondo and Robinhood tokenized stocks — is
+ * registered without that bit because no Uniswap pool prices it, so the vault's market swap would
+ * revert. Those trade through CoW as limit or TWAP orders instead.
+ */
+const AMM_LIQUID: Record<Network, string[]> = {
+  mainnet: [
+    '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC
+    '0xdac17f958d2ee523a2206206994597c13d831ec7', // USDT
+    '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', // WETH
+    '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599', // WBTC
+    '0x68749665ff8d2d112fa859aa293f07a622782f38', // XAUt
+    '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984', // UNI
+    '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9', // AAVE
+  ],
+  base: [
+    '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', // USDC
+    '0xfde4c96c8593536e31f229ea8f37b2ada2699bb2', // USDT
+    '0x4200000000000000000000000000000000000006', // WETH
+    '0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf', // cbBTC
+  ],
+  sepolia: [
+    '0x1c7d4b196cb0c7b01d743fbc6116a902379c7238', // USDC
+    '0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0', // USDT
+    '0x7b79995e5f793a07bc00c21412e50ecae098e7f9', // WETH
+  ],
+  robinhood: [
+    '0x5fc5360d0400a0fd4f2af552add042d716f1d168', // USDG
+    '0x0bd7d308f8e1639fab988df18a8011f41eacad73', // WETH
+  ],
+};
+
+/** Whether this asset can be market-traded on this network (it has AMM liquidity). */
+export function isAmmLiquid(network: Network, symbolOrAddress: string): boolean {
+  const a = ASSETS[network].find(
+    (x) => x.symbol === symbolOrAddress || x.address.toLowerCase() === symbolOrAddress.toLowerCase(),
+  );
+  return !!a && AMM_LIQUID[network].includes(a.address.toLowerCase());
+}
+
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 /** Resolve an asset's symbol/decimals by address. Unknown tokens fall back to 18 decimals. */
+/**
+ * Tokens a POSITION is held as: the Sky savings share and the Aave aTokens.
+ *
+ * They are never offered as assets to hold or trade, but the vault does hold them, and a limit order
+ * funded from a position sells one directly — so their decimals and a readable symbol have to be
+ * known, or an order row divides an aToken's 6-decimal amount by 1e18 and prints nothing. Each names
+ * the asset it stands for, which is what makes it read as a stablecoin where that matters.
+ */
+export const RECEIPT_TOKENS: Record<Network, Record<string, {symbol: string; decimals: number; underlying: string}>> = {
+  mainnet: {
+    '0xa3931d71877c0e7a3148cb7eb4463524fec27fbd': {symbol: 'sUSDS', decimals: 18, underlying: 'USDC'},
+    '0x98c23e9d8f34fefb1b7bd6a91b7ff122f4e16f5c': {symbol: 'aUSDC', decimals: 6, underlying: 'USDC'},
+    '0x23878914efe38d27c4d67ab83ed1b93a74d4086a': {symbol: 'aUSDT', decimals: 6, underlying: 'USDT'},
+    '0x4d5f47fa6a74757f35c14fd3a6ef8e3c9bc514e8': {symbol: 'aWETH', decimals: 18, underlying: 'WETH'},
+    '0x5ee5bf7ae06d1be5997a1a72006fe6c607ec6de8': {symbol: 'aWBTC', decimals: 8, underlying: 'WBTC'},
+    '0xae7ab96520de3a18e5e111b5eaab095312d7fe84': {symbol: 'stETH', decimals: 18, underlying: 'WETH'},
+  },
+  base: {
+    '0x5875eee11cf8398102fdad704c9e96607675467a': {symbol: 'sUSDS', decimals: 18, underlying: 'USDC'},
+    '0x4e65fe4dba92790696d040ac24aa414708f5c0ab': {symbol: 'aUSDC', decimals: 6, underlying: 'USDC'},
+    '0xd4a0e0b9149bcee3c920d2e00b5de09138fd8bb7': {symbol: 'aWETH', decimals: 18, underlying: 'WETH'},
+    '0xbdb9300b7cde636d9cd4aff00f6f009ffbbc8ee6': {symbol: 'acbBTC', decimals: 8, underlying: 'cbBTC'},
+  },
+  sepolia: {
+    '0xaf0f6e8b0dc5c913bbf4d14c22b4e78dd14310b6': {symbol: 'aUSDT', decimals: 6, underlying: 'USDT'},
+    '0x1804bf30507dc2eb3bdebbbdd859991eaef6eeff': {symbol: 'aWBTC', decimals: 8, underlying: 'WBTC'},
+  },
+  robinhood: {},
+};
+
+/** The asset a receipt token stands for, or null when the address is not one. */
+export function underlyingOf(network: Network, address: string): string | null {
+  return RECEIPT_TOKENS[network][address.toLowerCase()]?.underlying ?? null;
+}
+
 export function assetMeta(
   network: Network,
   address: string,
@@ -108,7 +195,7 @@ export function assetMeta(
   const a = ASSETS[network].find(
     (x) => x.address.toLowerCase() === address.toLowerCase(),
   );
-  return a
-    ? {symbol: a.symbol, decimals: a.decimals}
-    : {symbol: short(address), decimals: 18};
+  if (a) return {symbol: a.symbol, decimals: a.decimals};
+  const r = RECEIPT_TOKENS[network][address.toLowerCase()];
+  return r ? {symbol: r.symbol, decimals: r.decimals} : {symbol: short(address), decimals: 18};
 }

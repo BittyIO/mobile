@@ -16,6 +16,11 @@ const ICONS: Record<string, number> = {
   XAUt: require('@/assets/tokens/xaut.png'),
   // Tokenized stocks (Robinhood Chain and Ondo Global Markets), logos vendored from the web repo;
   // the SVG ones (SPY, GLD, HIMS, CRCL) rasterised to PNG.
+  //
+  // Every one of these is edge to edge. As vendored they were a pale tint disc with the brand mark
+  // inset at 0.83 of the frame, which read as a small logo in a halo beside the coins on the same
+  // row; the tint has been recoloured to the mark's own colour, and CRCL, which came as a white
+  // square, cropped to its disc. Anything added here wants the same treatment.
   AAPL: require('@/assets/tokens/aapl.png'),
   NVDA: require('@/assets/tokens/nvda.png'),
   GOOGL: require('@/assets/tokens/googl.png'),
@@ -39,7 +44,6 @@ const ICONS: Record<string, number> = {
   NFLX: require('@/assets/tokens/stocks/nflx.png'),
   HOOD: require('@/assets/tokens/stocks/hood.png'),
   BMNR: require('@/assets/tokens/stocks/bmnr.png'),
-  SNDK: require('@/assets/tokens/stocks/sndk.png'),
   COST: require('@/assets/tokens/stocks/cost.png'),
 };
 // Marks whose brand version is a dark disc, which sinks into a dark card: the dark theme gets the

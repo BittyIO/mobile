@@ -5,6 +5,7 @@ import Svg, {Path} from 'react-native-svg';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {create} from 'zustand';
 import {EXPLORER_TX, type Network} from '@/core/chain';
+import {trackTx} from '@/vault/pending';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 
@@ -43,20 +44,24 @@ export const useToasts = create<State>((set) => ({
 }));
 
 /**
- * A transaction's toast: opens as "Submitting…" and is flipped to Confirmed (with a View link to the
- * explorer) or Failed by the caller.
+ * A submitted transaction.
+ *
+ * Nothing is shown while it is in flight: the header's Confirming badge counts it, which is where a
+ * user looks for "did that go through", and a toast on every action was noise on top of it. A
+ * FAILURE still speaks up, because a signature the user cancelled or a relay that refused leaves no
+ * other trace — the badge never moves and the action would otherwise look like nothing happened.
  *
  *   const tx = showTx('Deposit 100 USDC', network);
  *   try { tx.success(await deposit(...)); } catch (e) { tx.error(String(e)); }
  */
 export function showTx(title: string, network: Network) {
-  const {show, update} = useToasts.getState();
-  const id = show({kind: 'pending', title, network});
   return {
-    id,
-    success: (hash?: string) => update(id, {kind: 'success', hash}),
-    error: (detail?: string) => update(id, {kind: 'error', detail}),
-    dismiss: () => useToasts.getState().dismiss(id),
+    success: (hash?: string) => {
+      if (hash) trackTx(hash, network, title);
+    },
+    error: (detail?: string) => {
+      useToasts.getState().show({kind: 'error', title, detail, network});
+    },
   };
 }
 

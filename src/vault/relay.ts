@@ -151,7 +151,30 @@ async function relayEncoded(opts: {
     | null;
 
   if (json?.ok && json.hash) return {hash: json.hash};
-  throw new Error(json?.reason ?? json?.error ?? `Relay failed (${res.status})`);
+  throw new Error(relayError(json, res.status));
+}
+
+/**
+ * The relayer's machine-readable reason, turned into something a person can act on.
+ *
+ * These reached the user verbatim, so a trade that emptied its own fee coin reported
+ * "fee-leg-failed" and looked like a bug in the swap. Each of these says what the vault has to
+ * change, because none of them is retryable as-is.
+ */
+function relayError(json: {reason?: string; error?: string} | null, status: number): string {
+  switch (json?.reason) {
+    case 'fee-leg-failed':
+      // The operation itself simulates fine; only the charge that follows it does not.
+      return 'The operation would leave no stable coin in the vault to pay the network fee. Lower the amount or keep a small balance aside.';
+    case 'insufficient-liquid-balance':
+      return 'No stable coin in the vault can cover the network fee. Withdraw some from a yield or lending position first.';
+    case 'budget-exhausted':
+      return "The vault's daily network-fee budget is used up. It resets 24 hours after the first charge.";
+    case 'gasless-off':
+      return 'Relaying is turned off for this vault. Turn a fee coin back on in Settings.';
+    default:
+      return json?.reason ?? json?.error ?? `Relay failed (${status})`;
+  }
 }
 
 export async function relayVaultWrite(opts: {

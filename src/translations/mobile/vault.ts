@@ -3,6 +3,7 @@ import type {MobileTable} from './index';
 // Settings › Security / Manage / Gasless / Auto-yield / Delegation screens.
 export const vault: MobileTable = {
   en: {
+    est_network_fee: 'Estimated network fee {{amount}}',
     // Security
     payment_risk: 'Payment risk',
     payment_risk_hint:
@@ -22,9 +23,9 @@ export const vault: MobileTable = {
     paused_until: 'paused until {{time}}',
     resume: 'Resume',
     utilities: 'Utilities',
-    wrapping: 'Wrapping…',
-    wrap_idle_eth: 'Wrap idle ETH → WETH',
-    wrap_idle_eth_hint: "Converts any native ETH the vault holds into WETH so it's tradeable.",
+    wrapping: 'Converting…',
+    wrap_idle_eth: 'Make idle ETH tradeable',
+    wrap_idle_eth_hint: 'ETH sent to the vault becomes tradeable as it arrives. Run this if any is still idle.',
     // Manage
     newer_vault: 'A newer vault version is available.',
     upgrading: 'Upgrading…',
@@ -82,6 +83,7 @@ export const vault: MobileTable = {
     sign_add_operator: 'Sign & Add Operator',
   },
   zh: {
+    est_network_fee: '预计网络费用 {{amount}}',
     payment_risk: '支付风险',
     payment_risk_hint: '支付防护措施。收紧（更长的延迟、更低的上限）立即生效；放宽需等待变更时间锁。',
     new_payment_delay: '新支付延迟',
@@ -99,9 +101,9 @@ export const vault: MobileTable = {
     paused_until: '已暂停至 {{time}}',
     resume: '恢复',
     utilities: '工具',
-    wrapping: '封装中…',
-    wrap_idle_eth: '将闲置 ETH 封装为 WETH',
-    wrap_idle_eth_hint: '将金库持有的原生 ETH 转换为 WETH，以便交易。',
+    wrapping: '转换中…',
+    wrap_idle_eth: '将闲置 ETH 转为可交易',
+    wrap_idle_eth_hint: 'ETH 存入金库时会自动转为可交易。若仍有闲置，可在此手动转换。',
     newer_vault: '有新版本的金库可用。',
     upgrading: '升级中…',
     upgrade_vault: '升级金库',
@@ -151,6 +153,7 @@ export const vault: MobileTable = {
     sign_add_operator: '签名并添加操作员',
   },
   'zh-TW': {
+    est_network_fee: '預估網路費用 {{amount}}',
     payment_risk: '支付風險',
     payment_risk_hint: '支付防護措施。收緊（更長的延遲、更低的上限）立即生效；放寬需等待變更時間鎖。',
     new_payment_delay: '新支付延遲',
@@ -168,9 +171,9 @@ export const vault: MobileTable = {
     paused_until: '已暫停至 {{time}}',
     resume: '恢復',
     utilities: '工具',
-    wrapping: '封裝中…',
-    wrap_idle_eth: '將閒置 ETH 封裝為 WETH',
-    wrap_idle_eth_hint: '將金庫持有的原生 ETH 轉換為 WETH，以便交易。',
+    wrapping: '轉換中…',
+    wrap_idle_eth: '將閒置 ETH 轉為可交易',
+    wrap_idle_eth_hint: 'ETH 存入金庫時會自動轉為可交易。若仍有閒置，可在此手動轉換。',
     newer_vault: '有新版本的金庫可用。',
     upgrading: '升級中…',
     upgrade_vault: '升級金庫',
@@ -220,6 +223,7 @@ export const vault: MobileTable = {
     sign_add_operator: '簽名並新增操作員',
   },
   ja: {
+    est_network_fee: '推定ネットワーク手数料 {{amount}}',
     payment_risk: '支払いリスク',
     payment_risk_hint:
       '支払いのガードレール。厳格化（遅延の延長、上限の引き下げ）は即時に適用され、緩和は変更タイムロックの経過を待ちます。',
@@ -238,9 +242,9 @@ export const vault: MobileTable = {
     paused_until: '{{time}} まで一時停止中',
     resume: '再開',
     utilities: 'ユーティリティ',
-    wrapping: 'ラップ中…',
-    wrap_idle_eth: '未使用の ETH を WETH にラップ',
-    wrap_idle_eth_hint: 'ボールトが保有するネイティブ ETH を取引可能な WETH に変換します。',
+    wrapping: '変換中…',
+    wrap_idle_eth: '未使用の ETH を取引可能にする',
+    wrap_idle_eth_hint: 'ETH はボールトに届いた時点で取引可能になります。未使用のまま残っている場合はここで変換します。',
     newer_vault: '新しいバージョンのボールトが利用可能です。',
     upgrading: 'アップグレード中…',
     upgrade_vault: 'ボールトをアップグレード',
@@ -294,6 +298,7 @@ export const vault: MobileTable = {
     sign_add_operator: '署名してオペレーターを追加',
   },
   ko: {
+    est_network_fee: '예상 네트워크 수수료 {{amount}}',
     payment_risk: '지급 위험',
     payment_risk_hint: '지급 보호 장치입니다. 강화(더 긴 지연, 더 낮은 한도)는 즉시 적용되고, 완화는 변경 타임락이 지나야 적용됩니다.',
     new_payment_delay: '신규 지급 지연',
@@ -311,9 +316,9 @@ export const vault: MobileTable = {
     paused_until: '{{time}}까지 일시 중지됨',
     resume: '재개',
     utilities: '유틸리티',
-    wrapping: '래핑 중…',
-    wrap_idle_eth: '유휴 ETH를 WETH로 래핑',
-    wrap_idle_eth_hint: '볼트가 보유한 네이티브 ETH를 거래 가능한 WETH로 변환합니다.',
+    wrapping: '변환 중…',
+    wrap_idle_eth: '유휴 ETH를 거래 가능하게 전환',
+    wrap_idle_eth_hint: 'ETH는 볼트에 도착할 때 거래 가능 상태가 됩니다. 아직 유휴 상태라면 여기서 전환하세요.',
     newer_vault: '새 볼트 버전을 사용할 수 있습니다.',
     upgrading: '업그레이드 중…',
     upgrade_vault: '볼트 업그레이드',
@@ -365,6 +370,7 @@ export const vault: MobileTable = {
     sign_add_operator: '서명 및 운영자 추가',
   },
   fr: {
+    est_network_fee: 'Frais de réseau estimés {{amount}}',
     payment_risk: 'Risque de paiement',
     payment_risk_hint:
       'Garde-fous sur les paiements. Un durcissement (délais plus longs, plafonds plus bas) s’applique immédiatement ; un assouplissement attend le délai de modification.',
@@ -385,8 +391,8 @@ export const vault: MobileTable = {
     resume: 'Reprendre',
     utilities: 'Utilitaires',
     wrapping: 'Conversion…',
-    wrap_idle_eth: 'Convertir l’ETH inactif → WETH',
-    wrap_idle_eth_hint: 'Convertit l’ETH natif détenu par le coffre en WETH afin qu’il soit négociable.',
+    wrap_idle_eth: 'Rendre l’ETH inactif négociable',
+    wrap_idle_eth_hint: 'L’ETH envoyé au coffre devient négociable dès son arrivée. Lancez ceci s’il en reste d’inactif.',
     newer_vault: 'Une nouvelle version du coffre est disponible.',
     upgrading: 'Mise à niveau…',
     upgrade_vault: 'Mettre à niveau le coffre',
@@ -441,6 +447,7 @@ export const vault: MobileTable = {
     sign_add_operator: 'Signer et ajouter l’opérateur',
   },
   es: {
+    est_network_fee: 'Comisión de red estimada {{amount}}',
     payment_risk: 'Riesgo de pagos',
     payment_risk_hint:
       'Salvaguardas para los pagos. Endurecer (retrasos más largos, límites más bajos) se aplica de inmediato; relajar espera el bloqueo temporal de cambios.',
@@ -460,9 +467,9 @@ export const vault: MobileTable = {
     paused_until: 'en pausa hasta {{time}}',
     resume: 'Reanudar',
     utilities: 'Utilidades',
-    wrapping: 'Envolviendo…',
-    wrap_idle_eth: 'Envolver ETH inactivo → WETH',
-    wrap_idle_eth_hint: 'Convierte el ETH nativo que tenga la bóveda en WETH para que sea negociable.',
+    wrapping: 'Convirtiendo…',
+    wrap_idle_eth: 'Hacer negociable el ETH inactivo',
+    wrap_idle_eth_hint: 'El ETH enviado a la bóveda se vuelve negociable al llegar. Ejecuta esto si queda alguno inactivo.',
     newer_vault: 'Hay una versión más reciente de la bóveda disponible.',
     upgrading: 'Actualizando…',
     upgrade_vault: 'Actualizar bóveda',
@@ -517,6 +524,7 @@ export const vault: MobileTable = {
     sign_add_operator: 'Firmar y añadir operador',
   },
   de: {
+    est_network_fee: 'Geschätzte Netzwerkgebühr {{amount}}',
     payment_risk: 'Zahlungsrisiko',
     payment_risk_hint:
       'Schutzmaßnahmen für Zahlungen. Verschärfungen (längere Verzögerungen, niedrigere Limits) gelten sofort; Lockerungen warten die Änderungssperre ab.',
@@ -536,9 +544,9 @@ export const vault: MobileTable = {
     paused_until: 'pausiert bis {{time}}',
     resume: 'Fortsetzen',
     utilities: 'Werkzeuge',
-    wrapping: 'Wird gewrappt…',
-    wrap_idle_eth: 'Ungenutztes ETH → WETH wrappen',
-    wrap_idle_eth_hint: 'Wandelt natives ETH im Tresor in WETH um, damit es handelbar ist.',
+    wrapping: 'Wird umgewandelt…',
+    wrap_idle_eth: 'Ungenutztes ETH handelbar machen',
+    wrap_idle_eth_hint: 'ETH, das im Tresor eingeht, wird beim Eingang handelbar. Führen Sie dies aus, falls noch welches ungenutzt ist.',
     newer_vault: 'Eine neuere Tresor-Version ist verfügbar.',
     upgrading: 'Upgrade läuft…',
     upgrade_vault: 'Tresor upgraden',

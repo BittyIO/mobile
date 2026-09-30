@@ -12,7 +12,7 @@ export type Colors = {
   bg: string; // the screen ground
   card: string; // section cards
   cardAlt: string; // a surface one step off the card: chips, tab tracks, word tiles inside a card
-  input: string; // text fields and pickers inside a card
+  input: string; // text fields and pickers inside a card (iOS tertiarySystemFill)
   buttonSecondary: string; // the quiet button fill (Withdraw next to Deposit)
   neutralSoft: string; // a faint neutral fill for grey pills
   elevated: string; // sheets and bars over the content
@@ -42,7 +42,7 @@ export const DARK: Colors = {
   bg: '#000000',
   card: '#1C1C1E',
   cardAlt: '#2C2C2E',
-  input: '#2C2C2E',
+  input: 'rgba(118,118,128,0.24)',
   buttonSecondary: '#2C2C2E',
   neutralSoft: 'rgba(120,120,128,0.32)',
   elevated: '#1C1C1E',
@@ -70,7 +70,7 @@ export const LIGHT: Colors = {
   bg: '#F2F2F7',
   card: '#FFFFFF',
   cardAlt: '#F2F2F7',
-  input: '#F2F2F7',
+  input: 'rgba(118,118,128,0.12)',
   buttonSecondary: '#E5E5EA',
   neutralSoft: 'rgba(110,118,129,0.14)',
   elevated: '#FFFFFF',

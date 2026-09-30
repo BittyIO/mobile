@@ -8,6 +8,7 @@ import fr from '@/translations/fr.json';
 import es from '@/translations/es.json';
 import de from '@/translations/de.json';
 import {useLanguage, type Language} from '@/core/language-store';
+import {companyName} from '@/core/company-names';
 import {MOBILE_STRINGS} from '@/translations/mobile';
 
 // Translations. Two sources, looked up in this order:
@@ -55,5 +56,15 @@ export function useT() {
     (key: string, params?: Record<string, string | number>) => translate(language, key, params),
     [language],
   );
-  return {t, language};
+  /**
+   * A tokenized stock's company name in the current language, falling back to the catalog's own.
+   *
+   * It rides along on this hook because every screen that shows a company name already calls it,
+   * and the alternative is each of them reading the language and importing the table separately.
+   */
+  const company = useCallback(
+    (symbol: string, fallback?: string) => companyName(symbol, fallback, language),
+    [language],
+  );
+  return {t, language, company};
 }

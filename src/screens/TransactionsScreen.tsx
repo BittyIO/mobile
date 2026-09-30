@@ -22,8 +22,12 @@ import {EXPLORER_TX, type Network} from '@/core/chain';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 import {CopyAddress} from '@/components/CopyAddress';
-import {describeActions} from '@/vault/tx-actions';
+import {categoryForActions, defiMoveFromActions, describeActions} from '@/vault/tx-actions';
 import {GPV2_SETTLEMENT, fetchRecentOrders, type CowOrder} from '@/vault/limit';
+import {usePending, type PendingTx} from '@/vault/pending';
+import type {RouteProp} from '@react-navigation/native';
+import {useRoute} from '@react-navigation/native';
+import type {RootStackParamList} from '@/App';
 import {ASSETS} from '@/core/assets';
 
 const fmtAmt = (v: string | null): string => fmtNum(Number(v ?? '0'));
@@ -47,11 +51,17 @@ type Part = {
   // For a plain send or receive: who the other side was. Sends show "to", receives show "from".
   counterparty?: {address: string; direction: 'to' | 'from'};
 };
+/** The web's own grouping of an operation, in its order. */
+type Category = 'trade' | 'stake' | 'send' | 'receive' | 'gas';
+const CATEGORY_ORDER: Category[] = ['trade', 'stake', 'send', 'receive', 'gas'];
+
 type OpView = {
   parts: Part[];
   fee: TransferRow | null;
   // Configuration the transaction performed (approvals, services, assets, ...), one line each.
   details: string[];
+  /** Which tab it belongs to; taken from what the parts turned out to be. */
+  category: Category;
 };
 
 type T = (key: string, params?: Record<string, string | number>) => string;
@@ -68,6 +78,8 @@ function classify(op: Operation, network: Network, t: T, orders?: Map<string, Co
   const rest = core.filter((l) => !swapSet.has(l));
 
   const parts: Part[] = [];
+  // What the parts turned out to be, for the tab this row belongs to.
+  const kinds = {stake: false, supply: false, sent: false, received: false};
   if (swap) {
     // A swap against the CoW settlement contract is a limit or TWAP order being filled by a solver —
     // its own transaction, separate from the approval that was relayed earlier. Side is read off the
@@ -89,20 +101,28 @@ function classify(op: Operation, network: Network, t: T, orders?: Map<string, Co
   // contract as counterparty (covers testnet receipt tokens we don't enumerate). The principal is the
   // non-receipt side; its direction (leaving the vault = deposit, arriving = withdraw) types it.
   if (rest.length > 0) {
-    const isStake = rest.some((l) => STAKE_TOKENS.has(lc(l.assetAddress)) || STAKE_COUNTERPARTY.has(lc(l.counterparty)));
-    const isSupply = rest.some((l) => SUPPLY_TOKENS.has(lc(l.assetAddress)) || SUPPLY_COUNTERPARTY.has(lc(l.counterparty)));
+    // What the CALL says, where there is a call. The receipt side of an Earn move is often
+    // invisible — the indexer tracks no aTokens, so an Aave supply shows one outgoing leg and
+    // nothing coming back, which the transfer rules below read as money sent to a stranger.
+    const move = defiMoveFromActions(op.actions, network);
+    const isStake = move ? move.kind === 'stake' : rest.some((l) => STAKE_TOKENS.has(lc(l.assetAddress)) || STAKE_COUNTERPARTY.has(lc(l.counterparty)));
+    const isSupply = move ? move.kind === 'supply' : rest.some((l) => SUPPLY_TOKENS.has(lc(l.assetAddress)) || SUPPLY_COUNTERPARTY.has(lc(l.counterparty)));
     const principal = rest.filter((l) => !isReceiptToken(l.assetAddress));
-    const principalOut = principal.some((l) => l.direction === 'out');
+    const principalOut = move ? move.out : principal.some((l) => l.direction === 'out');
     const hasIn = rest.some((l) => l.direction === 'in');
     const hasOut = rest.some((l) => l.direction === 'out');
     if (isStake) {
+      kinds.stake = true;
       parts.push({title: principalOut ? t('vault.deposit_to_earn') : t('vault.withdraw_from_earn'), swap: null, legs: principal});
     } else if (isSupply) {
+      kinds.supply = true;
       parts.push({title: principalOut ? t('vault.supply_to_flexible_lend') : t('vault.withdraw_from_flexible_lend'), swap: null, legs: principal});
     } else if (hasIn && !hasOut) {
+      kinds.received = true;
       const from = rest.find((l) => l.counterparty)?.counterparty;
       parts.push({title: t('vault.received'), swap: null, legs: rest, counterparty: from ? {address: from, direction: 'from'} : undefined});
     } else if (hasOut && !hasIn) {
+      kinds.sent = true;
       const to = rest.find((l) => l.counterparty)?.counterparty;
       parts.push({title: t('vault.sent'), swap: null, legs: rest, counterparty: to ? {address: to, direction: 'to'} : undefined});
     } else {
@@ -112,12 +132,32 @@ function classify(op: Operation, network: Network, t: T, orders?: Map<string, Co
   }
 
   const details = describeActions(op.actions, network, t, orders);
+  /**
+   * The tab a row lands on.
+   *
+   * A swap is unarguable, so it leads. Then what the vault was ASKED to do, because an action is
+   * direct evidence where a counterparty address is a guess — this is what keeps a cancelled limit
+   * order and an intent approval on Trade, and the keeper's sweep on Earn, instead of dropping
+   * them all on the fee tab for having moved nothing the heuristic recognised. Only then the
+   * tokens that moved, and last the fee tab, which is left holding genuine configuration changes.
+   */
+  const category: Category =
+    swap
+      ? 'trade'
+      : (categoryForActions(op.actions) ??
+        (kinds.stake || kinds.supply
+          ? 'stake'
+          : kinds.sent
+            ? 'send'
+            : kinds.received
+              ? 'receive'
+              : 'gas'));
   if (parts.length === 0) {
     // Nothing moved but the fee: the transaction IS its configuration change, so it heads the row.
     parts.push({title: details[0] ?? t('mobile.home.transaction'), swap: null, legs: []});
-    return {parts, fee, details: details.slice(1)};
+    return {parts, fee, details: details.slice(1), category};
   }
-  return {parts, fee, details};
+  return {parts, fee, details, category};
 }
 
 function Leg({r, counterparty}: {r: TransferRow; counterparty?: Part['counterparty']}) {
@@ -201,6 +241,46 @@ function Op({op, explorer, network, orders}: {op: Operation; explorer: string; n
   );
 }
 
+/** One submitted transaction that is still in flight, or has just landed. */
+function PendingRow({tx, explorer}: {tx: PendingTx; explorer: string}) {
+  const {t} = useT();
+  const c = useColors();
+  const styles = useStyles(makeStyles);
+  const remove = usePending((s) => s.remove);
+  const failed = tx.status === 'failed';
+  // Never included, so there is nothing to look up and nothing to wait for — only to clear.
+  const dropped = tx.status === 'dropped';
+  const label = dropped
+    ? 'mobile.home.not_included'
+    : failed
+      ? 'vault.failed'
+      : tx.status === 'confirmed'
+        ? 'vault.confirmed'
+        : 'mobile.home.confirming';
+  return (
+    <Pressable style={styles.op} onPress={() => !dropped && Linking.openURL(explorer + tx.hash)}>
+      <View style={styles.opHeader}>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>{tx.title}</Text>
+        </View>
+        {tx.status === 'pending' ? <ActivityIndicator size="small" color={c.subtext} /> : null}
+      </View>
+      <Text style={[styles.detail, (failed || dropped) && {color: c.danger}]}>{t(label)}</Text>
+      <View style={styles.footer}>
+        {/* A row that has stopped moving is the user's to dismiss; one still in flight is not. */}
+        {tx.status === 'pending' ? (
+          <View />
+        ) : (
+          <Pressable hitSlop={8} onPress={() => remove(tx.hash)}>
+            <Text style={styles.clear}>{t('mobile.home.clear')}</Text>
+          </Pressable>
+        )}
+        {dropped ? <View /> : <Text style={styles.link}>{t('mobile.home.view')} ↗</Text>}
+      </View>
+    </Pressable>
+  );
+}
+
 export function TransactionsScreen() {
   const {t} = useT();
   const c = useColors();
@@ -233,6 +313,34 @@ export function TransactionsScreen() {
   }, [loading]);
   const explorer = EXPLORER_TX[network];
 
+  // Submitted here and not yet indexed: kept locally (see vault/pending) and shown on their own tab.
+  const pendingTxs = usePending((s) => s.txs).filter((x) => x.network === network);
+  const acknowledge = usePending((s) => s.acknowledge);
+  const clearSettled = usePending((s) => s.clearSettled);
+  // Anything that has stopped moving can be swept in one go, rather than a row at a time.
+  const settledCount = pendingTxs.filter((x) => x.status !== 'pending').length;
+  const route = useRoute<RouteProp<RootStackParamList, 'Transactions'>>();
+  const [tab, setTab] = React.useState<Category | 'confirming' | 'all'>(route.params?.tab === 'confirming' ? 'confirming' : 'all');
+
+  // One tab per category that has entries, as on the web, with Confirming leading when it does.
+  const views = React.useMemo(() => new Map(ops.map((op) => [op.txHash, classify(op, network, t, orders)])), [ops, network, t, orders]);
+  const tabs: {key: Category | 'confirming' | 'all'; label: string}[] = [
+    ...(pendingTxs.length > 0 ? [{key: 'confirming' as const, label: t('mobile.home.confirming')}] : []),
+    {key: 'all', label: t('vault.all')},
+    ...CATEGORY_ORDER.filter((cat) => ops.some((op) => views.get(op.txHash)?.category === cat)).map((cat) => ({
+      key: cat,
+      label: t(
+        cat === 'trade' ? 'vault.trade' : cat === 'stake' ? 'vault.earn' : cat === 'send' ? 'vault.sent' : cat === 'receive' ? 'vault.received' : 'mobile.settings.gas',
+      ),
+    })),
+  ];
+  // A tab that has emptied out (the last pending one confirmed) hands back to All.
+  React.useEffect(() => {
+    if (!tabs.some((x) => x.key === tab)) setTab('all');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabs.length]);
+  const shown = tab === 'all' ? ops : tab === 'confirming' ? [] : ops.filter((op) => views.get(op.txHash)?.category === tab);
+
   return (
     <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic"
       style={styles.container}
@@ -240,12 +348,41 @@ export function TransactionsScreen() {
       refreshControl={
         <RefreshControl refreshing={pulled && loading} onRefresh={onPull} tintColor={c.text} colors={[c.accent]} />
       }>
-      {error ? (
+      {tabs.length > 2 ? (
+        <View style={styles.tabStrip}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabRow}>
+            {tabs.map((x) => (
+              <Pressable
+              key={x.key}
+              style={styles.tab}
+              onPress={() => {
+                if (x.key === 'confirming') acknowledge();
+                setTab(x.key);
+              }}>
+                <Text style={[styles.tabText, tab === x.key && styles.tabTextOn]}>{x.label}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
+
+      {tab === 'confirming' ? (
+        <>
+          {settledCount > 1 ? (
+            <Pressable style={styles.clearAll} hitSlop={8} onPress={() => clearSettled(network)}>
+              <Text style={styles.clear}>{t('mobile.home.clear_all')}</Text>
+            </Pressable>
+          ) : null}
+          {pendingTxs.map((x) => (
+            <PendingRow key={x.hash} tx={x} explorer={explorer} />
+          ))}
+        </>
+      ) : error ? (
         <Text style={styles.err}>{error}</Text>
-      ) : ops.length === 0 ? (
+      ) : shown.length === 0 ? (
         <Text style={styles.note}>{loading ? '' : t('vault.no_operations')}</Text>
       ) : (
-        ops.map((op) => <Op key={op.txHash} op={op} explorer={explorer} network={network} orders={orders} />)
+        shown.map((op) => <Op key={op.txHash} op={op} explorer={explorer} network={network} orders={orders} />)
       )}
       {loading && ops.length === 0 ? <ActivityIndicator color={c.accent} /> : null}
     </ScrollView>
@@ -254,8 +391,15 @@ export function TransactionsScreen() {
 
 const makeStyles = (c: Colors) => StyleSheet.create({
   container: {flex: 1, backgroundColor: c.bg},
-  content: {flexGrow: 1, padding: 20, gap: 12},
+  tabStrip: {marginTop: -4, marginBottom: -8},
+  tabRow: {flexDirection: 'row', alignItems: 'flex-end', gap: 20, paddingHorizontal: 4},
+  tab: {alignItems: 'center', paddingVertical: 6},
+  tabText: {color: c.subtext, fontSize: 15, fontWeight: '600'},
+  tabTextOn: {color: c.text, fontWeight: '700'},
+  content: {flexGrow: 1, padding: 16, gap: 16, paddingBottom: 32},
   op: {backgroundColor: c.card, borderRadius: 20, padding: 18, gap: 12},
+  clear: {color: c.accent, fontSize: 14, fontWeight: '600'},
+  clearAll: {alignSelf: 'flex-end', marginBottom: -8},
   opHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10},
   partGap: {marginTop: 14, gap: 8},
   titleRow: {flexDirection: 'row', alignItems: 'center', gap: 8},

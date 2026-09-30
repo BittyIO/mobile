@@ -1,6 +1,7 @@
 import {useHeaderHeight} from '@react-navigation/elements';
+import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {ActivityIndicator, Animated, InputAccessoryView, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {ActivityIndicator, Animated, Keyboard, KeyboardAvoidingView, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
@@ -11,17 +12,20 @@ import {PendingSwitch} from '@/components/PendingSwitch';
 import {Amount} from '@/components/Amount';
 import {ConfirmButton} from '@/components/Button';
 import {showTx, ToastHost} from '@/components/Toast';
-import {useSlideUp} from '@/components/useSlideUp';
+import {useSheetAnim} from '@/components/useSheetAnim';
+import {SHEET_HEIGHT_RATIO} from '@/components/Sheet';
 import {ProtocolChip} from '@/components/ProtocolIcon';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
-import {formatUnits, type Address} from 'viem';
+import {formatUnits, parseUnits, type Address} from 'viem';
 import type {Signer} from '@/wallet/signer';
 import {useVaultPositions} from '@/vault/useVaultPositions';
 import {useVaultLp} from '@/vault/useVaultLp';
 import {useFlows} from '@/vault/useFlows';
 import {useVaultBalances} from '@/vault/useVaultBalances';
-import {earnedRaw} from '@/vault/flows';
+import {earnedRaw, recordFlow} from '@/vault/flows';
+import {relayGasFor} from '@/vault/fee-quote';
+import {useConfirmAction} from '@/components/ConfirmAction';
 import {removeLp, claimLpFees} from '@/vault/lp-actions';
 import {depositToProtocol, withdrawFromProtocol} from '@/vault/actions';
 import {balanceOfSymbol} from '@/vault/read';
@@ -39,17 +43,19 @@ import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 
 const fmt = (v: number | string): string => fmtNum(Number(v));
-const KB_ID = 'earn-amount-kb'; // links the amount field to its keyboard Done bar
 
 // A deposit/withdraw route: a yield/lend adapter paired with an asset it accepts. The rows below are
 // synthesized from these so every supported asset shows by default — the first deposit opts the vault in.
-type Route = {protocol: Address; name: string; asset: Asset};
+// `kind` picks the ledger the flow is written to: staking routes go to stake-flows, lending
+// routes to supply-flows, and the two endpoints name their directions differently.
+type Route = {protocol: Address; name: string; asset: Asset; kind: 'staking' | 'lending'};
 type Row = {route: Route; pos: Position | null};
 
 /** A catalog row: asset + protocol, its position amount, and inline Deposit/Withdraw. */
 function EarnRow({
   row,
   free,
+  amountKnown,
   earned,
   apy,
   protocolName,
@@ -68,7 +74,10 @@ function EarnRow({
   row: Row;
   first: boolean;
   last: boolean;
-  free: string;
+  /** The vault's free balance of the asset; null while it loads. */
+  free: string | null;
+  /** Whether the position read has landed; its amount shows as a dash until it has. */
+  amountKnown: boolean;
   earned: string | null;
   apy: number | null;
   /** Shown as a small logo after the APY when the section mixes protocols (Sky / Lido). */
@@ -96,22 +105,22 @@ function EarnRow({
     <View style={[styles.trWrap, first && styles.trFirst, last && styles.trLast]}>
       <Pressable style={styles.trTop} onPress={onToggle}>
         <View style={styles.assetCell}>
-          <TokenIcon symbol={asset.symbol} />
+          <TokenIcon symbol={asset.symbol} size={30} />
           <View style={styles.assetText}>
             <View style={styles.symLine}>
               <Text style={styles.sym}>{displaySymbol(asset.symbol)}</Text>
               {apy != null ? (
                 <View style={styles.apyPill}>
-                  <Text style={styles.apyText}>{apy.toFixed(2)}% APY</Text>
+                  <Text style={styles.apyText}>{t('mobile.earn.apy_rate', {rate: apy.toFixed(2)})}</Text>
                 </View>
               ) : null}
               {protocolName ? <ProtocolChip name={protocolName} size={14} /> : null}
             </View>
-            <Text style={styles.rowSub}><Amount v={fmt(free)} size={13} color={c.subtext} /></Text>
+            <Text style={styles.rowSub}>{free != null ? <Amount v={fmt(free)} size={13} color={c.subtext} /> : '—'}</Text>
           </View>
         </View>
         <View style={styles.amtCol}>
-          <Text style={styles.amt}><Amount v={fmt(amount)} size={15} /></Text>
+          <Text style={styles.amt}>{amountKnown ? <Amount v={fmt(amount)} size={15} /> : '—'}</Text>
           {earned && Number(earned) > 0 ? <Text style={styles.earned}>+ <Amount v={fmt(earned)} size={12} color={c.success} /></Text> : null}
         </View>
       </Pressable>
@@ -177,6 +186,7 @@ function EarnTable({
 }
 
 export function EarnScreen() {
+  const tabBarHeight = useBottomTabBarHeight();
   const headerHeight = useHeaderHeight();
   const {t} = useT();
   const c = useColors();
@@ -204,11 +214,11 @@ export function EarnScreen() {
   const stakeRoutes = useMemo<Route[]>(() => {
     const out: Route[] = [];
     const lido = adapterByName(network, 'Lido');
-    if (lido) assets.filter((a) => a.symbol === 'WETH').forEach((asset) => out.push({protocol: lido, name: 'Lido', asset}));
+    if (lido) assets.filter((a) => a.symbol === 'WETH').forEach((asset) => out.push({protocol: lido, name: 'Lido', asset, kind: 'staking'}));
     const sky = adapterByName(network, 'Sky');
     // The Sky adapter takes USDC only (it swaps through the PSM into sUSDS); every other
     // stablecoin reverts with InvalidAsset, so it gets no row.
-    if (sky) assets.filter((a) => a.symbol === 'USDC').forEach((asset) => out.push({protocol: sky, name: 'Sky', asset}));
+    if (sky) assets.filter((a) => a.symbol === 'USDC').forEach((asset) => out.push({protocol: sky, name: 'Sky', asset, kind: 'staking'}));
     return out;
   }, [network, assets]);
 
@@ -216,7 +226,7 @@ export function EarnScreen() {
     const aave = adapterByName(network, 'Aave V3');
     if (!aave) return [];
     const supported = ['WETH', 'WBTC', 'cbBTC', 'USDC', 'USDT'];
-    return assets.filter((a) => supported.includes(a.symbol)).map((asset) => ({protocol: aave, name: 'Aave V3', asset}));
+    return assets.filter((a) => supported.includes(a.symbol)).map((asset) => ({protocol: aave, name: 'Aave V3', asset, kind: 'lending' as const}));
   }, [network, assets]);
 
   // The protocols behind each section, shown at the right of its header.
@@ -249,16 +259,16 @@ export function EarnScreen() {
     const raw = earnedRaw(p, flows.flows);
     return raw != null ? formatUnits(raw, p.decimals) : null;
   };
-  const freeFor = (symbol: string): string => (bal.balances ? balanceOfSymbol(bal.balances, symbol) : '0');
+  // Null while the balances are still loading — the row shows a dash rather than 0.
+  const freeFor = (symbol: string): string | null => (bal.balances ? balanceOfSymbol(bal.balances, symbol) : null);
 
   // Deposit / Withdraw happen in a compact bottom sheet (below), not a full-screen page.
   const [act, setAct] = useState<{mode: 'deposit' | 'withdraw'; route: Route; max: string; verb: string} | null>(null);
   const [actAmount, setActAmount] = useState('');
-  const [actBusy, setActBusy] = useState(false);
   const [actErr, setActErr] = useState<string | null>(null);
 
   const openDeposit = (r: Route, verb: string) => {
-    setAct({mode: 'deposit', route: r, max: freeFor(r.asset.symbol), verb});
+    setAct({mode: 'deposit', route: r, max: freeFor(r.asset.symbol) ?? '0', verb});
     setActAmount('');
     setActErr(null);
   };
@@ -285,43 +295,60 @@ export function EarnScreen() {
       setActErr(t('vault.insufficient_balance', {token: displaySymbol(act.route.asset.symbol)}));
       return;
     }
-    setActBusy(true);
+    // The sheet closes as soon as the order is placed: the toast reports Submitting → Confirmed, so
+    // nothing sits spinning over the form the user is finished with.
+    const {verb, mode, route} = act;
+    const amount = actAmount;
+    const vault = bal.vault;
+    setAct(null);
     setActErr(null);
-    const tx = showTx(`${act.verb} ${fmt(actAmount)} ${displaySymbol(act.route.asset.symbol)}`, network);
+    const tx = showTx(`${verb} ${fmt(amount)} ${displaySymbol(route.asset.symbol)}`, network);
     try {
       const acct = await getSigner();
-      const run = act.mode === 'deposit' ? depositToProtocol : withdrawFromProtocol;
+      const run = mode === 'deposit' ? depositToProtocol : withdrawFromProtocol;
       const hash = await run({
         account: acct,
-        vault: bal.vault,
+        vault,
         network,
-        protocol: act.route.protocol,
-        asset: act.route.asset.address,
-        amount: actAmount,
-        decimals: act.route.asset.decimals,
-        stableCoin: pickFeeCoin(act.route.asset.address),
+        protocol: route.protocol,
+        asset: route.asset.address,
+        amount,
+        decimals: route.asset.decimals,
+        stableCoin: pickFeeCoin(route.asset.address),
       });
       tx.success(hash);
-      setAct(null);
+      // Ledger the move, so the earned line under this row has a principal to measure against.
+      // Keyed off the route, which is the same protocol and asset the call above used.
+      void recordFlow({
+        vault,
+        network,
+        protocol: route.protocol,
+        asset: route.asset.address,
+        kind: route.kind === 'staking' ? 'stake' : 'supply',
+        direction: mode === 'deposit' ? 'in' : 'out',
+        amount: parseUnits(amount as `${number}`, route.asset.decimals),
+        txHash: hash,
+      });
       pos.refresh();
       bal.refresh();
-      // The relay returns on submit, not on mine — so the immediate read is still pre-tx. Refresh again
-      // once it's mined so the deposited balance actually updates.
+      // The relay returns on submit, not on mine — so the immediate read is still pre-tx. Refresh
+      // again once it's mined, and on a short timer as well: on a busy chain the receipt wait can
+      // fail on a public RPC, and without the timer the row would sit at 0 until a pull-to-refresh.
+      const again = () => {
+        pos.refresh();
+        bal.refresh();
+      };
       publicClientFor(network)
         .waitForTransactionReceipt({hash: hash as `0x${string}`})
-        .then(() => {
-          pos.refresh();
-          bal.refresh();
-        })
+        .then(again)
         .catch(() => {});
+      for (const ms of [6000, 20000]) setTimeout(again, ms);
     } catch (e) {
-      const msg = String((e as Error)?.message ?? e);
-      tx.error(msg);
-      setActErr(msg);
-    } finally {
-      setActBusy(false);
+      tx.error(String((e as Error)?.message ?? e));
     }
   };
+
+  const {ask, sheet: confirmSheet} = useConfirmAction();
 
   const runLp = async (tokenId: string, title: string, build: (a: Signer) => Promise<string>) => {
     if (!account || !bal.vault) return;
@@ -340,16 +367,29 @@ export function EarnScreen() {
 
   const stable = assets.find((a) => a.kind === 'stable');
   const pairLabel = (p: LpPosition) => `${displaySymbol(p.symbol0)}/${displaySymbol(p.symbol1)}`;
+  // Both are relayed writes behind a small row button, so each asks before it signs.
   const onRemoveLp = (p: LpPosition) =>
     stable &&
-    runLp(p.tokenId, `${t('vault.remove_liquidity')} ${pairLabel(p)}`, (a) =>
-      removeLp({account: a, vault: bal.vault!, network, tokenId: p.tokenId, liquidity: p.liquidity, stableCoin: stable.address}),
-    );
+    ask({
+      title: t('vault.remove_liquidity'),
+      message: pairLabel(p),
+      gas: relayGasFor({withdraw: 1}),
+      run: () =>
+        runLp(p.tokenId, `${t('vault.remove_liquidity')} ${pairLabel(p)}`, (a) =>
+          removeLp({account: a, vault: bal.vault!, network, tokenId: p.tokenId, liquidity: p.liquidity, stableCoin: stable!.address}),
+        ),
+    });
   const onClaimLp = (p: LpPosition) =>
     stable &&
-    runLp(p.tokenId, `${t('vault.claim_fees')} ${pairLabel(p)}`, (a) =>
-      claimLpFees({account: a, vault: bal.vault!, network, tokenId: p.tokenId, stableCoin: stable.address}),
-    );
+    ask({
+      title: t('vault.claim_fees'),
+      message: pairLabel(p),
+      gas: relayGasFor({withdraw: 1}),
+      run: () =>
+        runLp(p.tokenId, `${t('vault.claim_fees')} ${pairLabel(p)}`, (a) =>
+          claimLpFees({account: a, vault: bal.vault!, network, tokenId: p.tokenId, stableCoin: stable!.address}),
+        ),
+    });
 
   // Load each asset's configured auto-yield route; re-read after a toggle.
   useEffect(() => {
@@ -414,7 +454,11 @@ export function EarnScreen() {
   const anyLoading = pos.loading || lp.loading;
   const [pulled, setPulled] = useState(false);
   const refreshing = pulled && anyLoading;
-  const actSlide = useSlideUp(act != null);
+  // The deposit / withdraw sheet comes up to the same line as every other sheet in the app.
+  const {height: screenHeight} = useWindowDimensions();
+  const actHeight = Math.round(screenHeight * SHEET_HEIGHT_RATIO);
+  // Same motion as every other sheet: rises, follows a downward drag, slides back out.
+  const actSheet = useSheetAnim(act != null, () => setAct(null));
   const onRefresh = useCallback(() => {
     setPulled(true);
     pos.refresh();
@@ -445,6 +489,7 @@ export function EarnScreen() {
         }
         row={row}
         free={freeFor(row.route.asset.symbol)}
+        amountKnown={!pos.loading || pos.positions.length > 0}
         earned={earnedFor(row.pos)}
         apy={apyFor(row.route)}
         protocolName={showProtocol ? row.route.name : undefined}
@@ -452,7 +497,16 @@ export function EarnScreen() {
         depositLabel={depositLabel}
         autoOn={isAutoOn(row.route)}
         autoBusy={autoBusy === row.route.asset.address.toLowerCase()}
-        onToggleAuto={() => toggleAuto(row.route)}
+        onToggleAuto={() =>
+          ask({
+            title: t(isAutoOn(row.route) ? 'mobile.actions.auto_yield_off' : 'mobile.actions.auto_yield_set', {
+              token: displaySymbol(row.route.asset.symbol),
+            }),
+            message: row.route.name,
+            gas: relayGasFor({}),
+            run: () => toggleAuto(row.route),
+          })
+        }
         onDeposit={() => openDeposit(row.route, depositLabel)}
         onWithdraw={() => row.pos && openWithdraw(row.route, row.pos)}
       />
@@ -464,7 +518,9 @@ export function EarnScreen() {
     <>
     <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical
       style={styles.container}
-      contentContainerStyle={[styles.content, {paddingTop: 8}]}
+      // The bar is translucent and the list runs under it, so the bottom padding has to be the
+      // bar's real height or the last row can never be scrolled clear of it.
+      contentContainerStyle={[styles.content, {paddingTop: 8, paddingBottom: tabBarHeight + 16}]}
       contentInset={{top: headerHeight}}
       contentOffset={{x: 0, y: -headerHeight}}
       scrollIndicatorInsets={{top: headerHeight}}
@@ -538,40 +594,39 @@ export function EarnScreen() {
       </View>
     </ScrollView>
 
+      {confirmSheet}
+
       {/* Deposit / Withdraw bottom sheet */}
-      <Modal transparent visible={act != null} animationType="none" onRequestClose={() => !actBusy && setAct(null)}>
-        <Pressable style={styles.sheetBackdrop} onPress={() => !actBusy && setAct(null)}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <Animated.View style={actSlide}>
+      <Modal transparent visible={actSheet.mounted} animationType="none" onRequestClose={actSheet.requestClose}>
+        <Animated.View style={[StyleSheet.absoluteFill, styles.shade, actSheet.backdropStyle]} />
+        <Pressable style={styles.sheetBackdrop} onPress={actSheet.requestClose}>
+          <KeyboardAvoidingView behavior={undefined} style={{height: actHeight}}>
+            <Animated.View style={[styles.sheetWrap, actSheet.sheetStyle]} {...actSheet.panHandlers}>
             <Pressable style={styles.sheet} onPress={() => Keyboard.dismiss()}>
               <View style={styles.sheetHead}>
                 <Text style={styles.sheetTitle}>{act ? `${act.verb} ${displaySymbol(act.route.asset.symbol)}` : ''}</Text>
-                <Pressable onPress={() => !actBusy && setAct(null)} hitSlop={10}>
+                <Pressable onPress={actSheet.requestClose} hitSlop={10}>
                   <Text style={styles.sheetClose}>✕</Text>
                 </Pressable>
               </View>
               <AmountInput
                 value={actAmount}
                 onChangeText={setActAmount}
-                placeholder={t('mobile.earn.amount_in', {symbol: displaySymbol(act?.route.asset.symbol)})}
+                placeholder={t('vault.amount')}
                 max={act?.max}
-                maxLabel={act ? t('mobile.earn.available', {amount: fmt(act.max), symbol: displaySymbol(act.route.asset.symbol)}) : undefined}
-                inputAccessoryViewID={KB_ID}
+                maxLabel={act ? `${fmt(act.max)} ${displaySymbol(act.route.asset.symbol)}` : undefined}
               />
               {actErr ? <Text style={styles.actErr}>{actErr}</Text> : null}
-              <ConfirmButton onPress={onActionSubmit} loading={actBusy} disabled={!act || !account || !bal.vault || !(Number(actAmount) > 0) || exceedsMax(actAmount, act.max)} />
+              <ConfirmButton
+                onPress={onActionSubmit}
+                disabled={!act || !account || !bal.vault || !(Number(actAmount) > 0) || exceedsMax(actAmount, act.max)}
+                gas={relayGasFor(act?.mode === 'withdraw' ? {withdraw: 1} : {supply: 1})}
+              />
             </Pressable>
             </Animated.View>
           </KeyboardAvoidingView>
           <ToastHost />
         </Pressable>
-        <InputAccessoryView nativeID={KB_ID}>
-          <View style={styles.kbBar}>
-            <Pressable onPress={() => Keyboard.dismiss()} hitSlop={8}>
-              <Text style={styles.kbDone}>{t('vault.done')}</Text>
-            </Pressable>
-          </View>
-        </InputAccessoryView>
       </Modal>
     </>
   );
@@ -579,7 +634,8 @@ export function EarnScreen() {
 
 const makeStyles = (c: Colors) => StyleSheet.create({
   container: {flex: 1, backgroundColor: c.bg},
-  content: {flexGrow: 1, padding: 16, gap: 20, paddingBottom: 32},
+  // paddingBottom is set inline from the tab bar's height; see the ScrollView.
+  content: {flexGrow: 1, padding: 16, gap: 20},
   section: {gap: 0},
   pad: {paddingVertical: 20},
   empty: {color: c.subtext, fontSize: 13, paddingTop: 12, paddingBottom: 4},
@@ -601,14 +657,14 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   assetText: {gap: 2},
   symLine: {flexDirection: 'row', alignItems: 'center', gap: 8},
   apyPill: {backgroundColor: c.successSoft, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2},
-  apyText: {color: c.success, fontSize: 10, fontWeight: '700'},
+  apyText: {color: c.success, fontSize: 12, fontWeight: '700'},
   sym: {color: c.text, fontSize: 15, fontWeight: '600'},
   rowSub: {color: c.subtext, fontSize: 13, marginTop: 2},
   protoPill: {backgroundColor: c.card, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2},
-  protoPillText: {color: c.textMuted, fontSize: 10, fontWeight: '600'},
+  protoPillText: {color: c.textMuted, fontSize: 12, fontWeight: '600'},
   amtCol: {alignItems: 'flex-end', minWidth: 64},
   amt: {color: c.text, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums']},
-  amtLabel: {color: c.subtext, fontSize: 10, marginTop: 1},
+  amtLabel: {color: c.subtext, fontSize: 12, marginTop: 1},
   earned: {color: c.success, fontSize: 12, fontVariant: ['tabular-nums'], marginTop: 1},
   rowBtns: {flexDirection: 'row', gap: 8},
   priBtn: {flex: 1, backgroundColor: c.accent, borderRadius: 8, paddingVertical: 9, alignItems: 'center'},
@@ -627,15 +683,15 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   lpFees: {color: c.subtext, fontSize: 12, fontVariant: ['tabular-nums']},
   secSpacer: {flex: 1},
   // Deposit/Withdraw bottom sheet
-  sheetBackdrop: {flex: 1, backgroundColor: c.overlay, justifyContent: 'flex-end'},
-  sheet: {backgroundColor: c.elevated, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 34, gap: 14},
+  shade: {backgroundColor: c.overlay},
+  sheetBackdrop: {flex: 1, justifyContent: 'flex-end'},
+  sheetWrap: {flex: 1},
+  sheet: {flex: 1, backgroundColor: c.elevated, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, gap: 14},
   sheetHead: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
   sheetTitle: {color: c.text, fontSize: 18, fontWeight: '700'},
   sheetClose: {color: c.subtext, fontSize: 18},
   hint: {color: c.subtext, fontSize: 12, lineHeight: 17},
   actErr: {color: c.danger, fontSize: 13},
-  kbBar: {backgroundColor: c.elevated, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, paddingHorizontal: 16, paddingVertical: 10, alignItems: 'flex-end'},
-  kbDone: {color: c.accent, fontSize: 16, fontWeight: '700'},
   actions: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10},
   autoInline: {flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1},
   autoToggleLabel: {color: c.subtext, fontSize: 13, fontWeight: '600'},

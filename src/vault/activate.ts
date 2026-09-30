@@ -19,14 +19,11 @@ import {
 } from '@/core/chain';
 import {ACTIVATION_TYPES, PRICE_FEED_ABI} from '@/core/abi';
 import {activationFeeUnits} from '@/core/activation-fee';
+// One copy of the ETH/USD feeds: the fee shown before signing and the fee actually signed must be
+// priced from the same source, or the two disagree for no reason the user can see.
+import {ETH_USD_FEED} from './fee-quote';
 import {fetchPrices} from '@/core/prices';
 
-// Chainlink ETH/USD feeds — dependency-free price for the fee (answer at 8 decimals).
-const ETH_USD_FEED: Partial<Record<Network, Address>> = {
-  mainnet: '0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419',
-  base: '0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70',
-  sepolia: '0x694AA1769357215DE4FAC081bf1f309aDC325306',
-};
 
 /** Is the vault deployed (activated)? A counterfactual vault has no code until activation. */
 export async function isActivated(vault: Address, network: Network): Promise<boolean> {
@@ -55,7 +52,7 @@ export async function activateVault(o: {
     // (Robinhood Chain has no feed).
     feedAddress
       ? (client.readContract({address: feedAddress, abi: PRICE_FEED_ABI, functionName: 'latestRoundData'}) as Promise<readonly [bigint, bigint, bigint, bigint, bigint]>).then((feed) => Number(feed[1]) / 1e8)
-      : fetchPrices(['ETH']).then((p) => {
+      : fetchPrices(['ETH'], o.network).then((p) => {
           const usd = p.get('ETH');
           if (!usd) throw new Error('ETH price unavailable');
           return usd;

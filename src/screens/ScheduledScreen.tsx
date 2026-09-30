@@ -4,6 +4,9 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {isAddress, type Address} from 'viem';
 import {ConfirmButton} from '@/components/Button';
+import {useConfirmAction} from '@/components/ConfirmAction';
+import {shortAddress} from '@/core/format';
+import {relayGasFor} from '@/vault/fee-quote';
 import {exceedsMax} from '@/components/AmountInput';
 import {TokenIcon} from '@/components/TokenIcon';
 import {PendingSwitch} from '@/components/PendingSwitch';
@@ -82,6 +85,8 @@ export function ScheduledScreen() {
   // A scheduled payment pays from the vault's free balance each time it runs.
   const bal = useVaultBalances(network);
   const max = balanceOfSymbol(bal.balances, sym);
+  // A balance that has not loaded is unknown, not zero.
+  const balKnown = bal.balances != null;
   const over = exceedsMax(amount, max);
   const [pickerOpen, setPickerOpen] = useState(false);
   const canAdd =
@@ -148,6 +153,8 @@ export function ScheduledScreen() {
     }
   };
 
+  const {ask, sheet: confirmSheet} = useConfirmAction();
+
   const act = async (id: string, title: string, fn: (acct: Awaited<ReturnType<typeof getSigner>>) => Promise<string>) => {
     setActing(id);
     const tx = showTx(title, network);
@@ -162,14 +169,28 @@ export function ScheduledScreen() {
     }
   };
 
+  // Paying early and removing a schedule are both relayed writes on a small row button, so each
+  // asks first rather than firing on the tap that reached it.
   const onPay = (p: ScheduledPayment) =>
-    act(p.id, t('mobile.payments.pay_now'), (acct) =>
-      payScheduledNow({account: acct, vault: vault!, network, id: p.id, stableCoin: stable!.address}),
-    );
+    ask({
+      title: t('mobile.payments.pay_now'),
+      message: shortAddress(p.scheduledPaymentAddress),
+      gas: relayGasFor({transfer: 1}),
+      run: () =>
+        act(p.id, t('mobile.payments.pay_now'), (acct) =>
+          payScheduledNow({account: acct, vault: vault!, network, id: p.id, stableCoin: stable!.address}),
+        ).then(() => undefined),
+    });
   const onRemove = (p: ScheduledPayment) =>
-    act(p.id, `${t('vault.remove')} · ${t('vault.scheduled')}`, (acct) =>
-      removeScheduledPayment({account: acct, vault: vault!, network, id: p.id, stableCoin: stable!.address}),
-    );
+    ask({
+      title: `${t('vault.remove')} · ${t('vault.scheduled')}`,
+      message: shortAddress(p.scheduledPaymentAddress),
+      gas: relayGasFor({}),
+      run: () =>
+        act(p.id, `${t('vault.remove')} · ${t('vault.scheduled')}`, (acct) =>
+          removeScheduledPayment({account: acct, vault: vault!, network, id: p.id, stableCoin: stable!.address}),
+        ).then(() => undefined),
+    });
 
   const intervalText = (secs: string) => {
     const n = Number(secs);
@@ -233,7 +254,7 @@ export function ScheduledScreen() {
           {/* Amount per payment: "Balance: … Max" above, the asset pill inside the field, as on Send. */}
           <View style={styles.line}>
             <Text style={styles.balance}>
-              {t('vault.balance')}: <Amount v={fmtNum(Number(max))} /> {displaySymbol(sym)}
+              {t('vault.balance')}: {balKnown ? <Amount v={fmtNum(Number(max))} /> : '—'} {balKnown ? displaySymbol(sym) : ''}
             </Text>
             <View style={[styles.field, over && styles.fieldOver]}>
               <TextInput
@@ -332,7 +353,8 @@ export function ScheduledScreen() {
       <AssetPicker visible={pickerOpen} title={t('vault.asset')} assets={assets} selected={sym} onSelect={setSym} onClose={() => setPickerOpen(false)} />
 
       <View style={styles.footer}>
-      <ConfirmButton onPress={onAdd} loading={busy} disabled={!canAdd} />
+      <ConfirmButton onPress={onAdd} disabled={!canAdd} />
+      {confirmSheet}
       </View>
     </SafeAreaView>
   );
@@ -346,12 +368,12 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   section: {gap: 8, marginBottom: 8},
   label: {color: c.subtext, fontSize: 15, fontWeight: '600', paddingHorizontal: 16, marginTop: 8},
   card: {backgroundColor: c.card, borderRadius: 20, padding: 12, gap: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border},
-  toInput: {height: 44, borderRadius: 10, borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, color: c.text, paddingHorizontal: 12, fontSize: 13, fontFamily: 'Menlo'},
+  toInput: {height: 44, borderRadius: 10, backgroundColor: c.input, color: c.text, paddingHorizontal: 12, fontSize: 15, fontFamily: 'Menlo'},
   line: {gap: 6},
   balance: {color: c.subtext, fontSize: 12},
-  field: {flexDirection: 'row', alignItems: 'center', height: 56, borderRadius: 14, borderWidth: 1, borderColor: c.border, backgroundColor: c.input, paddingLeft: 16, paddingRight: 8},
-  fieldOver: {borderColor: c.danger},
-  fieldInput: {flex: 1, color: c.text, fontSize: 18, paddingVertical: 0},
+  field: {flexDirection: 'row', alignItems: 'center', height: 56, borderRadius: 12, backgroundColor: c.input, paddingLeft: 16, paddingRight: 8},
+  fieldOver: {borderWidth: 1, borderColor: c.danger},
+  fieldInput: {flex: 1, color: c.text, fontSize: 17, paddingVertical: 0},
   assetPill: {flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.neutralSoft, borderRadius: 18, paddingVertical: 7, paddingHorizontal: 10},
   assetSym: {color: c.text, fontSize: 14, fontWeight: '700'},
   over: {color: c.danger, fontSize: 12},
@@ -372,5 +394,5 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   editText: {color: c.text, fontSize: 13, fontWeight: '700'},
   rmBtn: {borderColor: c.danger},
   rmText: {color: c.danger, fontSize: 13, fontWeight: '700'},
-  inputErr: {borderColor: c.danger},
+  inputErr: {borderWidth: 1, borderColor: c.danger},
 });

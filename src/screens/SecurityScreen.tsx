@@ -20,6 +20,8 @@ import {
 import {ASSETS} from '@/core/assets';
 import {useT} from '@/i18n';
 import {showTx} from '@/components/Toast';
+import {useConfirmAction} from '@/components/ConfirmAction';
+import {relayGasFor} from '@/vault/fee-quote';
 import {useColors, useStyles, type Colors} from '@/theme';
 
 const HOUR = 3600;
@@ -88,7 +90,9 @@ export function SecurityScreen() {
   }, [vault, network]);
   useEffect(load, [load]);
 
-  const run = async (key: string, title: string, fn: (acct: Acct) => Promise<string>): Promise<boolean> => {
+  const {ask, sheet} = useConfirmAction();
+
+  const runNow = async (key: string, title: string, fn: (acct: Acct) => Promise<string>): Promise<boolean> => {
     if (!vault || !stable) return false;
     setBusy(key);
     const tx = showTx(title, network);
@@ -104,6 +108,14 @@ export function SecurityScreen() {
       setBusy(null);
     }
   };
+
+  /**
+   * Every write on this page goes through here, so wrapping it is what puts a Face ID step and an
+   * estimated fee in front of all of them at once — the switches and the small Save buttons
+   * included, which used to send a transaction on the tap that reached them.
+   */
+  const run = (key: string, title: string, fn: Parameters<typeof runNow>[2]) =>
+    ask({title, gas: relayGasFor({}), run: () => runNow(key, title, fn).then(() => undefined)});
 
   // One risk field: label, current display, editable input, Save (enabled only when changed & valid).
   const RISK_FIELDS: {
@@ -232,6 +244,7 @@ export function SecurityScreen() {
         }
       />
       <Text style={styles.fine}>{t('mobile.vault.wrap_idle_eth_hint')}</Text>
+      {sheet}
     </ScrollView>
   );
 }
@@ -250,14 +263,12 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   fieldRow: {flexDirection: 'row', gap: 10},
   input: {
     flex: 1,
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: c.border,
-    backgroundColor: c.card,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: c.input,
     color: c.text,
-    paddingHorizontal: 14,
-    fontSize: 16,
+    paddingHorizontal: 12,
+    fontSize: 17,
   },
   inputErr: {borderColor: c.danger},
   saveBtn: {

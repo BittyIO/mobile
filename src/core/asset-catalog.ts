@@ -1,5 +1,5 @@
 import {useEffect, useState} from 'react';
-import {ASSETS, type Asset, type AssetKind, type AssetCategory} from '@/core/assets';
+import {ASSETS, assetCategory, type Asset, type AssetKind} from '@/core/assets';
 import type {Network} from '@/core/chain';
 import type {Address} from 'viem';
 
@@ -40,7 +40,7 @@ function toAsset(it: ApiItem): Asset {
     address: it.address as Address,
     decimals: it.decimals,
     kind: (it.kind as AssetKind) ?? 'crypto',
-    category: it.category as AssetCategory | undefined,
+    category: assetCategory(it.category),
     company: it.company,
     icon: iconUrl(it.icon),
   };

@@ -4,6 +4,8 @@ import type {MobileTable} from './index';
 // as the action taken ("Cancel limit orders"), the way the button that caused it reads.
 export const actions: MobileTable = {
   en: {
+    deposit_to: 'Deposit to {{name}}',
+    withdraw_from: 'Withdraw from {{name}}',
     activate: 'Activate vault',
     approve_intent: 'Approved for {{token}}',
     cancel_intent: 'Cancel limit order',
@@ -41,6 +43,8 @@ export const actions: MobileTable = {
     send_cancelled: 'Cancel send',
   },
   zh: {
+    deposit_to: '存入 {{name}}',
+    withdraw_from: '从 {{name}} 取出',
     activate: '激活金库',
     approve_intent: '已授权 {{token}}',
     cancel_intent: '取消限价订单',
@@ -78,6 +82,8 @@ export const actions: MobileTable = {
     send_cancelled: '取消转账',
   },
   'zh-TW': {
+    deposit_to: '存入 {{name}}',
+    withdraw_from: '從 {{name}} 取出',
     activate: '啟用金庫',
     approve_intent: '已授權 {{token}}',
     cancel_intent: '取消限價訂單',
@@ -115,6 +121,8 @@ export const actions: MobileTable = {
     send_cancelled: '取消轉帳',
   },
   ja: {
+    deposit_to: '{{name}} へ入金',
+    withdraw_from: '{{name}} から出金',
     activate: 'ボールトを有効化',
     approve_intent: '{{token}} を承認済み',
     cancel_intent: '指値注文をキャンセル',
@@ -152,6 +160,8 @@ export const actions: MobileTable = {
     send_cancelled: '送金をキャンセル',
   },
   ko: {
+    deposit_to: '{{name}}에 예치',
+    withdraw_from: '{{name}}에서 출금',
     activate: '볼트 활성화',
     approve_intent: '{{token}} 승인됨',
     cancel_intent: '지정가 주문 취소',
@@ -189,6 +199,8 @@ export const actions: MobileTable = {
     send_cancelled: '송금 취소',
   },
   fr: {
+    deposit_to: 'Dépôt vers {{name}}',
+    withdraw_from: 'Retrait depuis {{name}}',
     activate: 'Activer le coffre',
     approve_intent: 'Approuvé pour {{token}}',
     cancel_intent: 'Annuler l\'ordre limité',
@@ -226,6 +238,8 @@ export const actions: MobileTable = {
     send_cancelled: 'Annuler l’envoi',
   },
   es: {
+    deposit_to: 'Depósito en {{name}}',
+    withdraw_from: 'Retiro desde {{name}}',
     activate: 'Activar bóveda',
     approve_intent: 'Aprobado para {{token}}',
     cancel_intent: 'Cancelar orden limitada',
@@ -263,6 +277,8 @@ export const actions: MobileTable = {
     send_cancelled: 'Cancelar envío',
   },
   de: {
+    deposit_to: 'Einzahlung bei {{name}}',
+    withdraw_from: 'Abhebung von {{name}}',
     activate: 'Tresor aktivieren',
     approve_intent: 'Für {{token}} freigegeben',
     cancel_intent: 'Limit-Order stornieren',

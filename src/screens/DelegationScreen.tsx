@@ -2,6 +2,8 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {isAddress, type Address} from 'viem';
 import {ConfirmButton} from '@/components/Button';
+import {useConfirmAction} from '@/components/ConfirmAction';
+import {relayGasFor} from '@/vault/fee-quote';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {ownerVaultAddress} from '@/vault/read';
@@ -10,6 +12,7 @@ import {listOperators, updateOperator, operatorScanBounded} from '@/vault/delega
 import {useT} from '@/i18n';
 import {showTx} from '@/components/Toast';
 import {CopyAddress} from '@/components/CopyAddress';
+import {shortAddress} from '@/core/format';
 import {useColors, useStyles, type Colors} from '@/theme';
 
 const short = (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}`;
@@ -46,6 +49,8 @@ export function DelegationScreen() {
   }, [vault, network]);
   useEffect(load, [load]);
 
+  const {ask, sheet} = useConfirmAction();
+
   const run = async (
     key: string,
     title: string,
@@ -74,10 +79,17 @@ export function DelegationScreen() {
     ).then((ok) => ok && setOp(''));
   };
 
+  // Removing an operator is a relayed write and a mis-tap on a row would have sent it, so it asks.
   const onRemoveOp = (addr: Address) =>
-    run(`rm-${addr}`, `${t('vault.remove')} · ${t('vault.payout_operators')}`, (acct) =>
-      updateOperator({account: acct, vault: vault!, network, operator: addr, add: false, stableCoin: stable!.address}),
-    );
+    ask({
+      title: `${t('vault.remove')} · ${t('vault.payout_operators')}`,
+      message: shortAddress(addr),
+      gas: relayGasFor({}),
+      run: () =>
+        run(`rm-${addr}`, `${t('vault.remove')} · ${t('vault.payout_operators')}`, (acct) =>
+          updateOperator({account: acct, vault: vault!, network, operator: addr, add: false, stableCoin: stable!.address}),
+        ).then(() => undefined),
+    });
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
@@ -114,7 +126,8 @@ export function DelegationScreen() {
         value={op}
         onChangeText={setOp}
       />
-      <ConfirmButton onPress={onAddOp} loading={busy === 'add-op'} disabled={!account || !vault || !stable || !isAddress(op) || busy !== null} />
+      <ConfirmButton onPress={onAddOp} disabled={!account || !vault || !stable || !isAddress(op) || busy !== null} />
+      {sheet}
     </ScrollView>
   );
 }
@@ -144,13 +157,11 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   rmBtn: {borderColor: c.danger},
   rmText: {color: c.danger, fontSize: 13, fontWeight: '700'},
   input: {
-    height: 52,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: c.border,
-    backgroundColor: c.card,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: c.input,
     color: c.text,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     fontSize: 15,
     fontFamily: 'Menlo',
   },

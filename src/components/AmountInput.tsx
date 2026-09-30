@@ -20,7 +20,6 @@ export function AmountInput({
   placeholder,
   max,
   maxLabel,
-  inputAccessoryViewID,
 }: {
   value: string;
   onChangeText: (v: string) => void;
@@ -29,8 +28,6 @@ export function AmountInput({
   max?: string;
   /** e.g. "Balance: 12.5 USDC" shown above the field. */
   maxLabel?: string;
-  /** Links the field to an iOS keyboard accessory (a Done bar) for the number pad. */
-  inputAccessoryViewID?: string;
 }) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
@@ -39,17 +36,22 @@ export function AmountInput({
   const over = exceedsMax(value, max);
   return (
     <View style={styles.wrap}>
-      {maxLabel ? <Text style={styles.balance}>{maxLabel}</Text> : null}
       <View style={[styles.row, over && styles.rowOver]}>
         <TextInput
           style={styles.input}
           placeholder={placeholder}
           placeholderTextColor={c.subtext}
           keyboardType="decimal-pad"
-          inputAccessoryViewID={inputAccessoryViewID}
           value={value}
           onChangeText={onChangeText}
         />
+        {/* What is available sits right beside Max, where the number and the button that fills it
+            belong together, instead of on a line of its own above the field. */}
+        {maxLabel ? (
+          <Text style={styles.balance} numberOfLines={1}>
+            {maxLabel}
+          </Text>
+        ) : null}
         {hasMax ? (
           <Pressable style={styles.max} onPress={() => onChangeText(max!)}>
             <Text style={styles.maxText}>{t('common.max')}</Text>
@@ -63,19 +65,17 @@ export function AmountInput({
 
 const makeStyles = (c: Colors) => StyleSheet.create({
   wrap: {gap: 6},
-  balance: {color: c.subtext, fontSize: 12},
+  balance: {color: c.subtext, fontSize: 13, flexShrink: 1, marginRight: 8},
   over: {color: c.danger, fontSize: 12},
-  rowOver: {borderColor: c.danger},
+  rowOver: {borderWidth: 1, borderColor: c.danger},
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: c.border,
+    borderRadius: 12,
     backgroundColor: c.input,
     paddingRight: 8,
   },
-  input: {flex: 1, height: 56, color: c.text, paddingHorizontal: 16, fontSize: 18},
+  input: {flex: 1, minWidth: 60, height: 56, color: c.text, paddingHorizontal: 16, fontSize: 17},
   max: {paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: c.accentSoft},
   maxText: {color: c.accent, fontSize: 13, fontWeight: '700'},
 });

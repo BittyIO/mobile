@@ -3,6 +3,9 @@ import {Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'r
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {isAddress, type Address} from 'viem';
 import {ConfirmButton} from '@/components/Button';
+import {useConfirmAction} from '@/components/ConfirmAction';
+import {shortAddress} from '@/core/format';
+import {relayGasFor} from '@/vault/fee-quote';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {ownerVaultAddress} from '@/vault/read';
@@ -46,6 +49,8 @@ export function WhitelistScreen() {
   }, [vault, network]);
   useEffect(load, [load]);
 
+  const {ask, sheet} = useConfirmAction();
+
   const withSigner = async (id: string, title: string, fn: (acct: Awaited<ReturnType<typeof getSigner>>) => Promise<string>) => {
     setActing(id);
     const tx = showTx(title, network);
@@ -76,10 +81,17 @@ export function WhitelistScreen() {
     }
   };
 
+  // A relayed write behind a small row button: confirm first, so a mis-tap cannot spend anything.
   const onRemove = (r: WhitelistedRecipient) =>
-    withSigner(r.id, `${t('vault.remove')} · ${t('vault.address_book')}`, (acct) =>
-      removeWhitelisted({account: acct, vault: vault!, network, id: r.id, stableCoin: stable!.address}),
-    );
+    ask({
+      title: `${t('vault.remove')} · ${t('vault.address_book')}`,
+      message: shortAddress(r.recipientAddress),
+      gas: relayGasFor({}),
+      run: () =>
+        withSigner(r.id, `${t('vault.remove')} · ${t('vault.address_book')}`, (acct) =>
+          removeWhitelisted({account: acct, vault: vault!, network, id: r.id, stableCoin: stable!.address}),
+        ).then(() => undefined),
+    });
 
   const onPay = (r: WhitelistedRecipient) => {
     if (!stable) return;
@@ -88,6 +100,11 @@ export function WhitelistScreen() {
       t('mobile.payments.amount_in', {symbol: displaySymbol(stable.symbol)}),
       (value) => {
         if (!value || !(Number(value) > 0)) return;
+        ask({
+          title: `${t('vault.send')} ${value} ${displaySymbol(stable.symbol)}`,
+          message: shortAddress(r.recipientAddress),
+          gas: relayGasFor({transfer: 1}),
+          run: () =>
         withSigner(r.id, `${t('vault.send')} ${value} ${displaySymbol(stable.symbol)}`, (acct) =>
           sendToWhitelisted({
             account: acct,
@@ -98,7 +115,8 @@ export function WhitelistScreen() {
             amount: value,
             stableCoin: stable.address,
           }),
-        );
+            ).then(() => undefined),
+        });
       },
       'plain-text',
       '',
@@ -149,7 +167,8 @@ export function WhitelistScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-      <ConfirmButton onPress={onAdd} loading={busy} disabled={!account || !vault || !stable || !isAddress(to) || busy} />
+      <ConfirmButton onPress={onAdd} disabled={!account || !vault || !stable || !isAddress(to) || busy} />
+      {sheet}
       </View>
     </SafeAreaView>
   );
@@ -172,13 +191,11 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   rmBtn: {borderColor: c.danger},
   rmText: {color: c.danger, fontSize: 13, fontWeight: '700'},
   input: {
-    height: 52,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: c.border,
-    backgroundColor: c.card,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: c.input,
     color: c.text,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     fontSize: 15,
     fontFamily: 'Menlo',
   },

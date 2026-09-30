@@ -16,7 +16,7 @@ import {TokenIcon} from '@/components/TokenIcon';
 import {adapterByName} from '@/core/protocols';
 import type {RootStackParamList} from '@/App';
 import {useStyles, type Colors} from '@/theme';
-import {displaySymbol} from '@/core/format';
+import {displaySymbol, fmtNum} from '@/core/format';
 import {useT} from '@/i18n';
 
 /**
@@ -114,9 +114,9 @@ export function EarnActionScreen() {
         <AmountInput
           value={amount}
           onChangeText={setAmount}
-          placeholder={t('mobile.home.amount_in', {symbol: targetSymbol})}
+          placeholder={t('vault.amount')}
           max={max}
-          maxLabel={max ? t('mobile.home.available_amount', {amount: max, symbol: targetSymbol}) : undefined}
+          maxLabel={max ? `${fmtNum(Number(max))} ${displaySymbol(targetSymbol)}` : undefined}
         />
 
 
@@ -125,7 +125,7 @@ export function EarnActionScreen() {
       </ScrollView>
 
       <SafeAreaView edges={['bottom']} style={styles.footer}>
-      <ConfirmButton onPress={onSubmit} loading={status === 'busy'} disabled={!canSubmit} />
+      <ConfirmButton onPress={onSubmit} disabled={!canSubmit} />
       </SafeAreaView>
     </View>
   );
@@ -154,14 +154,12 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   coinText: {color: c.subtext, fontSize: 15, fontWeight: '600'},
   coinTextOn: {color: c.text},
   input: {
-    height: 56,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: c.border,
-    backgroundColor: c.card,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: c.input,
     color: c.text,
-    paddingHorizontal: 16,
-    fontSize: 18,
+    paddingHorizontal: 12,
+    fontSize: 17,
   },
   hint: {color: c.subtext, fontSize: 13, lineHeight: 18},
   ok: {color: c.success, fontSize: 13, fontFamily: 'Menlo'},

@@ -18,11 +18,89 @@ type T = (key: string, params?: Record<string, string | number>) => string;
 const list = (v: string | string[] | undefined): string[] => (Array.isArray(v) ? v : v ? [v] : []);
 
 /** One line for a CoW order: "0.1 ETH → 250 USDC" (sell for buy), from the order's raw amounts. */
-function describeOrder(o: CowOrder, network: Network): string {
+export function describeOrder(o: CowOrder, network: Network): string {
   const sell = assetMeta(network, o.sellToken as `0x${string}`);
   const buy = assetMeta(network, o.buyToken as `0x${string}`);
   const amt = (raw: string, dec: number) => fmtNum(Number(formatUnits(BigInt(raw), dec)));
   return `${amt(o.sellAmount, sell.decimals)} ${displaySymbol(sell.symbol)} → ${amt(o.buyAmount, buy.decimals)} ${displaySymbol(buy.symbol)}`;
+}
+
+/** The history tabs an action can belong to; mirrors TransactionsScreen's Category. */
+export type ActionCategory = 'trade' | 'stake' | 'send' | 'gas';
+
+/**
+ * Which tab a transaction belongs to, judged by what the vault was ASKED to do.
+ *
+ * The tab used to be inferred purely from which tokens moved, and a transaction that moved none
+ * fell through to "network fee" — so cancelling a limit order, and approving an asset for the
+ * intent protocol, both filed themselves under the fee they happened to pay. An action is direct
+ * evidence of intent where a counterparty address is a guess, so it is consulted first.
+ *
+ * Only actions with an unambiguous home are listed. Anything else, and anything genuinely about
+ * the vault's configuration, still lands on the fee tab, which is where a pure config change
+ * belongs.
+ */
+const ACTION_CATEGORY: Record<string, ActionCategory> = {
+  // Earn, and the reason this map exists at all: a lending supply moves the underlying OUT and the
+  // aToken IN, but the indexer does not track aTokens, so only the outgoing leg is visible and the
+  // transfer heuristic read it as a payment to a stranger.
+  deposit: 'stake',
+  withdraw: 'stake',
+  // Trading. None of these move a token, but every one of them is part of an order's life.
+  approveIntentRelayer: 'trade',
+  cancelIntentOrder: 'trade',
+  cancelIntentOrders: 'trade',
+  disableTradeUntilTimestamp: 'trade',
+  marketSell: 'trade',
+  marketBuy: 'trade',
+  // Earn. The keeper's sweep and the switches that govern it.
+  autoYield: 'stake',
+  autoYields: 'stake',
+  setAutoYielding: 'stake',
+  setAutoYieldings: 'stake',
+  setAutoYieldTrigger: 'stake',
+  // Payments.
+  addScheduledPayment: 'send',
+  updateScheduledPayments: 'send',
+  removeScheduledPayments: 'send',
+  payScheduled: 'send',
+  addWhitelistedRecipient: 'send',
+  removeWhitelistedRecipients: 'send',
+  proposeSend: 'send',
+  approveSend: 'send',
+  cancelSends: 'send',
+  fundSubVault: 'send',
+};
+
+/**
+ * A deposit into, or a withdrawal from, a yield or lending route — read from the call rather than
+ * from the transfers.
+ *
+ * `deposit` and `withdraw` are one pair of vault functions covering both Earn routes, so which
+ * kind it is comes from the protocol's own category: Aave is lending, Sky and Lido are yielding.
+ */
+export function defiMoveFromActions(
+  actions: VaultAction[] | undefined,
+  network: Network,
+): {kind: 'stake' | 'supply'; out: boolean} | null {
+  for (const a of actions ?? []) {
+    if (a.name !== 'deposit' && a.name !== 'withdraw') continue;
+    const protocol = String(a.args.depositProtocol ?? a.args.withdrawProtocol ?? a.args.protocol ?? '');
+    if (!protocol) continue;
+    const category = protocolMeta(network, protocol).category;
+    // An unknown adapter is still an Earn move; treating it as yielding names it honestly enough.
+    return {kind: category === 'lending' ? 'supply' : 'stake', out: a.name === 'deposit'};
+  }
+  return null;
+}
+
+/** The tab these actions put a transaction on, or null when none of them says. */
+export function categoryForActions(actions: VaultAction[] | undefined): ActionCategory | null {
+  for (const a of actions ?? []) {
+    const c = ACTION_CATEGORY[a.name];
+    if (c) return c;
+  }
+  return null;
 }
 
 export function describeActions(actions: VaultAction[] | undefined, network: Network, t: T, orders?: Map<string, CowOrder>): string[] {
@@ -41,6 +119,13 @@ export function describeActions(actions: VaultAction[] | undefined, network: Net
     switch (a.name) {
       case 'activateVault':
         out.push(k('activate'));
+        break;
+      // Neither was described before, so an Earn move showed no line at all under its title.
+      case 'deposit':
+        out.push(k('deposit_to', {name: proto(String(g.depositProtocol ?? g.protocol))}));
+        break;
+      case 'withdraw':
+        out.push(k('withdraw_from', {name: proto(String(g.withdrawProtocol ?? g.protocol))}));
         break;
       case 'approveIntentRelayer':
         out.push(k('approve_intent', {token: token(String(g.token))}));

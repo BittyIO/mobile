@@ -9,16 +9,24 @@
  * answers `true` when the allowlist is off, and a protocol already in `getProtocols` is skipped — so an
  * unrestricted vault pays nothing here.
  */
-import {type Address} from 'viem';
+import {parseAbi, type Address} from 'viem';
 import {publicClientFor, type Network} from '@/core/chain';
 import {VAULT_REGISTRY_ABI, VAULT_MANAGE_ABI} from '@/core/abi';
 import type {VaultCall} from './relay';
+
+const CLONE_ABI = parseAbi(['function getClone(address protocol) view returns (address)']);
 
 export async function buildSetupCalls(o: {
   network: Network;
   vault: Address;
   adapter: Address;
   tokens: Address[];
+  /**
+   * An INTENT adapter (CoW) has to be cloned on the vault, not merely allowed: the clone is what
+   * answers EIP-1271 for an off-chain order. Registering it is what creates it, so for these the
+   * check is "does a clone exist", never "is it allowed".
+   */
+  intent?: boolean;
 }): Promise<VaultCall[]> {
   const client = publicClientFor(o.network);
   // Dedupe the tokens (sell/buy can repeat across calls).
@@ -42,10 +50,20 @@ export async function buildSetupCalls(o: {
     // The current vault has no protocol list to read; it answers per address. (Reading the legacy
     // `getProtocols` here reverted on every 1.0 vault, the catch answered "none registered", and
     // every trade re-registered the adapter — one "Enable Uniswap V3" per trade in the history.)
-    client
-      .readContract({address: o.vault, abi: VAULT_MANAGE_ABI, functionName: 'isProtocolAllowed', args: [o.adapter]})
-      .then((v) => v as boolean)
-      .catch(() => true), // read failed → assume registered, as with the assets above
+    //
+    // For an intent adapter, allowed is not enough. An UNRESTRICTED vault answers `isProtocolAllowed`
+    // true for everything the guard lists, so the registration was skipped and the clone was never
+    // created — and CoW then rejected every order with InvalidEip1271Signature, because the vault had
+    // no clone to validate against. The clone itself is the question there.
+    o.intent
+      ? client
+          .readContract({address: o.vault, abi: CLONE_ABI, functionName: 'getClone', args: [o.adapter]})
+          .then((v) => !!v && !/^0x0+$/.test(v as string))
+          .catch(() => false) // read failed → register it; doing so twice is harmless
+      : client
+          .readContract({address: o.vault, abi: VAULT_MANAGE_ABI, functionName: 'isProtocolAllowed', args: [o.adapter]})
+          .then((v) => v as boolean)
+          .catch(() => true), // read failed → assume registered, as with the assets above
   ]);
 
   const calls: VaultCall[] = [];

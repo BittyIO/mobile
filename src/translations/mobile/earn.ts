@@ -5,6 +5,7 @@ import type {MobileTable} from './index';
 export const earn: MobileTable = {
   en: {
     auto_supply: 'Auto-Supply',
+    apy_rate: '{{rate}}% APY',
     auto_yield: 'Auto-Yield',
     no_yield_markets: 'No yield markets on this network.',
     no_lend_markets: 'No lending markets on this network.',
@@ -19,6 +20,7 @@ export const earn: MobileTable = {
   },
   zh: {
     auto_supply: '自动供应',
+    apy_rate: '年化 {{rate}}%',
     auto_yield: '自动收益',
     no_yield_markets: '此网络上没有收益市场。',
     no_lend_markets: '此网络上没有借贷市场。',
@@ -33,6 +35,7 @@ export const earn: MobileTable = {
   },
   'zh-TW': {
     auto_supply: '自動供應',
+    apy_rate: '年化 {{rate}}%',
     auto_yield: '自動收益',
     no_yield_markets: '此網路上沒有收益市場。',
     no_lend_markets: '此網路上沒有借貸市場。',
@@ -47,6 +50,7 @@ export const earn: MobileTable = {
   },
   ja: {
     auto_supply: '自動サプライ',
+    apy_rate: '年利 {{rate}}%',
     auto_yield: '自動運用',
     no_yield_markets: 'このネットワークには運用市場がありません。',
     no_lend_markets: 'このネットワークには貸付市場がありません。',
@@ -61,6 +65,7 @@ export const earn: MobileTable = {
   },
   ko: {
     auto_supply: '자동 공급',
+    apy_rate: '연 {{rate}}%',
     auto_yield: '자동 수익',
     no_yield_markets: '이 네트워크에는 수익 시장이 없습니다.',
     no_lend_markets: '이 네트워크에는 대출 시장이 없습니다.',
@@ -75,6 +80,7 @@ export const earn: MobileTable = {
   },
   fr: {
     auto_supply: 'Auto-fourniture',
+    apy_rate: '{{rate}} % APY',
     auto_yield: 'Rendement auto',
     no_yield_markets: 'Aucun marché de rendement sur ce réseau.',
     no_lend_markets: 'Aucun marché de prêt sur ce réseau.',
@@ -89,6 +95,7 @@ export const earn: MobileTable = {
   },
   es: {
     auto_supply: 'Auto-suministro',
+    apy_rate: '{{rate}} % APY',
     auto_yield: 'Rendimiento auto',
     no_yield_markets: 'No hay mercados de rendimiento en esta red.',
     no_lend_markets: 'No hay mercados de préstamo en esta red.',
@@ -103,6 +110,7 @@ export const earn: MobileTable = {
   },
   de: {
     auto_supply: 'Auto-Supply',
+    apy_rate: '{{rate}} % APY',
     auto_yield: 'Auto-Ertrag',
     no_yield_markets: 'Keine Ertragsmärkte in diesem Netzwerk.',
     no_lend_markets: 'Keine Kreditmärkte in diesem Netzwerk.',

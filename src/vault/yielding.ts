@@ -39,6 +39,25 @@ export type Yielding = {
 export const hasYieldingUsdc = (network: Network): boolean => !!SUSDS[network];
 
 /** Read the vault's sUSDS balance + its USDC rate, or null if unavailable / zero balance. */
+/** USDC per 1 sUSDS on this chain (the Sky Savings Rate accumulator), or 1 when it cannot be read. */
+export async function susdsRate(network: Network): Promise<number> {
+  const address = SUSDS[network];
+  if (!address) return 1;
+  try {
+    const client = publicClientFor(network);
+    if (network === 'base') {
+      const data = (await client.readContract({address: BASE_RATE_ORACLE, abi: SUSDS_DATA_ABI, functionName: 'getSUSDSData'})) as readonly bigint[];
+      const rate = Number(data[1]) / 1e27;
+      return Number.isFinite(rate) && rate > 0 ? rate : 1;
+    }
+    const perShare = (await client.readContract({address, abi: ERC4626_ABI, functionName: 'convertToAssets', args: [BigInt(1e18)]})) as bigint;
+    const rate = Number(perShare) / 1e18;
+    return Number.isFinite(rate) && rate > 0 ? rate : 1;
+  } catch {
+    return 1;
+  }
+}
+
 export async function fetchYielding(vault: Address, network: Network): Promise<Yielding | null> {
   const address = SUSDS[network];
   if (!address) return null;

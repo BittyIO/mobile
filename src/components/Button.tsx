@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {FaceIdIcon} from '@/components/FaceIdIcon';
+import {NetworkFee} from '@/components/NetworkFee';
 import {useT} from '@/i18n';
 
 type Props = {
@@ -78,18 +79,24 @@ export function ConfirmButton({
   disabled,
   color,
   style,
+  gas,
+  fee = true,
 }: {
   onPress: () => void;
   loading?: boolean;
   disabled?: boolean;
   color?: string;
   style?: StyleProp<ViewStyle>;
+  /** Gas this particular operation is expected to burn; defaults to a typical relayed write. */
+  gas?: bigint;
+  /** Set false where no relay fee is charged, so the line is not shown against a free action. */
+  fee?: boolean;
 }) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
   const isDisabled = disabled || loading;
-  return (
+  const button = (
     <Pressable
       onPress={onPress}
       disabled={isDisabled}
@@ -106,10 +113,20 @@ export function ConfirmButton({
       )}
     </Pressable>
   );
+  if (!fee) return button;
+  // The cost sits with the control that incurs it, so every signing surface answers "what does this
+  // cost me" in the same place without each screen having to remember to say it.
+  return (
+    <View style={styles.confirmWrap}>
+      <NetworkFee gas={gas} />
+      {button}
+    </View>
+  );
 }
 
 const makeStyles = (c: Colors) => StyleSheet.create({
   confirmRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
+  confirmWrap: {gap: 8},
   // A full pill, the iOS shape the Buy / Sell buttons already use, so every button in the app matches.
   base: {
     height: 52,

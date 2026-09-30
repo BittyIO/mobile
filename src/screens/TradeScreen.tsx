@@ -1,68 +1,74 @@
 import {useHeaderHeight} from '@react-navigation/elements';
-import React, {useEffect, useMemo, useState} from 'react';
-import {Animated, InputAccessoryView, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
-import Svg, {Circle, Line} from 'react-native-svg';
+import {useNavigation, useRoute} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import type {RootStackParamList, TradeParams} from '@/App';
+import {BottomTabBarHeightContext} from '@react-navigation/bottom-tabs';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
+import {Animated, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type StyleProp, type TextStyle} from 'react-native';
+import Svg, {Circle, Path} from 'react-native-svg';
 import {TokenIcon} from '@/components/TokenIcon';
+import {FavoriteStar} from '@/components/FavoriteStar';
 import {Amount} from '@/components/Amount';
 import {ConfirmButton} from '@/components/Button';
-import {useSlideUp} from '@/components/useSlideUp';
+import {useSheetAnim} from '@/components/useSheetAnim';
+import {FundRow} from '@/components/FundRow';
+import {useEndCaret} from '@/components/useEndCaret';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {showTx, showToast, ToastHost} from '@/components/Toast';
-import {AssetPicker} from '@/components/AssetPicker';
+import {PickerSheet} from '@/components/AssetPicker';
 import {PriceChart} from '@/components/PriceChart';
-import {Pill} from '@/components/ui';
+import {CategoryTabs, Pill} from '@/components/ui';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {useVaultBalances} from '@/vault/useVaultBalances';
+import {useVaultPositions} from '@/vault/useVaultPositions';
+import {positionToken} from '@/vault/position-token';
+import {susdsRate} from '@/vault/yielding';
+import {buildLimitAppData} from '@/core/cow';
 import {usePrices} from '@/vault/usePrices';
+import {getFlag, setFlag, SHOW_OTHER_ORDERS} from '@/core/prefs';
+import {usdValue, fmtUsd} from '@/core/prices';
 import {ownerVaultAddress, balanceOfSymbol} from '@/vault/read';
+import {FEE_RESERVE} from '@/vault/gasless';
+import {relayGasFor} from '@/vault/fee-quote';
+import {intentPrepCalls, needsRelayerApproval} from '@/vault/limit';
+import {Sheet} from '@/components/Sheet';
+import {describeOrder} from '@/vault/tx-actions';
+import {useConfirmAction} from '@/components/ConfirmAction';
+import {fetchProtocolApy, EMPTY_APY, type ProtocolApy} from '@/vault/apy';
 import {marketSell, buildMarketSell, poolSpotPrice} from '@/vault/trade';
-import {relayVaultMulticall, type VaultCall} from '@/vault/relay';
-import {placeLimitOrder, prepareIntent, cancelLimitOrders, fetchRecentOrders, fetchSettlements, type CowOrder, type SettlementMeta} from '@/vault/limit';
-import {EXPLORER_TX} from '@/core/chain';
+import {placeLimitOrder, prepareIntent, cancelLimitOrders, fetchRecentOrders, type CowOrder} from '@/vault/limit';
 import {placeTwap} from '@/vault/twap';
-import {fetchMarketTrades, type MarketTrade} from '@/vault/market-trades';
-import {fetchYielding, type Yielding} from '@/vault/yielding';
-import {adapterByName} from '@/core/protocols';
-import {ASSETS, assetMeta} from '@/core/assets';
+import {relayVaultMulticall, type VaultCall} from '@/vault/relay';
 import {VAULT_DEFI_ABI} from '@/core/abi';
+import {fetchMarketTrades, type MarketTrade} from '@/vault/market-trades';
+import {adapterByName} from '@/core/protocols';
+import {ASSET_CATEGORIES, ASSETS, assetCategory, assetMeta, isAmmLiquid, underlyingOf, type AssetCategory} from '@/core/assets';
 import {fmtNum, displaySymbol} from '@/core/format';
 import {formatUnits, parseUnits, type Address} from 'viem';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 
 const SLIPPAGE_BPS = 100; // 1%
-const KB_ID = 'trade-number-kb'; // links the numeric inputs to their Done accessory bar
 type Mode = 'Market' | 'Limit' | 'TWAP';
+
+/** The three places a market order can draw on, ticked one by one in the source sheet. */
+type FundKey = 'vault' | 'sky' | 'aave';
+const FUND_KEYS: FundKey[] = ['vault', 'sky', 'aave'];
 type Side = 'buy' | 'sell';
 type Tab = 'open' | 'finished' | 'cancelled';
-// "Valid for" presets, matching the web: Limit adds a 5-minute quick-fill + 180D; TWAP runs over a wider
-// horizon (no 5m). Keyed by seconds so switching modes keeps the selection consistent. The label is
-// `n` + the translated unit abbreviation ("5m", "1D").
-const MIN = 'vault.minute_abbrev';
+// "Valid for" presets, shared by Limit and TWAP. Keyed by seconds so switching modes keeps the
+// selection consistent. The label is `n` + the translated unit abbreviation ("1D", "7D").
 const DAY = 'vault.day_abbrev';
-const LIMIT_VALID = [
-  {n: 5, unit: MIN, s: 300},
+const VALID_PRESETS = [
   {n: 1, unit: DAY, s: 86400},
   {n: 7, unit: DAY, s: 604800},
   {n: 30, unit: DAY, s: 2592000},
   {n: 180, unit: DAY, s: 15552000},
 ];
-const TWAP_VALID = [
-  {n: 1, unit: DAY, s: 86400},
-  {n: 7, unit: DAY, s: 604800},
-  {n: 30, unit: DAY, s: 2592000},
-  {n: 180, unit: DAY, s: 15552000},
-];
+/** A year. CoW will not hold an order beyond its own horizon, and neither should the field. */
+const MAX_VALID_DAYS = 365;
 
-function SearchIcon({color, size = 15}: {color: string; size?: number}) {
-  const c = {stroke: color, strokeWidth: 2, fill: 'none', strokeLinecap: 'round' as const};
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24">
-      <Circle cx={11} cy={11} r={7} {...c} />
-      <Line x1={21} y1={21} x2={16.65} y2={16.65} {...c} />
-    </Svg>
-  );
-}
 
 // CoW's account endpoint keeps reporting an order as "open" for a while after its validTo passes, so an
 // order that's really done would stay stuck under Open and never reach Finished. Treat a past-validTo
@@ -94,20 +100,78 @@ function statusPill(s: string): {key: string; tone: 'sky' | 'green' | 'gray' | '
 const PARTNER_FEE = 0.002;
 
 const fmtN = fmtNum;
+/** Trim to token-sized precision, so a split never carries float noise into a withdrawal. */
+const round6 = (v: number) => Math.round(v * 1e6) / 1e6;
 const fmtAmt = (raw: string, decimals: number): string => fmtN(Number(formatUnits(BigInt(raw), decimals)));
 
 const fmtExpiry = (validTo: number): string =>
   new Date(validTo * 1000).toLocaleString(undefined, {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'});
 
 /**
- * Trade — web-mobile layout: pair + asset search, price chart, then the ORDERS list (Open / Finished /
+ * Trade — the market directory on the tab; on the pushed pair screen the chart, the ORDERS list
  * Cancelled). A fixed Buy/Sell bar sits at the bottom; pressing either opens the order form as a bottom
  * sheet (Market / Limit / TWAP) pre-set to that side. Market swaps via Uniswap V3; Limit/TWAP post CoW
  * intents (relayer approved once per sell token). All relayed, signed on-device.
  */
+/** Quick fractions of a source, the shortcut people reach for instead of typing a number. */
+/**
+ * Text with the searched-for run picked out in the accent, so a result says WHY it matched — a hit
+ * on a company name is otherwise indistinguishable from one on the ticker beside it.
+ *
+ * One occurrence, the first, which is the one the ranking sorted on.
+ */
+function Highlight({
+  text,
+  q,
+  style,
+  numberOfLines,
+}: {
+  text: string;
+  q: string;
+  style?: StyleProp<TextStyle>;
+  numberOfLines?: number;
+}) {
+  const c = useColors();
+  const i = q ? text.toLowerCase().indexOf(q.toLowerCase()) : -1;
+  if (i < 0) {
+    return (
+      <Text style={style} numberOfLines={numberOfLines}>
+        {text}
+      </Text>
+    );
+  }
+  return (
+    <Text style={style} numberOfLines={numberOfLines}>
+      {text.slice(0, i)}
+      <Text style={{color: c.accent}}>{text.slice(i, i + q.length)}</Text>
+      {text.slice(i + q.length)}
+    </Text>
+  );
+}
+
+/** Magnifier / clear, drawn on the same 24×24 grid as the tab icons. */
+function SearchIcon({open, color, size = 20}: {open: boolean; color: string; size?: number}) {
+  const c = {stroke: color, strokeWidth: 2, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const};
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      {open ? (
+        <Path d="M6 6l12 12M18 6 6 18" {...c} />
+      ) : (
+        <>
+          <Circle cx={11} cy={11} r={7} {...c} />
+          <Path d="M20 20l-4.3-4.3" {...c} />
+        </>
+      )}
+    </Svg>
+  );
+}
+
 export function TradeScreen() {
   const headerHeight = useHeaderHeight();
-  const {t} = useT();
+  // Read through the context, not the hook: this screen is also PUSHED from the Overview, and
+  // there it sits outside the tab navigator, where the hook throws. No bar means no gap to leave.
+  const tabBarHeight = React.useContext(BottomTabBarHeightContext) ?? 0;
+  const {t, company} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
   const account = useWallet((s) => s.account);
@@ -127,30 +191,103 @@ export function TradeScreen() {
     if (!stables.some((s) => s.symbol === quoteSym)) setQuoteSym(stables[0]?.symbol ?? 'USDC');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [network]);
-  const [search, setSearch] = useState('');
+  /**
+   * A pair handed over by another screen — tapping an asset on the Overview opens Trade on it.
+   *
+   * Applied on arrival and whenever the parameters change, so tapping a second asset while Trade is
+   * already the visible tab moves the pair rather than being ignored. Each side is checked against
+   * the network's own catalog first: a stale pair from a previous network must not strand the
+   * screen on an asset that does not exist here.
+   */
+  /**
+   * One component, two screens.
+   *
+   * The TAB is a market directory and nothing else: categories and a list of assets. The PUSHED
+   * copy is the trading screen for one pair — its chart, its orders, its Buy and Sell. Tapping a
+   * row in the directory is what gets you from one to the other, and keeping them in one file
+   * means the pair UI has a single definition.
+   */
+  const routeName = useRoute().name;
+  const isPair = routeName === 'TradePair';
+  const params = useRoute().params as TradeParams;
+  const wantBase = params?.base;
+  const wantQuote = params?.quote;
+  useEffect(() => {
+    if (wantBase && assets.some((a) => a.symbol === wantBase)) setBaseSym(wantBase);
+    if (wantQuote && stables.some((a) => a.symbol === wantQuote)) setQuoteSym(wantQuote);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantBase, wantQuote]);
+
   const [tab, setTab] = useState<Tab>('open');
 
   // Order form (in the bottom sheet)
   const [sheetSide, setSheetSide] = useState<Side | null>(null);
   const [mode, setMode] = useState<Mode>('Market');
+  /**
+   * Which balance of the PAY asset funds the order: the vault's free balance, its Sky savings, or its
+   * Aave supply. Chosen in the order sheet, and it never hides Market — a market swap withdraws from
+   * the position and swaps the proceeds in one transaction, and a limit or TWAP order withdraws in
+   * the preparation transaction so the tokens are free in the vault when a solver settles it.
+   */
+  const [spendSource, setSpendSource] = useState<'free' | 'yield' | 'lend'>('free');
   const [amount, setAmount] = useState('');
+  /**
+   * Where a market order's money comes from: a tick per source, and how much of it to take.
+   *
+   * Only the vault is ticked to begin with, so the order's available balance is the vault's balance
+   * until the user says otherwise. Ticking a source makes its WHOLE balance available and fills the
+   * row with it; the percentages and the field then take less without changing what is available.
+   */
+  const [fundOn, setFundOn] = useState<Record<FundKey, boolean>>({vault: true, sky: false, aave: false});
+  const [fundAmt, setFundAmt] = useState<Record<FundKey, string>>({vault: '', sky: '', aave: ''});
   const [receiveInput, setReceiveInput] = useState('');
   const [price, setPrice] = useState('');
   const [priceEdited, setPriceEdited] = useState(false);
   const [parts, setParts] = useState('10');
-  const [validSec, setValidSec] = useState(86400); // 1D — in both preset sets
+  const [validSec, setValidSec] = useState(86400); // 1D — the first preset in both sets
+  /**
+   * A typed validity in days, empty whenever a preset is the active answer.
+   *
+   * Kept beside `validSec` rather than derived from it, so the field shows what was typed and the
+   * chips can still light up for the values they cover. CoW rejects an order that has already
+   * expired and caps how far ahead one may sit, so the days are clamped to a sane band.
+   */
+  const [validDays, setValidDays] = useState('');
   const [status, setStatus] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
   const [err, setErr] = useState<string | null>(null);
 
   const [orders, setOrders] = useState<CowOrder[]>([]);
+  // Cancelling is a relayed transaction like any other, so it asks first.
+  const {ask, sheet: confirmSheet} = useConfirmAction();
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [cancellingAll, setCancellingAll] = useState(false);
-  const [approved, setApproved] = useState<Set<string>>(new Set());
+  /**
+   * Whether a limit or TWAP order still needs an on-chain transaction before it can be posted.
+   *
+   * Almost always it does not: once the vault has a CoW clone, the pair allowlisted and the sell
+   * token approved to the settlement relayer, signing an order is entirely off-chain and costs
+   * nothing. Read from the chain rather than remembered for the life of the screen, which is what
+   * made the app re-approve an already-approved token after every restart.
+   */
+  const [intentSetup, setIntentSetup] = useState<{needed: boolean; approve: boolean} | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [showOthers, setShowOthers] = useState(true);
+  /**
+   * Off on arrival. The page is opened on one pair, so the orders under it should be that pair's;
+   * seeing every order the vault has ever placed is the exception, and the user asks for it.
+   *
+   * Once they have asked, it stays asked. Re-ticking the same box on every visit is the kind of
+   * small friction that makes a filter feel broken.
+   */
+  const [showOthers, setShowOthers] = useState(() => getFlag(SHOW_OTHER_ORDERS));
+  const toggleOthers = () =>
+    setShowOthers((v) => {
+      setFlag(SHOW_OTHER_ORDERS, !v);
+      return !v;
+    });
   const [marketTrades, setMarketTrades] = useState<MarketTrade[]>([]);
 
   const balances = useVaultBalances(network);
+  const positions = useVaultPositions(balances.vault, network);
   // Pull-to-refresh: re-reads prices, the pool quote, the chart, balances and orders together.
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [pulled, setPulled] = useState(false);
@@ -158,32 +295,208 @@ export function TradeScreen() {
   const base = assets.find((a) => a.symbol === baseSym);
   const intent = adapterByName(network, 'CoW Swap');
 
-  // The vault's Sky (sUSDS) balance = "yielding USDC". Loaded with the vault balances. There's no separate
-  // yielding quote: when you pay USDC and free USDC is short, we auto-withdraw the shortfall from Sky.
-  const [yld, setYld] = useState<Yielding | null>(null);
-  useEffect(() => {
-    let live = true;
-    if (balances.vault) fetchYielding(balances.vault, network).then((y) => live && setYld(y)).catch(() => live && setYld(null));
-    else setYld(null);
-    return () => {
-      live = false;
-    };
-  }, [balances.vault, network, balances.balances]);
-
   const usdcAsset = useMemo(() => stables.find((s) => s.symbol === 'USDC') ?? stables[0], [stables]);
   const quoteAsset = assets.find((a) => a.symbol === quoteSym);
 
   // Order-form denomination: you always enter the PAY leg. A sell pays the base (e.g. ETH); a buy pays
   // the quote (e.g. USDC). So the Amount field + Max button sit on a DIFFERENT asset per side.
   const paysBase = sheetSide !== 'buy';
+  // The asset the pay leg spends. onSubmit re-derives it locally; this is the same thing, needed
+  // at render time for the funding rows' APY.
+  const spendAsset = paysBase ? base : quoteAsset;
   const spendSym = paysBase ? baseSym : quoteSym;
   const recvSym = paysBase ? quoteSym : baseSym;
   const freeSpend = balanceOfSymbol(balances.balances, spendSym);
-  // Paying USDC can also draw on the vault's yielding USDC (auto-withdrawn on submit), so it's spendable.
-  const yieldAvail = !paysBase && quoteSym === 'USDC' && yld ? yld.usdc : 0;
-  const spendBal = yieldAvail > 0 ? String(Number(freeSpend) + yieldAvail) : freeSpend;
+
+  // What a MARKET order can reach beyond the free balance. A market swap is one transaction, so the
+  // vault can withdraw from a position and swap the proceeds in the same multicall — but only from
+  // positions that pay out instantly: Sky savings and an Aave supply. Lido is excluded, its unstake
+  // is a multi-day queue. A limit or TWAP order settles later, off-chain, so it can spend only what
+  // it is pointed at: the free balance, or the savings share sold as itself.
+  const instant = useMemo(() => {
+    const sky = positions.positions.find((p) => p.kind === 'staked' && p.protocolName === 'Sky' && p.symbol === spendSym);
+    const aave = positions.positions.find((p) => p.kind === 'supplied' && p.symbol === spendSym);
+    return {
+      sky: sky ? {protocol: sky.protocol, amount: Number(sky.formatted), position: sky} : null,
+      aave: aave ? {protocol: aave.protocol, amount: Number(aave.formatted), position: aave} : null,
+    };
+  }, [positions.positions, spendSym]);
+
+  const sourceAmount = spendSource === 'yield' ? instant.sky?.amount ?? 0 : spendSource === 'lend' ? instant.aave?.amount ?? 0 : 0;
+
+  /**
+   * How much of the spend asset this order must leave in the vault for the relayer's fee.
+   *
+   * The fee is billed from a vault stablecoin AFTER the call runs, and the coin is picked from what
+   * the vault HOLDS — so when the asset being spent is the only funded stablecoin, the fee comes
+   * out of the very balance the swap is emptying. Spending all of it made the relay revert at the
+   * charge and report `fee-leg-failed`, with nothing wrong with the trade itself.
+   *
+   * Only market orders need it. A limit or TWAP order's transaction is setup and approval; the
+   * balance does not move until CoW settles it later, long after the fee is paid.
+   */
+  const feeComesFromSpend =
+    mode === 'Market' &&
+    stables.some((a) => a.symbol === spendSym) &&
+    !stables.some((a) => a.symbol !== spendSym && Number(balanceOfSymbol(balances.balances, a.symbol)) > 0);
+  const feeReserve = feeComesFromSpend ? FEE_RESERVE[network] : 0;
+
+  // Paying from the free balance, a market order may also top up from the positions in the same
+  // transaction, so its available figure includes them. A named position spends only itself.
+  // Either way the reserve comes off the top: offering a Max the relay cannot charge against is
+  // offering an order that always fails.
+  /**
+   * The funding plan: how much of this order is pulled out of each position.
+   *
+   * Nothing by default, so a market order's available balance is the VAULT's balance and no more.
+   * The user opens the source sheet and slides a position in when they want the order to reach
+   * further, which withdraws and swaps in the same transaction.
+   */
+  // The ceiling on each source. The vault's has the relayer's reserve taken off it, so the last of
+  // the fee coin can never be spent however far the user pushes the row.
+  // Four places, or fewer if the asset has fewer. A raw position balance carries a long float tail
+  // and ticking a row wrote it straight into the field as 40.001594; four is short enough to read
+  // and still finer than anyone trades to. Flooring rather than rounding also means Max can never
+  // ask for more than the position holds, which would fail at the withdrawal.
+  const fundDp = Math.min(spendAsset?.decimals ?? 4, 4);
+  const fundFloor = (v: number) => Math.floor(v * 10 ** fundDp) / 10 ** fundDp;
+  const fundCap: Record<FundKey, number> = {
+    vault: Math.max(0, fundFloor(Number(freeSpend) - feeReserve)),
+    sky: fundFloor(instant.sky?.amount ?? 0),
+    aave: fundFloor(instant.aave?.amount ?? 0),
+  };
+  /** What a source is currently contributing to the order. */
+  const fundPick = (k: FundKey): number => (!fundOn[k] ? 0 : Math.min(Number(fundAmt[k]) || 0, fundCap[k]));
+  const planSky = fundPick('sky');
+  const planAave = fundPick('aave');
+
+  const reachable =
+    spendSource !== 'free'
+      ? sourceAmount
+      : mode === 'Market'
+        ? // The CAPACITY the ticks unlock, not the amounts chosen inside them: ticking a position
+          // is what makes its balance reachable, and how much of it the order takes is a separate
+          // question answered by the row. So the figure under the pay input moves on a tick alone.
+          FUND_KEYS.reduce((n, k) => n + (fundOn[k] ? fundCap[k] : 0), 0)
+        : Number(freeSpend);
+  // Spending from a named position leaves the free balance alone, so only the shortfall against the
+  // reserve has to be held back. Spending from the free balance, the whole reserve comes out of the
+  // same pot. Outside a market order the reserve is zero and this is the plain reachable figure.
+  const keepBack =
+    mode === 'Market' ? 0 : spendSource !== 'free' ? Math.max(0, feeReserve - Number(freeSpend)) : feeReserve;
+  const spendBal = String(Math.max(0, reachable - keepBack));
+
+
+  /**
+   * Gas this particular order will burn, so the fee line moves with what the order actually does.
+   *
+   * A market order is a swap, plus one withdrawal for every position it draws on — which is why
+   * funding a trade out of Sky and Aave costs visibly more than spending the free balance. A limit
+   * or TWAP order swaps nothing on chain: its transaction is the allowlist and adapter setup that
+   * has to be mined before the order can be posted.
+   */
+  // Live APY for the two positions a market order can draw on, so each funding row says what
+  // giving that money up costs. Aave is rated per asset, Sky per adapter.
+  const [posApy, setPosApy] = useState<ProtocolApy>(EMPTY_APY);
+  useEffect(() => {
+    if (!instant.sky && !instant.aave) return;
+    let live = true;
+    fetchProtocolApy({
+      network,
+      aaveAssets: instant.aave && spendAsset ? [spendAsset.address as Address] : [],
+      skyProtocols: instant.sky ? [instant.sky.protocol] : [],
+      lidoProtocols: [],
+    })
+      .then((a) => live && setPosApy(a))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [network, instant.sky?.protocol, instant.aave?.protocol, spendAsset?.address]);
+  const skyApy = instant.sky ? posApy.protocolApy.get(instant.sky.protocol.toLowerCase()) ?? null : null;
+  const aaveApy = spendAsset ? posApy.assetApy.get(spendAsset.address.toLowerCase()) ?? null : null;
+
+
+  /**
+   * Change one source and restate the pay amount, so the two always agree. The pay field stays
+   * typable; whichever the user touched last is the one that leads.
+   */
+  const applyFunding = (on: Record<FundKey, boolean>, amt: Record<FundKey, string>) => {
+    setFundOn(on);
+    setFundAmt(amt);
+    const total = round6(
+      FUND_KEYS.reduce((n, k) => n + (on[k] ? Math.min(Number(amt[k]) || 0, fundCap[k]) : 0), 0),
+    );
+    // Through applyPay, not setAmount: it also re-derives the Receive field, which otherwise sat
+    // at whatever the previous amount implied until the price happened to move.
+    applyPay(total > 0 ? String(total) : '');
+  };
+
+  /**
+   * The pay field's Max.
+   *
+   * For a market order the ceiling IS the ticked sources' balances, so maxing the amount has to
+   * fill those rows too — otherwise the field jumps to the total while the sheet still shows the
+   * old, smaller selection, and the two controls describe different orders. Unticked sources are
+   * left alone: Max means all of what you chose to use, not all of everything.
+   */
+  const maxPay = () => {
+    if (mode !== 'Market') return applyPay(spendBal);
+    applyFunding(
+      fundOn,
+      FUND_KEYS.reduce(
+        (m, k) => ({...m, [k]: fundOn[k] ? String(fundCap[k]) : ''}),
+        {} as Record<FundKey, string>,
+      ),
+    );
+  };
+
+  /** Tick or untick a source: ticking fills the row with everything it holds, unticking empties it. */
+  const toggleFunding = (k: FundKey) => {
+    const on = {...fundOn, [k]: !fundOn[k]};
+    applyFunding(on, {...fundAmt, [k]: on[k] ? String(fundCap[k]) : ''});
+  };
+
+  const payTokenAddr = spendAsset?.address as Address | undefined;
+  const buyTokenAddr = (paysBase ? quoteAsset : base)?.address as Address | undefined;
+  useEffect(() => {
+    if (mode === 'Market' || !intent || !owner || !payTokenAddr || !buyTokenAddr) {
+      setIntentSetup(null);
+      return;
+    }
+    let live = true;
+    const vault = ownerVaultAddress(owner, network);
+    (async () => {
+      const approve = await needsRelayerApproval({vault, network, intentProtocol: intent, token: payTokenAddr});
+      const calls = await intentPrepCalls({
+        vault,
+        network,
+        intentProtocol: intent,
+        tokens: [payTokenAddr, buyTokenAddr],
+        approveToken: approve ? payTokenAddr : undefined,
+      });
+      if (live) setIntentSetup({needed: calls.length > 0, approve});
+    })().catch(() => live && setIntentSetup({needed: true, approve: true}));
+    return () => {
+      live = false;
+    };
+  }, [mode, intent, owner, network, payTokenAddr, buyTokenAddr]);
+
+  const feeGas = useMemo(
+    () =>
+      mode === 'Market'
+        ? relayGasFor({swap: 1, withdraw: (planSky > 0 ? 1 : 0) + (planAave > 0 ? 1 : 0)})
+        : relayGasFor({setup: true}),
+    [mode, planSky, planAave],
+  );
+  // A limit or TWAP order that needs no setup sends nothing, so it is charged nothing and the fee
+  // line is hidden rather than showing a number the vault will never be billed.
+  const feeApplies = mode === 'Market' || intentSetup?.needed === true;
+  // Until the balances are in, the figure is unknown — not zero. Showing 0 reads as "you have
+  // nothing", so the line shows a dash, Max is withheld, and nothing is flagged as over balance.
+  const balKnown = balances.balances != null;
   // More than the vault can pay: flagged as the user types, and the order is not sent.
-  const overBalance = !balances.loading && Number(amount) > 0 && Number(amount) > Number(spendBal);
+  const overBalance = balKnown && Number(amount) > 0 && Number(amount) > Number(spendBal);
 
   // Off-chain oracle price (CoinGecko) — only a fast-loading fallback for the display before the pool
   // quote lands. NEVER used for the trade itself: on a testnet it's the mainnet price and diverges from
@@ -195,13 +508,18 @@ export function TradeScreen() {
     return q ? b / q : b;
   }, [prices, baseSym, quoteSym]);
 
+  // Whether BOTH legs are flagged AMM-liquid by the guard. The tokenized stocks are not: a pool may
+  // exist for one, but with too little depth to price anything — CRCL's 1% pool quotes ~8% under the
+  // market. So for those pairs the pool is ignored entirely, here and in the mode switch.
+  const pairAmmLiquid = isAmmLiquid(network, baseSym) && isAmmLiquid(network, quoteSym);
+
   // Live Uniswap pool price (quote per 1 base) for THIS network's pool — the price the market swap
   // executes at. Re-quoted whenever the pair or network changes.
   const [poolPrice, setPoolPrice] = useState<number | null>(null);
   useEffect(() => {
     let live = true;
     setPoolPrice(null);
-    if (base && quoteAsset) {
+    if (base && quoteAsset && pairAmmLiquid) {
       poolSpotPrice(network, base.address, quoteAsset.address)
         .then((p) => live && setPoolPrice(p))
         .catch(() => live && setPoolPrice(null));
@@ -209,22 +527,31 @@ export function TradeScreen() {
     return () => {
       live = false;
     };
-  }, [network, base?.address, quoteAsset?.address, refreshNonce]);
+  }, [network, base?.address, quoteAsset?.address, pairAmmLiquid, refreshNonce]);
 
-  // The pool price is authoritative; fall back to the oracle only until the quote arrives.
-  const pairPrice = poolPrice ?? oraclePrice;
+  // For a liquid pair the pool is authoritative — it is where a market order executes — with the
+  // oracle standing in until the quote lands. For an illiquid one the pool is not a price at all, so
+  // the market rate is the only honest seed for a limit order.
+  const pairPrice = pairAmmLiquid ? poolPrice ?? oraclePrice : oraclePrice;
 
-  // Settlement tx per filled order, so a finished order can link to the transaction that executed it.
-  const [settlements, setSettlements] = useState<Map<string, SettlementMeta>>(() => new Map());
-  const settlementTxFor = (uid: string): string | null => {
-    for (const [hash, m] of settlements) if (m.orderUid.toLowerCase() === uid.toLowerCase()) return hash;
-    return null;
-  };
+  // USDC per sUSDS, so an order whose sell leg is the savings share is valued by what it is worth
+  // rather than by its number of shares — 81.0067 sUSDS is 90 USDC, and reading that as 81 priced the
+  // order about 8% low. An aToken is one-for-one with its underlying and needs no rate.
+  const [shareRate, setShareRate] = useState(1);
+  useEffect(() => {
+    let live = true;
+    susdsRate(network).then((r) => live && setShareRate(r));
+    return () => {
+      live = false;
+    };
+  }, [network]);
+  // A TWAP part carries a salted appData; a limit order carries the fixed one.
+  const limitAppData = useMemo(() => buildLimitAppData().hash.toLowerCase(), []);
+
   const refreshOrders = () => {
     if (!owner) return;
     const vault = ownerVaultAddress(owner, network);
     fetchRecentOrders(vault, network).then(setOrders).catch(() => setOrders([]));
-    fetchSettlements(vault, network).then(setSettlements).catch(() => setSettlements(new Map()));
     // Completed market swaps leave no order record — they're recovered from the vault's transfer feed.
     fetchMarketTrades(vault, network).then(setMarketTrades).catch(() => setMarketTrades([]));
   };
@@ -255,32 +582,208 @@ export function TradeScreen() {
       const other = stables.find((s) => s.symbol !== sym);
       if (other) setQuoteSym(other.symbol);
     }
-    setSearch('');
   };
-  const searchResults = search.trim()
-    ? assets
-        .filter((a) => {
-          const q = search.trim().toLowerCase();
-          return a.symbol.toLowerCase().includes(q) || (a.company ?? '').toLowerCase().includes(q);
-        })
-        .slice(0, 8)
-    : [];
+  /**
+   * The market directory: every asset the network has, by category.
+   *
+   * It lives here rather than on the Overview because this is where choosing an asset leads
+   * somewhere. The Overview answers "what do I own"; a list of tokenized stocks the vault has
+   * never held belongs on the tab where you go to buy one.
+   */
+  const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [category, setCategory] = useState<AssetCategory>('crypto_native');
+  const categories = useMemo(
+    () => ASSET_CATEGORIES.filter((k) => assets.some((a) => assetCategory(a.category) === k)),
+    [assets],
+  );
+  useEffect(() => {
+    if (categories.length && !categories.includes(category)) setCategory(categories[0]);
+  }, [categories, category]);
+
+
+  /** One directory row: icon, name, localised company, and what one of it costs. */
+  const assetRow = (a: (typeof assets)[number], i: number) => (
+    <Pressable
+      key={a.symbol}
+      style={[styles.resultRow, i > 0 && styles.resultDivided]}
+      onPress={() => openPair(a.symbol)}>
+      <TokenIcon symbol={a.symbol} size={30} />
+      <View style={styles.resultName}>
+        <Highlight text={displaySymbol(a.symbol)} q={query.trim()} style={styles.resultText} />
+        {company(a.symbol, a.company) ? (
+          <Highlight text={company(a.symbol, a.company) as string} q={query.trim()} style={styles.resultCompany} numberOfLines={1} />
+        ) : null}
+      </View>
+      {/* At the right edge, so the prices line up down the list and can be read as a column. */}
+      <Text style={styles.resultPrice}>{fmtUsd(usdValue(1, a.symbol, prices))}</Text>
+    </Pressable>
+  );
+
+  /**
+   * The categories sit side by side and swipe, the way they did on the Overview.
+   *
+   * A tap on a tab scrolls the pager there, so the list always slides in from the side it came
+   * from. The pager is only as tall as the page in view: each page reports its height, the pager
+   * takes the tallest, and an animated negative bottom margin pulls the content below back up to
+   * the page actually showing — otherwise every category would be as tall as the longest one.
+   */
+  /**
+   * Search shares the category line rather than taking a row of its own: the directory is already
+   * a header, a pager and a card, and a fourth band pushed the first asset off the first screen.
+   * Open, the field takes the line and the categories step aside — nothing to switch between while
+   * the results span every category anyway.
+   */
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState('');
+  // Read in the keyboard listener, which must not be re-subscribed on every keystroke.
+  const queryRef = useRef(query);
+  queryRef.current = query;
+  /**
+   * Putting the keyboard away with nothing typed puts the search away too, and the categories and
+   * the magnifier come back.
+   *
+   * Dismissing is how someone says they changed their mind, and leaving an empty field holding the
+   * category line meant the only way out was finding the ✕. A query that HAS been typed survives —
+   * the list scrolls the keyboard down on drag, and losing the results at that point would undo
+   * the search for the sake of tidiness.
+   */
+  useEffect(() => {
+    if (!searching) return;
+    const sub = Keyboard.addListener('keyboardDidHide', () => {
+      if (!queryRef.current.trim()) setSearching(false);
+    });
+    return () => sub.remove();
+  }, [searching]);
+  const pagerRef = React.useRef<ScrollView>(null);
+  const pagerX = React.useRef(new Animated.Value(0)).current;
+  const [pageW, setPageW] = useState(0);
+  const [pageH, setPageH] = useState<Record<string, number>>({});
+  const pages = categories.length > 0 ? categories : (['crypto_native'] as AssetCategory[]);
+  const pickCategory = (k: AssetCategory) => {
+    setCategory(k);
+    const i = pages.indexOf(k);
+    if (i >= 0 && pageW > 0) pagerRef.current?.scrollTo({x: i * pageW, animated: true});
+  };
+  const onPagerSettle = (x: number) => {
+    if (pageW <= 0) return;
+    const k = pages[Math.max(0, Math.min(pages.length - 1, Math.round(x / pageW)))];
+    if (k && k !== category) setCategory(k);
+  };
+  const knownH = pages.map((k) => pageH[k]);
+  const allKnown = pages.length > 1 && pageW > 0 && knownH.every((h) => h != null);
+  const maxH = allKnown ? Math.max(...(knownH as number[])) : 0;
+  const pagerStyle = allKnown
+    ? {
+        height: maxH,
+        marginBottom: pagerX.interpolate({
+          inputRange: pages.map((_, i) => i * pageW),
+          outputRange: (knownH as number[]).map((h) => h - maxH),
+          extrapolate: 'clamp' as const,
+        }),
+      }
+    : undefined;
+  // A new network is a different catalog: start from the first category again.
+  useEffect(() => {
+    setPageH({});
+    pagerRef.current?.scrollTo({x: 0, animated: false});
+  }, [network]);
+
+  /** Every asset in one category, dollars first. */
+  /**
+   * Search runs over the whole catalog, by ticker or by the company name in the user's language.
+   *
+   * Ticker matches come first. Someone typing "A" almost always means an asset called A, not the
+   * dozen whose description happens to contain the letter, and mixing the two in catalog order
+   * buried the obvious answer.
+   *
+   * Within each group the match's position in the text decides: one that STARTS with what was
+   * typed sorts above one that merely contains it, so "A" puts AAVE over BABA and Apple over
+   * Banana. Equal positions keep the catalog's own order, the sort being stable.
+   */
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const byPosition = (text: (a: (typeof assets)[number]) => string) => (x: (typeof assets)[number], y: (typeof assets)[number]) =>
+      text(x).toLowerCase().indexOf(q) - text(y).toLowerCase().indexOf(q);
+    const symbolOf = (a: (typeof assets)[number]) => displaySymbol(a.symbol);
+    const nameOf = (a: (typeof assets)[number]) => company(a.symbol, a.company) ?? '';
+
+    const bySymbol = assets.filter((a) => symbolOf(a).toLowerCase().includes(q)).sort(byPosition(symbolOf));
+    const hit = new Set(bySymbol.map((a) => a.address));
+    const byName = assets.filter((a) => !hit.has(a.address) && nameOf(a).toLowerCase().includes(q)).sort(byPosition(nameOf));
+    return [...bySymbol, ...byName];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, assets, company]);
+
+  const inCategory = (k: AssetCategory) =>
+    assets
+      .filter((a) => assetCategory(a.category) === k)
+      .sort((x, y) => Number(y.kind === 'stable') - Number(x.kind === 'stable'));
+
+  /** The pair to open for a directory row, quoted in a stable coin the vault actually holds. */
+  const openPair = (symbol: string) => {
+    const held = (sym: string) => Number(balanceOfSymbol(balances.balances, sym) || 0) > 0;
+    const options = stables.map((a) => a.symbol).filter((sy) => sy !== symbol);
+    const quote =
+      options.find((sy) => sy === 'USDC' && held(sy)) ??
+      options.find(held) ??
+      options.find((sy) => sy === 'USDC') ??
+      options[0];
+    if (!quote) return;
+    nav.navigate('TradePair', {base: symbol, quote});
+  };
+
 
   // Asset pickers: a sheet with icons, for the base and the quote side of the pair.
-  const [picker, setPicker] = useState<'base' | 'quote' | null>(null);
+  const [picker, setPicker] = useState<'base' | 'quote' | 'source' | null>(null);
   const pickBase = () => setPicker('base');
   const pickQuote = () => setPicker('quote');
-  const pickerAssets = picker === 'quote' ? stables.filter((s) => s.symbol !== baseSym) : assets.filter((a) => a.symbol !== quoteSym);
+  // Quote rows: the stablecoins, nothing else. A position is not a token you pick here — a market
+  // order draws on it automatically, and a limit order spends the free balance only.
+  const pickerItems =
+    picker === 'source'
+      ? (
+          [
+            // A market order already reaches the positions on its own (it withdraws and swaps in one
+            // transaction), so naming one there would be a choice without a difference. The rows are
+            // for limit and TWAP, where the source decides what the order can actually spend.
+            {key: 'free', label: displaySymbol(spendSym), sub: `${t('vault.balance')} · ${fmtNum(Number(freeSpend))}`},
+            // A position's row carries its rate, as the Earn rows do: leaving an order funded from
+            // one open costs nothing, and what it keeps paying while it waits is the reason why.
+            ...(mode !== 'Market' && instant.sky
+              ? [{key: 'yield', label: `${displaySymbol(spendSym)} ${t('vault.yielding')}`, sub: `${fmtNum(instant.sky.amount)} ${displaySymbol(spendSym)}${skyApy != null ? ` · ${t('mobile.earn.apy_rate', {rate: skyApy.toFixed(2)})}` : ''}`}]
+              : []),
+            ...(mode !== 'Market' && instant.aave
+              ? [{key: 'lend', label: `${displaySymbol(spendSym)} ${t('vault.lending')}`, sub: `${fmtNum(instant.aave.amount)} ${displaySymbol(spendSym)}${aaveApy != null ? ` · ${t('mobile.earn.apy_rate', {rate: aaveApy.toFixed(2)})}` : ''}`}]
+              : []),
+          ] as {key: string; label: string; sub: string}[]
+        ).map((o) => ({...o, icon: <TokenIcon symbol={spendSym} size={30} />}))
+      : picker === 'quote'
+      ? stables
+          .filter((s) => s.symbol !== baseSym)
+          .map((s) => ({key: `${s.symbol}:free`, label: displaySymbol(s.symbol), icon: <TokenIcon symbol={s.symbol} size={30} />}))
+      : assets
+          .filter((a) => a.symbol !== quoteSym)
+          .map((a) => ({
+            key: `${a.symbol}:free`,
+            label: displaySymbol(a.symbol),
+            sub: company(a.symbol, a.company),
+            icon: <TokenIcon symbol={a.symbol} size={30} />,
+          }));
 
   // Plain (no thousands separators, so Number() round-trips) price string for the input default.
   const priceToInput = (p: number) => (p >= 1000 ? p.toFixed(0) : p >= 1 ? p.toFixed(2) : p.toPrecision(4));
 
   const openSheet = (side: Side) => {
     setSheetSide(side);
+    setSpendSource('free');
     setStatus('idle');
     setErr(null);
     setAmount('');
     setReceiveInput('');
+    setValidDays('');
+    setFundOn({vault: true, sky: false, aave: false});
+    setFundAmt({vault: '', sky: '', aave: ''});
     setPriceEdited(false);
     setPrice(pairPrice ? priceToInput(pairPrice) : '');
   };
@@ -340,52 +843,119 @@ export function TradeScreen() {
   const onSubmit = async () => {
     const side = sheetSide;
     if (!side || !account || !owner || !base || !quoteAsset) return;
+    // Everything the order needs is read off now, because the sheet closes before the work starts.
+    const amt = amount;
     if (!(Number(amount) > 0)) return setErr(t('vault.enter_amount')), setStatus('error');
     if (mode !== 'Market' && !(Number(price) > 0)) return setErr(t('vault.enter_limit_price')), setStatus('error');
     if (overBalance) return setErr(t('vault.insufficient_balance', {token: displaySymbol(spendSym)})), setStatus('error');
     setStatus('busy');
     setErr(null);
     // "Buy 0.1 ETH" / "Sell 100 USDC" — the order in the user's words, not the tx.
-    const tx = showTx(`${side === 'buy' ? t('vault.buy') : t('vault.sell')} ${amount} ${displaySymbol(spendSym)}`, network);
+    const tx = showTx(`${side === 'buy' ? t('vault.buy') : t('vault.sell')} ${amt} ${displaySymbol(spendSym)}`, network);
+    // Closed straight away: a limit order first mines its setup transaction, and with no spinner on
+    // the button an open sheet looked like a tap that did nothing. The badge and the orders list
+    // carry it from here, and a failure raises a toast.
+    setSheetSide(null);
     try {
       const acct = await getSigner();
       const vault = ownerVaultAddress(owner, network);
       // You always sell the PAY leg for the RECEIVE leg: sell base→quote, buy quote→base. Exact-in.
-      const spendAsset = (paysBase ? base : quoteAsset);
       const recvAsset = (paysBase ? quoteAsset : base);
+      if (!spendAsset || !recvAsset) return;
       const sellToken = spendAsset.address as Address;
       const buyToken = recvAsset.address as Address;
       // Charge gas to a stablecoin that isn't the pay leg (so a max-USDC trade pays gas from USDT).
       const feeCoin = pickFeeCoin(sellToken);
 
-      // Paying USDC can draw on the vault's yielding USDC: if free USDC is short of the amount, withdraw the
-      // shortfall from Sky (rounded up so the swap has enough) — bundled into the same tx. No separate quote.
-      const payUsdc = !paysBase && quoteAsset.symbol === 'USDC' && !!yld;
-      const freeUsdc = payUsdc ? Number(balanceOfSymbol(balances.balances, 'USDC')) : 0;
-      const shortfall = payUsdc && Number(amount) > freeUsdc ? Math.min(Math.ceil((Number(amount) - freeUsdc) * 1e6) / 1e6, yld!.usdc) : 0;
-      const sky = shortfall > 0 ? adapterByName(network, 'Sky') : null;
-      const withdrawCalls: VaultCall[] =
-        shortfall > 0 && sky
-          ? [{abi: VAULT_DEFI_ABI, functionName: 'withdraw', args: [sky, quoteAsset.address, parseUnits(shortfall.toFixed(quoteAsset.decimals), quoteAsset.decimals)]}]
-          : [];
+      // What has to come out of a position before the tokens can be spent.
+      //
+      // A named source (Yielding / Lending) withdraws exactly the amount from that adapter. The free
+      // balance withdraws nothing unless a MARKET order runs past it, in which case the difference
+      // comes out of the positions — Sky first, then Aave — since that swap is one transaction.
+      // Rounded up so the order has enough, capped at what each position holds.
+      const dec = spendAsset.decimals;
+      const up = (v: number) => Math.ceil(v * 10 ** dec) / 10 ** dec;
+      const withdrawCall = (protocol: Address, take: number): VaultCall => ({
+        abi: VAULT_DEFI_ABI,
+        functionName: 'withdraw',
+        args: [protocol, sellToken, parseUnits(up(take).toFixed(dec) as `${number}`, dec)],
+      });
+      const withdrawCalls: VaultCall[] = [];
+      // What the vault will still be holding when the swap is done, and how much short of the
+      // relayer's reserve that leaves it. Anything missing is withdrawn alongside the trade: the
+      // fee is charged after the call, so the coin has to be there by then. See {feeReserve}.
+      const freeAfterSwap = Math.max(0, Number(freeSpend) - (spendSource === 'free' ? Number(amount) : 0));
+      const topUp = Math.max(0, feeReserve - freeAfterSwap);
+      if (spendSource !== 'free' && mode === 'Market') {
+        // A market swap needs the underlying in hand, and it withdraws and swaps in one transaction.
+        const from = spendSource === 'yield' ? instant.sky : instant.aave;
+        if (from) withdrawCalls.push(withdrawCall(from.protocol, Math.min(Number(amount) + topUp, from.amount)));
+      } else if (spendSource === 'free' && mode === 'Market') {
+        // The funding rows say where the money comes from; the amount says how much is needed. They
+        // normally agree, because moving a row restates the amount — but the pay field is still
+        // typable, and ticking a source makes its WHOLE balance available, so an amount typed after
+        // the fact can outrun what the rows selected. Each ticked position therefore gives what it
+        // was set to, and then tops up to its balance if the order is still short.
+        const sources = [
+          {pos: instant.sky, on: fundOn.sky, picked: planSky},
+          {pos: instant.aave, on: fundOn.aave, picked: planAave},
+        ];
+        let need = Math.max(0, Number(amount) + topUp - Number(freeSpend));
+        const takes = sources.map(({pos, on, picked}) => {
+          if (!pos || !on) return 0;
+          const take = Math.min(need, picked);
+          need = round6(need - take);
+          return take;
+        });
+        for (let i = 0; i < sources.length && need > 0; i++) {
+          const {pos, on, picked} = sources[i];
+          if (!pos || !on) continue;
+          const extra = Math.min(need, pos.amount - picked);
+          takes[i] += extra;
+          need = round6(need - extra);
+        }
+        sources.forEach(({pos}, i) => {
+          if (pos && takes[i] > 0) withdrawCalls.push(withdrawCall(pos.protocol, takes[i]));
+        });
+      }
 
       if (mode === 'Market') {
         if (withdrawCalls.length) {
-          // Top up USDC from Sky, then market-buy the base with it — one multicall. Fee is charged in USDC.
           const {setup, swap} = await buildMarketSell({network, vault, sellToken, buyToken, sellAmount: amount, slippageBps: SLIPPAGE_BPS});
-          await relayVaultMulticall({account: acct, vault, network, calls: [...withdrawCalls, ...setup, swap], stableCoin: quoteAsset.address});
+          const {hash} = await relayVaultMulticall({account: acct, vault, network, calls: [...withdrawCalls, ...setup, swap], stableCoin: feeCoin});
+          tx.success(hash);
         } else {
           // marketSell bundles any required allowlist setup ahead of the swap; exact-in, works both sides.
-          await marketSell({account: acct, vault, network, sellToken, buyToken, sellAmount: amount, slippageBps: SLIPPAGE_BPS, stableCoin: feeCoin});
+          const {hash} = await marketSell({account: acct, vault, network, sellToken, buyToken, sellAmount: amount, slippageBps: SLIPPAGE_BPS, stableCoin: feeCoin});
+          tx.success(hash);
         }
       } else {
         if (!intent) throw new Error(t('mobile.trade.cow_unavailable'));
         // Bundle the one-time setup (allowlist assets, register the intent adapter so the vault clones it,
         // approve the relayer) — plus any Sky top-up — into a single mined tx before posting, so the USDC is
         // in the vault when the order settles.
-        const needApprove = !approved.has(sellToken.toLowerCase());
-        await prepareIntent({account: acct, vault, network, intentProtocol: intent, tokens: [sellToken, buyToken], approveToken: needApprove ? sellToken : undefined, stableCoin: withdrawCalls.length ? quoteAsset.address : feeCoin, preCalls: withdrawCalls});
-        if (needApprove) setApproved((p) => new Set(p).add(sellToken.toLowerCase()));
+        // Funded from a position, the order sells the POSITION'S OWN TOKEN — sUSDS, or the aToken —
+        // rather than unwinding it first. The balance keeps earning while the order sits open, and
+        // an order that never fills has cost the user nothing. The amount is typed in the underlying
+        // and converted at the position's rate, capped at what it holds.
+        const from = spendSource === 'yield' ? instant.sky : spendSource === 'lend' ? instant.aave : null;
+        const pt = from ? await positionToken(vault, network, from.position) : null;
+        if (spendSource !== 'free' && !pt) throw new Error(t('mobile.trade.cow_unavailable'));
+        const payToken = pt ? pt.address : sellToken;
+        const payAmount = pt
+          ? formatUnits(
+              (() => {
+                const raw = parseUnits((Number(amount) / pt.rate).toFixed(pt.decimals) as `${number}`, pt.decimals);
+                return raw > pt.max ? pt.max : raw;
+              })(),
+              pt.decimals,
+            )
+          : amount;
+
+        // Asked of the chain, not of a Set that empties on restart: an unlimited allowance is
+        // already there after the first order, and approving it again costs a relay fee for nothing.
+        const needApprove = await needsRelayerApproval({vault, network, intentProtocol: intent, token: payToken});
+        await prepareIntent({account: acct, vault, network, intentProtocol: intent, tokens: [payToken, buyToken], approveToken: needApprove ? payToken : undefined, stableCoin: feeCoin});
         // Minimum received (what the user wants), in the receive leg's units. Falls back to the
         // price-derived amount if they left the field to auto-fill. Bounded decimals so parseUnits round-trips.
         const recvNum = Number(receiveInput) > 0 ? Number(receiveInput) : effPrice > 0 && Number(amount) > 0 ? (paysBase ? Number(amount) * effPrice : Number(amount) / effPrice) : 0;
@@ -396,15 +966,13 @@ export function TradeScreen() {
         }
         const minRecv = recvNum.toFixed(Math.min(recvAsset.decimals, 8));
         if (mode === 'Limit') {
-          await placeLimitOrder({account: acct, vault, network, sellToken, buyToken, sellAmount: amount, buyAmount: minRecv, kind: 'sell', validSeconds: validSec});
+          await placeLimitOrder({account: acct, vault, network, sellToken: payToken, buyToken, sellAmount: payAmount, buyAmount: minRecv, kind: 'sell', validSeconds: validSec});
         } else {
           const n = Math.max(1, parseInt(parts || '1', 10));
-          await placeTwap({account: acct, vault, network, sellToken, buyToken, totalSell: amount, totalMinBuy: minRecv, parts: n, partDuration: Math.max(60, Math.floor(validSec / n))});
+          await placeTwap({account: acct, vault, network, sellToken: payToken, buyToken, totalSell: payAmount, totalMinBuy: minRecv, parts: n, partDuration: Math.max(60, Math.floor(validSec / n))});
         }
       }
-      tx.success();
       setStatus('done');
-      setSheetSide(null);
       refreshOrders();
     } catch (e) {
       const msg = String((e as Error)?.message ?? e);
@@ -468,13 +1036,58 @@ export function TradeScreen() {
     {key: 'finished', label: t('vault.orders_finished_short')},
     {key: 'cancelled', label: t('vault.orders_cancelled_short')},
   ];
+  // Market needs a pool on BOTH legs: the tokenized stocks are registered without the AMM-liquid bit
+  // (no Uniswap market prices them) and the savings share has no pool either, so those pairs offer
+  // the intent modes only.
+  const marketable = pairAmmLiquid;
+  useEffect(() => {
+    if (!marketable && mode === 'Market') setMode('Limit');
+  }, [marketable, mode]);
+  // Market spends the vault balance and tops up from the positions by itself, so a named source has
+  // no meaning there.
+  useEffect(() => {
+    if (mode === 'Market') setSpendSource('free');
+  }, [mode]);
+
+  // Switching order type starts the amounts over: what is spendable changes with it (Market reaches
+  // the positions, Limit does not), so a figure typed under the old rules would silently be wrong.
+  const onValidDays = (v: string) => {
+    const digits = v.replace(/[^0-9]/g, '');
+    setValidDays(digits);
+    const n = Number(digits);
+    if (n > 0) setValidSec(Math.min(n, MAX_VALID_DAYS) * 86400);
+  };
+
+  const pickMode = (next: Mode) => {
+    if (next === mode) return;
+    setMode(next);
+    setAmount('');
+    setReceiveInput('');
+    setValidDays('');
+    setFundOn({vault: true, sky: false, aave: false});
+    setFundAmt({vault: '', sky: '', aave: ''});
+    setErr(null);
+    setStatus('idle');
+  };
+
   const MODES: {key: Mode; label: string}[] = [
-    {key: 'Market', label: t('vault.market')},
+    ...(marketable ? [{key: 'Market' as Mode, label: t('vault.market')}] : []),
     {key: 'Limit', label: t('vault.limit')},
     {key: 'TWAP', label: t('vault.twap')},
   ];
   const busy = status === 'busy';
-  const sheetSlide = useSlideUp(sheetSide != null);
+  // The sheet slides up and fills the screen below a strip of backdrop at the top: the keyboard then
+  // opens over its lower half, where nothing is, so a tapped field is never covered and the sheet
+  // itself never has to move.
+  const insets = useSafeAreaInsets();
+  const {height: screenHeight} = useWindowDimensions();
+  // Same motion as every other sheet: rises, follows a downward drag, slides back out.
+  const orderSheet = useSheetAnim(sheetSide != null, () => setSheetSide(null));
+  // Tapping a prefilled field puts the caret after the number, not before it.
+  const amountCaret = useEndCaret(amount);
+  const priceCaret = useEndCaret(price);
+  const partsCaret = useEndCaret(parts);
+  const receiveCaret = useEndCaret(receiveInput);
 
   const onPull = () => {
     setPulled(true);
@@ -489,7 +1102,7 @@ export function TradeScreen() {
     <>
       <ScrollView showsVerticalScrollIndicator={false}
         alwaysBounceVertical
-        contentContainerStyle={[styles.body, {paddingTop: 8}]}
+        contentContainerStyle={[styles.body, {paddingTop: 8, paddingBottom: tabBarHeight + 16}]}
         contentInset={{top: headerHeight}}
         contentOffset={{x: 0, y: -headerHeight}}
         scrollIndicatorInsets={{top: headerHeight}}
@@ -497,44 +1110,120 @@ export function TradeScreen() {
         refreshControl={<RefreshControl refreshing={pulled} onRefresh={onPull} tintColor={c.text} colors={[c.accent]} />}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled">
-        {/* Pair + asset search */}
         <View style={styles.headerRow}>
-          <View style={styles.pair}>
-            <Pressable style={styles.pairPart} onPress={pickBase}>
-              <TokenIcon symbol={baseSym} size={28} />
-              <Text style={styles.pairText}>{displaySymbol(baseSym)}</Text>
-            </Pressable>
-            <Text style={styles.pairSlash}>/</Text>
-            <Pressable style={styles.pairPart} onPress={pickQuote}>
-              <TokenIcon symbol={quoteSym} size={28} />
-              <Text style={styles.pairText}>{displaySymbol(quoteSym)}</Text>
-            </Pressable>
-          </View>
-          <View style={styles.search}>
-            <SearchIcon color={c.subtext} />
-            <TextInput style={styles.searchInput} placeholder={t('vault.search_assets')} placeholderTextColor={c.subtext} autoCapitalize="characters" autoCorrect={false} value={search} onChangeText={setSearch} />
-          </View>
+          {isPair ? (
+            <>
+              <View style={styles.pair}>
+                <Pressable style={styles.pairPart} onPress={pickBase}>
+                  <TokenIcon symbol={baseSym} size={28} />
+                  <Text style={styles.pairText}>{displaySymbol(baseSym)}</Text>
+                </Pressable>
+                <Text style={styles.pairSlash}>/</Text>
+                <Pressable style={styles.pairPart} onPress={pickQuote}>
+                  <TokenIcon symbol={quoteSym} size={28} />
+                  <Text style={styles.pairText}>{displaySymbol(quoteSym)}</Text>
+                </Pressable>
+              </View>
+              {/* Beside the asset it stars, rather than in the nav bar where iOS draws a capsule
+                  behind it. Starring is what puts the asset on the Overview. */}
+              <FavoriteStar symbol={baseSym} size={24} />
+            </>
+          ) : null}
         </View>
 
-        {searchResults.length > 0 ? (
-          <View style={styles.card}>
-            {searchResults.map((a) => (
-              <Pressable key={a.symbol} style={styles.resultRow} onPress={() => selectAsset(a.symbol)}>
-                <TokenIcon symbol={a.symbol} size={22} />
-                <Text style={styles.resultText}>{displaySymbol(a.symbol)}</Text>
-                {a.company ? (
-                  <Text style={styles.resultCompany} numberOfLines={1}>
-                    {a.company}
-                  </Text>
-                ) : null}
-              </Pressable>
-            ))}
-          </View>
+        {/* The market directory: categories switch the list.
+            A whole row opens that asset's own trade page, so there is nothing to expand here —
+            what the vault holds in a position is the Overview's question, not this one. */}
+        {!isPair ? (
+          <>
+            <View style={styles.catWrap}>
+                  <View style={styles.catLine}>
+                    {searching ? (
+                      <TextInput
+                        style={styles.searchInput}
+                        autoFocus
+                        placeholder={t('mobile.trade.search_assets')}
+                        placeholderTextColor={c.subtext}
+                        autoCapitalize="characters"
+                        autoCorrect={false}
+                        returnKeyType="search"
+                        value={query}
+                        onChangeText={setQuery}
+                      />
+                    ) : (
+                      // Shown even when the network has only one category. A lone "Crypto" still
+                      // says what the list below it is, and hiding it made Base open on an
+                      // unlabelled card. An empty `tabs` renders nothing and just holds the space.
+                      <View style={styles.catFlex}>
+                        <CategoryTabs
+                          tabs={categories.map((k) => ({
+                            key: k,
+                            label: k === 'crypto_native' ? t('mobile.home.category_crypto') : t(`vault.category_${k}`),
+                          }))}
+                          value={category}
+                          onChange={pickCategory}
+                        />
+                      </View>
+                    )}
+                    <Pressable
+                      style={styles.searchBtn}
+                      hitSlop={8}
+                      onPress={() => {
+                        setSearching((v) => !v);
+                        setQuery('');
+                      }}>
+                      <SearchIcon open={searching} color={c.subtext} />
+                    </Pressable>
+                  </View>
+                </View>
+
+                {query.trim() ? (
+                  <View style={styles.listCard}>
+                    {results.length > 0 ? (
+                      results.map(assetRow)
+                    ) : (
+                      <Text style={styles.emptySearch}>{t('vault.no_assets')}</Text>
+                    )}
+                  </View>
+                ) : (
+                <View onLayout={(e) => setPageW(e.nativeEvent.layout.width)}>
+                  {pageW > 0 ? (
+                    <Animated.ScrollView
+                      ref={pagerRef}
+                      horizontal
+                      pagingEnabled
+                      bounces={false}
+                      showsHorizontalScrollIndicator={false}
+                      scrollEnabled={pages.length > 1}
+                      nestedScrollEnabled
+                      style={pagerStyle}
+                      contentContainerStyle={styles.pagerContent}
+                      onScroll={Animated.event([{nativeEvent: {contentOffset: {x: pagerX}}}], {useNativeDriver: false})}
+                      scrollEventThrottle={16}
+                      onMomentumScrollEnd={(e) => onPagerSettle(e.nativeEvent.contentOffset.x)}>
+                      {pages.map((k) => (
+                        <View key={k} style={{width: pageW}}>
+                          <View
+                            onLayout={(e) => {
+                              // Read the height now: the event is recycled before a state updater runs.
+                              const h = e.nativeEvent.layout.height;
+                              setPageH((prev) => (prev[k] === h ? prev : {...prev, [k]: h}));
+                            }}>
+                            <View style={styles.listCard}>{inCategory(k).map(assetRow)}</View>
+                          </View>
+                        </View>
+                      ))}
+                    </Animated.ScrollView>
+                  ) : null}
+                </View>
+                )}
+          </>
         ) : null}
 
-        <PriceChart key={`${baseSym}-${refreshNonce}`} symbol={baseSym} />
+        {isPair ? <PriceChart key={`${baseSym}-${refreshNonce}`} symbol={baseSym} /> : null}
 
-        {/* Orders */}
+        {/* Orders — the pair screen's own history, not the directory's. */}
+        {isPair ? (
         <View style={styles.card}>
           <View style={styles.orderTabs}>
             <View style={styles.orderTabsLeft}>
@@ -547,14 +1236,25 @@ export function TradeScreen() {
                 </Pressable>
               ))}
             </View>
-            <Pressable style={styles.othersToggle} onPress={() => setShowOthers((v) => !v)} hitSlop={6}>
+            <Pressable style={styles.othersToggle} onPress={toggleOthers} hitSlop={6}>
               <View style={[styles.checkbox, showOthers && styles.checkboxOn]}>{showOthers ? <Text style={styles.checkboxTick}>✓</Text> : null}</View>
               <Text style={styles.othersText}>{t('mobile.trade.others')}</Text>
             </Pressable>
           </View>
 
           {tab === 'open' && openUids.length > 1 ? (
-            <Pressable style={styles.cancelAllRow} onPress={() => onCancelAll(openUids)} disabled={cancellingAll} hitSlop={6}>
+            <Pressable
+              style={styles.cancelAllRow}
+              onPress={() =>
+                ask({
+                  title: t('mobile.actions.cancel_intents', {count: openUids.length}),
+                  // One transaction invalidates every uid, so the fee does not scale with the count.
+                  gas: relayGasFor({}),
+                  run: () => onCancelAll(openUids),
+                })
+              }
+              disabled={cancellingAll}
+              hitSlop={6}>
               <Text style={styles.cancelAllText}>{cancellingAll ? t('mobile.trade.cancelling_all') : `${t('vault.cancel_all')} (${openUids.length})`}</Text>
             </Pressable>
           ) : null}
@@ -569,22 +1269,40 @@ export function TradeScreen() {
               const sp = statusPill(es);
               const sellM = assetMeta(network, o.sellToken as Address);
               const buyM = assetMeta(network, o.buyToken as Address);
-              const sellNum = Number(formatUnits(BigInt(o.sellAmount), sellM.decimals));
-              const buyNum = Number(formatUnits(BigInt(o.buyAmount), buyM.decimals));
+              // A leg held as a receipt token reads, and prices, as its underlying: what the user
+              // typed and what the order is worth. sUSDS converts at the savings rate; an aToken is
+              // one-for-one.
+              const legRate = (addr: string) => (assetMeta(network, addr).symbol === 'sUSDS' ? shareRate : 1);
+              const legSym = (addr: string, fallback: string) => underlyingOf(network, addr) ?? fallback;
+              const sellNum = Number(formatUnits(BigInt(o.sellAmount), sellM.decimals)) * legRate(o.sellToken);
+              const buyNum = Number(formatUnits(BigInt(o.buyAmount), buyM.decimals)) * legRate(o.buyToken);
+              const sellSym = legSym(o.sellToken, sellM.symbol);
+              const buySym = legSym(o.buyToken, buyM.symbol);
+              const fromPosition = !!underlyingOf(network, o.sellToken);
+              const isTwap = !!o.appData && o.appData.toLowerCase() !== limitAppData;
               // Price quoted in the stable leg when there is one, else base-per-quote by side.
-              const sellIsStable = stables.some((s) => s.address.toLowerCase() === o.sellToken.toLowerCase());
-              const buyIsStable = stables.some((s) => s.address.toLowerCase() === o.buyToken.toLowerCase());
+              // A savings share or an aToken counts as its underlying here: an order selling sUSDS
+              // for CRCL is a USDC-priced buy, and pricing it per share would be meaningless.
+              const stableLike = (addr: string) => {
+                const under = underlyingOf(network, addr);
+                return stables.some((s) => (under ? s.symbol === under : s.address.toLowerCase() === addr.toLowerCase()));
+              };
+              const sellIsStable = stableLike(o.sellToken);
+              const buyIsStable = stableLike(o.buyToken);
               let px: number;
               let pxSym: string;
               if (sellIsStable || buyIsStable) {
                 px = (sellIsStable ? sellNum : buyNum) / (sellIsStable ? buyNum : sellNum);
-                pxSym = sellIsStable ? sellM.symbol : buyM.symbol;
+                pxSym = sellIsStable ? sellSym : buySym;
               } else {
                 px = o.kind === 'buy' ? sellNum / buyNum : buyNum / sellNum;
-                pxSym = o.kind === 'buy' ? sellM.symbol : buyM.symbol;
+                pxSym = o.kind === 'buy' ? sellSym : buySym;
               }
               px = px / (o.kind === 'buy' ? 1 + PARTNER_FEE : 1 - PARTNER_FEE);
-              const isBuy = o.kind === 'buy';
+              // Buy or sell the ASSET: paying a stablecoin to receive something else is a buy,
+              // whichever way round CoW encodes it (every order is posted as a sell of the pay leg,
+              // so o.kind would call a CRCL purchase a sell of USDC).
+              const isBuy = sellIsStable && !buyIsStable;
               // All rows collapse by default; tap to expand (open rows reveal their Cancel button).
               const isExp = expanded === o.uid;
               const canCancel = es === 'open' && !!intent;
@@ -594,11 +1312,16 @@ export function TradeScreen() {
                     style={[styles.orderHead, isLast && !isExp && styles.noBottom]}
                     onPress={() => setExpanded(expanded === o.uid ? null : o.uid)}>
                     <View style={styles.orderHeadLeft}>
+                      {/* One label: the order type and its side, "Limit Buy" — two badges said the
+                          same thing twice. */}
                       <View style={[styles.kindBadge, {backgroundColor: isBuy ? c.successSoft : c.dangerSoft}]}>
-                        <Text style={[styles.kindText, {color: isBuy ? c.success : c.danger}]}>{isBuy ? t('vault.buy') : t('vault.sell')}</Text>
+                        <Text style={[styles.kindText, {color: isBuy ? c.success : c.danger}]}>
+                          {`${t(isTwap ? 'vault.twap' : 'vault.limit')} ${isBuy ? t('vault.buy') : t('vault.sell')}`}
+                        </Text>
                       </View>
                       <Text style={styles.orderSummary} numberOfLines={1}>
-                        <Amount v={fmtAmt(o.sellAmount, sellM.decimals)} /> {displaySymbol(sellM.symbol)} → <Amount v={fmtAmt(o.buyAmount, buyM.decimals)} /> {displaySymbol(buyM.symbol)}
+                        <Amount v={fmtNum(sellNum)} size={15} /> {displaySymbol(sellSym)}
+                        {fromPosition ? ` (${t('vault.yielding')})` : ''} → <Amount v={fmtNum(buyNum)} size={15} /> {displaySymbol(buySym)}
                       </Text>
                     </View>
                     {/* Open and Filled are what the tab already says, so an open order shows its Cancel
@@ -609,7 +1332,12 @@ export function TradeScreen() {
                         style={styles.orderHeadRight}
                         onPress={(e) => {
                           e.stopPropagation();
-                          void onCancel(o);
+                          ask({
+                            title: t('mobile.actions.cancel_intent'),
+                            message: describeOrder(o, network),
+                            gas: relayGasFor({}),
+                            run: () => onCancel(o),
+                          });
                         }}
                         disabled={cancelling === o.uid}
                         hitSlop={8}>
@@ -619,18 +1347,6 @@ export function TradeScreen() {
                       <View style={styles.orderHeadRight}>
                         <Pill label={t(sp.key)} tone={sp.tone} />
                       </View>
-                    ) : settlementTxFor(o.uid) ? (
-                      // Filled: link to the settlement transaction — the solver's execution, not the
-                      // relayed approval that came before it.
-                      <Pressable
-                        style={styles.orderHeadRight}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          void Linking.openURL(EXPLORER_TX[network] + settlementTxFor(o.uid));
-                        }}
-                        hitSlop={8}>
-                        <Text style={styles.viewLink}>{t('mobile.home.view')} ↗</Text>
-                      </Pressable>
                     ) : null}
                   </Pressable>
 
@@ -639,7 +1355,7 @@ export function TradeScreen() {
                       <View style={styles.orderLine}>
                         <Text style={styles.orderLabel}>{t('vault.pay')}</Text>
                         <View style={styles.orderAmt}>
-                          <Text style={styles.orderAmtVal}><Amount v={fmtAmt(o.sellAmount, sellM.decimals)} size={13} /></Text>
+                          <Text style={styles.orderAmtVal}><Amount v={fmtAmt(o.sellAmount, sellM.decimals)} size={15} /></Text>
                           <TokenIcon symbol={sellM.symbol} size={16} />
                           <Text style={styles.orderAmtSym}>{displaySymbol(sellM.symbol)}</Text>
                         </View>
@@ -647,7 +1363,7 @@ export function TradeScreen() {
                       <View style={styles.orderLine}>
                         <Text style={styles.orderLabel}>{t('vault.receive')}</Text>
                         <View style={styles.orderAmt}>
-                          <Text style={styles.orderAmtVal}><Amount v={fmtAmt(o.buyAmount, buyM.decimals)} size={13} /></Text>
+                          <Text style={styles.orderAmtVal}><Amount v={fmtAmt(o.buyAmount, buyM.decimals)} size={15} /></Text>
                           <TokenIcon symbol={buyM.symbol} size={16} />
                           <Text style={styles.orderAmtSym}>{displaySymbol(buyM.symbol)}</Text>
                         </View>
@@ -681,31 +1397,21 @@ export function TradeScreen() {
                     <Pressable style={[styles.orderHead, isLast && !isExp && styles.noBottom]} onPress={() => setExpanded(expanded === m.txHash ? null : m.txHash)}>
                       <View style={styles.orderHeadLeft}>
                         <View style={[styles.kindBadge, {backgroundColor: isBuy ? c.successSoft : c.dangerSoft}]}>
-                          <Text style={[styles.kindText, {color: isBuy ? c.success : c.danger}]}>{isBuy ? t('vault.buy') : t('vault.sell')}</Text>
-                        </View>
-                        <View style={styles.marketTag}>
-                          <Text style={styles.marketTagText}>{t('vault.market')}</Text>
+                          <Text style={[styles.kindText, {color: isBuy ? c.success : c.danger}]}>
+                            {`${t('vault.market')} ${isBuy ? t('vault.buy') : t('vault.sell')}`}
+                          </Text>
                         </View>
                         <Text style={styles.orderSummary} numberOfLines={1}>
                           <Amount v={fmtN(m.sold.amount)} /> {displaySymbol(m.sold.symbol)} → <Amount v={fmtN(m.bought.amount)} /> {displaySymbol(m.bought.symbol)}
                         </Text>
                       </View>
-                      <Pressable
-                        style={styles.orderHeadRight}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          void Linking.openURL(EXPLORER_TX[network] + m.txHash);
-                        }}
-                        hitSlop={8}>
-                        <Text style={styles.viewLink}>{t('mobile.home.view')} ↗</Text>
-                      </Pressable>
                     </Pressable>
                     {isExp ? (
                       <View style={[styles.orderDetail, isLast && styles.noBottom]}>
                         <View style={styles.orderLine}>
                           <Text style={styles.orderLabel}>{t('mobile.trade.paid')}</Text>
                           <View style={styles.orderAmt}>
-                            <Text style={styles.orderAmtVal}><Amount v={fmtN(m.sold.amount)} size={13} /></Text>
+                            <Text style={styles.orderAmtVal}><Amount v={fmtN(m.sold.amount)} size={15} /></Text>
                             <TokenIcon symbol={m.sold.symbol} size={16} />
                             <Text style={styles.orderAmtSym}>{displaySymbol(m.sold.symbol)}</Text>
                           </View>
@@ -713,7 +1419,7 @@ export function TradeScreen() {
                         <View style={styles.orderLine}>
                           <Text style={styles.orderLabel}>{t('vault.received')}</Text>
                           <View style={styles.orderAmt}>
-                            <Text style={styles.orderAmtVal}><Amount v={fmtN(m.bought.amount)} size={13} /></Text>
+                            <Text style={styles.orderAmtVal}><Amount v={fmtN(m.bought.amount)} size={15} /></Text>
                             <TokenIcon symbol={m.bought.symbol} size={16} />
                             <Text style={styles.orderAmtSym}>{displaySymbol(m.bought.symbol)}</Text>
                           </View>
@@ -735,10 +1441,18 @@ export function TradeScreen() {
               })
             : null}
         </View>
+        ) : null}
       </ScrollView>
 
-      {/* Fixed Buy / Sell bar. */}
-      <View style={styles.bar}>
+      {confirmSheet}
+
+      {/* Fixed Buy / Sell bar — the pair screen only; the directory has nothing to buy.
+          In the tab it rests on the tab bar, which is translucent and absolutely positioned, so it
+          carries that height as its own margin. PUSHED there is no tab bar, and the margin fell to
+          zero, leaving the buttons against the bottom of the screen and under the home indicator —
+          hence the safe-area inset as the floor. */}
+      {isPair ? (
+      <View style={[styles.bar, {marginBottom: Math.max(tabBarHeight, insets.bottom)}]}>
         <Pressable style={[styles.barBtn, {backgroundColor: c.buy}]} onPress={() => openSheet('buy')}>
           <Text style={styles.barText}>{t('vault.buy')}</Text>
         </Pressable>
@@ -746,24 +1460,30 @@ export function TradeScreen() {
           <Text style={styles.barText}>{t('vault.sell')}</Text>
         </Pressable>
       </View>
+      ) : null}
 
       {/* Order form bottom sheet */}
-      <Modal transparent visible={sheetSide != null} animationType="none" onRequestClose={() => setSheetSide(null)}>
-        <Pressable style={styles.sheetBackdrop} onPress={() => !busy && setSheetSide(null)}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <Animated.View style={sheetSlide}>
+      <Modal transparent visible={orderSheet.mounted} animationType="none" onRequestClose={orderSheet.requestClose}>
+        <Animated.View style={[StyleSheet.absoluteFill, styles.shade, orderSheet.backdropStyle]} />
+        <Pressable style={styles.sheetBackdrop} onPress={() => !busy && orderSheet.requestClose()}>
+          <KeyboardAvoidingView behavior={undefined} style={styles.sheetWrap}>
+            <Animated.View
+              style={[styles.sheetWrap, orderSheet.sheetStyle, {marginTop: insets.top + 8}]}
+              {...orderSheet.panHandlers}>
             <Pressable style={styles.sheet} onPress={() => Keyboard.dismiss()}>
             {/* The sheet's side is already the button the user pressed, and the submit button repeats it, so
                 the head carries only the close control. */}
             <View style={styles.sheetHead}>
-              <Pressable onPress={() => !busy && setSheetSide(null)} hitSlop={10}>
+              <Pressable onPress={() => !busy && orderSheet.requestClose()} hitSlop={10}>
                 <Text style={styles.sheetClose}>✕</Text>
               </Pressable>
             </View>
 
+            {/* Order type as plain labels from the left, like the Overview's asset categories, rather
+                than a segmented control stretched across the sheet. */}
             <View style={styles.segTrack}>
               {MODES.map((m) => (
-                <Pressable key={m.key} style={[styles.segBtn, mode === m.key && styles.segOn]} onPress={() => setMode(m.key)}>
+                <Pressable key={m.key} style={styles.segBtn} onPress={() => pickMode(m.key)}>
                   <Text style={[styles.segText, mode === m.key && styles.segTextOn]}>{m.label}</Text>
                 </Pressable>
               ))}
@@ -773,32 +1493,41 @@ export function TradeScreen() {
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>{sheetSide === 'buy' ? t('vault.you_pay') : t('vault.trade_amount')}</Text>
               <View style={styles.fieldRight}>
-                <TextInput style={[styles.fieldInput, overBalance && styles.fieldInputOver]} keyboardType="decimal-pad" inputAccessoryViewID={KB_ID} placeholder="0" placeholderTextColor={c.subtext} value={amount} onChangeText={applyPay} />
-                {Number(spendBal) > 0 ? (
-                  <Pressable onPress={() => applyPay(spendBal)} style={styles.maxPill}>
+                <TextInput style={[styles.fieldInput, overBalance && styles.fieldInputOver]} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={c.subtext} value={amount} onChangeText={applyPay} {...amountCaret} />
+                {balKnown && Number(spendBal) > 0 ? (
+                  <Pressable onPress={maxPay} style={styles.maxPill}>
                     <Text style={styles.maxText}>{t('common.max')}</Text>
                   </Pressable>
                 ) : null}
-                <TokenIcon symbol={spendSym} size={20} />
-                <Text style={styles.fieldSym}>{displaySymbol(spendSym)}</Text>
+                <Pressable style={styles.sourcePill} onPress={() => setPicker('source')}>
+                  <TokenIcon symbol={spendSym} size={20} />
+                  <Text style={styles.fieldSym}>{displaySymbol(spendSym)}</Text>
+                  {spendSource !== 'free' ? (
+                    <Text style={styles.sourceTag}>{spendSource === 'yield' ? t('vault.yielding') : t('vault.lending')}</Text>
+                  ) : null}
+                </Pressable>
               </View>
             </View>
+            {/* The ceiling this order can actually reach, which for a market order already has the
+                positions added and the relayer's reserve taken off — the same number Max fills in.
+                Where it comes from is the funding rows' job, so no breakdown is repeated here. */}
             {overBalance ? (
               <Text style={styles.overText}>
-                {t('vault.exceeds_balance')} · {t('vault.available')} <Amount v={fmtNum(Number(spendBal))} /> {displaySymbol(spendSym)}
+                {t('vault.exceeds_balance')} · <Amount v={fmtNum(Number(spendBal))} /> {displaySymbol(spendSym)}
               </Text>
-            ) : Number(spendBal) > 0 ? (
+            ) : balKnown && Number(spendBal) > 0 ? (
               <Text style={styles.availText}>
-                {t('vault.available')} <Amount v={fmtNum(Number(spendBal))} /> {displaySymbol(spendSym)}
-                {yieldAvail > 0 ? ` ${t('mobile.trade.incl_yielding', {amount: fmtNum(yieldAvail)})}` : ''}
+                {t('vault.available')} <Amount v={fmtNum(Number(spendBal))} size={11} /> {displaySymbol(spendSym)}
               </Text>
             ) : null}
+
+
 
             {mode !== 'Market' ? (
               <View style={styles.field}>
                 <Text style={styles.fieldLabel}>{t('vault.price')}</Text>
                 <View style={styles.fieldRight}>
-                  <TextInput style={styles.fieldInput} keyboardType="decimal-pad" inputAccessoryViewID={KB_ID} placeholder="0" placeholderTextColor={c.subtext} value={price} onChangeText={(v) => { setPrice(v); setPriceEdited(true); }} />
+                  <TextInput style={styles.fieldInput} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={c.subtext} value={price} onChangeText={(v) => { setPrice(v); setPriceEdited(true); }} {...priceCaret} onFocus={(e) => { priceCaret.onFocus?.(e); setPriceEdited(true); }} />
                   <Text style={styles.fieldSym}>{displaySymbol(quoteSym)}</Text>
                 </View>
               </View>
@@ -808,7 +1537,7 @@ export function TradeScreen() {
               <View style={styles.field}>
                 <Text style={styles.fieldLabel}>{t('vault.parts')}</Text>
                 <View style={styles.fieldRight}>
-                  <TextInput style={styles.fieldInput} keyboardType="number-pad" inputAccessoryViewID={KB_ID} value={parts} onChangeText={setParts} />
+                  <TextInput style={styles.fieldInput} keyboardType="number-pad" value={parts} onChangeText={setParts} {...partsCaret} />
                 </View>
               </View>
             ) : null}
@@ -817,48 +1546,134 @@ export function TradeScreen() {
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>{t('vault.receive_amount')} {mode === 'Market' ? '≈' : '≥'}</Text>
               <View style={styles.fieldRight}>
-                <TextInput style={styles.fieldInput} keyboardType="decimal-pad" inputAccessoryViewID={KB_ID} placeholder="0" placeholderTextColor={c.subtext} value={receiveInput} onChangeText={applyReceive} />
+                <TextInput style={styles.fieldInput} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={c.subtext} value={receiveInput} onChangeText={applyReceive} {...receiveCaret} />
                 <TokenIcon symbol={recvSym} size={20} />
                 <Text style={styles.fieldSym}>{displaySymbol(recvSym)}</Text>
               </View>
             </View>
 
+            {/* Validity: the usual answers as chips, and a field for anything else. A preset is one
+                tap where it fits, and 45 days was previously unreachable without picking 30. */}
             {mode !== 'Market' ? (
               <View style={styles.validRow}>
                 <Text style={styles.fieldLabel}>{mode === 'TWAP' ? t('mobile.trade.over') : t('vault.valid_for')}</Text>
                 <View style={styles.validChips}>
-                  {(mode === 'TWAP' ? TWAP_VALID : LIMIT_VALID).map((v) => (
-                    <Pressable key={v.s} style={[styles.vchip, validSec === v.s && styles.vchipOn]} onPress={() => setValidSec(v.s)}>
-                      <Text style={[styles.vchipText, validSec === v.s && styles.vchipTextOn]}>{`${v.n}${t(v.unit)}`}</Text>
+                  {VALID_PRESETS.map((v) => (
+                    <Pressable
+                      key={v.s}
+                      style={[styles.vchip, validDays === '' && validSec === v.s && styles.vchipOn]}
+                      onPress={() => {
+                        setValidSec(v.s);
+                        setValidDays('');
+                      }}>
+                      <Text style={[styles.vchipText, validDays === '' && validSec === v.s && styles.vchipTextOn]}>
+                        {`${v.n}${t(v.unit)}`}
+                      </Text>
                     </Pressable>
                   ))}
+                  <View style={[styles.vdays, validDays !== '' && styles.vdaysOn]}>
+                    <TextInput
+                      style={styles.vdaysInput}
+                      keyboardType="number-pad"
+                      placeholder="0"
+                      placeholderTextColor={c.subtext}
+                      value={validDays}
+                      onChangeText={onValidDays}
+                      maxLength={3}
+                    />
+                    <Text style={[styles.vchipText, validDays !== '' && styles.vchipTextOn]}>{t(DAY)}</Text>
+                  </View>
                 </View>
               </View>
             ) : null}
 
             {status === 'error' && err ? <Text style={styles.err} selectable>{err}</Text> : null}
 
-            <ConfirmButton onPress={onSubmit} loading={busy} disabled={!canConfirm} color={sheetSide === 'buy' ? c.buy : c.sell} style={styles.submit} />
+            <ConfirmButton onPress={onSubmit} disabled={!canConfirm} color={sheetSide === 'buy' ? c.buy : c.sell} style={styles.submit} gas={feeGas} fee={feeApplies} />
             </Pressable>
             </Animated.View>
           </KeyboardAvoidingView>
+          {/* Funding, for a market order. One tickable row per source: the vault's own balance,
+              and each position that pays out instantly. Ticking a row puts all of it into the
+              order and opens the quick percentages and a field to take less. A market swap
+              withdraws and trades in one transaction, so a position is a source like any other —
+              its only cost is the yield it stops earning, which is why the rate is on the row.
+              Limit and TWAP orders keep the plain source list: they settle later and can only be
+              pointed at ONE place. */}
+          {mode === 'Market' ? (
+            <Sheet
+              visible={picker === 'source'}
+              title={t('vault.asset')}
+              onClose={() => setPicker(null)}
+              // Taller than a plain picker: three rows, each with a keypad target and a row of
+              // fractions, and the keyboard has to leave something to read.
+              height={Math.round(screenHeight * 0.8)}>
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                {/* Labelled exactly as the limit sheet labels the same three things, so the two
+                    read as one list with a tick added. */}
+                {([
+                  ['vault', displaySymbol(spendSym), `${t('vault.balance')} · ${fmtNum(fundCap.vault)}`] as const,
+                  [
+                    'sky',
+                    `${displaySymbol(spendSym)} ${t('vault.yielding')}`,
+                    `${fmtNum(fundCap.sky)} ${displaySymbol(spendSym)}${skyApy != null ? ` · ${t('mobile.earn.apy_rate', {rate: skyApy.toFixed(2)})}` : ''}`,
+                  ] as const,
+                  [
+                    'aave',
+                    `${displaySymbol(spendSym)} ${t('vault.lending')}`,
+                    `${fmtNum(fundCap.aave)} ${displaySymbol(spendSym)}${aaveApy != null ? ` · ${t('mobile.earn.apy_rate', {rate: aaveApy.toFixed(2)})}` : ''}`,
+                  ] as const,
+                ] as const).map(([key, label, sub]) =>
+                  fundCap[key] > 0 || key === 'vault' ? (
+                    <FundRow
+                      key={key}
+                      label={label}
+                      sub={sub}
+                      symbol={spendSym}
+                      cap={fundCap[key]}
+                      on={fundOn[key]}
+                      amount={fundAmt[key]}
+                      onToggle={() => toggleFunding(key)}
+                      onAmount={(v) => applyFunding({...fundOn, [key]: true}, {...fundAmt, [key]: v})}
+                      onCommit={() => {
+                        // Edited down to nothing means the source is out of the order, so the tick
+                        // goes with it — otherwise a ticked row would keep its balance counted as
+                        // available while contributing none of it.
+                        if (!(Number(fundAmt[key]) > 0)) applyFunding({...fundOn, [key]: false}, {...fundAmt, [key]: ''});
+                      }}
+                    />
+                  ) : null,
+                )}
+              </ScrollView>
+            </Sheet>
+          ) : (
+            <PickerSheet
+              visible={picker === 'source'}
+              title={t('vault.asset')}
+              items={pickerItems}
+              selected={spendSource}
+              onSelect={(key) => setSpendSource(key as 'free' | 'yield' | 'lend')}
+              onClose={() => setPicker(null)}
+            />
+          )}
           <ToastHost />
         </Pressable>
 
-        <InputAccessoryView nativeID={KB_ID}>
-          <View style={styles.kbBar}>
-            <Pressable onPress={() => Keyboard.dismiss()} hitSlop={8}>
-              <Text style={styles.kbDone}>{t('vault.done')}</Text>
-            </Pressable>
-          </View>
-        </InputAccessoryView>
       </Modal>
-      <AssetPicker
-        visible={picker != null}
-        title={picker === 'quote' ? t('mobile.trade.quote') : t('vault.select_asset')}
-        assets={pickerAssets}
-        selected={picker === 'quote' ? quoteSym : baseSym}
-        onSelect={(sym) => (picker === 'quote' ? setQuoteSym(sym) : selectAsset(sym))}
+      <PickerSheet
+        visible={picker === 'base' || picker === 'quote'}
+        title={picker === 'source' ? t('vault.asset') : picker === 'quote' ? t('mobile.trade.quote') : t('vault.select_asset')}
+        items={pickerItems}
+        selected={picker === 'source' ? spendSource : picker === 'quote' ? `${quoteSym}:free` : `${baseSym}:free`}
+        onSelect={(key) => {
+          if (picker === 'source') {
+            setSpendSource(key as 'free' | 'yield' | 'lend');
+            return;
+          }
+          const [sym] = key.split(':');
+          if (picker === 'quote') setQuoteSym(sym);
+          else selectAsset(sym);
+        }}
         onClose={() => setPicker(null)}
       />
     </>
@@ -867,20 +1682,33 @@ export function TradeScreen() {
 
 const makeStyles = (c: Colors) => StyleSheet.create({
   container: {flex: 1, backgroundColor: c.bg},
-  kbBar: {backgroundColor: c.elevated, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, paddingHorizontal: 16, paddingVertical: 10, alignItems: 'flex-end'},
-  kbDone: {color: c.accent, fontSize: 16, fontWeight: '700'},
-  body: {flexGrow: 1, padding: 16, gap: 14, paddingBottom: 24},
+  // paddingBottom is set inline from the tab bar's height; see the ScrollView.
+  body: {flexGrow: 1, padding: 16, gap: 14},
   headerRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10},
   pair: {flexDirection: 'row', alignItems: 'center', flexShrink: 1},
   pairPart: {flexDirection: 'row', alignItems: 'center', gap: 6},
   pairText: {color: c.text, fontSize: 20, fontWeight: '700'},
   pairSlash: {color: c.subtext, fontSize: 20, fontWeight: '600', marginHorizontal: 7},
-  search: {flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.card, borderRadius: 19, borderWidth: 1, borderColor: c.border, paddingHorizontal: 12, height: 38, width: 130},
-  searchInput: {flex: 1, color: c.text, fontSize: 14, padding: 0},
   card: {backgroundColor: c.card, borderRadius: 20, padding: 16, gap: 0},
-  resultRow: {flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10},
+  catWrap: {marginTop: -4, marginBottom: -4},
+  // Categories and search share one line: the tabs take what is left, the button is fixed.
+  catLine: {flexDirection: 'row', alignItems: 'center'},
+  catFlex: {flex: 1},
+  searchBtn: {paddingHorizontal: 6, paddingVertical: 6},
+  searchInput: {flex: 1, color: c.text, fontSize: 15, fontWeight: '600', paddingVertical: 6, paddingHorizontal: 4},
+  pagerContent: {alignItems: 'flex-start'},
+  // Side padding only: the rows bring their own vertical, so the first is not double-padded.
+  listCard: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 6},
+  resultDivided: {borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border},
+  resultRow: {flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, minHeight: 56},
+  // Stacked, not side by side: the ticker leads and the company sits under it, which gives the
+  // row the height of the Overview's asset rows instead of one cramped line.
+  resultName: {flex: 1},
   resultText: {color: c.text, fontSize: 15, fontWeight: '600'},
-  resultCompany: {color: c.subtext, fontSize: 13, flexShrink: 1},
+  // Bold, beside the ticker: the two together are what the row is. Tabular figures so the digits
+  // do not shuffle as prices tick.
+  resultPrice: {color: c.subtext, fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums']},
+  resultCompany: {color: c.subtext, fontSize: 13, marginTop: 1},
   orderTabs: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 12},
   orderTabsLeft: {flexDirection: 'row', gap: 16, alignItems: 'center'},
   orderTabText: {color: c.subtext, fontSize: 13, fontWeight: '600'},
@@ -893,56 +1721,65 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   cancelAllRow: {alignItems: 'flex-end', paddingVertical: 6},
   cancelAllText: {color: c.subtext, fontSize: 12, fontWeight: '600', textDecorationLine: 'underline'},
   empty: {color: c.subtext, fontSize: 13, textAlign: 'center', paddingTop: 10},
+  // Its own style, not the orders list's: that one hangs under a header row and is padded at
+  // the top only, which left this sitting against the card's top edge instead of in it.
+  emptySearch: {color: c.subtext, fontSize: 13, textAlign: 'center', paddingVertical: 36},
   orderCard: {borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border},
-  orderHead: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, gap: 10},
+  // An order row reads at the same weight as an asset row elsewhere: 15pt for the line itself, a
+  // 44pt-tall tap target, and the labels one step down rather than two.
+  orderHead: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, gap: 10, minHeight: 52},
   orderHeadLeft: {flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1},
-  orderHeadRight: {flexDirection: 'row', alignItems: 'center', gap: 8},
-  orderSummary: {color: c.text, fontSize: 12, fontVariant: ['tabular-nums'], flexShrink: 1},
-  orderDetail: {paddingBottom: 12, gap: 7},
+  orderHeadRight: {flexDirection: 'row', alignItems: 'center', gap: 10},
+  orderSummary: {color: c.text, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums'], flexShrink: 1},
+  orderDetail: {paddingBottom: 14, gap: 10},
   noBottom: {paddingBottom: 0},
-  kindBadge: {borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3},
-  kindText: {fontSize: 11, fontWeight: '700'},
-  marketTag: {backgroundColor: c.card, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2},
-  marketTagText: {color: c.textMuted, fontSize: 10, fontWeight: '600'},
+  kindBadge: {borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4},
+  kindText: {fontSize: 12, fontWeight: '700'},
   orderLine: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
-  orderLabel: {color: c.subtext, fontSize: 12},
+  orderLabel: {color: c.subtext, fontSize: 14},
   orderAmt: {flexDirection: 'row', alignItems: 'center', gap: 6},
-  orderAmtVal: {color: c.text, fontSize: 13, fontVariant: ['tabular-nums']},
-  orderAmtSym: {color: c.subtext, fontSize: 12, fontWeight: '600'},
-  orderVal: {color: c.text, fontSize: 13, fontVariant: ['tabular-nums']},
-  cancelInline: {color: c.danger, fontSize: 13, fontWeight: '600'},
-  viewLink: {color: c.accent, fontSize: 13, fontWeight: '600'},
-  bar: {flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingVertical: 14, backgroundColor: c.bg},
+  orderAmtVal: {color: c.text, fontSize: 15, fontVariant: ['tabular-nums']},
+  orderAmtSym: {color: c.subtext, fontSize: 14, fontWeight: '600'},
+  orderVal: {color: c.text, fontSize: 15, fontVariant: ['tabular-nums']},
+  cancelInline: {color: c.danger, fontSize: 15, fontWeight: '600'},
+  bar: {flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 18, backgroundColor: c.bg},
   barBtn: {flex: 1, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center'},
   barText: {color: c.onAccent, fontSize: 17, fontWeight: '700'},
   dim: {opacity: 0.5},
   // sheet
-  sheetBackdrop: {flex: 1, backgroundColor: c.overlay, justifyContent: 'flex-end'},
-  sheet: {backgroundColor: c.elevated, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 34, gap: 10},
+  shade: {backgroundColor: c.overlay},
+  sheetBackdrop: {flex: 1, justifyContent: 'flex-end'},
+  // Fills the screen below the top strip: full width, square at the bottom, rounded at the top.
+  sheetWrap: {flex: 1},
+  sheet: {flex: 1, backgroundColor: c.elevated, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, gap: 10},
   sheetHead: {flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 4},
   sheetTitle: {color: c.text, fontSize: 18, fontWeight: '700'},
   sheetQuote: {color: c.subtext, fontWeight: '600'},
   sheetPrice: {color: c.subtext, fontSize: 12, marginTop: 3, fontVariant: ['tabular-nums']},
   sheetClose: {color: c.subtext, fontSize: 18},
-  segTrack: {flexDirection: 'row', backgroundColor: c.cardAlt, borderRadius: 12, padding: 4, gap: 4, marginBottom: 4},
-  segBtn: {flex: 1, paddingVertical: 10, borderRadius: 9, alignItems: 'center'},
-  segOn: {backgroundColor: c.buttonSecondary},
-  segText: {color: c.subtext, fontSize: 14, fontWeight: '600'},
-  segTextOn: {color: c.text},
+  segTrack: {flexDirection: 'row', alignItems: 'center', gap: 20, marginBottom: 4},
+  segBtn: {paddingVertical: 6},
+  segText: {color: c.subtext, fontSize: 15, fontWeight: '600'},
+  segTextOn: {color: c.text, fontWeight: '700'},
   // web-style inline field: left label + right value + token adornment
-  field: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: c.input, borderRadius: 12, borderWidth: 1, borderColor: c.border, paddingHorizontal: 14, height: 52},
+  field: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: c.input, borderRadius: 12, paddingHorizontal: 14, height: 52},
   fieldLabel: {color: c.subtext, fontSize: 12, fontWeight: '600'},
   fieldRight: {flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, justifyContent: 'flex-end', marginLeft: 12},
   fieldInput: {flex: 1, textAlign: 'right', color: c.text, fontSize: 17, fontVariant: ['tabular-nums'], padding: 0},
   fieldValue: {flex: 1, textAlign: 'right', color: c.text, fontSize: 17, fontVariant: ['tabular-nums']},
   fieldSym: {color: c.text, fontSize: 14, fontWeight: '700'},
   maxPill: {backgroundColor: c.accentSoft, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3},
+  sourcePill: {flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.neutralSoft, borderRadius: 16, paddingVertical: 5, paddingHorizontal: 8},
+  sourceTag: {color: c.subtext, fontSize: 11, fontWeight: '600'},
   maxText: {color: c.accent, fontSize: 11, fontWeight: '700'},
   availText: {color: c.subtext, fontSize: 11, marginTop: -6, marginLeft: 2},
   overText: {color: c.danger, fontSize: 12},
   fieldInputOver: {color: c.danger},
   validRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: c.input, borderRadius: 12, borderWidth: 1, borderColor: c.border, paddingLeft: 14, paddingRight: 6, height: 52},
-  validChips: {flexDirection: 'row', gap: 4},
+  validChips: {flexDirection: 'row', alignItems: 'center', gap: 4},
+  vdays: {flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8},
+  vdaysOn: {backgroundColor: c.accentSoft},
+  vdaysInput: {minWidth: 26, textAlign: 'right', color: c.text, fontSize: 13, fontWeight: '600', padding: 0},
   vchip: {paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8},
   vchipOn: {backgroundColor: c.buttonSecondary},
   vchipText: {color: c.subtext, fontSize: 13, fontWeight: '600'},

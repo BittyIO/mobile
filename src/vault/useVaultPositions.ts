@@ -10,19 +10,26 @@ type State = {
   refresh: () => void;
 };
 
+const sameRow = (a: Position, b: Position) =>
+  a.protocol.toLowerCase() === b.protocol.toLowerCase() && a.asset.toLowerCase() === b.asset.toLowerCase();
+
 /**
- * The vault's staking + lending positions (via the backend cache). `refresh()` forces a fresh chain
- * re-read on the server — call it after a stake/withdraw so the numbers reflect the tx. Null vault
- * (owner not derived yet) yields an empty, non-loading state.
+ * The vault's staking + lending positions.
+ *
+ * Two sources, deliberately independent:
+ *  - the backend cache, which the server refreshes from chain on its own schedule;
+ *  - a live Sky read (see fetchSkyPosition), merged in when the cache has no Sky row.
+ * A failure in either must not blank the other.
+ *
+ * `refresh()` re-reads. It asks the SERVER to re-read the chain (`?fresh=1`) in the BACKGROUND only,
+ * applying that answer if it arrives: on a chain with many registered assets that request can take
+ * longer than the server's own time limit, and making the visible read depend on it turned every
+ * post-deposit refresh into an empty list — which is what showed a funded Sky position as 0.
  */
-export function useVaultPositions(
-  vault: Address | null,
-  network: Network,
-): State {
+export function useVaultPositions(vault: Address | null, network: Network): State {
   const [positions, setPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // 0 = use cache; >0 = force fresh (post-tx).
   const [nonce, setNonce] = useState(0);
 
   const refresh = useCallback(() => setNonce((n) => n + 1), []);
@@ -33,22 +40,37 @@ export function useVaultPositions(
       return;
     }
     let live = true;
+    let sky: Position | null = null;
     setLoading(true);
     setError(null);
-    // The cached positions, plus a live Sky read when the cache has no (Sky, USDC) row — see
-    // fetchSkyPosition. The Sky read never fails the load: a null just leaves the list as served.
-    Promise.all([fetchPositions(vault, network, nonce > 0), fetchSkyPosition(vault, network).catch(() => null)])
-      .then(([served, sky]) => {
+
+    const merge = (served: Position[]) => (sky && !served.some((p) => sameRow(p, sky!)) ? [...served, sky] : served);
+
+    let apiError: string | null = null;
+    Promise.all([
+      fetchPositions(vault, network, false).catch((e) => {
+        apiError = String((e as Error)?.message ?? e);
+        return [] as Position[];
+      }),
+      fetchSkyPosition(vault, network).catch(() => null),
+    ])
+      .then(([served, live_sky]) => {
         if (!live) return;
-        const hasSky =
-          sky != null &&
-          served.some(
-            (p) => p.protocol.toLowerCase() === sky.protocol.toLowerCase() && p.asset.toLowerCase() === sky.asset.toLowerCase(),
-          );
-        setPositions(sky && !hasSky ? [...served, sky] : served);
+        sky = live_sky;
+        const merged = merge(served);
+        setPositions(merged);
+        // An API error only matters when nothing is on screen because of it.
+        setError(merged.length === 0 ? apiError : null);
       })
-      .catch((e) => live && setError(String((e as Error)?.message ?? e)))
       .finally(() => live && setLoading(false));
+
+    // After a write, ask the server for a chain re-read too, and take it if it answers in time.
+    if (nonce > 0) {
+      fetchPositions(vault, network, true)
+        .then((fresh) => live && setPositions(merge(fresh)))
+        .catch(() => {});
+    }
+
     return () => {
       live = false;
     };

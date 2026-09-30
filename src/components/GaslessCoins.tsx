@@ -9,6 +9,8 @@ import {getGaslessConfig, setGaslessCoins, disableGasless, GASLESS_MAX_DAILY, GA
 import {ASSETS} from '@/core/assets';
 import {TokenIcon} from '@/components/TokenIcon';
 import {PendingSwitch} from '@/components/PendingSwitch';
+import {useConfirmAction} from '@/components/ConfirmAction';
+import {relayGasFor} from '@/vault/fee-quote';
 import {useT} from '@/i18n';
 import {showTx} from '@/components/Toast';
 import {useStyles, type Colors} from '@/theme';
@@ -34,6 +36,8 @@ export function GaslessCoins() {
   // with, and the coin that will pay its activation fee.
   const [activated, setActivated] = useState<boolean | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // Changing a fee coin is a relayed write, so it asks before it signs like everything else.
+  const {ask, sheet} = useConfirmAction();
 
   const load = useCallback(() => {
     if (!vault) return;
@@ -114,11 +118,19 @@ export function GaslessCoins() {
               value={allowed(a.address)}
               pending={busy === a.address}
               disabled={locked || cfg === 'loading'}
-              onValueChange={(v) => onToggle(a.address, v)}
+              onValueChange={(v) =>
+                ask({
+                  title: t('mobile.settings.gas_token'),
+                  message: `${displaySymbol(a.symbol)} · ${t(v ? 'vault.enabled' : 'vault.disabled')}`,
+                  gas: relayGasFor({}),
+                  run: () => onToggle(a.address, v),
+                })
+              }
             />
           </View>
         ))}
       </View>
+      {sheet}
     </View>
   );
 }

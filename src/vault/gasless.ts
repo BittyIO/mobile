@@ -28,6 +28,25 @@ export type GaslessConfig = {
 export const GASLESS_MAX_DAILY = 100;
 export const GASLESS_MAX_PER_OP = 10;
 
+/**
+ * Free stablecoin an operation must LEAVE BEHIND, in whole tokens, so the relayer can be paid.
+ *
+ * The fee is charged after the operation runs, not before: executeWithFee performs the call and
+ * then transfers the fee out of the vault. So an order that spends every last unit of the coin it
+ * will be billed in passes every check, runs, and then reverts at the charge. The relayer answers
+ * `fee-leg-failed`, which reads as a mystery because the trade itself was fine.
+ *
+ * Measured against real fees rather than guessed: an L2 relay costs cents, and a mainnet one ran
+ * about 0.84 USDC after the pricing fix. Each figure here is a wide multiple of that and still far
+ * under the vault's own $10 per-operation ceiling, so it never becomes the binding constraint.
+ */
+export const FEE_RESERVE: Record<Network, number> = {
+  mainnet: 3,
+  base: 0.5,
+  sepolia: 0.5,
+  robinhood: 0.5,
+};
+
 export async function getGaslessConfig(
   vault: Address,
   network: Network,

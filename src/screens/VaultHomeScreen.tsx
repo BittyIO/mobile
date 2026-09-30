@@ -1,6 +1,7 @@
 import {useHeaderHeight} from '@react-navigation/elements';
-import React, {useCallback, useMemo, useState} from 'react';
-import {ActivityIndicator, Animated, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
+import React, {useCallback, useMemo, useRef, useState} from 'react';
+import {ActivityIndicator, Animated, PanResponder, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import Svg, {Circle, Line, Path} from 'react-native-svg';
@@ -17,8 +18,10 @@ import {earnedRaw} from '@/vault/flows';
 import {usePrices} from '@/vault/usePrices';
 import {usdValue, fmtUsd} from '@/core/prices';
 import {fmtNum, displaySymbol} from '@/core/format';
-import {ASSET_CATEGORIES, type AssetCategory} from '@/core/assets';
+
 import {useAssetCatalog} from '@/core/asset-catalog';
+import {assetCategory, type AssetCategory} from '@/core/assets';
+import {useAssetOrder, useFavoriteSet} from '@/core/favorites-store';
 import {balanceOfSymbol} from '@/vault/read';
 import {formatUnits} from 'viem';
 import {useColors, useStyles, type Colors} from '@/theme';
@@ -76,12 +79,13 @@ const fmt = fmtNum;
 
 type Row = {
   symbol: string;
-  company?: string;
   icon?: string;
   address: string;
   free: number;
   yielding: number;
   lending: number;
+  /** Each position behind the totals, with what it has earned, for the expanded row. */
+  legs: {protocol: string; kind: 'staked' | 'supplied'; amount: number; earned: number}[];
   earned: number;
   total: number;
   usd: number | null;
@@ -91,12 +95,160 @@ type Row = {
 };
 
 /** The assets card for one category: its rows, or the loading / empty / error state. */
-function AssetList({rows, loading, error}: {rows: Row[]; loading: boolean; error: string | null}) {
+function AssetList({
+  rows,
+  loading,
+  error,
+  onTrade,
+  onReorder,
+  onDragging,
+}: {
+  rows: Row[];
+  loading: boolean;
+  error: string | null;
+  onTrade: (row: Row) => (() => void) | null;
+  /** The new order, by symbol, once a drag settles. */
+  onReorder: (symbols: string[]) => void;
+  /** The parent stops scrolling while a row is in hand. */
+  onDragging: (active: boolean) => void;
+}) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
+
+  /**
+   * Long press and drag to reorder.
+   *
+   * Row heights differ — an open row is taller than a closed one — so the drop target is worked
+   * out from measured heights rather than assuming they match. The row in hand is lifted and
+   * follows the finger; the rows it passes slide out of its way by exactly its height, so the gap
+   * that opens is the one it will land in.
+   */
+  const [heights, setHeights] = useState<number[]>([]);
+  const [from, setFrom] = useState<number | null>(null);
+  const [to, setTo] = useState(0);
+  const dy = useRef(new Animated.Value(0)).current;
+  // Read inside the responder, which is created once and would otherwise see the first render.
+  //
+  // `onReorder` has to live here too, not just the data. It is rebuilt every render around the
+  // CURRENT network, so the copy the responder captured on mount writes to whichever network was
+  // showing when the Overview first mounted — which is why a drag appeared to work on Ethereum
+  // and do nothing anywhere else: every other network's order was being saved under Ethereum's key.
+  const live = useRef({rows, heights, from: null as number | null, to: 0, onReorder});
+  live.current = {...live.current, rows, heights, onReorder};
+
+  const measure = (i: number, h: number) =>
+    setHeights((prev) => (prev[i] === h ? prev : Object.assign([...prev], {[i]: h})));
+
+  /** Which slot the dragged row's own centre now sits over. */
+  const slotFor = (offset: number) => {
+    const {heights: hs, from: f} = live.current;
+    if (f == null) return 0;
+    const own = hs[f] ?? 0;
+    let target = f;
+    let travelled = 0;
+    if (offset > 0) {
+      for (let i = f + 1; i < hs.length; i++) {
+        travelled += hs[i] ?? own;
+        if (offset > travelled - (hs[i] ?? own) / 2) target = i;
+        else break;
+      }
+    } else {
+      for (let i = f - 1; i >= 0; i--) {
+        travelled += hs[i] ?? own;
+        if (-offset > travelled - (hs[i] ?? own) / 2) target = i;
+        else break;
+      }
+    }
+    return target;
+  };
+
+  const responder = useRef(
+    PanResponder.create({
+      // Only a long press starts this. A plain touch belongs to the row's own targets.
+      onStartShouldSetPanResponder: () => false,
+      // CAPTURE, not the bubbling variant. The row's own Pressable holds the responder from the
+      // moment the finger lands, and a bubbling claim asks it to hand over — which it does not do
+      // reliably once it has fired its long press. Asking on the way DOWN the tree takes the
+      // gesture before the Pressable sees the move at all. The start handler stays false, so a
+      // plain tap still belongs to the row.
+      onMoveShouldSetPanResponderCapture: () => live.current.from != null,
+      onMoveShouldSetPanResponder: () => live.current.from != null,
+      // Nothing takes the gesture back mid-drag — not the page, not the row's own Pressable.
+      onPanResponderTerminationRequest: () => false,
+      onShouldBlockNativeResponder: () => true,
+      onPanResponderMove: (_e: unknown, g: {dy: number}) => {
+        dy.setValue(g.dy);
+        const next = slotFor(g.dy);
+        if (next !== live.current.to) {
+          live.current.to = next;
+          setTo(next);
+        }
+      },
+      onPanResponderRelease: () => finish(),
+      onPanResponderTerminate: () => finish(),
+    }),
+  ).current;
+
+  const finish = () => {
+    const {rows: rs, from: f, to: target, onReorder: save} = live.current;
+    if (f != null && target !== f) {
+      const next = [...rs];
+      next.splice(target, 0, next.splice(f, 1)[0]);
+      save(next.map((r) => r.symbol));
+    }
+    cancelHold();
+    live.current.from = null;
+    setFrom(null);
+    dy.setValue(0);
+    onDragging(false);
+  };
+
+  /**
+   * Arm the drag on a long hold, timed from the touch itself.
+   *
+   * Pressable's own onLongPress cancels the moment the finger drifts, which on a scrolling list is
+   * most holds. A timer started by the raw touch survives that, and the press handlers underneath
+   * are left alone so a tap still does what it did.
+   */
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const armHold = (i: number) => {
+    holdTimer.current = setTimeout(() => begin(i), 220);
+  };
+  const cancelHold = () => {
+    if (holdTimer.current) clearTimeout(holdTimer.current);
+    holdTimer.current = null;
+  };
+  /**
+   * The finger left. Cancels a hold that never matured, and puts down a row that was lifted but
+   * never moved — without this it stays picked up for ever, because the drag responder only ends
+   * a gesture it actually took.
+   */
+  const endTouch = () => {
+    cancelHold();
+    if (live.current.from != null) finish();
+  };
+
+  const begin = (i: number) => {
+    live.current.from = i;
+    live.current.to = i;
+    setFrom(i);
+    setTo(i);
+    dy.setValue(0);
+    onDragging(true);
+  };
+
+  /** How far a row that is not the one in hand has to step aside. */
+  const shiftFor = (i: number) => {
+    if (from == null || i === from) return 0;
+    const own = heights[from] ?? 0;
+    if (from < to && i > from && i <= to) return -own;
+    if (from > to && i >= to && i < from) return own;
+    return 0;
+  };
+
   return (
-    <View style={styles.card}>
+    <View style={styles.listCard}>
       {error ? (
         <Text style={styles.err}>{error}</Text>
       ) : loading ? (
@@ -105,9 +257,27 @@ function AssetList({rows, loading, error}: {rows: Row[]; loading: boolean; error
         <Text style={styles.note}>{t('vault.no_assets')}</Text>
       ) : (
         <View style={styles.list}>
-          {rows.map((r, i) => (
-            <AssetRow key={r.address} row={r} first={i === 0} last={i === rows.length - 1} />
-          ))}
+          {rows.map((r, i) => {
+            const held = from === i;
+            return (
+              <Animated.View
+                key={r.address}
+                onLayout={(e) => measure(i, e.nativeEvent.layout.height)}
+                onTouchStart={() => armHold(i)}
+                onTouchEnd={endTouch}
+                onTouchCancel={endTouch}
+                style={[
+                  held && styles.lifted,
+                  {transform: [{translateY: held ? dy : shiftFor(i)}]},
+                ]}
+                // Attached to every row, always. Adding them only once a row is held meant the
+                // view joined the responder negotiation after the touch had already started, and
+                // the move was never offered to it — which is why nothing moved.
+                {...responder.panHandlers}>
+                <AssetRow row={r} first={i === 0} onTrade={onTrade(r)} onHold={() => begin(i)} />
+              </Animated.View>
+            );
+          })}
         </View>
       )}
     </View>
@@ -115,41 +285,121 @@ function AssetList({rows, loading, error}: {rows: Row[]; loading: boolean; error
 }
 
 /**
- * One asset: the name with the unit price under it, and at the right the
- * balance (principal + earned in green when yield has accrued) with the holding's value under it.
+ * One asset: the name with the unit price under it, and at the right the balance (principal +
+ * earned in green when yield has accrued) with the holding's value under it.
+ *
+ * A row whose balance is spread across a yield or lending position opens on tap to show where each
+ * part of it sits. The total on the right is the sum of all three, which answers "how much do I
+ * have" but not "how much can I spend right now" — that is what the breakdown is for, and it is
+ * hidden until asked for so the common single-source row stays one line.
  */
-function AssetRow({row, first, last}: {row: Row; first: boolean; last: boolean}) {
+function AssetRow({
+  row,
+  first,
+  onTrade,
+  onHold,
+}: {
+  row: Row;
+  first: boolean;
+  /** Null when this asset has nothing to trade against, which leaves the name inert. */
+  onTrade: (() => void) | null;
+  /** A long press picks the row up so it can be dragged to a new place in the list. */
+  onHold: () => void;
+}) {
+  const {t} = useT();
+  const styles = useStyles(makeStyles);
+  const c = useColors();
+  const [open, setOpen] = useState(false);
+  const splittable = row.legs.length > 0 && row.total > 0;
+
+  return (
+    <View style={!first && styles.rowSeparator}>
+      {/* The row goes to Trade. The amounts on the right are their own target and open the
+          breakdown instead — a nested pressable wins over the one around it, so the two do not
+          fight, and the split matches what each half is about: the asset, and what you hold of it. */}
+      {/* onLongPress is here for its side effect as much as its handler: once Pressability has
+          fired a long press it suppresses the tap, so releasing after a hold does not also open
+          the trade page. The drag itself is armed by a timer on the wrapper, which survives the
+          small finger drift that cancels a Pressable's press. */}
+      <Pressable style={styles.rowInner} onPress={() => onTrade?.()} onLongPress={onHold} delayLongPress={220}>
+        <View style={styles.assetCell}>
+          <TokenIcon symbol={row.symbol} uri={row.icon} size={30} />
+          <View style={styles.assetText}>
+            {/* The ticker alone. What the company is belongs on the Trade directory, where you are
+                choosing between assets; here you already know what you hold. */}
+            <Text style={styles.sym}>{displaySymbol(row.symbol)}</Text>
+            {row.price != null ? <Text style={styles.sub}>{fmtUsd(row.price)}</Text> : null}
+          </View>
+        </View>
+        <Pressable
+          style={styles.amtCol}
+          hitSlop={8}
+          disabled={!splittable}
+          onPress={() => setOpen((o) => !o)}>
+          <Text style={styles.amt}>
+            {row.earned > 0 ? (
+              <>
+                <Amount v={fmt(row.total - row.earned)} size={15} weight="600" />{' '}
+                <Text style={styles.amtEarned}>+ <Amount v={fmt(row.earned)} size={13} color={c.success} weight="600" /></Text>
+              </>
+            ) : (
+              <Amount v={fmt(row.total)} size={15} weight="600" />
+            )}
+          </Text>
+          {row.usd != null ? <Text style={styles.sub}>{fmtUsd(row.usd)}</Text> : null}
+        </Pressable>
+      </Pressable>
+
+      {open ? (
+        <View style={styles.legs}>
+          {/* Balance first: it is the part that can be spent without unwinding anything. Which
+              protocol holds the rest is a detail for the Earn tab; here the question is only how
+              much of the total is free and how much is working. */}
+          <Leg label={t('vault.balance')} amount={row.free} symbol={row.symbol} />
+          {row.legs.map((leg, i) => (
+            <Leg
+              key={`${leg.protocol}-${leg.kind}-${i}`}
+              label={t(leg.kind === 'staked' ? 'vault.yielding' : 'vault.lending')}
+              amount={leg.amount}
+              earned={leg.earned}
+              symbol={row.symbol}
+            />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * One line of the breakdown, indented to the asset name rather than to its icon.
+ *
+ * A position splits into what was put in and what it has made, the same way the row's total does
+ * above it, so the green figure answers "which of these is actually earning, and how much".
+ */
+function Leg({label, amount, earned = 0, symbol}: {label: string; amount: number; earned?: number; symbol: string}) {
   const styles = useStyles(makeStyles);
   const c = useColors();
   return (
-    <View style={[styles.row, !first && styles.rowSeparator, first && styles.noTop, last && styles.noBottom]}>
-      <View style={styles.assetCell}>
-        <TokenIcon symbol={row.symbol} uri={row.icon} />
-        <View style={styles.assetText}>
-          <View style={styles.symLine}>
-            <Text style={styles.sym}>{displaySymbol(row.symbol)}</Text>
-            {row.company ? (
-              <Text style={styles.company} numberOfLines={1}>
-                {row.company}
-              </Text>
-            ) : null}
-          </View>
-          {row.price != null ? <Text style={styles.sub}>{fmtUsd(row.price)}</Text> : null}
-        </View>
-      </View>
-      <View style={styles.amtCol}>
-        <Text style={styles.amt}>
-          {row.earned > 0 ? (
-            <>
-              <Amount v={fmt(row.total - row.earned)} size={15} weight="600" />{' '}
-              <Text style={styles.amtEarned}>+ <Amount v={fmt(row.earned)} size={13} color={c.success} weight="600" /></Text>
-            </>
-          ) : (
-            <Amount v={fmt(row.total)} size={15} weight="600" />
-          )}
-        </Text>
-        {row.usd != null ? <Text style={styles.sub}>{fmtUsd(row.usd)}</Text> : null}
-      </View>
+    <View style={styles.legRow}>
+      <Text style={styles.legLabel} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text style={styles.legAmt}>
+        {earned > 0 ? (
+          <>
+            <Amount v={fmt(amount - earned)} size={13} weight="600" />{' '}
+            <Text style={styles.legEarned}>
+              + <Amount v={fmt(earned)} size={12} color={c.success} weight="600" />
+            </Text>{' '}
+          </>
+        ) : (
+          <>
+            <Amount v={fmt(amount)} size={13} weight="600" />{' '}
+          </>
+        )}
+        {displaySymbol(symbol)}
+      </Text>
     </View>
   );
 }
@@ -157,6 +407,7 @@ function AssetRow({row, first, last}: {row: Row; first: boolean; last: boolean})
 
 export function VaultHomeScreen() {
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const {t} = useT();
   const c = useColors();
   const styles = useStyles(makeStyles);
@@ -166,7 +417,6 @@ export function VaultHomeScreen() {
   const pos = useVaultPositions(bal.vault, network);
   const lp = useVaultLp(bal.vault, network);
   const flows = useFlows(bal.vault, network);
-  const prices = usePrices(network);
 
   // The hooks load once on mount; after that the data refreshes only on pull-to-refresh. Refetching on
   // every focus flashed the loading state each time the tab was opened.
@@ -175,6 +425,11 @@ export function VaultHomeScreen() {
   const [receiveOpen, setReceiveOpen] = useState(false);
 
   const catalog = useAssetCatalog(network);
+  // Priced from the catalog the rows actually render, so an asset that exists only in the live
+  // catalog — every Ondo stock on mainnet — is no longer left without a price.
+  const catalogSymbols = useMemo(() => catalog.map((a) => a.symbol), [catalog]);
+  const [priceNonce, setPriceNonce] = useState(0);
+  const prices = usePrices(network, priceNonce, catalogSymbols);
   const rows = useMemo<Row[]>(() => {
     // Stablecoins lead the list, then the rest in catalog order.
     const assets = [...catalog].sort((x, y) => Number(y.kind === 'stable') - Number(x.kind === 'stable'));
@@ -195,61 +450,72 @@ export function VaultHomeScreen() {
               return s + (raw != null ? Number(formatUnits(raw, p.decimals)) : 0);
             }, 0)
         : 0;
+      const legs = pos.positions
+        .filter((p) => p.symbol === a.symbol && Number(p.formatted) > 0)
+        .map((p) => {
+          const raw = flows.flows ? earnedRaw(p, flows.flows) : null;
+          return {
+            protocol: p.protocolName,
+            kind: p.kind as 'staked' | 'supplied',
+            amount: Number(p.formatted),
+            earned: raw != null ? Number(formatUnits(raw, p.decimals)) : 0,
+          };
+        })
+        // Yielding above lending, always, rather than whatever order the positions arrived in.
+        .sort((x, y) => Number(x.kind === 'supplied') - Number(y.kind === 'supplied'));
       const total = free + yielding + lending;
-      return {symbol: a.symbol, company: a.company, icon: a.icon, address: a.address, free, yielding, lending, earned, total, usd: usdValue(total, a.symbol, prices), price: usdValue(1, a.symbol, prices), stable: a.kind === 'stable', category: a.category ?? 'crypto_native'};
+      return {legs, symbol: a.symbol, icon: a.icon, address: a.address, free, yielding, lending, earned, total, usd: usdValue(total, a.symbol, prices), price: usdValue(1, a.symbol, prices), stable: a.kind === 'stable', category: assetCategory(a.category)};
     });
   }, [catalog, bal.balances, pos.positions, flows.flows, network, prices]);
 
+  /**
+   * Tapping an asset's name opens Trade on a pair for it.
+   *
+   * The quote is a stable coin the vault actually HOLDS, because a pair the user cannot fund is a
+   * dead end: with USDT and no USDC, the pair is ASSET/USDT. Dollars are interchangeable enough
+   * that USDC wins when both are funded, and it is the fallback when neither is.
+   *
+   * A stable coin trades against another stable coin, so USDC opens as USDC/USDT. On a network
+   * with only one, there is no second side and the name does nothing rather than opening a pair
+   * against itself.
+   *
+   * The destination is the Trade screen PUSHED over the Overview, the same component the tab
+   * renders, so the Trade tab keeps whatever pair the user last left it on.
+   */
+  const tradeFor = useCallback(
+    (row: Row): (() => void) | null => {
+      const held = (sym: string) => (rows.find((r) => r.symbol === sym)?.total ?? 0) > 0;
+      const options = catalog.filter((a) => a.kind === 'stable').map((a) => a.symbol).filter((s) => s !== row.symbol);
+      const quote =
+        options.find((s) => s === 'USDC' && held(s)) ??
+        options.find(held) ??
+        options.find((s) => s === 'USDC') ??
+        options[0];
+      if (!quote) return null;
+      // Pushed, not a tab switch: it is a detour into one pair, with a back button out of it.
+      return () => nav.navigate('TradePair', {base: row.symbol, quote});
+    },
+    [rows, catalog, nav],
+  );
+
+
   // Category filter, the web's grouping: whichever categories this network's assets use, Crypto
-  // Native first and selected by default.
-  const [category, setCategory] = useState<AssetCategory>('crypto_native');
-  const categories = useMemo(() => ASSET_CATEGORIES.filter((k) => rows.some((r) => r.category === k)), [rows]);
-  const byCategory = useMemo(() => {
-    const m = new Map<AssetCategory, Row[]>();
-    for (const r of rows) m.set(r.category, [...(m.get(r.category) ?? []), r]);
-    return m;
-  }, [rows]);
-  // The lists sit side by side in a horizontal pager: a swipe moves to the neighbouring category and a
-  // tap on a tab scrolls the pager there, so the list always slides in from the side it comes from.
-  // The pager is only as tall as the page in view, interpolated between neighbours while swiping, so
-  // each category keeps the height of its own rows.
-  const pagerRef = React.useRef<ScrollView>(null);
-  const pagerX = React.useRef(new Animated.Value(0)).current;
-  const [pageW, setPageW] = useState(0);
-  const [pageH, setPageH] = useState<Record<string, number>>({});
-  const pages = categories.length > 0 ? categories : (['crypto_native'] as AssetCategory[]);
-  const pickCategory = (k: AssetCategory) => {
-    setCategory(k);
-    const i = pages.indexOf(k);
-    if (i >= 0 && pageW > 0) pagerRef.current?.scrollTo({x: i * pageW, animated: true});
-  };
-  const onPagerSettle = (x: number) => {
-    if (pageW <= 0) return;
-    const k = pages[Math.max(0, Math.min(pages.length - 1, Math.round(x / pageW)))];
-    if (k && k !== category) setCategory(k);
-  };
-  const knownH = pages.map((k) => pageH[k]);
-  const allKnown = pages.length > 1 && pageW > 0 && knownH.every((h) => h != null);
-  const maxH = allKnown ? Math.max(...(knownH as number[])) : 0;
-  // Nothing is clipped: the pager stays as tall as its tallest page, and an animated negative bottom
-  // margin pulls the content below up to the bottom of the page in view, so each card shows whole with
-  // its rounded corners and the page below still follows the current list's height.
-  const pagerStyle = allKnown
-    ? {
-        height: maxH,
-        marginBottom: pagerX.interpolate({
-          inputRange: pages.map((_, i) => i * pageW),
-          outputRange: (knownH as number[]).map((h) => h - maxH),
-          extrapolate: 'clamp',
-        }),
-      }
-    : undefined;
-  // A new network has a different list: start the selection afresh.
-  React.useEffect(() => {
-    setCategory('crypto_native');
-    setPageH({});
-    pagerRef.current?.scrollTo({x: 0, animated: false});
-  }, [network]);
+  /**
+   * What the Overview lists: the starred assets, plus anything the vault holds.
+   *
+   * Starring happens on an asset's trade page, and the defaults are the assets any vault is
+   * expected to hold. A balance shows whether or not it is starred — money must not be able to
+   * disappear from this screen because of a display preference.
+   */
+  const favorites = useFavoriteSet(network);
+  const {sort: sortByOrder, save: saveOrder, key: orderKey} = useAssetOrder(network);
+  // A row held for dragging must not also scroll the page under it.
+  const [dragging, setDragging] = useState(false);
+  const shown = useMemo(
+    () => sortByOrder(rows.filter((r) => favorites.has(r.symbol) || r.total > 0)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, network, orderKey, [...favorites].sort().join(',')],
+  );
 
   // Total portfolio value: every asset (free + yielding + lending) plus both sides of each LP position.
   const totalUsd = useMemo(() => {
@@ -285,6 +551,9 @@ export function VaultHomeScreen() {
     bal.refresh();
     pos.refresh();
     lp.refresh();
+    // Prices too: a pull that refreshed the balances but left last minute's prices behind moved
+    // the amounts and not the values, which reads as a bug.
+    setPriceNonce((n) => n + 1);
   }, [bal, pos, lp]);
   React.useEffect(() => {
     if (!anyLoading) setPulled(false);
@@ -292,8 +561,12 @@ export function VaultHomeScreen() {
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical
+      // A held row owns the vertical gesture; the page must not scroll out from under it.
+      scrollEnabled={!dragging}
       style={styles.container}
-      contentContainerStyle={[styles.content, {paddingTop: 8}]}
+      // The bar is translucent and the list runs under it, so the bottom padding has to be the
+      // bar's real height or the last row can never be scrolled clear of it.
+      contentContainerStyle={[styles.content, {paddingTop: 8, paddingBottom: tabBarHeight + 16}]}
       contentInset={{top: headerHeight}}
       contentOffset={{x: 0, y: -headerHeight}}
       scrollIndicatorInsets={{top: headerHeight}}
@@ -323,53 +596,14 @@ export function VaultHomeScreen() {
         </View>
       </View>
 
-      {categories.length > 1 ? (
-        <View style={styles.catWrap}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catRow}>
-            {categories.map((k) => {
-              const on = category === k;
-              return (
-                <Pressable key={k} onPress={() => pickCategory(k)} style={styles.catTab}>
-                  <Text style={[styles.catText, on && styles.catTextOn]}>{k === 'crypto_native' ? t('mobile.home.category_crypto') : t(`vault.category_${k}`)}</Text>
-                  <View style={[styles.catUnderline, on && styles.catUnderlineOn]} />
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </View>
-      ) : null}
-
-      {/* Each category is its own list, one page of the pager. */}
-      <View onLayout={(e) => setPageW(e.nativeEvent.layout.width)}>
-        {pageW > 0 ? (
-          <Animated.ScrollView
-            ref={pagerRef}
-            horizontal
-            pagingEnabled
-            bounces={false}
-            showsHorizontalScrollIndicator={false}
-            scrollEnabled={pages.length > 1}
-            nestedScrollEnabled
-            style={pagerStyle}
-            contentContainerStyle={styles.pagerContent}
-            onScroll={Animated.event([{nativeEvent: {contentOffset: {x: pagerX}}}], {useNativeDriver: false})}
-            scrollEventThrottle={16}
-            onMomentumScrollEnd={(e) => onPagerSettle(e.nativeEvent.contentOffset.x)}>
-            {pages.map((k) => (
-              <View key={k} style={{width: pageW}}>
-                <View
-                  onLayout={(e) => {
-                    // Read the height now: the event is recycled before a state updater runs.
-                    const h = e.nativeEvent.layout.height;
-                    setPageH((prev) => (prev[k] === h ? prev : {...prev, [k]: h}));
-                  }}>
-                  <AssetList rows={byCategory.get(k) ?? []} loading={bal.loading && !bal.balances} error={bal.error} />
-                </View>
-              </View>
-            ))}
-          </Animated.ScrollView>
-        ) : null}
-      </View>
+      <AssetList
+        rows={shown}
+        loading={bal.loading && !bal.balances}
+        error={bal.error}
+        onTrade={tradeFor}
+        onReorder={saveOrder}
+        onDragging={setDragging}
+      />
 
       <ReceiveDialog
         visible={receiveOpen}
@@ -383,18 +617,12 @@ export function VaultHomeScreen() {
 
 const makeStyles = (c: Colors) => StyleSheet.create({
   container: {flex: 1, backgroundColor: c.bg},
-  content: {flexGrow: 1, padding: 16, gap: 16, paddingBottom: 32},
+  // paddingBottom is set inline from the tab bar's height; see the ScrollView.
+  content: {flexGrow: 1, padding: 16, gap: 16},
   card: {backgroundColor: c.card, borderRadius: 20, padding: 16, gap: 6},
-  // Underline tabs sized to their labels and scrollable; only the selected tab draws its accent line.
-  catWrap: {marginTop: -4, marginBottom: -8},
+  // Labels only: the selected one is in the primary text colour, the rest grey.
   // Pages keep their own height (no stretch to the tallest neighbour).
-  pagerContent: {alignItems: 'flex-start'},
-  catRow: {flexDirection: 'row', alignItems: 'flex-end', gap: 20, paddingHorizontal: 4},
-  catTab: {alignItems: 'center', gap: 8, paddingTop: 6},
-  catText: {color: c.subtext, fontSize: 14, fontWeight: '600'},
-  catTextOn: {color: c.text},
-  catUnderline: {height: 2, alignSelf: 'stretch', backgroundColor: 'transparent', borderRadius: 1},
-  catUnderlineOn: {backgroundColor: c.accent},
+
   heroCard: {backgroundColor: c.card, borderRadius: 20, padding: 20, gap: 6},
   totalHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
   totalLabel: {color: c.subtext, fontSize: 13, fontWeight: '600'},
@@ -405,17 +633,44 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   actionLabel: {color: c.text, fontSize: 13, fontWeight: '600'},
   note: {color: c.subtext, fontSize: 13, paddingVertical: 8},
   err: {color: c.danger, fontSize: 13, paddingVertical: 8},
+  // The card carries only the side padding; the rows own their own vertical space, so the first
+  // row is not sitting under the card's 16 AND its own 12. The 4 tops it up to the 16 the rest of
+  // the app's grouped lists use.
+  /**
+   * The row in hand, over the ones it is passing.
+   *
+   * The negative side margins cancel the card's own padding so the lifted surface runs the whole
+   * width of the row, edge to edge. Without them it was inset by 16 on each side and read as a
+   * smaller card floating inside the list rather than the row itself being picked up.
+   */
+  lifted: {
+    zIndex: 2,
+    elevation: 6,
+    marginHorizontal: -16,
+    paddingHorizontal: 16,
+    backgroundColor: c.cardAlt,
+    shadowColor: '#000',
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    shadowOffset: {width: 0, height: 4},
+  },
+  listCard: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 4},
   list: {gap: 0},
   // The separator sits on TOP of every row: one between the header and the first asset, one
   // between each pair of rows, and none trailing the last.
   rowSeparator: {borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border},
-  row: {flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10},
+  rowInner: {flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10},
+  // Indented to the asset NAME, not its icon: a 28pt icon and the cell's 10pt gap above it.
+  legs: {paddingLeft: 38, paddingBottom: 12, gap: 8},
+  legRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
+  legLabel: {flex: 1, color: c.subtext, fontSize: 13},
+  legAmt: {color: c.text, fontSize: 13, fontVariant: ['tabular-nums']},
+  legEarned: {color: c.success, fontSize: 12},
   assetCell: {flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1},
+  // Sized to the icon and the name, never to the cell: the gap to its right is the row's.
   badge: {width: 28, height: 28, borderRadius: 14, backgroundColor: c.bg, alignItems: 'center', justifyContent: 'center'},
   badgeText: {color: c.subtext, fontSize: 10, fontWeight: '700'},
   assetText: {flexShrink: 1, minWidth: 0},
-  symLine: {flexDirection: 'row', alignItems: 'baseline', gap: 6, flexShrink: 1},
-  company: {color: c.subtext, fontSize: 13, flexShrink: 1},
   sym: {color: c.text, fontSize: 15, fontWeight: '600'},
   amtCol: {alignItems: 'flex-end'},
   amt: {color: c.text, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums']},
@@ -424,8 +679,6 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   chev: {color: c.subtext, fontSize: 18, width: 16, textAlign: 'right'},
   // The card's padding frames the list: the last row (or its open details) adds no bottom padding,
   // so the space below the last asset equals the space above the header.
-  noBottom: {paddingBottom: 0},
-  noTop: {paddingTop: 0},
   depositBtn: {backgroundColor: c.accent, borderRadius: 10, paddingVertical: 10, alignItems: 'center', marginTop: 2},
   depositText: {color: c.onAccent, fontSize: 14, fontWeight: '700'},
 });

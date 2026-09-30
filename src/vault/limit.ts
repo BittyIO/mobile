@@ -8,7 +8,7 @@
  * Prerequisite for a SELL to actually settle: the vault must have approved the CoW vault relayer for
  * the sell token once (see {@link prepareIntent}), and the CoW intent adapter must be enabled.
  */
-import {encodeAbiParameters, parseUnits, type Address, type Hex} from 'viem';
+import {encodeAbiParameters, parseAbi, parseUnits, type Address, type Hex} from 'viem';
 import type {Signer} from '@/wallet/signer';
 import {CHAIN_ID, publicClientFor, type Network} from '@/core/chain';
 import {BALANCE_ERC20, COW_PARTNER_FEE_BPS, GPV2_SETTLEMENT, KIND_BUY, KIND_SELL, ORDER_712_TYPES, ORDER_TUPLE, buildLimitAppData, cowApiBase, cowSupported} from '@/core/cow';
@@ -146,6 +146,68 @@ export async function placeLimitOrder(o: {
  * is needed. Waits for the tx to mine, because the clone + allowlist must be on-chain before the order is
  * posted (CoW validates isValidSignature against them).
  */
+const RELAYER_SOURCE_ABI = parseAbi(['function vaultRelayer() view returns (address)']);
+const ALLOWANCE_ABI = parseAbi(['function allowance(address owner,address spender) view returns (uint256)']);
+
+/**
+ * Does the vault still have to approve the settlement relayer for this token?
+ *
+ * `approveIntentRelayer` sets an unlimited allowance from the VAULT to the adapter's vaultRelayer,
+ * so the question is answered on chain and stays answered. It used to be tracked in a Set that
+ * lived as long as the screen, which meant every app restart re-approved a token that already had
+ * an unlimited allowance and charged a relay fee to do nothing.
+ *
+ * A failed read answers "yes": approving twice wastes a little gas, skipping a needed approval
+ * makes the order unfillable.
+ */
+export async function needsRelayerApproval(o: {
+  vault: Address;
+  network: Network;
+  intentProtocol: Address;
+  token: Address;
+}): Promise<boolean> {
+  const client = publicClientFor(o.network);
+  try {
+    const relayer = (await client.readContract({
+      address: o.intentProtocol,
+      abi: RELAYER_SOURCE_ABI,
+      functionName: 'vaultRelayer',
+    })) as Address;
+    const allowance = (await client.readContract({
+      address: o.token,
+      abi: ALLOWANCE_ABI,
+      functionName: 'allowance',
+      args: [o.vault, relayer],
+    })) as bigint;
+    return allowance === BigInt(0);
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * The on-chain calls a CoW order still needs before it can be posted, which is usually none.
+ *
+ * Split out of {prepareIntent} so the sheet can ask the same question the submit path answers, and
+ * say truthfully whether the order costs anything. An order on a vault that has already traded
+ * this pair sends no transaction and is free; charging it a fee line was simply wrong.
+ */
+export async function intentPrepCalls(o: {
+  vault: Address;
+  network: Network;
+  intentProtocol: Address;
+  tokens: Address[];
+  approveToken?: Address;
+  preCalls?: VaultCall[];
+}): Promise<VaultCall[]> {
+  const calls: VaultCall[] = [
+    ...(o.preCalls ?? []),
+    ...(await buildSetupCalls({network: o.network, vault: o.vault, adapter: o.intentProtocol, tokens: o.tokens, intent: true})),
+  ];
+  if (o.approveToken) calls.push({abi: VAULT_INTENT_ABI, functionName: 'approveIntentRelayer', args: [o.intentProtocol, o.approveToken]});
+  return calls;
+}
+
 export async function prepareIntent(o: {
   account: Signer;
   vault: Address;
@@ -157,8 +219,7 @@ export async function prepareIntent(o: {
   /** Extra calls run BEFORE setup in the same tx — e.g. a Sky withdraw to top up the sell token. */
   preCalls?: VaultCall[];
 }): Promise<void> {
-  const calls: VaultCall[] = [...(o.preCalls ?? []), ...(await buildSetupCalls({network: o.network, vault: o.vault, adapter: o.intentProtocol, tokens: o.tokens}))];
-  if (o.approveToken) calls.push({abi: VAULT_INTENT_ABI, functionName: 'approveIntentRelayer', args: [o.intentProtocol, o.approveToken]});
+  const calls = await intentPrepCalls(o);
   if (calls.length === 0) return;
 
   const {hash} =

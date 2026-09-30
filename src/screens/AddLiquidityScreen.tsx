@@ -11,7 +11,7 @@ import {ownerVaultAddress, balanceOfSymbol} from '@/vault/read';
 import {addLiquidityFullRange} from '@/vault/lp-actions';
 import {ASSETS} from '@/core/assets';
 import {useStyles, type Colors} from '@/theme';
-import {displaySymbol} from '@/core/format';
+import {displaySymbol, fmtNum} from '@/core/format';
 import {useT} from '@/i18n';
 
 const FEE_TIERS = [500, 3000, 10000] as const;
@@ -98,7 +98,7 @@ export function AddLiquidityScreen() {
           onChangeText={setAmtA}
           placeholder={t('mobile.home.amount_in', {symbol: aSym})}
           max={balanceOfSymbol(bal.balances, aSym)}
-          maxLabel={t('stablecoin.balance', {amount: `${balanceOfSymbol(bal.balances, aSym)} ${aSym}`})}
+          maxLabel={bal.balances ? `${fmtNum(Number(balanceOfSymbol(bal.balances, aSym)))} ${displaySymbol(aSym)}` : undefined}
         />
 
         <Text style={styles.label}>{t('mobile.home.token_b')}</Text>
@@ -108,7 +108,7 @@ export function AddLiquidityScreen() {
           onChangeText={setAmtB}
           placeholder={t('mobile.home.amount_in', {symbol: bSym})}
           max={balanceOfSymbol(bal.balances, bSym)}
-          maxLabel={t('stablecoin.balance', {amount: `${balanceOfSymbol(bal.balances, bSym)} ${bSym}`})}
+          maxLabel={bal.balances ? `${fmtNum(Number(balanceOfSymbol(bal.balances, bSym)))} ${displaySymbol(bSym)}` : undefined}
         />
 
         <Text style={styles.label}>{t('vault.fee_tier')}</Text>
@@ -126,7 +126,7 @@ export function AddLiquidityScreen() {
       </ScrollView>
 
       <SafeAreaView edges={['bottom']} style={styles.footer}>
-      <ConfirmButton onPress={onSubmit} loading={status === 'busy'} disabled={!canSubmit} />
+      <ConfirmButton onPress={onSubmit} disabled={!canSubmit} />
       </SafeAreaView>
     </View>
   );
@@ -152,13 +152,11 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   chipText: {color: c.subtext, fontSize: 14, fontWeight: '600'},
   chipTextOn: {color: c.text},
   input: {
-    height: 52,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: c.border,
-    backgroundColor: c.card,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: c.input,
     color: c.text,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     fontSize: 17,
   },
   hint: {color: c.subtext, fontSize: 13, lineHeight: 18, marginTop: 4},

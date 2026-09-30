@@ -137,5 +137,5 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   boxOn: {backgroundColor: c.accent, borderColor: c.accent},
   tick: {color: c.onAccent, fontSize: 14, fontWeight: '800'},
   checkText: {color: c.text, fontSize: 14, flex: 1},
-  input: {minHeight: 96, borderRadius: 14, borderWidth: 1, borderColor: c.border, backgroundColor: c.card, color: c.text, padding: 16, fontSize: 16, textAlignVertical: 'top'},
+  input: {minHeight: 96, borderRadius: 12, backgroundColor: c.input, color: c.text, padding: 16, fontSize: 17, textAlignVertical: 'top'},
 });

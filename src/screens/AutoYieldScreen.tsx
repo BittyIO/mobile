@@ -11,6 +11,8 @@ import {TokenIcon} from '@/components/TokenIcon';
 import {yieldAdapters} from '@/core/protocols';
 import {useT} from '@/i18n';
 import {showTx} from '@/components/Toast';
+import {useConfirmAction} from '@/components/ConfirmAction';
+import {relayGasFor} from '@/vault/fee-quote';
 import {useStyles, type Colors} from '@/theme';
 import {displaySymbol} from '@/core/format';
 
@@ -45,6 +47,24 @@ export function AutoYieldScreen() {
       if (n.includes('sky')) return sym === 'USDC';
       if (n.includes('lido')) return sym === 'WETH';
       return true; // Aave etc.
+    });
+
+  const {ask, sheet} = useConfirmAction();
+
+  // Both of these are relayed writes reached from a plain row, so each asks before it signs.
+  const askSet = (asset: Address, protocol: Address, key: string, label: string) =>
+    ask({
+      title: t('mobile.actions.auto_yield_set', {token: assetMeta(network, asset).symbol}),
+      message: label,
+      gas: relayGasFor({}),
+      run: () => onSet(asset, protocol, key),
+    });
+  const askSweep = (asset: Address, key: string) =>
+    ask({
+      title: t('mobile.vault.sweep_now'),
+      message: assetMeta(network, asset).symbol,
+      gas: relayGasFor({supply: 1}),
+      run: () => onSweep(asset, key),
     });
 
   const onSet = async (asset: Address, protocol: Address, key: string) => {
@@ -96,7 +116,7 @@ export function AutoYieldScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
               <Pressable
                 disabled={busy !== null}
-                onPress={() => onSet(a.address, zeroAddress, `${a.symbol}-none`)}
+                onPress={() => askSet(a.address, zeroAddress, `${a.symbol}-none`, t('vault.none'))}
                 style={[styles.chip, noneOn && styles.chipOn]}>
                 <Text style={[styles.chipText, noneOn && styles.chipTextOn]}>
                   {busy === `${a.symbol}-none` ? '…' : t('vault.none')}
@@ -109,7 +129,7 @@ export function AutoYieldScreen() {
                   <Pressable
                     key={y.address}
                     disabled={busy !== null}
-                    onPress={() => onSet(a.address, y.address, key)}
+                    onPress={() => askSet(a.address, y.address, key, y.name)}
                     style={[styles.chip, on && styles.chipOn]}>
                     <Text style={[styles.chipText, on && styles.chipTextOn]}>
                       {busy === key ? '…' : y.name}
@@ -121,7 +141,7 @@ export function AutoYieldScreen() {
               {!noneOn ? (
                 <Pressable
                   disabled={busy !== null}
-                  onPress={() => onSweep(a.address, `${a.symbol}-sweep`)}
+                  onPress={() => askSweep(a.address, `${a.symbol}-sweep`)}
                   style={styles.sweepBtn}>
                   <Text style={styles.sweepText}>
                     {busy === `${a.symbol}-sweep` ? t('mobile.vault.sweeping') : t('mobile.vault.sweep_now')}
@@ -131,6 +151,7 @@ export function AutoYieldScreen() {
             </View>
           );
         })}
+      {sheet}
     </ScrollView>
   );
 }

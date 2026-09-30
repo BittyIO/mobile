@@ -1,4 +1,5 @@
 import {useHeaderHeight} from '@react-navigation/elements';
+import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
 import React, {useState} from 'react';
 import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
@@ -7,12 +8,42 @@ import type {RootStackParamList} from '@/App';
 import {useWallet} from '@/wallet/store';
 import {revealMnemonic} from '@/wallet/keyring';
 import {useLanguage, LANGUAGES, languageLabel} from '@/core/language-store';
-import {useAppearance, APPEARANCES, useStyles, type Colors} from '@/theme';
+import Svg, {Circle, Path, Rect} from 'react-native-svg';
+import {useAppearance, APPEARANCES, useColors, useStyles, type Colors} from '@/theme';
 import {SettingsIcon, type SettingsIconName} from '@/components/SettingsIcon';
 import {useAssetManagerRow} from '@/components/useAssetManagerRow';
 import {useVaultVersionRow} from '@/components/useVaultVersionRow';
 import {PickerSheet} from '@/components/AssetPicker';
+import {Sheet} from '@/components/Sheet';
+import {GaslessCoins} from '@/components/GaslessCoins';
 import {useT} from '@/i18n';
+
+/**
+ * Sun, moon, phone — one per appearance option, so the sheet is readable at a glance instead of
+ * three lines of near-identical text. Bare strokes rather than the tinted boxes the settings rows
+ * wear: those mark a destination, and these are three states of one setting.
+ */
+function AppearanceIcon({name, color}: {name: string; color: string}) {
+  const c = {stroke: color, strokeWidth: 1.9, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const};
+  return (
+    <Svg width={26} height={26} viewBox="0 0 24 24">
+      {name === 'light' ? (
+        <>
+          <Circle cx={12} cy={12} r={4.2} {...c} />
+          <Path d="M12 2.5v2.2M12 19.3v2.2M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6" {...c} />
+        </>
+      ) : name === 'dark' ? (
+        <Path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" {...c} />
+      ) : (
+        // "System" is whatever the device says, so the device is the mark.
+        <>
+          <Rect x={7} y={2.5} width={10} height={19} rx={2.4} {...c} />
+          <Path d="M10.8 18.6h2.4" {...c} />
+        </>
+      )}
+    </Svg>
+  );
+}
 
 // One row of a settings group: title, an optional current value on the right, and a chevron when
 // it pushes a page. Rows inside a group are separated by a hairline.
@@ -61,9 +92,11 @@ export function SettingsScreen() {
   const manager = useAssetManagerRow();
   const version = useVaultVersionRow();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const {appearance, setAppearance} = useAppearance();
+  const c = useColors();
   const lock = useWallet((s) => s.lock);
   const [phrase, setPhrase] = useState<string | null>(null);
 
@@ -71,6 +104,10 @@ export function SettingsScreen() {
   // use: it is part of the React tree, so it opens on the next frame, where the native action sheet
   // waits on a round trip to UIKit and a presentation animation of its own.
   const [picker, setPicker] = useState<'language' | 'appearance' | null>(null);
+  // Which coins may pay the relay fee is one short list of switches, so it is a sheet rather than a
+  // page of its own: nothing on it leads anywhere, and pushing a screen for it made a two-tap trip
+  // out of a one-tap decision.
+  const [feeCoins, setFeeCoins] = useState(false);
   const pickLanguage = () => setPicker('language');
 
   const pickAppearance = () => setPicker('appearance');
@@ -85,7 +122,7 @@ export function SettingsScreen() {
   };
 
   return (
-    <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical style={styles.flex} contentContainerStyle={[styles.body, {paddingTop: headerHeight + 8}]}>
+    <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical style={styles.flex} contentContainerStyle={[styles.body, {paddingTop: headerHeight + 8, paddingBottom: tabBarHeight + 16}]}>
       <View style={styles.section}>
         <Text style={styles.groupLabel}>{t('mobile.settings.system')}</Text>
         <View style={styles.group}>
@@ -97,7 +134,7 @@ export function SettingsScreen() {
       <View style={styles.section}>
         <Text style={styles.groupLabel}>{t('mobile.settings.vault')}</Text>
         <View style={styles.group}>
-          <Row icon="gasless" title={t('mobile.settings.gas_token')} onPress={() => nav.navigate('Gasless')} />
+          <Row icon="gasless" title={t('mobile.settings.gas_token')} onPress={() => setFeeCoins(true)} chevron={false} />
           <Row icon="allowlist" title={t('mobile.settings.allow_list')} onPress={() => nav.navigate('VaultAssets')} />
           <Row icon="security" title={t('mobile.settings.security')} sub={t('mobile.settings.security_sub')} onPress={() => nav.navigate('VaultSecurity')} />
           <Row icon="version" title={t('mobile.settings.current_version')} value={version.value} sub={version.sub} onPress={version.onPress} chevron={version.upgradeable} last />
@@ -144,10 +181,20 @@ export function SettingsScreen() {
         onSelect={(code) => setLanguage(code as (typeof LANGUAGES)[number]['code'])}
         onClose={() => setPicker(null)}
       />
+      {/* The confirmations for the two rows that write on their own (asset manager, upgrade). */}
+      {manager.sheet}
+      {version.sheet}
+      <Sheet visible={feeCoins} title={t('mobile.settings.gas_token')} onClose={() => setFeeCoins(false)}>
+        <GaslessCoins />
+      </Sheet>
       <PickerSheet
         visible={picker === 'appearance'}
         title={t('mobile.settings.appearance')}
-        items={APPEARANCES.map((a) => ({key: a, label: t(`mobile.settings.appearance_${a}`)}))}
+        items={APPEARANCES.map((a) => ({
+          key: a,
+          label: t(`mobile.settings.appearance_${a}`),
+          icon: <AppearanceIcon name={a} color={c.text} />,
+        }))}
         selected={appearance}
         onSelect={(a) => setAppearance(a as (typeof APPEARANCES)[number])}
         onClose={() => setPicker(null)}
@@ -158,7 +205,8 @@ export function SettingsScreen() {
 
 const makeStyles = (c: Colors) => StyleSheet.create({
   flex: {flex: 1, backgroundColor: c.bg},
-  body: {flexGrow: 1, padding: 16, gap: 20, paddingBottom: 32},
+  // paddingBottom is set inline from the tab bar's height; see the ScrollView.
+  body: {flexGrow: 1, padding: 16, gap: 20},
   groupLabel: {color: c.subtext, fontSize: 15, fontWeight: '600', paddingHorizontal: 16, marginTop: 8, marginBottom: 6},
   section: {gap: 0},
   group: {backgroundColor: c.card, borderRadius: 20, overflow: 'hidden'},

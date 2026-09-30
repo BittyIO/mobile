@@ -1,7 +1,7 @@
 import {useHeaderHeight} from '@react-navigation/elements';
 import React, {useMemo, useState} from 'react';
 import {StyleSheet, View} from 'react-native';
-import {UnderlineTabs} from '@/components/ui';
+import {CategoryTabs} from '@/components/ui';
 import {SendScreen} from '@/screens/SendScreen';
 import {ScheduledScreen} from '@/screens/ScheduledScreen';
 import {WhitelistScreen} from '@/screens/WhitelistScreen';
@@ -10,7 +10,7 @@ import {useStyles, type Colors} from '@/theme';
 
 type Tab = 'send' | 'scheduled' | 'addressbook';
 
-/** Payment tab — web's underline sub-nav over the Send / Scheduled / Address Book panels. */
+/** Payment tab — the Market's category row over the Send / Scheduled / Address Book panels. */
 export function PaymentsScreen() {
   const headerHeight = useHeaderHeight();
   const {t} = useT();
@@ -26,7 +26,9 @@ export function PaymentsScreen() {
   );
   return (
     <View style={[styles.container, {paddingTop: headerHeight}]}>
-      <UnderlineTabs tabs={tabs} value={tab} onChange={setTab} />
+      <View style={styles.tabs}>
+        <CategoryTabs tabs={tabs} value={tab} onChange={setTab} />
+      </View>
       <View style={styles.panel}>
         {tab === 'send' ? <SendScreen /> : tab === 'scheduled' ? <ScheduledScreen /> : <WhitelistScreen />}
       </View>
@@ -36,5 +38,7 @@ export function PaymentsScreen() {
 
 const makeStyles = (c: Colors) => StyleSheet.create({
   container: {flex: 1, backgroundColor: c.bg},
+  // 16 here plus the row's own 4 puts the labels at 20, where the Market's sit.
+  tabs: {paddingHorizontal: 16, paddingTop: 8, paddingBottom: 2},
   panel: {flex: 1},
 });

@@ -8,6 +8,8 @@ import {useAssetCatalog} from '@/core/asset-catalog';
 import {TokenIcon} from '@/components/TokenIcon';
 import {PendingSwitch} from '@/components/PendingSwitch';
 import {showTx} from '@/components/Toast';
+import {useConfirmAction} from '@/components/ConfirmAction';
+import {relayGasFor} from '@/vault/fee-quote';
 import {ProtocolIcon} from '@/components/ProtocolIcon';
 import {allAdapters} from '@/core/protocols';
 import {useT} from '@/i18n';
@@ -28,7 +30,7 @@ const SERVICE_KEY: Record<string, string> = {
 };
 
 export function ManageScreen() {
-  const {t} = useT();
+  const {t, company} = useT();
   const styles = useStyles(makeStyles);
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
@@ -59,7 +61,9 @@ export function ManageScreen() {
   }, [vault, network]);
   useEffect(load, [load]);
 
-  const run = async (key: string, title: string, fn: (acct: Awaited<ReturnType<typeof getSigner>>) => Promise<string>) => {
+  const {ask, sheet} = useConfirmAction();
+
+  const runNow = async (key: string, title: string, fn: (acct: Awaited<ReturnType<typeof getSigner>>) => Promise<string>) => {
     if (!vault || !stable) return;
     setBusy(key);
     const tx = showTx(title, network);
@@ -73,6 +77,14 @@ export function ManageScreen() {
       setBusy(null);
     }
   };
+
+  /**
+   * Every write on this page goes through here, so wrapping it is what puts a Face ID step and an
+   * estimated fee in front of all of them at once — the switches and the small Save buttons
+   * included, which used to send a transaction on the tap that reached them.
+   */
+  const run = (key: string, title: string, fn: Parameters<typeof runNow>[2]) =>
+    ask({title, gas: relayGasFor({}), run: () => runNow(key, title, fn).then(() => undefined)});
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
@@ -106,9 +118,9 @@ export function ManageScreen() {
               <TokenIcon symbol={a.symbol} uri={a.icon} size={22} />
               <View style={styles.symText}>
                 <Text style={styles.sym}>{displaySymbol(a.symbol)}</Text>
-                {a.company ? (
+                {company(a.symbol, a.company) ? (
                   <Text style={styles.company} numberOfLines={1}>
-                    {a.company}
+                    {company(a.symbol, a.company)}
                   </Text>
                 ) : null}
               </View>
@@ -153,6 +165,7 @@ export function ManageScreen() {
         ))}
         </View>
       </View>
+      {sheet}
     </ScrollView>
   );
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import {Pressable, StyleSheet, Text, View, type ViewStyle} from 'react-native';
+import {Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle} from 'react-native';
 import {useColors, useStyles, type Colors} from '@/theme';
 
 /** Section heading — text-lg font-semibold, matches the web `<h2>` used across Earn/Settings. */
@@ -36,8 +36,14 @@ export function Pill({label, tone = 'gray'}: {label: string; tone?: PillTone}) {
   );
 }
 
-/** Underline sub-tab bar (Payments / Settings), full width, equal thirds. */
-export function UnderlineTabs<T extends string>({
+/**
+ * The Market tab's category row: plain labels in a line, the selected one at full strength. Scrolls
+ * sideways when they overflow, and draws no underline or divider — the card below is the only edge.
+ *
+ * Shared so the Market directory and the Payments sub-nav cannot drift apart. The caller owns the
+ * outer spacing, because the two sit in differently padded screens.
+ */
+export function CategoryTabs<T extends string>({
   tabs,
   value,
   onChange,
@@ -48,17 +54,13 @@ export function UnderlineTabs<T extends string>({
 }) {
   const ui = useStyles(makeUi);
   return (
-    <View style={ui.tabBar}>
-      {tabs.map((t) => {
-        const on = t.key === value;
-        return (
-          <Pressable key={t.key} style={ui.tabBtn} onPress={() => onChange(t.key)}>
-            <Text style={[ui.tabText, on && ui.tabTextOn]}>{t.label}</Text>
-            <View style={[ui.tabUnderline, on && ui.tabUnderlineOn]} />
-          </Pressable>
-        );
-      })}
-    </View>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={ui.catRow}>
+      {tabs.map((t) => (
+        <Pressable key={t.key} onPress={() => onChange(t.key)} style={ui.catTab}>
+          <Text style={[ui.catText, t.key === value && ui.catTextOn]}>{t.label}</Text>
+        </Pressable>
+      ))}
+    </ScrollView>
   );
 }
 
@@ -67,10 +69,8 @@ const makeUi = (c: Colors) => StyleSheet.create({
   card: {backgroundColor: c.card, borderRadius: 12, padding: 14},
   pill: {borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, alignSelf: 'flex-start'},
   pillText: {fontSize: 11, fontWeight: '600'},
-  tabBar: {flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.neutralSoft},
-  tabBtn: {flex: 1, alignItems: 'center', paddingVertical: 10, gap: 8},
-  tabText: {color: c.subtext, fontSize: 14, fontWeight: '600'},
-  tabTextOn: {color: c.text},
-  tabUnderline: {height: 2, width: '100%', backgroundColor: 'transparent'},
-  tabUnderlineOn: {backgroundColor: c.accent},
+  catRow: {flexDirection: 'row', alignItems: 'flex-end', gap: 20, paddingHorizontal: 4},
+  catTab: {alignItems: 'center', paddingVertical: 6},
+  catText: {color: c.subtext, fontSize: 15, fontWeight: '600'},
+  catTextOn: {color: c.text, fontWeight: '700'},
 });
