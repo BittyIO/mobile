@@ -5,7 +5,7 @@
  * per-adapter on-chain read the web's getVaultLpPositions does).
  */
 import {formatUnits, parseUnits, type Address} from 'viem';
-import {apiUrl, DEFAULT_VAULT_VERSION, type Network} from '@/core/chain';
+import {apiFetch, apiUrl, DEFAULT_VAULT_VERSION, type Network} from '@/core/chain';
 import {ASSETS, assetMeta} from '@/core/assets';
 import {adapterByName, protocolMeta, type ProtocolCategory} from '@/core/protocols';
 import {fetchYielding} from './yielding';
@@ -24,6 +24,9 @@ export type Position = {
   formatted: string;
 };
 
+/** The positions endpoint's own ceiling. Generous on purpose; it is there to catch a hang. */
+const SLOW_READ_MS = 60_000;
+
 type PositionJson = {
   protocol: string;
   asset: string;
@@ -40,13 +43,18 @@ export async function fetchPositions(
   network: Network,
   fresh = false,
 ): Promise<Position[]> {
-  const res = await fetch(
+  const res = await apiFetch(
     apiUrl(
       `/api/ethereum/vaults/${vault}/positions?version=${DEFAULT_VAULT_VERSION}${
         fresh ? '&fresh=1' : ''
       }`,
       network,
     ),
+    undefined,
+    // The slowest read in the app, and knowingly so: see the note above about `fresh`. On mainnet
+    // the server walks every registered asset against every adapter, which on a cold cache takes
+    // longer than any other endpoint here.
+    SLOW_READ_MS,
   );
   if (!res.ok) throw new Error(`positions ${res.status}`);
   const data = (await res.json()) as {positions?: PositionJson[]};

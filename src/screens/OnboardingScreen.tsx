@@ -1,9 +1,10 @@
-import React, {useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Button} from '@/components/Button';
 import {useWallet} from '@/wallet/store';
 import {generateNewMnemonic} from '@/wallet/keyring';
+import {useRevealGuard} from '@/core/device-security';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 
@@ -29,6 +30,18 @@ export function OnboardingScreen() {
   const [busy, setBusy] = useState(false);
 
   const words = useMemo(() => (mnemonic ? mnemonic.split(' ') : []), [mnemonic]);
+
+  // Hide the new phrase while the screen is recorded; warn (can't prevent) on a screenshot.
+  const reveal = useRevealGuard();
+  useEffect(() => {
+    if (reveal.screenshotCount > 0 && step === 'reveal') {
+      Alert.alert(
+        'Screenshot detected',
+        'Anything in Photos can sync to the cloud and be stolen. Write your recovery phrase on paper instead, then delete the screenshot.',
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reveal.screenshotCount]);
 
   const onCreate = () => {
     setMnemonic(generateNewMnemonic());
@@ -79,14 +92,23 @@ export function OnboardingScreen() {
           <>
             <Text style={styles.h}>{t('mobile.payments.onboarding_reveal_title')}</Text>
             <Text style={styles.p}>{t('mobile.payments.onboarding_reveal_desc')}</Text>
-            <View style={styles.grid}>
-              {words.map((w, i) => (
-                <View key={`${w}-${i}`} style={styles.word}>
-                  <Text style={styles.wordIdx}>{i + 1}</Text>
-                  <Text style={styles.wordText}>{w}</Text>
-                </View>
-              ))}
-            </View>
+            {reveal.captured ? (
+              <View style={styles.grid}>
+                <Text style={styles.fine}>
+                  Your recovery phrase is hidden while the screen is being recorded or mirrored. Stop
+                  the recording to reveal it.
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.grid}>
+                {words.map((w, i) => (
+                  <View key={`${w}-${i}`} style={styles.word}>
+                    <Text style={styles.wordIdx}>{i + 1}</Text>
+                    <Text style={styles.wordText}>{w}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
             <Pressable style={styles.check} onPress={() => setSaved((v) => !v)}>
               <View style={[styles.box, saved && styles.boxOn]}>{saved ? <Text style={styles.tick}>✓</Text> : null}</View>
               <Text style={styles.checkText}>{t('mobile.payments.onboarding_saved_ack')}</Text>

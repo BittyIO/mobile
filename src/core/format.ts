@@ -19,6 +19,25 @@ export function fmtNum(n: number): string {
   return n.toLocaleString(undefined, {maximumFractionDigits: 7});
 }
 
+/**
+ * The same formatter, kept SHORT — for a row that lists amounts rather than reports a balance.
+ *
+ * {@link fmtNum} gives a sub-1 amount up to seven decimals, which is right where the number IS the
+ * answer (what you hold, what is free to spend). In a list of orders it is noise: "0.1051606 ETH →
+ * 250 USDC" is read for its magnitude, and the long tail only makes two rows harder to compare. So
+ * two decimals, truncated like the ≥ 1 case so an amount is never overstated, and trailing zeros
+ * kept ("0.10") because a column of amounts lines up on the point.
+ *
+ * Below 0.01 it hands back to {@link fmtNum}: truncating there would print "0.00" and lose the row.
+ */
+export function fmtShort(n: number): string {
+  if (!Number.isFinite(n) || n === 0) return '0';
+  const abs = Math.abs(n);
+  if (abs >= 1) return fmtNum(n);
+  if (abs < 0.01) return fmtNum(n);
+  return (Math.trunc(n * 100) / 100).toFixed(2);
+}
+
 const SUBSCRIPT = '₀₁₂₃₄₅₆₇₈₉';
 const sub = (k: number) => String(k).split('').map((d) => SUBSCRIPT[Number(d)]).join('');
 

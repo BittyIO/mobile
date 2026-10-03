@@ -1,5 +1,5 @@
 import React, {useCallback, useState} from 'react';
-import {StyleSheet, Text, useWindowDimensions, View} from 'react-native';
+import {StyleSheet, Text, View} from 'react-native';
 import {Sheet} from '@/components/Sheet';
 import {ConfirmButton} from '@/components/Button';
 import {TYPICAL_RELAY_GAS} from '@/vault/fee-quote';
@@ -33,7 +33,6 @@ export function useConfirmAction(): {ask: (r: ConfirmRequest) => void; sheet: Re
   const [req, setReq] = useState<ConfirmRequest | null>(null);
   const [busy, setBusy] = useState(false);
   const styles = useStyles(makeStyles);
-  const {height} = useWindowDimensions();
 
   const ask = useCallback((r: ConfirmRequest) => {
     setReq(r);
@@ -60,12 +59,17 @@ export function useConfirmAction(): {ask: (r: ConfirmRequest) => void; sheet: Re
       visible={req != null}
       title={req?.title ?? ''}
       onClose={close}
-      // Short: a line of text and a button. A full-height sheet for a yes/no reads as a page.
-      height={Math.round(height * 0.34)}>
+      // No height of its own: the shared 61.8% every other popup in the app stops at. It held a
+      // third of the screen on the grounds that a yes/no needs no more, which was true of the
+      // sheet in isolation and wrong beside the ones it alternates with.
+      >
+      {/* Title, what is being confirmed, then the button — the order the trade sheet uses. The
+          button was pushed to the floor by a flexing spacer, which put the whole height of the
+          sheet between the sentence and the control that acts on it. The space below it is left
+          empty instead. */}
       <View style={styles.body}>
         {req?.message ? <Text style={styles.message}>{req.message}</Text> : null}
-        <View style={styles.spacer} />
-        <ConfirmButton onPress={confirm} loading={busy} gas={req?.gas ?? TYPICAL_RELAY_GAS} />
+        <ConfirmButton onPress={confirm} loading={busy} gas={req?.gas ?? TYPICAL_RELAY_GAS} style={styles.submit} />
       </View>
     </Sheet>
   );
@@ -77,5 +81,5 @@ const makeStyles = (c: Colors) =>
   StyleSheet.create({
     body: {flex: 1},
     message: {color: c.subtext, fontSize: 15, lineHeight: 21},
-    spacer: {flex: 1},
+    submit: {marginTop: 14},
   });

@@ -23,7 +23,7 @@ const FEE_TIERS = [500, 3000, 10000] as const;
 export function AddLiquidityScreen() {
   const {t} = useT();
   const styles = useStyles(makeStyles);
-  const account = useWallet((s) => s.account);
+  const unlocked = useWallet((s) => s.unlocked);
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
@@ -42,12 +42,12 @@ export function AddLiquidityScreen() {
   const tokenB = assets.find((a) => a.symbol === bSym);
   const stable = assets.find((a) => a.kind === 'stable');
   const canSubmit =
-    !!account && !!owner && !!tokenA && !!tokenB && !!stable && aSym !== bSym &&
+    unlocked && !!owner && !!tokenA && !!tokenB && !!stable && aSym !== bSym &&
     Number(amtA) > 0 && Number(amtB) > 0 && status !== 'busy' &&
     !exceedsMax(amtA, balanceOfSymbol(bal.balances, aSym)) && !exceedsMax(amtB, balanceOfSymbol(bal.balances, bSym));
 
   const onSubmit = async () => {
-    if (!account || !owner || !tokenA || !tokenB || !stable) return;
+    if (!unlocked || !owner || !tokenA || !tokenB || !stable) return;
     setStatus('busy');
     setErr(null);
     const tx = showTx(`${t('vault.add_liquidity')} ${displaySymbol(aSym)}/${displaySymbol(bSym)}`, network);

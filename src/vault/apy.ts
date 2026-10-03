@@ -6,7 +6,7 @@
  *  - Lido (staking): a backend endpoint (`/api/protocol-apy/lido`), since the APR isn't a simple read.
  */
 import {parseAbi, type Address} from 'viem';
-import {apiUrl, publicClientFor, type Network} from '@/core/chain';
+import {apiFetch, apiUrl, publicClientFor, type Network} from '@/core/chain';
 
 const SECONDS_PER_YEAR = 31_536_000;
 
@@ -99,7 +99,7 @@ export async function fetchProtocolApy(o: {
   const lidoTask = async () => {
     if (o.lidoProtocols.length === 0) return;
     try {
-      const res = await fetch(apiUrl('/api/protocol-apy/lido', o.network));
+      const res = await apiFetch(apiUrl('/api/protocol-apy/lido', o.network));
       const j = (await res.json()) as {apr?: number | string};
       const apr = Number(j?.apr);
       if (Number.isFinite(apr)) o.lidoProtocols.forEach((p) => protocolApy.set(p.toLowerCase(), apr));

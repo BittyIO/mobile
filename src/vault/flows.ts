@@ -3,7 +3,7 @@
  * (supply-flows); earned = current position + total unstaked − total staked. Hidden when ≤ 0 (a fresh
  * or net-withdrawn position hasn't earned yet). Ported from web use-stake-flows / use-supply-flows.
  */
-import {apiUrl, type Network} from '@/core/chain';
+import {apiFetch, apiUrl, type Network} from '@/core/chain';
 import type {Position} from './positions';
 
 type Totals = {staked: bigint; unstaked: bigint};
@@ -37,7 +37,7 @@ const big = (v: unknown): bigint => {
 async function fetchOne(path: string, vault: string, network: Network): Promise<FlowMap> {
   const m: FlowMap = new Map();
   try {
-    const res = await fetch(apiUrl(`${path}?vault=${vault}`, network));
+    const res = await apiFetch(apiUrl(`${path}?vault=${vault}`, network));
     if (!res.ok) return m;
     const j = (await res.json()) as {
       data?: {

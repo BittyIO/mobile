@@ -103,8 +103,28 @@ export function categoryForActions(actions: VaultAction[] | undefined): ActionCa
   return null;
 }
 
-export function describeActions(actions: VaultAction[] | undefined, network: Network, t: T, orders?: Map<string, CowOrder>): string[] {
+export function describeActions(
+  actions: VaultAction[] | undefined,
+  network: Network,
+  t: T,
+  orders: Map<string, CowOrder> | undefined,
+  /** The DeFi-details switch. Passed in, not read here: see the note where `venues` is used. */
+  venues: boolean,
+): string[] {
   if (!actions?.length) return [];
+  /**
+   * `venues` is whether to name the protocol a deposit or withdrawal went through.
+   *
+   * Off, the line is dropped rather than reworded: the operation's own title already says an Earn
+   * move happened, and "Deposit to Lending" under "Deposit" only repeats it. The lines that are
+   * ABOUT a protocol — enabling a service, upgrading one — keep their name either way, since
+   * without it they would say nothing.
+   *
+   * It arrives as an argument rather than being read from the store here. Read here, through
+   * getState, the caller never subscribed to it: flipping the switch in Settings re-rendered
+   * nothing and the history kept the lines it had already built. A parameter makes the dependency
+   * one the caller can see and name.
+   */
   const token = (a: string) => displaySymbol(assetMeta(network, a).symbol);
   const proto = (a: string) => protocolMeta(network, a).name;
   const k = (key: string, params?: Record<string, string | number>) => t(`mobile.actions.${key}`, params);
@@ -122,10 +142,10 @@ export function describeActions(actions: VaultAction[] | undefined, network: Net
         break;
       // Neither was described before, so an Earn move showed no line at all under its title.
       case 'deposit':
-        out.push(k('deposit_to', {name: proto(String(g.depositProtocol ?? g.protocol))}));
+        if (venues) out.push(k('deposit_to', {name: proto(String(g.depositProtocol ?? g.protocol))}));
         break;
       case 'withdraw':
-        out.push(k('withdraw_from', {name: proto(String(g.withdrawProtocol ?? g.protocol))}));
+        if (venues) out.push(k('withdraw_from', {name: proto(String(g.withdrawProtocol ?? g.protocol))}));
         break;
       case 'approveIntentRelayer':
         out.push(k('approve_intent', {token: token(String(g.token))}));

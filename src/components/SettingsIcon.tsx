@@ -3,6 +3,7 @@ import {Image, StyleSheet, View} from 'react-native';
 import Svg, {Circle, Line, Path, Rect} from 'react-native-svg';
 
 export type SettingsIconName =
+  | 'user'
   | 'language'
   | 'network'
   | 'appearance'
@@ -19,12 +20,19 @@ export type SettingsIconName =
   | 'perTx'
   | 'payout'
   | 'version'
-  | 'allowlist';
+  | 'allowlist'
+  | 'timelock'
+  | 'limits'
+  | 'follow'
+  | 'terms'
+  | 'privacy';
 
 // iOS Settings row icons: a white glyph on a small rounded square, one tint per row. Glyphs follow
 // the lucide set the web uses (Globe, Coins, Wrench, Shield, Key, Lock, Zap, Users, Fuel, CalendarClock, Receipt), drawn on a
 // 24×24 grid.
 const TINT: Record<SettingsIconName, string> = {
+  // The app's own accent: this is the row that decides what every row below it means.
+  user: '#0E85FF',
   language: '#0E85FF',
   network: '#5856D6',
   appearance: '#5E5CE6',
@@ -42,6 +50,11 @@ const TINT: Record<SettingsIconName, string> = {
   payout: '#34C759',
   version: '#0E85FF',
   allowlist: '#30B0C7',
+  timelock: '#FF9500',
+  limits: '#FF2D55',
+  follow: '#0E85FF',
+  terms: '#8E8E93',
+  privacy: '#5856D6',
 };
 
 export function SettingsIcon({name, size = 29}: {name: SettingsIconName; size?: number}) {
@@ -97,6 +110,38 @@ export function SettingsIcon({name, size = 29}: {name: SettingsIconName; size?: 
           </>
         ) : name === 'autoYield' ? (
           <Path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" {...c} />
+        ) : name === 'timelock' ? (
+          <>
+            {/* A clock inside a padlock's shackle: a change that has to wait out a delay. */}
+            <Rect x={3} y={11} width={18} height={11} rx={2} {...c} />
+            <Path d="M7 11V7a5 5 0 0 1 10 0v4" {...c} />
+            <Path d="M12 14v3l2 1.2" {...c} />
+          </>
+        ) : name === 'limits' ? (
+          <>
+            {/* A gauge with its needle short of the end: a ceiling, not a clock. */}
+            <Path d="M4 18a8 8 0 1 1 16 0" {...c} />
+            <Path d="M12 18l4.5-4.5" {...c} />
+            <Circle cx={12} cy={18} r={1.3} {...c} />
+          </>
+        ) : name === 'follow' ? (
+          <>
+            {/* The X mark, drawn rather than fetched. */}
+            <Path d="M4 3l16 18M20 3L4 21" {...c} />
+          </>
+        ) : name === 'terms' ? (
+          <>
+            {/* A page with ruled lines. */}
+            <Path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" {...c} />
+            <Path d="M14 3v5h5M9 13h6M9 17h4" {...c} />
+          </>
+        ) : name === 'privacy' ? (
+          <>
+            {/* A shield with a keyhole: the same guard as Security, but about what is kept. */}
+            <Path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" {...c} />
+            <Circle cx={12} cy={10.5} r={1.8} {...c} />
+            <Path d="M12 12.3v3" {...c} />
+          </>
         ) : name === 'dailyLimit' ? (
           <>
             {/* A calendar page: a day's budget. */}
@@ -127,6 +172,13 @@ export function SettingsIcon({name, size = 29}: {name: SettingsIconName; size?: 
             <Path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" {...c} />
             <Circle cx={9} cy={7} r={4} {...c} />
             <Path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" {...c} />
+          </>
+        ) : name === 'user' ? (
+          <>
+            {/* lucide User — ONE person, where `delegation` above is lucide Users. A vault belongs
+                to one owner; the plural mark next to it would read as a shared account. */}
+            <Path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" {...c} />
+            <Circle cx={12} cy={7} r={4} {...c} />
           </>
         ) : (
           <>

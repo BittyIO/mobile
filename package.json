@@ -2,10 +2,11 @@
   "name": "bitty-mobile",
   "version": "0.0.1",
   "private": true,
-  "description": "Bitty — native iOS app (React Native, embedded keyring). Vault product only.",
+  "description": "Bitty \u2014 native iOS app (React Native, embedded keyring). Vault product only.",
   "scripts": {
     "start": "react-native start",
     "ios": "react-native run-ios",
+    "ios:release": "bash scripts/ios-release.sh",
     "pods": "cd ios && pod install",
     "tsc": "tsc --noEmit",
     "lint": "eslint src"

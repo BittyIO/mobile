@@ -116,6 +116,35 @@ export const EXPLORER_TX: Record<Network, string> = {
 // CLIENT of the same backend — routes stay on the server and are called over HTTP.
 export const API_BASE = 'https://bitty.io';
 
+/**
+ * A read that cannot hang.
+ *
+ * Nothing in this app bounded a `fetch`. On iOS one inherits NSURLSession's 60-second timeout and
+ * reports nothing at all until it expires, so a backend that stalls pins a screen's `loading` flag
+ * for a minute with no error and no way out — which is what left Earn and Trade apparently loading
+ * for ever: both are built almost entirely from server reads (positions, LP, flows, APY; orders,
+ * market trades, the chart), where the Overview can draw itself from the chain read alone. An abort
+ * turns a stall into a rejection, which every caller here already knows how to show.
+ *
+ * READS ONLY. Never wrap a relay, an order submission or any other write in this: the request may
+ * well have been received, and a client that gives up reports a failure for something that is
+ * about to happen anyway.
+ *
+ * The limit is a SAFETY NET against a stall, not a latency budget. It was 15s, which is a budget —
+ * and a cold read of the positions endpoint on a chain with thirty registered assets beats it, so
+ * the first visit to Earn aborted and showed nothing while the second, answered from the server's
+ * warm cache, was instant. A caller that knows it is asking something slow passes its own.
+ */
+export async function apiFetch(url: string, init?: RequestInit, timeoutMs = 30_000): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, {...init, signal: ctrl.signal});
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Build an API URL, tagging the chain the same way the web app does (`?network=`). */
 export function apiUrl(path: string, network: Network): string {
   const sep = path.includes('?') ? '&' : '?';

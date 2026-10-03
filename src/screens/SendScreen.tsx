@@ -1,10 +1,11 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {ActionSheetIOS, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import {formatUnits, isAddress, parseUnits, type Address} from 'viem';
+import {formatUnits, parseUnits, type Address} from 'viem';
+import {isPayableAddress, isTokenAddress} from '@/core/asset-catalog';
 import {exceedsMax} from '@/components/AmountInput';
 import {TokenIcon} from '@/components/TokenIcon';
-import Svg, {Path} from 'react-native-svg';
+import Svg, {Circle, Path} from 'react-native-svg';
 import {Sheet} from '@/components/Sheet';
 import {ConfirmButton} from '@/components/Button';
 import {showTx} from '@/components/Toast';
@@ -29,7 +30,15 @@ type Recipient = {to: string; lines: Line[]};
 
 const short = (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}`;
 const lineKey = (l: {sym: string; source: Source}) => `${l.sym}:${l.source}`;
-const newLine = (sym: string, source: Source = 'free'): Line => ({sym, source, amount: ''});
+/**
+ * A new line starts at 0, not blank.
+ *
+ * Empty read as half-drawn next to a filled asset pill and a Max badge. A zero is what the row is
+ * actually worth until something is typed, and `lineToRow` already drops a zero from the batch, so
+ * showing it changes nothing about what is sent. The field selects on focus, so typing replaces
+ * the 0 rather than landing after it.
+ */
+const newLine = (sym: string, source: Source = 'free'): Line => ({sym, source, amount: '0'});
 const parse = (v: string, d: number): bigint => {
   try {
     return v && Number(v) > 0 ? parseUnits(v as `${number}`, d) : 0n;
@@ -39,22 +48,73 @@ const parse = (v: string, d: number): bigint => {
 };
 
 /**
- * The delete control for a recipient and for one of its rows.
+ * Clear what is typed in an amount field.
+ *
+ * It stands exactly where the Max badge does and only one of the two is ever on screen: an empty
+ * field offers Max, a filled one offers this. It takes over from the per-row delete control that
+ * used to sit above each line — a row whose amount is empty contributes nothing to the batch, so
+ * clearing IS how a token is dropped from a payment, and one ✕ now undoes a mistake instead of
+ * destroying a row the user may still want to type into.
  *
  * Drawn rather than typed: the ✕ character renders at whatever weight the system font gives it and
- * sits off its optical centre, which is what made it read as a stray glyph. This is the same stroke
- * the rest of the app's icons use, centred on a muted disc so it looks like a control — quiet next
- * to the field, and unmistakably a button.
+ * sits off its optical centre, which is what made it read as a stray glyph.
  */
-function RemoveBtn({onPress}: {onPress: () => void}) {
+function ClearBtn({onPress}: {onPress: () => void}) {
   const c = useColors();
   const styles = useStyles(makeStyles);
   return (
-    <Pressable style={styles.removeBtn} onPress={onPress} hitSlop={12}>
+    <Pressable style={styles.clearBtn} onPress={onPress} hitSlop={12} accessibilityRole="button">
       <Svg width={11} height={11} viewBox="0 0 24 24">
         <Path d="M6 6l12 12M18 6 6 18" stroke={c.subtext} strokeWidth={3} strokeLinecap="round" fill="none" />
       </Svg>
     </Pressable>
+  );
+}
+
+/**
+ * The one control at the end of a recipient's address row: add another recipient, or drop this one.
+ *
+ * The first card can never be removed, so it carries the add — which is where the web puts it too,
+ * and it means the right-hand end of the row always holds exactly one control rather than a button
+ * for the book plus a delete floating above the card.
+ */
+function RecipientBtn({mode, onPress, label}: {mode: 'add' | 'remove'; onPress: () => void; label: string}) {
+  const c = useColors();
+  const styles = useStyles(makeStyles);
+  return (
+    <Pressable style={styles.recipBtn} onPress={onPress} hitSlop={12} accessibilityRole="button" accessibilityLabel={label}>
+      <Svg width={18} height={18} viewBox="0 0 24 24">
+        <Path
+          d={mode === 'add' ? 'M12 5v14M5 12h14' : 'M6 6l12 12M18 6 6 18'}
+          stroke={mode === 'add' ? c.accent : c.subtext}
+          strokeWidth={2.2}
+          strokeLinecap="round"
+          fill="none"
+        />
+      </Svg>
+    </Pressable>
+  );
+}
+
+/**
+ * The avatar that opens the address book — a mark inside the address field rather than a labelled
+ * button beside it. The field is what it acts on, so it belongs in the field; the width it gives
+ * back is width the address itself needed.
+ *
+ * A contact silhouette, not a book: what the control produces is a PERSON to pay, and the avatar is
+ * the mark every phone already uses for that. FILLED rather than stroked, because the tile around
+ * it is the frame an avatar wants — head and shoulders in solid accent read as a face at 20pt,
+ * where two thin outlines inside a small square read as a diagram of one.
+ *
+ * The head overlaps the shoulder dome by a point, so the two shapes merge into one silhouette
+ * instead of a circle floating above an arc.
+ */
+function AvatarIcon({color}: {color: string}) {
+  return (
+    <Svg width={20} height={20} viewBox="0 0 24 24">
+      <Circle cx={12} cy={8} r={4.2} fill={color} />
+      <Path d="M20 21a8 8 0 0 0-16 0Z" fill={color} />
+    </Svg>
   );
 }
 
@@ -72,7 +132,7 @@ export function SendScreen() {
   const styles = useStyles(makeStyles);
   const c = useColors();
   const {height: screenHeight} = useWindowDimensions();
-  const account = useWallet((s) => s.account);
+  const unlocked = useWallet((s) => s.unlocked);
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
@@ -162,10 +222,6 @@ export function SendScreen() {
     setLinesTouched(true);
     patchR(i, {lines: recipients[i].lines.map((l, j) => (j === k ? {...l, ...patch} : l))});
   };
-  const removeLine = (i: number, k: number) => {
-    setLinesTouched(true);
-    patchR(i, {lines: recipients[i].lines.filter((_, j) => j !== k)});
-  };
   /** One line's ceiling: what its own source still holds for this recipient. */
   const maxFor = (l: Line, ri: number): string =>
     formatUnits(remaining(l.sym, l.source, ri), meta(l.sym)?.decimals ?? 18);
@@ -223,7 +279,7 @@ export function SendScreen() {
   const rows = useMemo(
     () =>
       recipients.flatMap((r) =>
-        isAddress(r.to)
+        isPayableAddress(r.to, network)
           ? r.lines
               .map(lineToRow)
               .filter((x): x is NonNullable<typeof x> => x != null)
@@ -261,7 +317,7 @@ export function SendScreen() {
     return left > 0n ? left : 0n;
   };
   const anyOver = recipients.some((r, i) => r.lines.some((l) => exceedsMax(l.amount, maxFor(l, i))));
-  const canSubmit = !!account && !!stable && status !== 'busy' && rows.length > 0 && !anyOver;
+  const canSubmit = unlocked && !!stable && status !== 'busy' && rows.length > 0 && !anyOver;
 
   const onSubmit = async () => {
     if (!vault || !stable) return;
@@ -297,62 +353,87 @@ export function SendScreen() {
       <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.scroll} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         {recipients.map((r, i) => (
           <View key={i} style={styles.card}>
-            {/* Same place as a row's own remove: top right of the thing it deletes, so the two
-                controls mean the same gesture at two scales. */}
-            {i > 0 ? (
-              <View style={styles.lineHead}>
-                <RemoveBtn onPress={() => removeRecipient(i)} />
-              </View>
-            ) : null}
+            {/* The address, as on the web: the book is a mark INSIDE the field, and the one button
+                at the end of the row adds the next recipient or drops this one. The card no longer
+                carries a delete of its own — there was nothing for a second control to mean. */}
             <View style={styles.toRow}>
-              <TextInput
-                style={[styles.toInput, r.to.length > 0 && !isAddress(r.to) && styles.inputErr]}
-                placeholder={t('mobile.vault.enter_address')}
-                placeholderTextColor={c.subtext}
-                autoCapitalize="none"
-                autoCorrect={false}
-                value={r.to}
-                onChangeText={(v) => patchR(i, {to: v})}
+              <View style={[styles.toField, r.to.length > 0 && !isPayableAddress(r.to, network) && styles.inputErr]}>
+                {/* A tinted tile, not a bare glyph: inside a field an icon on its own reads as
+                    decoration — a label for what the field holds — and nobody tries tapping it.
+                    The fill gives it an edge, the accent says it does something, and it dims on
+                    press like every other button in the app. */}
+                <Pressable
+                  style={({pressed}) => [styles.bookBtn, pressed && styles.bookBtnOn]}
+                  onPress={() => pickRecipient(i)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('vault.address_book')}>
+                  <AvatarIcon color={c.accent} />
+                </Pressable>
+                <TextInput
+                  style={styles.toInput}
+                  placeholder={t('mobile.vault.enter_address')}
+                  placeholderTextColor={c.subtext}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  value={r.to}
+                  onChangeText={(v) => patchR(i, {to: v})}
+                />
+              </View>
+              <RecipientBtn
+                mode={i === 0 ? 'add' : 'remove'}
+                label={i === 0 ? t('vault.add_recipient') : t('vault.remove')}
+                onPress={() => (i === 0 ? addRecipient() : removeRecipient(i))}
               />
-              <Pressable style={styles.bookBtn} onPress={() => pickRecipient(i)}>
-                <Text style={styles.bookText}>{t('mobile.payments.book')}</Text>
-              </Pressable>
             </View>
+            {/* Named, not just refused: a well-formed address that the field rejects looks like a
+                bug unless the screen says what is wrong with it. */}
+            {isTokenAddress(r.to, network) ? (
+              <Text style={styles.over}>{t('mobile.payments.token_address_warning')}</Text>
+            ) : null}
 
             {r.lines.map((l, k) => {
               const max = maxFor(l, i);
               const over = exceedsMax(l.amount, max);
               const sym = displaySymbol(l.sym);
+              const hasAmount = Number(l.amount) > 0;
               return (
                 <View key={k} style={styles.line}>
-                  {/* Remove above the row at its right, rather than beside the field, where it
-                      stole width from the amount and read as part of the input. Below it: amount
-                      left, then what this source still holds — tap to fill — then the source,
-                      whose pill re-picks it from the flat list. */}
-                  {r.lines.length > 1 ? (
-                    <View style={styles.lineHead}>
-                      <RemoveBtn onPress={() => removeLine(i, k)} />
-                    </View>
-                  ) : null}
+                  {/* Asset first, amount after it, as on the web: the row reads "what, then how
+                      much". The pill picks the token AND the source it comes out of. At the end,
+                      exactly one control — what this source still holds with a Max badge while the
+                      field is empty, and a clear once something is typed.
+                      
+                      There is no delete. A row with nothing in its amount is not part of the
+                      payment: `lineToRow` returns null for a zero, so the batch is built from the
+                      funded rows alone. Clearing the amount IS removing the row, which leaves one
+                      control at the end of the bar instead of two that both look like they undo
+                      something. */}
                   <View style={[styles.field, over && styles.fieldOver]}>
-                    <TextInput
-                      style={styles.fieldInput}
-                      keyboardType="decimal-pad"
-                      placeholder="0"
-                      placeholderTextColor={c.subtext}
-                      value={l.amount}
-                      onChangeText={(v) => patchLine(i, k, {amount: v})}
-                    />
-                    {Number(max) > 0 ? (
-                      <Pressable onPress={() => patchLine(i, k, {amount: max})} hitSlop={8}>
-                        <Text style={styles.maxInline}>{fmtNum(Number(max))}</Text>
-                      </Pressable>
-                    ) : null}
                     <Pressable style={styles.assetPill} onPress={() => setPicker({i, k})}>
                       <TokenIcon symbol={l.sym} size={20} />
                       <Text style={styles.assetSym}>{sym}</Text>
                       {l.source !== 'free' ? <Text style={styles.assetSource}>{sourceLabel(l.source)}</Text> : null}
                     </Pressable>
+                    <TextInput
+                      style={styles.fieldInput}
+                      keyboardType="decimal-pad"
+                      value={l.amount}
+                      selectTextOnFocus
+                      onChangeText={(v) => patchLine(i, k, {amount: v})}
+                    />
+                    {hasAmount ? (
+                      <ClearBtn onPress={() => patchLine(i, k, {amount: '0'})} />
+                    ) : Number(max) > 0 ? (
+                      <Pressable style={styles.maxBtn} onPress={() => patchLine(i, k, {amount: max})} hitSlop={8}>
+                        <Text style={styles.balInline} numberOfLines={1}>{fmtNum(Number(max))}</Text>
+                        {/* `common.max` and NOT `vault.max`: the latter is the literal "Max" in
+                            every locale that has it and missing from seven of them, so the badge
+                            was English at best. This is the same key the Trade screen's Max pill
+                            uses, and it is translated everywhere. */}
+                        <Text style={styles.maxBadge}>{t('common.max')}</Text>
+                      </Pressable>
+                    ) : null}
                   </View>
 
                   {over ? <Text style={styles.over}>{t('vault.exceeds_balance')}</Text> : null}
@@ -371,10 +452,6 @@ export function SendScreen() {
             ) : null}
           </View>
         ))}
-
-        <Pressable style={styles.addRecipient} onPress={addRecipient}>
-          <Text style={styles.addRecipientText}>＋ {t('vault.add_recipient')}</Text>
-        </Pressable>
 
         {status === 'error' && err ? <Text style={styles.err}>{err}</Text> : null}
       </ScrollView>
@@ -426,20 +503,39 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   body: {flexGrow: 1, padding: 16, gap: 12, paddingBottom: 16},
   footer: {paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16},
   card: {backgroundColor: c.card, borderRadius: 20, borderCurve: 'continuous', padding: 12, gap: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border},
-  toRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
-  toInput: {flex: 1, height: 44, borderRadius: 10, backgroundColor: c.input, color: c.text, paddingHorizontal: 12, fontSize: 15, fontFamily: 'Menlo'},
+  toRow: {flexDirection: 'row', alignItems: 'center', gap: 2},
+  // The book icon lives in here, so the field is the container and the input is what sits beside it.
+  toField: {flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, borderRadius: 10, backgroundColor: c.input, paddingLeft: 5, paddingRight: 12},
+  // Inset by the field's own 5 on every side, so the tile sits in the bar rather than against it.
+  // A full circle now that it holds an avatar: that is the shape a face is framed in everywhere
+  // else on a phone, and it is what tells the mark apart from the squared controls on the row.
+  bookBtn: {width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: c.card},
+  bookBtnOn: {opacity: 0.6},
+  toInput: {flex: 1, color: c.text, fontSize: 15, fontFamily: 'Menlo', paddingVertical: 0},
   inputErr: {borderWidth: 1, borderColor: c.danger},
-  bookBtn: {paddingHorizontal: 12, height: 44, borderRadius: 10, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center'},
-  bookText: {color: c.accent, fontSize: 13, fontWeight: '600'},
-  removeBtn: {width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: c.neutralSoft},
+  /**
+   * Borderless and only as wide as the glyph: it is one mark at the end of the row, not a second
+   * field beside the address.
+   *
+   * 26 rather than 36, because the width it took came straight out of the field next to it — the
+   * address is 42 characters of monospace and the amount shares its bar with a pill and a Max
+   * badge, so both were paying for whitespace around an 18pt icon. The TOUCH target is unchanged:
+   * hitSlop on each control carries it back past 44, which is what the finger actually hits.
+   * Full field height, so the mark centres on the field rather than floating beside it.
+   */
+  recipBtn: {width: 26, height: 44, alignItems: 'center', justifyContent: 'center'},
+  clearBtn: {width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: c.neutralSoft},
   // No rule between rows: the card's own gap separates them, and each field is a filled bar that
   // already reads as its own object.
   line: {gap: 6},
-  lineHead: {flexDirection: 'row', justifyContent: 'flex-end'},
-  field: {flexDirection: 'row', alignItems: 'center', height: 56, borderRadius: 12, backgroundColor: c.input, paddingLeft: 16, paddingRight: 8},
+  field: {flexDirection: 'row', alignItems: 'center', height: 56, borderRadius: 12, backgroundColor: c.input, paddingLeft: 8, paddingRight: 8, gap: 8},
   fieldOver: {borderWidth: 1, borderColor: c.danger},
-  fieldInput: {flex: 1, color: c.text, fontSize: 17, paddingVertical: 0},
-  maxInline: {color: c.subtext, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'], marginRight: 10},
+  // minWidth 0 so a long balance beside it cannot push the input past the field's edge.
+  fieldInput: {flex: 1, minWidth: 0, color: c.text, fontSize: 17, paddingVertical: 0},
+  // Balance and badge are one target: tapping either fills the field, as on the web.
+  maxBtn: {flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: 124},
+  balInline: {color: c.subtext, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'], flexShrink: 1},
+  maxBadge: {color: c.accent, backgroundColor: c.accentSoft, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2, overflow: 'hidden'},
   assetPill: {flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.neutralSoft, borderRadius: 18, paddingVertical: 7, paddingHorizontal: 10},
   assetSym: {color: c.text, fontSize: 14, fontWeight: '700'},
   assetSource: {color: c.subtext, fontSize: 11, fontWeight: '600'},
@@ -452,10 +548,6 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   pickLabel: {color: c.text, fontSize: 15, fontWeight: '600'},
   pickSub: {color: c.subtext, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums']},
   addToken: {color: c.accent, fontSize: 13, fontWeight: '600'},
-  // Squared with the recipient card above it: same 20 radius, same continuous iOS corner, so the
-  // dashed outline reads as the next card in the stack rather than a smaller box under one.
-  addRecipient: {alignItems: 'center', paddingVertical: 12, borderRadius: 20, borderCurve: 'continuous', borderWidth: 1, borderColor: c.border, borderStyle: 'dashed'},
-  addRecipientText: {color: c.accent, fontSize: 14, fontWeight: '600'},
   ok: {color: c.success, fontSize: 12, fontFamily: 'Menlo'},
   err: {color: c.danger, fontSize: 13},
 });

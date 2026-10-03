@@ -10,7 +10,7 @@
  */
 import {encodeAbiParameters, parseAbi, parseUnits, type Address, type Hex} from 'viem';
 import type {Signer} from '@/wallet/signer';
-import {CHAIN_ID, publicClientFor, type Network} from '@/core/chain';
+import {apiFetch, CHAIN_ID, publicClientFor, type Network} from '@/core/chain';
 import {BALANCE_ERC20, COW_PARTNER_FEE_BPS, GPV2_SETTLEMENT, KIND_BUY, KIND_SELL, ORDER_712_TYPES, ORDER_TUPLE, buildLimitAppData, cowApiBase, cowSupported} from '@/core/cow';
 import {VAULT_INTENT_ABI} from '@/core/abi';
 import {assetMeta} from '@/core/assets';
@@ -271,7 +271,7 @@ export async function cancelLimitOrder(o: {
  */
 export async function fetchRecentOrders(vault: Address, network: Network): Promise<CowOrder[]> {
   try {
-    const res = await fetch(`${cowApiBase(network)}/account/${vault}/orders?limit=30`);
+    const res = await apiFetch(`${cowApiBase(network)}/account/${vault}/orders?limit=30`);
     if (!res.ok) return [];
     const all = (await res.json()) as CowOrder[];
     // CoW returns newest first already; keep it defensive.
@@ -297,7 +297,7 @@ export async function fetchSettlements(vault: Address, network: Network): Promis
   if (!cowSupported(network)) return out;
   try {
     const base = cowApiBase(network);
-    const [tradesRes, orders] = await Promise.all([fetch(`${base}/trades?owner=${vault}`), fetchRecentOrders(vault, network)]);
+    const [tradesRes, orders] = await Promise.all([apiFetch(`${base}/trades?owner=${vault}`), fetchRecentOrders(vault, network)]);
     if (!tradesRes.ok) return out;
     const trades = (await tradesRes.json()) as {orderUid: string; txHash?: string}[];
     if (!Array.isArray(trades)) return out;

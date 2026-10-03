@@ -1,5 +1,5 @@
 import React, {useEffect} from 'react';
-import {ActivityIndicator, StatusBar, StyleSheet, Text, View} from 'react-native';
+import {ActivityIndicator, Pressable, StatusBar, StyleSheet, Text, View} from 'react-native';
 import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {NavigationContainer, DarkTheme, DefaultTheme} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
@@ -30,6 +30,18 @@ export type TabParamList = {
 export type RootStackParamList = {
   Main: undefined;
   Payments: undefined;
+  /** The asset directory as a watch list editor: no prices, a star on every row. */
+  Watchlist: undefined;
+  /** One Earn position in full: its rate over time, what Auto-Yield does, and both actions. */
+  EarnDetail: {
+    protocol: string;
+    asset: string;
+    symbol: string;
+    /** The protocol's display name, shown only when DeFi details are on. */
+    name: string;
+    /** Lending route rather than a staking one — picks the wording throughout. */
+    lend: boolean;
+  };
   EarnAction: {
     mode: 'deposit' | 'withdraw';
     protocol?: string;
@@ -51,6 +63,10 @@ export type RootStackParamList = {
    */
   TradePair: TradeParams;
   Transactions: {tab?: 'confirming'} | undefined;
+  /** Every order the vault has placed, on every pair — the Cancelled bucket included. */
+  OrderHistory: undefined;
+  /** One asset in full: what it is, what the vault holds of it, and how it can be traded. */
+  AssetDetail: {symbol: string};
   AddLiquidity: undefined;
   AutoYield: undefined;
   Delegation: undefined;
@@ -98,14 +114,23 @@ function MainTabs() {
     <Tab.Navigator
       screenOptions={({route}) => ({
         /**
-         * Stop re-rendering a tab nobody is looking at.
+         * OFF for the tabs, deliberately.
          *
-         * A tab mounts on its first visit and is never torn down, so by the time all four have
-         * been opened every layout pass walks all four trees — the Overview's asset rows and the
-         * Market's pager each measure themselves again, for a keyboard that only concerns the
-         * screen in front. Freezing a blurred screen also parks its refresh timers.
+         * It was on to stop a blurred tab re-measuring: a tab mounts on its first visit and is
+         * never torn down, so every layout pass walked all four trees. That is a real cost, and it
+         * is not worth what it was doing to the two data-heavy tabs.
+         *
+         * A frozen subtree keeps its last paint on screen and DEFERS rendering, state updates
+         * included. On a first visit to Earn or Market the screen mounted, painted once — empty,
+         * chart spinning — and was frozen before the focus transition settled. Every read then
+         * landed in state unseen: orders, prices, positions, the chart, all of it. Leaving the tab
+         * and coming back unfroze it and the whole screen filled in at once, which is what made
+         * this look like a loading bug and sent me hunting through the fetch layer twice.
+         *
+         * The pushed screens in the stack below keep it: they are covered by something, not merely
+         * unfocused, so nothing is waiting to be painted behind them.
          */
-        freezeOnBlur: true,
+        freezeOnBlur: false,
         sceneStyle: {backgroundColor: colors.bg},
         // iOS-style translucent header: the list scrolls under it. The tab header is a JS header
         // (no system blur), so a nearly opaque ground stands in for the material; each tab pads its
@@ -115,21 +140,24 @@ function MainTabs() {
         headerTintColor: colors.text,
         headerShadowVisible: false,
         /**
-         * The tab's own name, centred, with the confirming badge beside it.
+         * The tab's own name, centred, with the confirming badge on the left.
          *
          * `children` is whatever the screen set as its `title`, so each tab labels its header and
-         * its bar entry from one string. This replaced a "Vault 1" placeholder pinned to the left
-         * for a vault switcher that does not exist yet — it named nothing the user could act on
-         * and left every header without a title.
+         * its bar entry from one string — the Overview is the exception and names the app instead
+         * (see its screen below), because the first tab is the one that carries it.
+         *
+         * The badge sits in the left corner rather than beside the title: it is about the vault,
+         * not about the tab, and a count that shifts a centred title sideways as it appears is a
+         * title that moves for reasons the user cannot see. It renders nothing at zero, so that
+         * corner is usually empty.
          */
         headerTitleAlign: 'center',
-        headerTitle: ({children}) => (
-          <View style={styles.headerTitle}>
-            <Text style={styles.headerVault}>{children}</Text>
+        headerTitle: ({children}) => <Text style={styles.headerTitle}>{children}</Text>,
+        headerLeft: () => (
+          <View style={styles.headerBadge}>
             <ConfirmingBadge />
           </View>
         ),
-        headerLeft: () => null,
         headerRight: () => <NetworkSwitcher />,
         /**
          * The same surface as the header, at the other end of the screen.
@@ -158,24 +186,22 @@ function MainTabs() {
         tabBarInactiveTintColor: colors.subtext,
         tabBarIcon: ({color, size, focused}) => <TabIcon name={route.name as TabName} color={color} size={size} focused={focused} />,
       })}>
-      {/* The home tab is the one that carries the app's name rather than its own — "Overview"
-          still labels the bar entry, so only the header differs. */}
+      {/* The home tab carries the app's name, not its own. "Overview" still labels the bar entry
+          below — `title` does that — so only the header differs. */}
       <Tab.Screen
         name="Overview"
-        options={{
-          title: t('mobile.app.overview'),
-          headerTitle: () => (
-            <View style={styles.headerTitle}>
-              <Text style={styles.headerVault}>Bitty</Text>
-              <ConfirmingBadge />
-            </View>
-          ),
-        }}
+        options={{title: t('mobile.app.overview'), headerTitle: () => <Text style={styles.headerTitle}>Bitty</Text>}}
         component={VaultHomeScreen}
       />
       <Tab.Screen name="Earn" options={{title: t('mobile.app.earn')}} getComponent={() => require('@/screens/EarnScreen').EarnScreen} />
-      <Tab.Screen name="Market" options={{title: t('mobile.app.market')}} getComponent={() => require('@/screens/TradeScreen').TradeScreen} />
-      <Tab.Screen name="Settings" options={{title: t('mobile.app.settings')}} getComponent={() => require('@/screens/SettingsScreen').SettingsScreen} />
+      {/* Labelled Trade; the ROUTE keeps the name Market. `navigate` resolves a name against the
+            nearest navigator that has it, and a tab called Trade once swallowed every push to the
+            pair screen. The title is what the user reads; the name is what routing matches. */}
+        <Tab.Screen name="Market" options={{title: t('mobile.app.trade')}} getComponent={() => require('@/screens/TradeScreen').TradeScreen} />
+      {/* Labelled "Me"; the ROUTE keeps the name Settings, as `navigate` and the tab icon key off
+          it. The tab holds the vault, the key on this device and the app's own preferences — "Me"
+          is what all three have in common, where "Settings" named only the last of them. */}
+      <Tab.Screen name="Settings" options={{title: t('mobile.app.me')}} getComponent={() => require('@/screens/SettingsScreen').SettingsScreen} />
     </Tab.Navigator>
   );
 }
@@ -239,7 +265,24 @@ function Root() {
         }}>
         <Stack.Screen name="Main" component={MainTabs} options={{headerShown: false}} />
         <Stack.Screen name="Payments" getComponent={() => require('@/screens/PaymentsScreen').PaymentsScreen} options={{title: t('vault.send')}} />
-        <Stack.Screen name="EarnAction" getComponent={() => require('@/screens/EarnActionScreen').EarnActionScreen} options={{title: t('mobile.app.earn'), presentation: 'modal'}} />
+        <Stack.Screen
+          name="Watchlist"
+          getComponent={() => require('@/screens/TradeScreen').TradeScreen}
+          options={{title: t('mobile.home.watch_list'), fullScreenGestureEnabled: true}}
+        />
+        <Stack.Screen
+          name="EarnDetail"
+          getComponent={() => require('@/screens/EarnDetailScreen').EarnDetailScreen}
+          options={{title: t('mobile.app.earn'), fullScreenGestureEnabled: true}}
+        />
+        {/* Presented like the order sheet on the pair screen: a page sheet that comes up to just
+            under the status bar. A short detent squeezed the amount form against its own confirm
+            button; this is one number and a button, but it is still a form. */}
+        <Stack.Screen
+          name="EarnAction"
+          getComponent={() => require('@/screens/EarnActionScreen').EarnActionScreen}
+          options={{title: t('mobile.app.earn'), presentation: 'modal'}}
+        />
         {/* The tab's own screen, pushed. The pair is named at the top of the page itself, so the
             header does not repeat it. */}
         <Stack.Screen
@@ -255,6 +298,16 @@ function Root() {
           options={{title: t('mobile.app.trade'), fullScreenGestureEnabled: true}}
         />
         <Stack.Screen name="Transactions" getComponent={() => require('@/screens/TransactionsScreen').TransactionsScreen} options={{title: t('mobile.app.history')}} />
+        <Stack.Screen
+          name="OrderHistory"
+          getComponent={() => require('@/screens/OrderHistoryScreen').OrderHistoryScreen}
+          options={{title: t('mobile.trade.order_history'), fullScreenGestureEnabled: true}}
+        />
+        <Stack.Screen
+          name="AssetDetail"
+          getComponent={() => require('@/screens/AssetDetailScreen').AssetDetailScreen}
+          options={{title: t('mobile.trade.asset_details'), fullScreenGestureEnabled: true}}
+        />
         <Stack.Screen name="AddLiquidity" getComponent={() => require('@/screens/AddLiquidityScreen').AddLiquidityScreen} options={{title: t('mobile.app.add_liquidity'), presentation: 'modal'}} />
         <Stack.Screen name="AutoYield" getComponent={() => require('@/screens/AutoYieldScreen').AutoYieldScreen} options={{title: t('mobile.app.auto_yield'), presentation: 'modal'}} />
         <Stack.Screen name="Delegation" getComponent={() => require('@/screens/DelegationScreen').DelegationScreen} options={{title: t('vault.payout_operators')}} />
@@ -268,6 +321,8 @@ function Root() {
 const makeStyles = (colors: Colors) =>
   StyleSheet.create({
     splash: {flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center'},
-    headerTitle: {flexDirection: 'row', alignItems: 'center', gap: 8},
-    headerVault: {color: colors.text, fontSize: 17, fontWeight: '700'},
+    // The header's left container has no inset of its own (only the back button it usually holds
+    // brings one), so this supplies the 16 that matches the switcher's margin on the right.
+    headerBadge: {marginLeft: 16},
+    headerTitle: {color: colors.text, fontSize: 17, fontWeight: '700'},
   });

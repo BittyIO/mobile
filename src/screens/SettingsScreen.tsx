@@ -1,17 +1,27 @@
 import {useHeaderHeight} from '@react-navigation/elements';
 import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
-import React, {useState} from 'react';
-import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import React, {useEffect, useMemo, useState} from 'react';
+import {Alert, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
 import {useWallet} from '@/wallet/store';
+import {useNetwork} from '@/core/network-store';
+import {ownerVaultAddress} from '@/vault/read';
+import {getGaslessConfig, type GaslessConfig} from '@/vault/gasless';
+import {isActivated} from '@/vault/activate';
+import {ASSETS} from '@/core/assets';
+import {TokenIcon} from '@/components/TokenIcon';
 import {revealMnemonic} from '@/wallet/keyring';
+import {useRevealGuard} from '@/core/device-security';
 import {useLanguage, LANGUAGES, languageLabel} from '@/core/language-store';
 import Svg, {Circle, Path, Rect} from 'react-native-svg';
 import {useAppearance, APPEARANCES, useColors, useStyles, type Colors} from '@/theme';
+import {useDefiDetails} from '@/core/defi-details';
+import {API_BASE} from '@/core/chain';
 import {SettingsIcon, type SettingsIconName} from '@/components/SettingsIcon';
 import {useAssetManagerRow} from '@/components/useAssetManagerRow';
+import {useVaultPicker} from '@/components/useVaultPicker';
 import {useVaultVersionRow} from '@/components/useVaultVersionRow';
 import {PickerSheet} from '@/components/AssetPicker';
 import {Sheet} from '@/components/Sheet';
@@ -55,28 +65,109 @@ function Row({
   onPress,
   chevron = true,
   last,
+  toggle,
+  right,
 }: {
   icon: SettingsIconName;
   title: string;
   sub?: string;
   value?: string;
-  onPress: () => void;
+  onPress?: () => void;
   chevron?: boolean;
   last?: boolean;
+  /** A row that flips a local setting in place, rather than pushing or opening a sheet. */
+  toggle?: {value: boolean; onValueChange: (v: boolean) => void};
+  /** Where a row's current answer is a set of things rather than a word — icons, marks. */
+  right?: React.ReactNode;
 }) {
   const styles = useStyles(makeStyles);
-  return (
-    <Pressable style={[styles.row, !last && styles.rowDivider]} onPress={onPress}>
+  const body = (
+    <>
       <SettingsIcon name={icon} />
       <View style={styles.rowText}>
         <Text style={styles.rowTitle}>{title}</Text>
         {sub ? <Text style={styles.rowSub}>{sub}</Text> : null}
       </View>
       <View style={styles.rowRight}>
-        {value ? <Text style={styles.rowValue}>{value}</Text> : null}
-        {chevron ? <Text style={styles.chev}>›</Text> : null}
+        {toggle ? (
+          <Switch value={toggle.value} onValueChange={toggle.onValueChange} style={styles.rowSwitch} />
+        ) : (
+          <>
+            {right ?? null}
+            {value ? <Text style={styles.rowValue}>{value}</Text> : null}
+            {chevron ? <Text style={styles.chev}>›</Text> : null}
+          </>
+        )}
       </View>
+    </>
+  );
+  // A switch row has nothing to press: the control is the whole interaction, and a Pressable
+  // wrapping it would fight the gesture.
+  if (toggle) return <View style={[styles.row, !last && styles.rowDivider]}>{body}</View>;
+  return (
+    <Pressable style={[styles.row, !last && styles.rowDivider]} onPress={onPress}>
+      {body}
     </Pressable>
+  );
+}
+
+/**
+ * The coins that may currently pay the relay fee, as their own marks.
+ *
+ * The row said "Network fee token" and nothing else, so the only way to learn which coins were on
+ * was to open the sheet. The answer is two or three logos wide, which is exactly the kind of thing
+ * a settings row's right-hand side is for.
+ *
+ * An empty allowlist means ANY coin, which is the default — so that case shows them all rather
+ * than nothing, because that is what it means. Nothing is shown until the config is read: a row
+ * that guessed and then corrected itself would be worse than one that waits a moment.
+ *
+ * A vault that has not been activated yet has no config to read, and `getGaslessConfig` returns
+ * null for it exactly as it does for a failed read. That is NOT "no fee coin": the vault opens on
+ * the system defaults — any stablecoin — and one of these coins is what PAYS for the activation,
+ * so this is the moment the row most needs to name them. Hence the bytecode check: no code at the
+ * address means the defaults, and only an unreadable config on a vault that does exist stays
+ * blank.
+ */
+function FeeCoinMarks({nonce}: {nonce: number}) {
+  const styles = useStyles(makeStyles);
+  const network = useNetwork((s) => s.network);
+  const owner = useWallet((s) => s.address);
+  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const stablecoins = useMemo(() => ASSETS[network].filter((a) => a.kind === 'stable'), [network]);
+  const [cfg, setCfg] = useState<GaslessConfig | null>(null);
+  const [deployed, setDeployed] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!vault) return;
+    let live = true;
+    setCfg(null);
+    setDeployed(null);
+    getGaslessConfig(vault, network)
+      .then((c) => live && setCfg(c))
+      .catch(() => live && setCfg(null));
+    isActivated(vault, network)
+      .then((d) => live && setDeployed(d))
+      .catch(() => live && setDeployed(true));
+    return () => {
+      live = false;
+    };
+  }, [vault, network, nonce]);
+
+  // Before activation the allowlist is empty by definition, which already means "all of them".
+  const preActivation = !cfg && deployed === false;
+  if (!cfg && !preActivation) return null;
+  const on =
+    cfg && cfg.stableCoins.length
+      ? stablecoins.filter((a) => cfg.stableCoins.some((coin) => coin.toLowerCase() === a.address.toLowerCase()))
+      : stablecoins;
+  if (on.length === 0) return null;
+  return (
+    <View style={styles.feeCoins}>
+      {on.map((a) => (
+        <TokenIcon key={a.address} symbol={a.symbol} size={20} />
+      ))}
+    </View>
   );
 }
 
@@ -90,15 +181,29 @@ export function SettingsScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const {language, setLanguage} = useLanguage();
   const manager = useAssetManagerRow();
+  const vaultPicker = useVaultPicker();
   const version = useVaultVersionRow();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const {appearance, setAppearance} = useAppearance();
+  const {show: defiDetails, setShow: setDefiDetails} = useDefiDetails();
   const c = useColors();
   const lock = useWallet((s) => s.lock);
   const [phrase, setPhrase] = useState<string | null>(null);
+  // Hide the phrase while the screen is recorded, and pull it + warn if a screenshot is taken.
+  const reveal = useRevealGuard();
+  useEffect(() => {
+    if (reveal.screenshotCount > 0 && phrase) {
+      setPhrase(null);
+      Alert.alert(
+        'Screenshot detected',
+        'Your recovery phrase was hidden. Never keep it in Photos or anywhere synced to the cloud — write it on paper.',
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reveal.screenshotCount]);
 
   // Language and Theme Mode use the app's own picker sheet, the one the asset and network selectors
   // use: it is part of the React tree, so it opens on the next frame, where the native action sheet
@@ -108,6 +213,8 @@ export function SettingsScreen() {
   // page of its own: nothing on it leads anywhere, and pushing a screen for it made a two-tap trip
   // out of a one-tap decision.
   const [feeCoins, setFeeCoins] = useState(false);
+  // Closing the sheet is the only moment the answer can have changed, so that is when it is re-read.
+  const [feeCoinsNonce, setFeeCoinsNonce] = useState(0);
   const pickLanguage = () => setPicker('language');
 
   const pickAppearance = () => setPicker('appearance');
@@ -134,10 +241,30 @@ export function SettingsScreen() {
       <View style={styles.section}>
         <Text style={styles.groupLabel}>{t('mobile.settings.vault')}</Text>
         <View style={styles.group}>
-          <Row icon="gasless" title={t('mobile.settings.gas_token')} onPress={() => setFeeCoins(true)} chevron={false} />
+          {/* First, because which vault you are looking at decides what every row below means. It
+              lived in the header for a while, where it was permanently on screen for a control
+              almost nobody touches; this is where someone goes LOOKING for it. */}
+          <Row icon="user" title={t('mobile.settings.choose_vault')} value={vaultPicker.value} onPress={vaultPicker.open} />
+          <Row
+            icon="gasless"
+            title={t('mobile.settings.gas_token')}
+            onPress={() => setFeeCoins(true)}
+            chevron={false}
+            right={<FeeCoinMarks nonce={feeCoinsNonce} />}
+          />
           <Row icon="allowlist" title={t('mobile.settings.allow_list')} onPress={() => nav.navigate('VaultAssets')} />
-          <Row icon="security" title={t('mobile.settings.security')} sub={t('mobile.settings.security_sub')} onPress={() => nav.navigate('VaultSecurity')} />
-          <Row icon="version" title={t('mobile.settings.current_version')} value={version.value} sub={version.sub} onPress={version.onPress} chevron={version.upgradeable} last />
+          {/* The two halves of the vault's guardrails, each its own row: how long a loosening has
+              to wait, and how much may leave. Both open the same page — it holds both — but the
+              row that got you there says which one you came for. */}
+          <Row icon="timelock" title={t('mobile.settings.timelock')} onPress={() => nav.navigate('VaultSecurity')} />
+          <Row icon="limits" title={t('mobile.settings.limits')} onPress={() => nav.navigate('VaultSecurity')} />
+          {/* Whether the vault names the protocols it routes through, on Earn and in history. */}
+          <Row
+            icon="protocols"
+            title={t('mobile.settings.defi_details')}
+            toggle={{value: defiDetails, onValueChange: setDefiDetails}}
+            last
+          />
         </View>
       </View>
 
@@ -150,18 +277,36 @@ export function SettingsScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.groupLabel}>{t('mobile.settings.wallet')}</Text>
+        <Text style={styles.groupLabel}>{t('mobile.settings.about_us')}</Text>
+        <View style={styles.group}>
+          <Row icon="version" title={t('mobile.settings.current_version')} value={version.value} sub={version.sub} onPress={version.onPress} chevron={version.upgradeable} />
+          <Row icon="follow" title={t('mobile.settings.follow_us')} onPress={() => Linking.openURL('https://x.com/bitty_io')} />
+          <Row icon="terms" title={t('mobile.settings.terms_of_use')} onPress={() => Linking.openURL(`${API_BASE}/content/terms-of-use`)} />
+          <Row icon="privacy" title={t('mobile.settings.privacy_policy')} onPress={() => Linking.openURL(`${API_BASE}/content/privacy-policy`)} last />
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        {/* Recovery phrase and Lock Vault — what the section holds is the key, not the wallet. */}
+        <Text style={styles.groupLabel}>{t('mobile.settings.security')}</Text>
         <View style={styles.group}>
           {phrase ? (
             <View style={[styles.phraseBox, styles.rowDivider]}>
-              <View style={styles.grid}>
-                {phrase.split(' ').map((w, i) => (
-                  <View key={`${w}-${i}`} style={styles.word}>
-                    <Text style={styles.wordIdx}>{i + 1}</Text>
-                    <Text style={styles.wordText}>{w}</Text>
-                  </View>
-                ))}
-              </View>
+              {reveal.captured ? (
+                <Text style={styles.warn}>
+                  Hidden while your screen is being recorded or mirrored. Stop the recording to view
+                  your recovery phrase.
+                </Text>
+              ) : (
+                <View style={styles.grid}>
+                  {phrase.split(' ').map((w, i) => (
+                    <View key={`${w}-${i}`} style={styles.word}>
+                      <Text style={styles.wordIdx}>{i + 1}</Text>
+                      <Text style={styles.wordText}>{w}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
               <Text style={styles.warn}>{t('mobile.settings.never_share')}</Text>
               <Pressable style={styles.smBtn} onPress={() => setPhrase(null)}>
                 <Text style={styles.smBtnText}>{t('mobile.settings.hide')}</Text>
@@ -173,6 +318,7 @@ export function SettingsScreen() {
           <Row icon="lock" title={t('mobile.settings.lock')} onPress={lock} chevron={false} last />
         </View>
       </View>
+      {vaultPicker.sheet}
       <PickerSheet
         visible={picker === 'language'}
         title={t('mobile.settings.language')}
@@ -212,6 +358,10 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   group: {backgroundColor: c.card, borderRadius: 20, overflow: 'hidden'},
   row: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 15, paddingHorizontal: 16, gap: 12},
   rowDivider: {borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},
+  // A chevron's glyph sits a few points inside its box; a switch fills its own exactly, so
+  // without this it looks nearer the edge than every other row in the group.
+  feeCoins: {flexDirection: 'row', alignItems: 'center', gap: 4},
+  rowSwitch: {marginRight: 10},
   rowText: {gap: 3, flexShrink: 1, flex: 1},
   rowTitle: {color: c.text, fontSize: 15, fontWeight: '600'},
   rowSub: {color: c.subtext, fontSize: 12},

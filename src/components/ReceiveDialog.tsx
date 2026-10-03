@@ -1,8 +1,7 @@
-import React from 'react';
-import {Modal, Pressable, StyleSheet, Text, View} from 'react-native';
+import React, {useEffect, useRef, useState} from 'react';
+import {Modal, Pressable, Share, StyleSheet, Text, View} from 'react-native';
+import Clipboard from '@react-native-clipboard/clipboard';
 import QRCode from 'react-native-qrcode-svg';
-import {CopyAddress} from '@/components/CopyAddress';
-import {shortAddress} from '@/core/format';
 import {useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 
@@ -20,6 +19,22 @@ export function ReceiveDialog({
 }) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+
+  const copy = () => {
+    if (!vault) return;
+    Clipboard.setString(vault);
+    setCopied(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setCopied(false), 1500);
+  };
+  // The system sheet, so the address can go to any app the phone has — the common way it leaves
+  // this screen is into a message to whoever is sending the funds.
+  const share = () => vault && Share.share({message: vault}).catch(() => {});
 
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
@@ -32,7 +47,21 @@ export function ReceiveDialog({
               <QRCode value={vault} size={200} backgroundColor="white" />
             </View>
           ) : null}
-          {vault ? <CopyAddress address={vault} label={shortAddress(vault)} textStyle={styles.addr} iconSize={16} /> : <Text style={styles.addr}>—</Text>}
+          {/* One line, shrinking to fit rather than wrapping: the whole address is here to be
+              read in one sweep, and two ragged lines of hex are harder to check than one. */}
+          <Text style={styles.addr} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+            {vault ?? '—'}
+          </Text>
+          {vault ? (
+            <View style={styles.actions}>
+              <Pressable style={styles.btn} onPress={copy}>
+                <Text style={styles.btnText}>{copied ? t('common.copied') : t('common.copy')}</Text>
+              </Pressable>
+              <Pressable style={styles.btn} onPress={share}>
+                <Text style={styles.btnText}>{t('mobile.home.share_address')}</Text>
+              </Pressable>
+            </View>
+          ) : null}
         </Pressable>
       </Pressable>
     </Modal>
@@ -45,5 +74,11 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   title: {color: c.text, fontSize: 20, fontWeight: '800'},
   sub: {color: c.subtext, fontSize: 13, marginTop: -8},
   qrWrap: {backgroundColor: 'white', padding: 14, borderRadius: 16},
-  addr: {color: c.text, fontSize: 13, fontFamily: 'Menlo', textAlign: 'center'},
+  // The full 42 characters. Shortened it could be compared but not transcribed, and this is the
+  // one place someone reads an address off the screen to check it.
+  addr: {color: c.text, fontSize: 13, fontFamily: 'Menlo', textAlign: 'center', alignSelf: 'stretch'},
+  // Copy and Share on their own line, so neither crowds the address above them.
+  actions: {flexDirection: 'row', alignSelf: 'stretch', gap: 10},
+  btn: {flex: 1, height: 44, borderRadius: 22, backgroundColor: c.buttonSecondary, alignItems: 'center', justifyContent: 'center'},
+  btnText: {color: c.text, fontSize: 15, fontWeight: '600'},
 });

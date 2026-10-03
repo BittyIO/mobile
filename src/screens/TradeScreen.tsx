@@ -7,7 +7,10 @@ import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {Animated, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type StyleProp, type TextStyle} from 'react-native';
 import Svg, {Circle, Path} from 'react-native-svg';
 import {TokenIcon} from '@/components/TokenIcon';
-import {FavoriteStar} from '@/components/FavoriteStar';
+import {ProtocolChip} from '@/components/ProtocolIcon';
+import {venueNames} from '@/core/protocols';
+import {useDefiDetails} from '@/core/defi-details';
+import {isAssetsList, useFavorites, useWatchLists, watchListLabel, watchListNumber} from '@/core/favorites-store';
 import {Amount} from '@/components/Amount';
 import {ConfirmButton} from '@/components/Button';
 import {useSheetAnim} from '@/components/useSheetAnim';
@@ -20,13 +23,14 @@ import {PriceChart} from '@/components/PriceChart';
 import {CategoryTabs, Pill} from '@/components/ui';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
+import type {Network} from '@/core/chain';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {useVaultPositions} from '@/vault/useVaultPositions';
 import {positionToken} from '@/vault/position-token';
 import {susdsRate} from '@/vault/yielding';
 import {buildLimitAppData} from '@/core/cow';
 import {usePrices} from '@/vault/usePrices';
-import {getFlag, setFlag, SHOW_OTHER_ORDERS} from '@/core/prefs';
+import {getFlag, setFlag, getPref, setPref, SHOW_OTHER_ORDERS, LAST_PAIR} from '@/core/prefs';
 import {usdValue, fmtUsd} from '@/core/prices';
 import {ownerVaultAddress, balanceOfSymbol} from '@/vault/read';
 import {FEE_RESERVE} from '@/vault/gasless';
@@ -38,13 +42,22 @@ import {useConfirmAction} from '@/components/ConfirmAction';
 import {fetchProtocolApy, EMPTY_APY, type ProtocolApy} from '@/vault/apy';
 import {marketSell, buildMarketSell, poolSpotPrice} from '@/vault/trade';
 import {placeLimitOrder, prepareIntent, cancelLimitOrders, fetchRecentOrders, type CowOrder} from '@/vault/limit';
-import {placeTwap} from '@/vault/twap';
+import {placeTwap, fetchTwapSchedules, cancelTwap, type TwapSchedule} from '@/vault/twap';
+import {
+  effectiveStatus,
+  fmtExpiry,
+  orderBucket,
+  splitTwapGroups,
+  statusPill,
+  type OrderBucket,
+  type TwapGroup,
+} from '@/vault/order-view';
 import {relayVaultMulticall, type VaultCall} from '@/vault/relay';
 import {VAULT_DEFI_ABI} from '@/core/abi';
 import {fetchMarketTrades, type MarketTrade} from '@/vault/market-trades';
 import {adapterByName} from '@/core/protocols';
-import {ASSET_CATEGORIES, ASSETS, assetCategory, assetMeta, isAmmLiquid, underlyingOf, type AssetCategory} from '@/core/assets';
-import {fmtNum, displaySymbol} from '@/core/format';
+import {ASSET_CATEGORIES, ASSETS, assetCategory, assetMeta, isAmmLiquid, isKnownAsset, underlyingOf, type AssetCategory} from '@/core/assets';
+import {fmtNum, fmtShort, displaySymbol} from '@/core/format';
 import {formatUnits, parseUnits, type Address} from 'viem';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
@@ -56,7 +69,12 @@ type Mode = 'Market' | 'Limit' | 'TWAP';
 type FundKey = 'vault' | 'sky' | 'aave';
 const FUND_KEYS: FundKey[] = ['vault', 'sky', 'aave'];
 type Side = 'buy' | 'sell';
-type Tab = 'open' | 'finished' | 'cancelled';
+/**
+ * The two tabs this screen shows. Cancelled orders are not among them — an order that never
+ * happened is a thing you look up, not something that belongs beside the orders you are managing,
+ * so the whole of it lives on the pushed Order History instead.
+ */
+type Tab = 'open' | 'finished';
 // "Valid for" presets, shared by Limit and TWAP. Keyed by seconds so switching modes keeps the
 // selection consistent. The label is `n` + the translated unit abbreviation ("1D", "7D").
 const DAY = 'vault.day_abbrev';
@@ -70,31 +88,6 @@ const VALID_PRESETS = [
 const MAX_VALID_DAYS = 365;
 
 
-// CoW's account endpoint keeps reporting an order as "open" for a while after its validTo passes, so an
-// order that's really done would stay stuck under Open and never reach Finished. Treat a past-validTo
-// "open" order as expired here so it buckets correctly.
-const effectiveStatus = (o: CowOrder, cancelled?: Set<string>): string => {
-  // CoW's orderbook keeps reporting an order as open for a while after its on-chain invalidation, so
-  // an order this session cancelled is shown as cancelled straight away, whatever the API says.
-  if (cancelled?.has(o.uid.toLowerCase()) && o.status === 'open') return 'cancelled';
-  return o.status === 'open' && o.validTo * 1000 < Date.now() ? 'expired' : o.status;
-};
-
-const orderBucket = (s: string): Tab => {
-  const x = s.toLowerCase();
-  if (x.includes('cancel')) return 'cancelled';
-  if (x.includes('fulfil') || x.includes('filled') || x.includes('expire')) return 'finished';
-  return 'open';
-};
-// Returns the translation key for the pill label; the caller resolves it with `t`.
-function statusPill(s: string): {key: string; tone: 'sky' | 'green' | 'gray' | 'amber'} {
-  const x = s.toLowerCase();
-  if (x.includes('fulfil') || x.includes('filled')) return {key: 'vault.fulfilled', tone: 'green'};
-  if (x.includes('cancel')) return {key: 'vault.cancelled', tone: 'gray'};
-  if (x.includes('expire')) return {key: 'vault.expired', tone: 'amber'};
-  return {key: 'vault.open', tone: 'sky'};
-}
-
 // CoW's partner fee is baked into the on-chain amounts (buy grosses up the sell side; sell discounts the
 // buy side); back it out so the displayed price matches what the user entered. Display-only.
 const PARTNER_FEE = 0.002;
@@ -102,10 +95,55 @@ const PARTNER_FEE = 0.002;
 const fmtN = fmtNum;
 /** Trim to token-sized precision, so a split never carries float noise into a withdrawal. */
 const round6 = (v: number) => Math.round(v * 1e6) / 1e6;
-const fmtAmt = (raw: string, decimals: number): string => fmtN(Number(formatUnits(BigInt(raw), decimals)));
+const fmtAmt = (raw: string, decimals: number): string => fmtShort(Number(formatUnits(BigInt(raw), decimals)));
 
-const fmtExpiry = (validTo: number): string =>
-  new Date(validTo * 1000).toLocaleString(undefined, {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'});
+/**
+ * The watch list's name, as the screen's title, editable in place.
+ *
+ * Its own component, subscribing to the store itself, for one reason: the header is set through
+ * `navigation.setOptions`, and an inline arrow passed there is a NEW element type on every call —
+ * React would unmount and remount the field, losing the caret on each keystroke. A stable
+ * component set once keeps its focus while the name changes underneath it.
+ *
+ * "Assets" is not a name anyone chose, so there it is plain text.
+ */
+function WatchlistTitle({network}: {network: Network}) {
+  const {t} = useT();
+  const c = useColors();
+  const styles = useStyles(makeStyles);
+  const watch = useWatchLists(network);
+  const builtIn = isAssetsList(watch.active?.id);
+  const fallback = builtIn
+    ? t('mobile.home.all_assets')
+    : t('mobile.home.watch_list_n', {n: watchListNumber(watch.lists, watch.active?.id ?? '')});
+  if (builtIn) return <Text style={styles.navTitle}>{fallback}</Text>;
+  return (
+    <TextInput
+      style={styles.navTitleInput}
+      value={watch.active?.name ?? ''}
+      onChangeText={(v) => watch.active && watch.rename(network, watch.active.id, v)}
+      placeholder={fallback}
+      placeholderTextColor={c.subtext}
+      maxLength={24}
+      returnKeyType="done"
+      textAlign="center"
+      selectTextOnFocus
+    />
+  );
+}
+
+/** lucide Trash2, for the header. */
+function TrashMark({color}: {color: string}) {
+  const st = {stroke: color, strokeWidth: 1.9, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const};
+  return (
+    <Svg width={20} height={20} viewBox="0 0 24 24">
+      <Path d="M3 6h18" {...st} />
+      <Path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" {...st} />
+      <Path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" {...st} />
+      <Path d="M10 11v6M14 11v6" {...st} />
+    </Svg>
+  );
+}
 
 /**
  * Trade — the market directory on the tab; on the pushed pair screen the chart, the ORDERS list
@@ -171,24 +209,47 @@ export function TradeScreen() {
   // Read through the context, not the hook: this screen is also PUSHED from the Overview, and
   // there it sits outside the tab navigator, where the hook throws. No bar means no gap to leave.
   const tabBarHeight = React.useContext(BottomTabBarHeightContext) ?? 0;
-  const {t, company} = useT();
+  const {t, company, words} = useT();
+  // Same switch the Earn card's protocol mark obeys.
+  const defiDetails = useDefiDetails((s) => s.show);
   const styles = useStyles(makeStyles);
   const c = useColors();
-  const account = useWallet((s) => s.account);
+  const unlocked = useWallet((s) => s.unlocked);
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
   const assets = ASSETS[network];
   const stables = useMemo(() => assets.filter((a) => a.kind === 'stable'), [assets]);
 
-  const [baseSym, setBaseSym] = useState(assets.find((a) => a.kind !== 'stable')?.symbol ?? 'WETH');
-  const [quoteSym, setQuoteSym] = useState(stables[0]?.symbol ?? 'USDC');
+  // The tab has no params, so it starts from the pair last traded — reopening on a default while
+  // the user has been watching one asset all week is a small, daily annoyance.
+  const [lastBase, lastQuote] = (getPref(LAST_PAIR) ?? '').split('/');
+  const [baseSym, setBaseSym] = useState(
+    (lastBase && assets.some((a) => a.symbol === lastBase) ? lastBase : null) ??
+      assets.find((a) => a.kind !== 'stable')?.symbol ??
+      'WETH',
+  );
+  const rememberedQuote = lastQuote && stables.some((a) => a.symbol === lastQuote) ? lastQuote : null;
+  const [quoteSym, setQuoteSym] = useState(rememberedQuote ?? stables[0]?.symbol ?? 'USDC');
+  /**
+   * Whether the quote on screen is a CHOICE or the app's own guess.
+   *
+   * A guess is corrected once balances land (see `preferredQuote` below). The pair last traded, a
+   * pair handed over by another screen, and a pick from the sheet are all choices, and a choice is
+   * never moved out from under the user — not even to a coin they hold more of.
+   */
+  const quoteChosen = useRef(rememberedQuote != null);
   // A network switch keeps the pair only where both sides exist there. Robinhood has no USDC or USDT,
   // so a USDC quote becomes USDG on arrival, and USDG becomes USDC again on the way back; a base the
   // new network lacks falls back to its first non-stable asset.
   useEffect(() => {
     if (!assets.some((a) => a.symbol === baseSym)) setBaseSym(assets.find((a) => a.kind !== 'stable')?.symbol ?? assets[0]?.symbol ?? 'WETH');
-    if (!stables.some((s) => s.symbol === quoteSym)) setQuoteSym(stables[0]?.symbol ?? 'USDC');
+    // Provisional: the new network's balances are not in yet, so `preferredQuote` cannot run here.
+    // Clearing the flag is what lets it correct this once they are.
+    if (!stables.some((s) => s.symbol === quoteSym)) {
+      quoteChosen.current = false;
+      setQuoteSym(stables[0]?.symbol ?? 'USDC');
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [network]);
   /**
@@ -202,21 +263,95 @@ export function TradeScreen() {
   /**
    * One component, two screens.
    *
-   * The TAB is a market directory and nothing else: categories and a list of assets. The PUSHED
-   * copy is the trading screen for one pair — its chart, its orders, its Buy and Sell. Tapping a
-   * row in the directory is what gets you from one to the other, and keeping them in one file
+   * Both the TAB and the PUSHED copy are the trading screen for one pair — chart, orders, Buy and
+   * Sell. The tab opens on the pair last traded; a push names its own. Keeping them in one file
    * means the pair UI has a single definition.
+   *
+   * The third route, Watchlist, is the odd one: the same asset directory with no prices and a star
+   * on every row, pushed from the Overview to choose what that list holds. The question there is
+   * which assets to keep, not what they cost, and a price beside a star invites a tap that would
+   * leave the screen.
    */
   const routeName = useRoute().name;
-  const isPair = routeName === 'TradePair';
+  const isWatchlist = routeName === 'Watchlist';
+  const isPair = !isWatchlist;
+  const toggleFavorite = useFavorites((st) => st.toggle);
+  /**
+   * The watch list this page is editing — always the one the Overview has in front.
+   *
+   * The page is reached by tapping that list's own name, so "which list am I starring onto" is
+   * never a question it has to ask. Renaming and deleting live here for the same reason: this is
+   * the page about the list, where the Overview's row is only the way to choose one.
+   */
+  const watch = useWatchLists(network);
+  const builtIn = isAssetsList(watch.active?.id);
+  const onList = new Set(watch.active?.symbols ?? []);
+  /** What an unnamed list is called: "Assets" for the built-in one, "Watch list #2" for the rest. */
+  const listFallback = builtIn
+    ? t('mobile.home.all_assets')
+    : t('mobile.home.watch_list_n', {n: watchListNumber(watch.lists, watch.active?.id ?? '')});
+  const listName = watchListLabel(watch.active, listFallback);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  /**
+   * The list's name IS the screen's title, and deleting it is the bar button beside it.
+   *
+   * Set once per route, not per render: the title is a focused text field while it is being
+   * edited, and re-supplying `headerTitle` with a fresh inline component would remount it and
+   * swallow the caret. `WatchlistTitle` subscribes to the store itself so the header updates
+   * without the options being set again.
+   */
+  useEffect(() => {
+    if (!isWatchlist) return;
+    nav.setOptions({headerTitle: () => <WatchlistTitle network={network} />});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isWatchlist, network]);
+  /**
+   * The bin, as the bar's right-hand item.
+   *
+   * It is sized to the bar's full 44, not to the glyph. react-native-screens hands `headerRight`
+   * to a bar-button custom view and anchors it by its BOTTOM edge — which is what the one
+   * measurement we have says: a 32pt box put the glyph 28 down from the top of a 44pt bar, too
+   * low by six. A box the height of the bar puts its centre at the bar's centre, so where the
+   * native side anchors it stops mattering.
+   */
+  const canDelete = !builtIn && watch.lists.length > 1;
+  useEffect(() => {
+    if (!isWatchlist) return;
+    nav.setOptions({
+      headerRight: canDelete
+        ? () => (
+            <Pressable
+              style={styles.navAction}
+              onPress={() => setConfirmDelete(true)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t('mobile.home.delete_list')}>
+              <TrashMark color={c.danger} />
+            </Pressable>
+          )
+        : undefined,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isWatchlist, canDelete, c.danger]);
+
+
   const params = useRoute().params as TradeParams;
   const wantBase = params?.base;
   const wantQuote = params?.quote;
   useEffect(() => {
     if (wantBase && assets.some((a) => a.symbol === wantBase)) setBaseSym(wantBase);
-    if (wantQuote && stables.some((a) => a.symbol === wantQuote)) setQuoteSym(wantQuote);
+    if (wantQuote && stables.some((a) => a.symbol === wantQuote)) {
+      quoteChosen.current = true;
+      setQuoteSym(wantQuote);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wantBase, wantQuote]);
+
+  // Written whenever the pair settles, so the tab reopens on it next launch.
+  useEffect(() => {
+    if (baseSym && quoteSym) setPref(LAST_PAIR, `${baseSym}/${quoteSym}`);
+  }, [baseSym, quoteSym]);
 
   const [tab, setTab] = useState<Tab>('open');
 
@@ -253,6 +388,15 @@ export function TradeScreen() {
    * expired and caps how far ahead one may sit, so the days are clamped to a sane band.
    */
   const [validDays, setValidDays] = useState('');
+  /**
+   * The chip to fall back to when the days field is left empty.
+   *
+   * Clearing the field used to leave the row with NOTHING lit: `validDays` was empty, so the chips
+   * stopped claiming the value, while `validSec` still held the custom one they could not match —
+   * so the order carried a validity nothing on screen named. Blurring an empty field now returns to
+   * the preset that was last chosen, which is the answer the user can see.
+   */
+  const lastPreset = useRef(VALID_PRESETS[0].s);
   const [status, setStatus] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
   const [err, setErr] = useState<string | null>(null);
 
@@ -270,7 +414,21 @@ export function TradeScreen() {
    * made the app re-approve an already-approved token after every restart.
    */
   const [intentSetup, setIntentSetup] = useState<{needed: boolean; approve: boolean} | null>(null);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  /**
+   * Which rows are open, as a SET of keys rather than one id.
+   *
+   * It held a single id, so opening any row closed whichever was already open — two orders could
+   * never be read side by side, and a tap meant to open one silently folded away another the user
+   * was still looking at. The open orders and the market trades below them share this state; their
+   * keys are an order uid and a transaction hash, which cannot collide.
+   */
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set<string>());
+  const toggleExpanded = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
   /**
    * Off on arrival. The page is opened on one pair, so the orders under it should be that pair's;
    * seeing every order the vault has ever placed is the exception, and the user asks for it.
@@ -279,15 +437,50 @@ export function TradeScreen() {
    * small friction that makes a filter feel broken.
    */
   const [showOthers, setShowOthers] = useState(() => getFlag(SHOW_OTHER_ORDERS));
-  const toggleOthers = () =>
-    setShowOthers((v) => {
-      setFlag(SHOW_OTHER_ORDERS, !v);
-      return !v;
-    });
+  const setOthers = (v: boolean) => {
+    setFlag(SHOW_OTHER_ORDERS, v);
+    setShowOthers(v);
+  };
+  const toggleOthers = () => setOthers(!showOthers);
   const [marketTrades, setMarketTrades] = useState<MarketTrade[]>([]);
 
   const balances = useVaultBalances(network);
   const positions = useVaultPositions(balances.vault, network);
+
+  /**
+   * The stablecoin to quote in when the app is choosing: one the vault actually HOLDS, USDC first.
+   *
+   * Quoting in a coin with a zero balance opens a dead screen — Max is 0, Buy has nothing to spend,
+   * and the first thing the user has to do is swap into the quote before they can use it. USDC
+   * leads because it is the deepest side of nearly every pool here; any other held stable beats an
+   * empty USDC, and if the vault holds no stablecoin at all the catalog order decides, as before.
+   */
+  const preferredQuote = (exclude?: string): string | undefined => {
+    const held = (sym: string) => Number(balanceOfSymbol(balances.balances, sym) || 0) > 0;
+    const options = stables.map((a) => a.symbol).filter((sy) => sy !== exclude);
+    return (
+      options.find((sy) => sy === 'USDC' && held(sy)) ??
+      options.find(held) ??
+      options.find((sy) => sy === 'USDC') ??
+      options[0]
+    );
+  };
+
+  /**
+   * Correct the opening guess once the balances arrive.
+   *
+   * The first frame knows nothing about what the vault holds — the state initialiser runs before
+   * the balance read — so the quote starts as the catalog's first stablecoin and is moved here to
+   * one with something in it. Runs once: the flag is set before the move, so a later refresh that
+   * changes which coins are held does not reshuffle the pair while the user is looking at it.
+   */
+  useEffect(() => {
+    if (quoteChosen.current || !balances.balances) return;
+    quoteChosen.current = true;
+    const want = preferredQuote(baseSym);
+    if (want) setQuoteSym(want);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [balances.balances]);
   // Pull-to-refresh: re-reads prices, the pool quote, the chart, balances and orders together.
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [pulled, setPulled] = useState(false);
@@ -489,9 +682,20 @@ export function TradeScreen() {
         : relayGasFor({setup: true}),
     [mode, planSky, planAave],
   );
-  // A limit or TWAP order that needs no setup sends nothing, so it is charged nothing and the fee
-  // line is hidden rather than showing a number the vault will never be billed.
+  /**
+   * Three answers, not two: a figure, a zero, or nothing.
+   *
+   * A market swap is always relayed, so it is always quoted. A limit or TWAP order on a vault that
+   * is already set up — adapter cloned, pay token approved to the settlement relayer — is signed
+   * and posted off-chain and sends no transaction at all, so the honest figure is $0 and the line
+   * now says so. It used to hide instead, which left "free" and "not worked out yet"
+   * indistinguishable on the one line whose job is to prevent a surprise.
+   *
+   * While the probe is still in flight `intentSetup` is null and the cost is genuinely UNKNOWN, so
+   * there the line stays hidden rather than claiming a zero it cannot back.
+   */
   const feeApplies = mode === 'Market' || intentSetup?.needed === true;
+  const feeFree = mode !== 'Market' && intentSetup?.needed === false;
   // Until the balances are in, the figure is unknown — not zero. Showing 0 reads as "you have
   // nothing", so the line shows a dash, Max is withheld, and nothing is flagged as over balance.
   const balKnown = balances.balances != null;
@@ -548,12 +752,24 @@ export function TradeScreen() {
   // A TWAP part carries a salted appData; a limit order carries the fixed one.
   const limitAppData = useMemo(() => buildLimitAppData().hash.toLowerCase(), []);
 
+  /**
+   * The TWAP schedules, by appData.
+   *
+   * A TWAP is not one order: it is N part orders, each posted when its slot comes round, all
+   * sharing the schedule's salted appData. CoW knows nothing of the schedule, so the part count —
+   * and therefore how far along the TWAP is — can only come from the record kept at placement.
+   */
+  const [twaps, setTwaps] = useState<Map<string, TwapSchedule>>(() => new Map());
+
   const refreshOrders = () => {
     if (!owner) return;
     const vault = ownerVaultAddress(owner, network);
     fetchRecentOrders(vault, network).then(setOrders).catch(() => setOrders([]));
     // Completed market swaps leave no order record — they're recovered from the vault's transfer feed.
     fetchMarketTrades(vault, network).then(setMarketTrades).catch(() => setMarketTrades([]));
+    fetchTwapSchedules(vault, network)
+      .then((rows) => setTwaps(new Map(rows.map((r) => [r.appData.toLowerCase(), r]))))
+      .catch(() => setTwaps(new Map()));
   };
   // Orders cancelled in this session, applied over the orderbook until it catches up.
   const [cancelledUids, setCancelledUids] = useState<Set<string>>(() => new Set());
@@ -576,12 +792,23 @@ export function TradeScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [owner, network]);
 
+  /**
+   * Choosing either leg of the pair turns "Others" back off.
+   *
+   * The flag is sticky on purpose — re-ticking it on every visit would make the filter feel broken
+   * — but deliberately picking an asset is a statement about which pair you are here for, and the
+   * orders under the chart went on listing every pair the vault has ever traded. The filter stays
+   * asked for as long as the pair is left alone; changing the pair answers the question again.
+   */
+  const pickedPairLeg = () => setOthers(false);
+
   const selectAsset = (sym: string) => {
     setBaseSym(sym);
     if (sym === quoteSym) {
       const other = stables.find((s) => s.symbol !== sym);
       if (other) setQuoteSym(other.symbol);
     }
+    pickedPairLeg();
   };
   /**
    * The market directory: every asset the network has, by category.
@@ -606,7 +833,7 @@ export function TradeScreen() {
     <Pressable
       key={a.symbol}
       style={[styles.resultRow, i > 0 && styles.resultDivided]}
-      onPress={() => openPair(a.symbol)}>
+      onPress={() => (isWatchlist ? toggleFavorite(network, a.symbol) : openPair(a.symbol))}>
       <TokenIcon symbol={a.symbol} size={30} />
       <View style={styles.resultName}>
         <Highlight text={displaySymbol(a.symbol)} q={query.trim()} style={styles.resultText} />
@@ -614,8 +841,20 @@ export function TradeScreen() {
           <Highlight text={company(a.symbol, a.company) as string} q={query.trim()} style={styles.resultCompany} numberOfLines={1} />
         ) : null}
       </View>
-      {/* At the right edge, so the prices line up down the list and can be read as a column. */}
-      <Text style={styles.resultPrice}>{fmtUsd(usdValue(1, a.symbol, prices))}</Text>
+      {/* Editing the watch list, a check takes the price's place — the same blue tick every picker
+          sheet in the app uses for "this one is chosen". A star said the same thing in a second
+          vocabulary, and only the chosen rows need a mark: an unchosen row is blank, so the list
+          reads as what is on it rather than as a field of empty outlines. The whole row toggles. */}
+      {isWatchlist ? (
+        onList.has(a.symbol) ? (
+          <Svg width={20} height={20} viewBox="0 0 24 24">
+            <Path d="M20 6 9 17l-5-5" stroke={c.accent} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          </Svg>
+        ) : null
+      ) : (
+        // At the right edge, so the prices line up down the list and can be read as a column.
+        <Text style={styles.resultPrice}>{fmtUsd(usdValue(1, a.symbol, prices))}</Text>
+      )}
     </Pressable>
   );
 
@@ -659,15 +898,30 @@ export function TradeScreen() {
   const [pageW, setPageW] = useState(0);
   const [pageH, setPageH] = useState<Record<string, number>>({});
   const pages = categories.length > 0 ? categories : (['crypto_native'] as AssetCategory[]);
+  /**
+   * Changing category takes the page back to the top.
+   *
+   * Each category is a different length and the pager shrinks to whichever is showing, so arriving
+   * at a short one from the bottom of a long one left the scroll position past the end of the new
+   * list entirely: swiping from the foot of Stocks to ETF showed an empty screen, with the ETFs
+   * above the fold and no indication they were there. The header is a chart and a category row, so
+   * going to the top is also going to the start of the list.
+   */
+  const pageRef = React.useRef<ScrollView>(null);
+  const toTop = () => pageRef.current?.scrollTo({y: -headerHeight, animated: true});
   const pickCategory = (k: AssetCategory) => {
     setCategory(k);
     const i = pages.indexOf(k);
     if (i >= 0 && pageW > 0) pagerRef.current?.scrollTo({x: i * pageW, animated: true});
+    if (k !== category) toTop();
   };
   const onPagerSettle = (x: number) => {
     if (pageW <= 0) return;
     const k = pages[Math.max(0, Math.min(pages.length - 1, Math.round(x / pageW)))];
-    if (k && k !== category) setCategory(k);
+    if (k && k !== category) {
+      setCategory(k);
+      toTop();
+    }
   };
   const knownH = pages.map((k) => pageH[k]);
   const allKnown = pages.length > 1 && pageW > 0 && knownH.every((h) => h != null);
@@ -722,13 +976,7 @@ export function TradeScreen() {
 
   /** The pair to open for a directory row, quoted in a stable coin the vault actually holds. */
   const openPair = (symbol: string) => {
-    const held = (sym: string) => Number(balanceOfSymbol(balances.balances, sym) || 0) > 0;
-    const options = stables.map((a) => a.symbol).filter((sy) => sy !== symbol);
-    const quote =
-      options.find((sy) => sy === 'USDC' && held(sy)) ??
-      options.find(held) ??
-      options.find((sy) => sy === 'USDC') ??
-      options[0];
+    const quote = preferredQuote(symbol);
     if (!quote) return;
     nav.navigate('TradePair', {base: symbol, quote});
   };
@@ -740,6 +988,24 @@ export function TradeScreen() {
   const pickQuote = () => setPicker('quote');
   // Quote rows: the stablecoins, nothing else. A position is not a token you pick here — a market
   // order draws on it automatically, and a limit order spends the free balance only.
+  /**
+   * What the vault holds of one asset, EVERYWHERE: its free balance plus every yielding and lending
+   * position in it.
+   *
+   * The pickers listed symbols and nothing else, so choosing what to trade meant leaving the sheet
+   * to find out whether there was anything to trade with — and a balance sitting in Earn looked
+   * like no balance at all. Positions carry the UNDERLYING symbol, so an aUSDC supply counts as
+   * USDC here, which is the figure the user thinks in.
+   */
+  const totalOf = (sym: string): number =>
+    Number(balanceOfSymbol(balances.balances, sym) || 0) +
+    positions.positions
+      .filter((p) => p.symbol === sym && (p.kind === 'staked' || p.kind === 'supplied'))
+      .reduce((n, p) => n + Number(p.formatted || 0), 0);
+  /** Funded rows first, each group keeping its catalog order (`sort` is stable). */
+  const fundedFirst = <T extends {total: number}>(rows: T[]): T[] =>
+    [...rows].sort((x, y) => Number(y.total > 0) - Number(x.total > 0));
+
   const pickerItems =
     picker === 'source'
       ? (
@@ -759,17 +1025,29 @@ export function TradeScreen() {
           ] as {key: string; label: string; sub: string}[]
         ).map((o) => ({...o, icon: <TokenIcon symbol={spendSym} size={30} />}))
       : picker === 'quote'
-      ? stables
-          .filter((s) => s.symbol !== baseSym)
-          .map((s) => ({key: `${s.symbol}:free`, label: displaySymbol(s.symbol), icon: <TokenIcon symbol={s.symbol} size={30} />}))
-      : assets
-          .filter((a) => a.symbol !== quoteSym)
-          .map((a) => ({
-            key: `${a.symbol}:free`,
-            label: displaySymbol(a.symbol),
-            sub: company(a.symbol, a.company),
-            icon: <TokenIcon symbol={a.symbol} size={30} />,
-          }));
+      ? fundedFirst(
+          stables
+            .filter((s) => s.symbol !== baseSym)
+            .map((s) => ({
+              key: `${s.symbol}:free`,
+              label: displaySymbol(s.symbol),
+              icon: <TokenIcon symbol={s.symbol} size={30} />,
+              total: totalOf(s.symbol),
+            })),
+        ).map(({total, ...row}) => ({...row, value: total > 0 ? fmtShort(total) : undefined}))
+      : fundedFirst(
+          assets
+            .filter((a) => a.symbol !== quoteSym)
+            .map((a) => ({
+              key: `${a.symbol}:free`,
+              label: displaySymbol(a.symbol),
+              sub: company(a.symbol, a.company),
+              icon: <TokenIcon symbol={a.symbol} size={30} />,
+              total: totalOf(a.symbol),
+            })),
+          // Nothing printed against a zero: an empty right-hand end reads as "none" without
+          // putting a column of noughts beside every asset the vault has never held.
+        ).map(({total, ...row}) => ({...row, value: total > 0 ? fmtShort(total) : undefined}));
 
   // Plain (no thousands separators, so Number() round-trips) price string for the input default.
   const priceToInput = (p: number) => (p >= 1000 ? p.toFixed(0) : p >= 1 ? p.toFixed(2) : p.toPrecision(4));
@@ -834,7 +1112,7 @@ export function TradeScreen() {
 
   // The same checks onSubmit makes, so the button is disabled rather than erroring on tap.
   const canConfirm =
-    !!sheetSide && !!account && !!owner && !!base && !!quoteAsset &&
+    !!sheetSide && unlocked && !!owner && !!base && !!quoteAsset &&
     Number(amount) > 0 &&
     (mode === 'Market' || Number(price) > 0) &&
     (mode !== 'TWAP' || Number(parts) >= 2) &&
@@ -842,7 +1120,7 @@ export function TradeScreen() {
 
   const onSubmit = async () => {
     const side = sheetSide;
-    if (!side || !account || !owner || !base || !quoteAsset) return;
+    if (!side || !unlocked || !owner || !base || !quoteAsset) return;
     // Everything the order needs is read off now, because the sheet closes before the work starts.
     const amt = amount;
     if (!(Number(amount) > 0)) return setErr(t('vault.enter_amount')), setStatus('error');
@@ -850,8 +1128,34 @@ export function TradeScreen() {
     if (overBalance) return setErr(t('vault.insufficient_balance', {token: displaySymbol(spendSym)})), setStatus('error');
     setStatus('busy');
     setErr(null);
-    // "Buy 0.1 ETH" / "Sell 100 USDC" — the order in the user's words, not the tx.
-    const tx = showTx(`${side === 'buy' ? t('vault.buy') : t('vault.sell')} ${amt} ${displaySymbol(spendSym)}`, network);
+    /**
+     * Both legs, in the user's words: "Pay 100 USDC to buy 0.1 ETH" / "Sell 0.1 ETH for 250 USDC".
+     *
+     * It named ONE leg, and the wrong one: `spendSym` is what the order PAYS, so a buy of ETH with
+     * USDC announced itself as "Buy 100 USDC" — a coin the user was not buying, in an amount that
+     * belonged to the other side of the trade. Naming both ends removes the question of which one
+     * the figure refers to.
+     *
+     * The receive figure is the field's own, falling back to the price-derived amount when the user
+     * left it to auto-fill. If neither is available (no pool price yet) the line states only what is
+     * certain — what is being paid.
+     */
+    const toastRecv =
+      Number(receiveInput) > 0
+        ? Number(receiveInput)
+        : effPrice > 0 && Number(amt) > 0
+          ? paysBase
+            ? Number(amt) * effPrice
+            : Number(amt) / effPrice
+          : 0;
+    const payLeg = `${amt} ${displaySymbol(spendSym)}`;
+    const recvLeg = `${fmtShort(toastRecv)} ${displaySymbol(recvSym)}`;
+    const tx = showTx(
+      toastRecv > 0
+        ? t(side === 'buy' ? 'mobile.trade.pay_to_buy' : 'mobile.trade.pay_to_sell', {pay: payLeg, receive: recvLeg})
+        : `${t('vault.pay')} ${payLeg}`,
+      network,
+    );
     // Closed straight away: a limit order first mines its setup transaction, and with no spinner on
     // the button an open sheet looked like a tap that did nothing. The badge and the orders list
     // carry it from here, and a failure raises a toast.
@@ -1014,27 +1318,114 @@ export function TradeScreen() {
     }
   };
 
-  // Only orders/trades for the current pair unless "Show others" is on.
+  /**
+   * Only orders/trades for the current pair unless "Show others" is on — and only ones this build
+   * can actually read.
+   *
+   * An order whose legs cannot be named is dropped outright. `assetMeta` answers an unknown token
+   * with a shortened ADDRESS and a guessed 18 decimals, so such a row printed an address where a
+   * symbol belongs, next to an amount and a price divided by the wrong scale. That is the "address
+   * and random numbers" row; not listing it is better than listing it wrong.
+   */
+  const namedOrders = useMemo(
+    () => orders.filter((o) => isKnownAsset(network, o.sellToken) && isKnownAsset(network, o.buyToken)),
+    [orders, network],
+  );
+  /**
+   * Until the first balance read lands the pair is the app's own GUESS.
+   *
+   * `preferredQuote` moves the quote to a coin the vault actually holds the moment balances
+   * arrive, so filtering against the opening guess listed, for that moment on a first visit, the
+   * orders of a pair the user never chose — and they vanished on the next render, which is why
+   * leaving the tab and coming back "fixed" it. An empty list until the pair settles is the honest
+   * answer. A failed read counts as settled: the pair will not move after one, and refusing to
+   * list anything because the balances are unavailable would be a worse lie.
+   */
+  const pairSettled = balances.balances != null || balances.error != null;
   const pairSet = new Set([base?.address.toLowerCase(), quoteAsset?.address.toLowerCase()]);
   const inPair = (o: CowOrder): boolean => pairSet.has(o.sellToken.toLowerCase()) && pairSet.has(o.buyToken.toLowerCase());
   const marketInPair = (m: MarketTrade): boolean => pairSet.has(m.sold.address.toLowerCase()) && pairSet.has(m.bought.address.toLowerCase());
-  const visibleOrders = showOthers ? orders : orders.filter(inPair);
+
+  /**
+   * A part order belongs to a schedule; it is not an order the user placed.
+   *
+   * The appData is the only link — CoW has no notion of a TWAP — and a schedule's is salted at
+   * placement, so an order is a part IFF its appData matches one the server recorded. (Comparing
+   * against the fixed limit appData instead, as the row badge still does for an orphan, cannot
+   * distinguish a part from a limit order placed by anything else.)
+   */
+  const partOf = (o: CowOrder): TwapSchedule | undefined => (o.appData ? twaps.get(o.appData.toLowerCase()) : undefined);
+
+  /**
+   * The side word for an order BADGE, which is not the word the Buy / Sell buttons use.
+   * Chinese carries 买入 / 卖出 on the buttons — full verbs, which is what an action wants — and
+   * 买 / 卖 here, which is what a label in a pill wants.
+   */
+  const sideWord = (isBuy: boolean) => t(isBuy ? 'mobile.trade.buy_short' : 'mobile.trade.sell_short');
+
+  /**
+   * One row per TWAP schedule, not one per part. See `splitTwapGroups` for why the total comes from
+   * the schedule rather than from the parts CoW happens to have posted.
+   */
+  const {plainOrders, twapGroups} = useMemo(
+    () => {
+      const {plain, groups} = splitTwapGroups(namedOrders, twaps, cancelledUids);
+      return {plainOrders: plain, twapGroups: groups};
+    },
+    [namedOrders, twaps, cancelledUids],
+  );
+
+  const [cancellingTwap, setCancellingTwap] = useState<string | null>(null);
+  /**
+   * Cancelling a TWAP is two things, not one: invalidate the part orders already posted, and tell
+   * the server to stop posting the rest. Cancelling the open part alone left the cron to post the
+   * next slot a minute later.
+   */
+  const onCancelTwap = async (g: TwapGroup) => {
+    if (!owner) return;
+    if (!intent) return showToast('error', t('mobile.trade.cannot_cancel'), t('mobile.trade.cow_unavailable'));
+    setCancellingTwap(g.appData);
+    const tx = showTx(t('mobile.actions.cancel_intent'), network);
+    try {
+      const acct = await getSigner();
+      await cancelTwap({
+        account: acct,
+        vault: ownerVaultAddress(owner, network),
+        network,
+        intentProtocol: intent,
+        appData: g.appData,
+        openPartUids: g.openUids as `0x${string}`[],
+        stableCoin: pickFeeCoin(),
+      });
+      markCancelled(g.openUids);
+      refreshOrders();
+    } catch (e) {
+      tx.error(String((e as Error)?.message ?? e));
+    } finally {
+      setCancellingTwap(null);
+    }
+  };
+
+  const visibleOrders = showOthers ? plainOrders : pairSettled ? plainOrders.filter(inPair) : [];
+  const visibleTwaps = showOthers ? twapGroups : pairSettled ? twapGroups.filter((g) => inPair(g.rep)) : [];
+  const shownTwaps = visibleTwaps.filter((g) => g.bucket === tab);
   // Market swaps are always complete → they belong under Finished.
-  const marketFinished = showOthers ? marketTrades : marketTrades.filter(marketInPair);
+  const marketFinished = showOthers ? marketTrades : pairSettled ? marketTrades.filter(marketInPair) : [];
 
   const counts = useMemo(() => {
-    const c: Record<Tab, number> = {open: 0, finished: 0, cancelled: 0};
+    const c: Record<OrderBucket, number> = {open: 0, finished: 0, cancelled: 0};
     visibleOrders.forEach((o) => (c[orderBucket(effectiveStatus(o, cancelledUids))] += 1));
+    // One per SCHEDULE. Counting parts made a ten-part TWAP look like ten open orders.
+    visibleTwaps.forEach((g) => (c[g.bucket] += 1));
     c.finished += marketFinished.length;
     return c;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleOrders, marketFinished]);
+  }, [visibleOrders, visibleTwaps, marketFinished]);
   const shownOrders = visibleOrders.filter((o) => orderBucket(effectiveStatus(o, cancelledUids)) === tab);
   const openUids = visibleOrders.filter((o) => effectiveStatus(o, cancelledUids) === 'open').map((o) => o.uid);
   const TABS: {key: Tab; label: string}[] = [
     {key: 'open', label: t('vault.orders_open_short')},
     {key: 'finished', label: t('vault.orders_finished_short')},
-    {key: 'cancelled', label: t('vault.orders_cancelled_short')},
   ];
   // Market needs a pool on BOTH legs: the tokenized stocks are registered without the AMM-liquid bit
   // (no Uniswap market prices them) and the savings share has no pool either, so those pairs offer
@@ -1058,12 +1449,32 @@ export function TradeScreen() {
     if (n > 0) setValidSec(Math.min(n, MAX_VALID_DAYS) * 86400);
   };
 
+  /**
+   * The keyboard has gone: whatever is in the field now is the answer, so make it one the row shows.
+   *
+   * Empty (or a typed zero) hands the choice back to the chips. A number past the cap is rewritten
+   * to the cap, because `onValidDays` clamps the SECONDS and left the text alone — so a field
+   * reading "999" was really an order valid for 365 days.
+   */
+  const onValidDaysBlur = () => {
+    const n = Number(validDays);
+    if (!(n > 0)) {
+      setValidDays('');
+      setValidSec(lastPreset.current);
+      return;
+    }
+    const clamped = Math.min(n, MAX_VALID_DAYS);
+    setValidDays(String(clamped));
+    setValidSec(clamped * 86400);
+  };
+
   const pickMode = (next: Mode) => {
     if (next === mode) return;
     setMode(next);
     setAmount('');
     setReceiveInput('');
     setValidDays('');
+    setValidSec(lastPreset.current);
     setFundOn({vault: true, sky: false, aave: false});
     setFundAmt({vault: '', sky: '', aave: ''});
     setErr(null);
@@ -1075,6 +1486,14 @@ export function TradeScreen() {
     {key: 'Limit', label: t('vault.limit')},
     {key: 'TWAP', label: t('vault.twap')},
   ];
+  /**
+   * Who settles the order type currently selected.
+   *
+   * A market order goes to the AMM adapter and a limit or TWAP order is posted as an intent, so
+   * the venue is the adapter category — read from the same registry the history rows name their
+   * protocol from, not from a list kept here. A network without that category shows nothing.
+   */
+  const venues = venueNames(network, mode === 'Market' ? 'amm' : 'intent');
   const busy = status === 'busy';
   // The sheet slides up and fills the screen below a strip of backdrop at the top: the keyboard then
   // opens over its lower half, where nothing is, so a tapped field is never covered and the sheet
@@ -1083,6 +1502,17 @@ export function TradeScreen() {
   const {height: screenHeight} = useWindowDimensions();
   // Same motion as every other sheet: rises, follows a downward drag, slides back out.
   const orderSheet = useSheetAnim(sheetSide != null, () => setSheetSide(null));
+  /**
+   * The side the sheet is SHOWING, which outlives `sheetSide`.
+   *
+   * Closing clears `sheetSide` while the card is still sliding out, and everything the form keyed
+   * on it changed halfway through the animation — the confirm button went from Buy's green to
+   * Sell's red on its way off screen, which reads as the trade having failed. This keeps the sheet
+   * looking like the sheet that was just confirmed until it is actually gone.
+   */
+  const lastSide = useRef<Side>('buy');
+  if (sheetSide) lastSide.current = sheetSide;
+  const shownSide = sheetSide ?? lastSide.current;
   // Tapping a prefilled field puts the caret after the number, not before it.
   const amountCaret = useEndCaret(amount);
   const priceCaret = useEndCaret(price);
@@ -1101,6 +1531,7 @@ export function TradeScreen() {
   return (
     <>
       <ScrollView showsVerticalScrollIndicator={false}
+        ref={pageRef}
         alwaysBounceVertical
         contentContainerStyle={[styles.body, {paddingTop: 8, paddingBottom: tabBarHeight + 16}]}
         contentInset={{top: headerHeight}}
@@ -1115,18 +1546,34 @@ export function TradeScreen() {
             <>
               <View style={styles.pair}>
                 <Pressable style={styles.pairPart} onPress={pickBase}>
-                  <TokenIcon symbol={baseSym} size={28} />
+                  <TokenIcon symbol={baseSym} size={22} />
                   <Text style={styles.pairText}>{displaySymbol(baseSym)}</Text>
                 </Pressable>
                 <Text style={styles.pairSlash}>/</Text>
                 <Pressable style={styles.pairPart} onPress={pickQuote}>
-                  <TokenIcon symbol={quoteSym} size={28} />
+                  <TokenIcon symbol={quoteSym} size={22} />
                   <Text style={styles.pairText}>{displaySymbol(quoteSym)}</Text>
                 </Pressable>
               </View>
-              {/* Beside the asset it stars, rather than in the nav bar where iOS draws a capsule
-                  behind it. Starring is what puts the asset on the Overview. */}
-              <FavoriteStar symbol={baseSym} size={24} />
+              {/* Beside the asset it is about, rather than in the nav bar where iOS draws a glass
+                  capsule behind every custom bar button.
+                  
+                  This was the star that puts the asset on the Overview. The pair page says what the
+                  asset COSTS and nothing about what it IS, so the contract behind a ticker, and
+                  whether a balance is free or sitting in Earn, had nowhere to be read; the star is
+                  still on every row of the asset directory and the watch list, which is where
+                  choosing what to follow happens anyway. */}
+              <Pressable
+                onPress={() => nav.navigate('AssetDetail', {symbol: baseSym})}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel={t('mobile.trade.asset_details')}>
+                <Svg width={21} height={21} viewBox="0 0 24 24">
+                  <Circle cx={12} cy={12} r={9.5} stroke={c.subtext} strokeWidth={1.8} fill="none" />
+                  <Path d="M12 11v5.5" stroke={c.subtext} strokeWidth={2} strokeLinecap="round" fill="none" />
+                  <Circle cx={12} cy={7.9} r={1.15} fill={c.subtext} />
+                </Svg>
+              </Pressable>
             </>
           ) : null}
         </View>
@@ -1146,7 +1593,6 @@ export function TradeScreen() {
                         placeholderTextColor={c.subtext}
                         autoCapitalize="characters"
                         autoCorrect={false}
-                        returnKeyType="search"
                         value={query}
                         onChangeText={setQuery}
                       />
@@ -1235,6 +1681,27 @@ export function TradeScreen() {
                   </Text>
                 </Pressable>
               ))}
+              {/* Not a third tab: it leaves the screen. Everything the two tabs leave out — the
+                  cancelled orders, and every pair other than this one — is on the page it pushes,
+                  so this is doing the work the Cancelled tab used to without spending a tab on
+                  orders that never happened.
+                  
+                  A mark rather than a label: beside two words that ARE the list, a third word that
+                  is a destination read as a tab, and the clock says "the record" in a tenth of the
+                  room. The same clock the Overview's History action wears, in the tab row's own
+                  muted grey rather than accent — it sits among labels, not among buttons, and blue
+                  made it the loudest thing in a row of quiet ones. The name goes to the screen
+                  reader, which sees no clock. */}
+              <Pressable
+                onPress={() => nav.navigate('OrderHistory')}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel={t('mobile.trade.order_history')}>
+                <Svg width={17} height={17} viewBox="0 0 24 24">
+                  <Circle cx={12} cy={12} r={9} stroke={c.subtext} strokeWidth={2.2} fill="none" />
+                  <Path d="M12 7.5V12l3 2" stroke={c.subtext} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                </Svg>
+              </Pressable>
             </View>
             <Pressable style={styles.othersToggle} onPress={toggleOthers} hitSlop={6}>
               <View style={[styles.checkbox, showOthers && styles.checkboxOn]}>{showOthers ? <Text style={styles.checkboxTick}>✓</Text> : null}</View>
@@ -1259,7 +1726,158 @@ export function TradeScreen() {
             </Pressable>
           ) : null}
 
-          {shownOrders.length === 0 && !(tab === 'finished' && marketFinished.length > 0) ? (
+          {/* One row per TWAP schedule, above the plain orders: it is the oldest thing in the list,
+              and its parts would otherwise be scattered through it by expiry. */}
+          {shownTwaps.map((g, gi) => {
+            const o = g.rep;
+            const sellM = assetMeta(network, o.sellToken as Address);
+            const buyM = assetMeta(network, o.buyToken as Address);
+            const isBuy = stables.some((st) => st.address.toLowerCase() === o.sellToken.toLowerCase());
+            const key = `twap-${g.appData}`;
+            const isExp = expanded.has(key);
+            const isLast =
+              gi === shownTwaps.length - 1 && shownOrders.length === 0 && !(tab === 'finished' && marketFinished.length > 0);
+            // The SCHEDULE's size, not the part's: one part is a tenth of what the user asked for,
+            // and a row claiming to be the order has to state the order's own amounts.
+            const partSell = Number(formatUnits(BigInt(o.sellAmount), sellM.decimals));
+            const partBuy = Number(formatUnits(BigInt(o.buyAmount), buyM.decimals));
+            /**
+             * The limit price the schedule was placed at.
+             *
+             * A TWAP has one, same as a limit order — every part carries it — and the detail
+             * listed everything about the order except the number that decides whether it fills.
+             * Read off a PART: the ratio is the same at any size, and the parts are what exist.
+             *
+             * Quoted in the stable leg where there is one, as everywhere else in this list, and
+             * the partner fee backed out so it matches what was typed into the form.
+             */
+            const sellStable = stables.some((st) => st.address.toLowerCase() === o.sellToken.toLowerCase());
+            const buyStable = stables.some((st) => st.address.toLowerCase() === o.buyToken.toLowerCase());
+            const pxBase = sellStable || buyStable
+              ? (sellStable ? partSell : partBuy) / (sellStable ? partBuy : partSell)
+              : partBuy / partSell;
+            const twapPx = pxBase / (o.kind === 'buy' ? 1 + PARTNER_FEE : 1 - PARTNER_FEE);
+            const twapPxSym = displaySymbol(
+              sellStable || buyStable ? (sellStable ? sellM.symbol : buyM.symbol) : buyM.symbol,
+            );
+            const canCancel = g.bucket === 'open' && !!intent;
+            return (
+              <View key={key} style={[styles.orderCard, isLast && styles.lastOrder]}>
+                <Pressable style={styles.orderHead} onPress={() => toggleExpanded(key)}>
+                  <View style={styles.orderHeadLeft}>
+                    <View style={[styles.kindBadge, {backgroundColor: isBuy ? c.successSoft : c.dangerSoft}]}>
+                      <Text style={[styles.kindText, {color: isBuy ? c.success : c.danger}]}>
+                        {words(t('vault.twap'), sideWord(isBuy))}
+                      </Text>
+                    </View>
+                    {/* One leg, not both. See {orderSummary}. */}
+                    <View style={styles.summaryWrap}>
+                      <TokenIcon symbol={isBuy ? buyM.symbol : sellM.symbol} size={18} />
+                      <Text style={styles.orderSummary} numberOfLines={1}>
+                        <Amount v={fmtShort(isBuy ? partBuy * g.total : partSell * g.total)} size={15} />{' '}
+                        {displaySymbol(isBuy ? buyM.symbol : sellM.symbol)}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.filledPill}>
+                    {g.filled}/{g.total} {t('mobile.trade.filled_parts')}
+                  </Text>
+                </Pressable>
+
+                {isExp ? (
+                  <View style={styles.orderDetail}>
+                    <View style={styles.orderLine}>
+                      <Text style={styles.orderLabel}>{t('vault.pay')}</Text>
+                      <View style={styles.orderAmt}>
+                        <Text style={styles.orderAmtVal}><Amount v={fmtShort(partSell * g.total)} size={15} /></Text>
+                        <TokenIcon symbol={sellM.symbol} size={16} />
+                        <Text style={styles.orderAmtSym}>{displaySymbol(sellM.symbol)}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.orderLine}>
+                      <Text style={styles.orderLabel}>{t('vault.receive')}</Text>
+                      <View style={styles.orderAmt}>
+                        <Text style={styles.orderAmtVal}><Amount v={fmtShort(partBuy * g.total)} size={15} /></Text>
+                        <TokenIcon symbol={buyM.symbol} size={16} />
+                        <Text style={styles.orderAmtSym}>{displaySymbol(buyM.symbol)}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.orderLine}>
+                      <Text style={styles.orderLabel}>{t('vault.price')}</Text>
+                      <Text style={styles.orderVal}>
+                        {Number.isFinite(twapPx) ? twapPx.toLocaleString('en-US', {maximumSignificantDigits: 6}) : '—'} {twapPxSym}
+                      </Text>
+                    </View>
+                    {/* What one slot buys, so the fraction above has a size attached to it. */}
+                    <View style={styles.orderLine}>
+                      <Text style={styles.orderLabel}>{t('mobile.trade.per_part')}</Text>
+                      <View style={styles.orderAmt}>
+                        <Text style={styles.orderAmtVal}><Amount v={fmtShort(partSell)} size={15} /></Text>
+                        <Text style={styles.orderAmtSym}>{displaySymbol(sellM.symbol)}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.orderLine}>
+                      <Text style={styles.orderLabel}>{t('vault.expires')}</Text>
+                      <Text style={styles.orderVal}>{fmtExpiry(g.schedule.windowEnd)}</Text>
+                    </View>
+
+                    {/**
+                      * The parts themselves.
+                      *
+                      * Only the ones POSTED can be listed: a TWAP's slots are placed one at a time
+                      * as the schedule comes round, so a ten-part order an hour old has one or two
+                      * orders in existence and eight still to come. Nine missing lines looked like
+                      * lost data, so the count says plainly how many have gone out, and each line
+                      * below it is a part that has — with what it actually filled for, where it
+                      * filled.
+                      */}
+                    <View style={styles.orderLine}>
+                      <Text style={styles.orderLabel}>{t('mobile.trade.parts_history')}</Text>
+                      <Text style={styles.orderVal}>
+                        {t('mobile.trade.parts_posted', {posted: g.parts.length, total: g.total})}
+                      </Text>
+                    </View>
+                    {g.parts.map((pt) => {
+                      const ps = effectiveStatus(pt, cancelledUids);
+                      const done = ps.toLowerCase().includes('fulfil');
+                      const sold = Number(formatUnits(BigInt(pt.executedSellAmount ?? '0'), sellM.decimals));
+                      const recv = Number(formatUnits(BigInt(pt.executedBuyAmount ?? '0'), buyM.decimals));
+                      return (
+                        <View key={pt.uid} style={styles.partRow}>
+                          <Text style={styles.partText} numberOfLines={1}>
+                            {done
+                              ? `${fmtShort(sold)} ${displaySymbol(sellM.symbol)} → ${fmtShort(recv)} ${displaySymbol(buyM.symbol)}`
+                              : `${fmtShort(Number(formatUnits(BigInt(pt.sellAmount), sellM.decimals)))} ${displaySymbol(sellM.symbol)}`}
+                          </Text>
+                          <Text style={styles.partStatus}>{t(statusPill(ps).key)}</Text>
+                        </View>
+                      );
+                    })}
+
+                    {canCancel ? (
+                      <Pressable
+                        style={styles.cancelRight}
+                        onPress={() =>
+                          ask({
+                            title: t('mobile.actions.cancel_intent'),
+                            gas: relayGasFor({}),
+                            run: () => onCancelTwap(g),
+                          })
+                        }
+                        disabled={cancellingTwap === g.appData}
+                        hitSlop={8}>
+                        <Text style={styles.cancelInline}>
+                          {cancellingTwap === g.appData ? t('mobile.trade.cancelling') : t('vault.cancel')}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ) : null}
+              </View>
+            );
+          })}
+
+          {shownOrders.length === 0 && shownTwaps.length === 0 && !(tab === 'finished' && marketFinished.length > 0) ? (
             <Text style={styles.empty}>{t(`mobile.trade.no_${tab}_orders`)}</Text>
           ) : (
             shownOrders.slice(0, 30).map((o, i, arr) => {
@@ -1304,25 +1922,36 @@ export function TradeScreen() {
               // so o.kind would call a CRCL purchase a sell of USDC).
               const isBuy = sellIsStable && !buyIsStable;
               // All rows collapse by default; tap to expand (open rows reveal their Cancel button).
-              const isExp = expanded === o.uid;
+              const isExp = expanded.has(o.uid);
               const canCancel = es === 'open' && !!intent;
               return (
-                <View key={o.uid} style={styles.orderCard}>
+                <View key={o.uid} style={[styles.orderCard, isLast && styles.lastOrder]}>
                   <Pressable
-                    style={[styles.orderHead, isLast && !isExp && styles.noBottom]}
-                    onPress={() => setExpanded(expanded === o.uid ? null : o.uid)}>
+                    style={styles.orderHead}
+                    onPress={() => toggleExpanded(o.uid)}>
                     <View style={styles.orderHeadLeft}>
-                      {/* One label: the order type and its side, "Limit Buy" — two badges said the
-                          same thing twice. */}
+                      {/* The side, and the type where the list holds more than one kind.
+                          Open and Cancelled are limit orders unless they say TWAP, so naming the
+                          type there spends a word on what the list already is. FINISHED is the
+                          exception: completed market swaps sit in it too, and against a row
+                          reading "Market Buy" a bare "Buy" looked like a different, nameless
+                          thing rather than the limit order it is. */}
                       <View style={[styles.kindBadge, {backgroundColor: isBuy ? c.successSoft : c.dangerSoft}]}>
                         <Text style={[styles.kindText, {color: isBuy ? c.success : c.danger}]}>
-                          {`${t(isTwap ? 'vault.twap' : 'vault.limit')} ${isBuy ? t('vault.buy') : t('vault.sell')}`}
+                          {isTwap
+                            ? words(t('vault.twap'), sideWord(isBuy))
+                            : words(t('vault.limit'), sideWord(isBuy))}
                         </Text>
                       </View>
-                      <Text style={styles.orderSummary} numberOfLines={1}>
-                        <Amount v={fmtNum(sellNum)} size={15} /> {displaySymbol(sellSym)}
-                        {fromPosition ? ` (${t('vault.yielding')})` : ''} → <Amount v={fmtNum(buyNum)} size={15} /> {displaySymbol(buySym)}
-                      </Text>
+                      <View style={styles.summaryWrap}>
+                        <TokenIcon symbol={isBuy ? buySym : sellSym} size={18} />
+                        <Text style={styles.orderSummary} numberOfLines={1}>
+                          <Amount v={fmtShort(isBuy ? buyNum : sellNum)} size={15} /> {displaySymbol(isBuy ? buySym : sellSym)}
+                          {/* Only a sell can come out of a position, and only the leg on screen can
+                              say so — on a buy the paying leg is not shown at all. */}
+                          {!isBuy && fromPosition ? ` (${t('vault.yielding')})` : ''}
+                        </Text>
+                      </View>
                     </View>
                     {/* Open and Filled are what the tab already says, so an open order shows its Cancel
                         here instead; Expired stays as a pill (the Cancelled tab holds both cancelled and
@@ -1351,7 +1980,7 @@ export function TradeScreen() {
                   </Pressable>
 
                   {isExp ? (
-                    <View style={[styles.orderDetail, isLast && styles.noBottom]}>
+                    <View style={styles.orderDetail}>
                       <View style={styles.orderLine}>
                         <Text style={styles.orderLabel}>{t('vault.pay')}</Text>
                         <View style={styles.orderAmt}>
@@ -1391,27 +2020,31 @@ export function TradeScreen() {
                 const isBuy = soldIsStable; // spent a stablecoin to acquire the crypto leg
                 const px = soldIsStable ? m.sold.amount / m.bought.amount : m.bought.amount / m.sold.amount;
                 const pxSym = soldIsStable ? m.sold.symbol : m.bought.symbol;
-                const isExp = expanded === m.txHash;
+                const isExp = expanded.has(m.txHash);
                 return (
-                  <View key={m.txHash} style={styles.orderCard}>
-                    <Pressable style={[styles.orderHead, isLast && !isExp && styles.noBottom]} onPress={() => setExpanded(expanded === m.txHash ? null : m.txHash)}>
+                  <View key={m.txHash} style={[styles.orderCard, isLast && styles.lastOrder]}>
+                    <Pressable style={styles.orderHead} onPress={() => toggleExpanded(m.txHash)}>
                       <View style={styles.orderHeadLeft}>
                         <View style={[styles.kindBadge, {backgroundColor: isBuy ? c.successSoft : c.dangerSoft}]}>
                           <Text style={[styles.kindText, {color: isBuy ? c.success : c.danger}]}>
-                            {`${t('vault.market')} ${isBuy ? t('vault.buy') : t('vault.sell')}`}
+                            {words(t('vault.market'), sideWord(isBuy))}
                           </Text>
                         </View>
-                        <Text style={styles.orderSummary} numberOfLines={1}>
-                          <Amount v={fmtN(m.sold.amount)} /> {displaySymbol(m.sold.symbol)} → <Amount v={fmtN(m.bought.amount)} /> {displaySymbol(m.bought.symbol)}
-                        </Text>
+                        <View style={styles.summaryWrap}>
+                          <TokenIcon symbol={isBuy ? m.bought.symbol : m.sold.symbol} size={18} />
+                          <Text style={styles.orderSummary} numberOfLines={1}>
+                            <Amount v={fmtShort(isBuy ? m.bought.amount : m.sold.amount)} />{' '}
+                            {displaySymbol(isBuy ? m.bought.symbol : m.sold.symbol)}
+                          </Text>
+                        </View>
                       </View>
                     </Pressable>
                     {isExp ? (
-                      <View style={[styles.orderDetail, isLast && styles.noBottom]}>
+                      <View style={styles.orderDetail}>
                         <View style={styles.orderLine}>
                           <Text style={styles.orderLabel}>{t('mobile.trade.paid')}</Text>
                           <View style={styles.orderAmt}>
-                            <Text style={styles.orderAmtVal}><Amount v={fmtN(m.sold.amount)} size={15} /></Text>
+                            <Text style={styles.orderAmtVal}><Amount v={fmtShort(m.sold.amount)} size={15} /></Text>
                             <TokenIcon symbol={m.sold.symbol} size={16} />
                             <Text style={styles.orderAmtSym}>{displaySymbol(m.sold.symbol)}</Text>
                           </View>
@@ -1419,7 +2052,7 @@ export function TradeScreen() {
                         <View style={styles.orderLine}>
                           <Text style={styles.orderLabel}>{t('vault.received')}</Text>
                           <View style={styles.orderAmt}>
-                            <Text style={styles.orderAmtVal}><Amount v={fmtN(m.bought.amount)} size={15} /></Text>
+                            <Text style={styles.orderAmtVal}><Amount v={fmtShort(m.bought.amount)} size={15} /></Text>
                             <TokenIcon symbol={m.bought.symbol} size={16} />
                             <Text style={styles.orderAmtSym}>{displaySymbol(m.bought.symbol)}</Text>
                           </View>
@@ -1487,11 +2120,21 @@ export function TradeScreen() {
                   <Text style={[styles.segText, mode === m.key && styles.segTextOn]}>{m.label}</Text>
                 </Pressable>
               ))}
+              {/* Pushed to the right edge of the same line, exactly as the Earn card's header
+                  carries its protocol: the mark alone, tapped to name itself, and shown only
+                  while "DeFi details" is on. Same component, same switch, same rule. */}
+              {defiDetails && venues.length > 0 ? (
+                <View style={styles.segVenues}>
+                  {venues.map((name) => (
+                    <ProtocolChip key={name} name={name} size={16} />
+                  ))}
+                </View>
+              ) : null}
             </View>
 
             {/* Amount (base) */}
             <View style={styles.field}>
-              <Text style={styles.fieldLabel}>{sheetSide === 'buy' ? t('vault.you_pay') : t('vault.trade_amount')}</Text>
+              <Text style={styles.fieldLabel}>{shownSide === 'buy' ? t('vault.you_pay') : t('vault.trade_amount')}</Text>
               <View style={styles.fieldRight}>
                 <TextInput style={[styles.fieldInput, overBalance && styles.fieldInputOver]} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={c.subtext} value={amount} onChangeText={applyPay} {...amountCaret} />
                 {balKnown && Number(spendBal) > 0 ? (
@@ -1563,6 +2206,7 @@ export function TradeScreen() {
                       key={v.s}
                       style={[styles.vchip, validDays === '' && validSec === v.s && styles.vchipOn]}
                       onPress={() => {
+                        lastPreset.current = v.s;
                         setValidSec(v.s);
                         setValidDays('');
                       }}>
@@ -1579,6 +2223,7 @@ export function TradeScreen() {
                       placeholderTextColor={c.subtext}
                       value={validDays}
                       onChangeText={onValidDays}
+                      onBlur={onValidDaysBlur}
                       maxLength={3}
                     />
                     <Text style={[styles.vchipText, validDays !== '' && styles.vchipTextOn]}>{t(DAY)}</Text>
@@ -1589,7 +2234,15 @@ export function TradeScreen() {
 
             {status === 'error' && err ? <Text style={styles.err} selectable>{err}</Text> : null}
 
-            <ConfirmButton onPress={onSubmit} disabled={!canConfirm} color={sheetSide === 'buy' ? c.buy : c.sell} style={styles.submit} gas={feeGas} fee={feeApplies} />
+            <ConfirmButton
+              onPress={onSubmit}
+              disabled={!canConfirm}
+              color={shownSide === 'buy' ? c.buy : c.sell}
+              style={styles.submit}
+              gas={feeGas}
+              fee={feeApplies}
+              free={feeFree}
+            />
             </Pressable>
             </Animated.View>
           </KeyboardAvoidingView>
@@ -1660,9 +2313,29 @@ export function TradeScreen() {
         </Pressable>
 
       </Modal>
+      {/* Deleting a list is local and instant — no chain, no fee, no signature — so it gets its own
+          sheet rather than the Face ID one every on-chain action shares. What it still needs is a
+          moment to think: the bin sits in the bar, a thumb's width from the back button. */}
+      <Sheet
+        visible={confirmDelete}
+        title={t('mobile.home.delete_list')}
+        onClose={() => setConfirmDelete(false)}
+        height={300}>
+        <Text style={styles.deleteMsg}>{t('mobile.home.delete_list_msg', {name: listName})}</Text>
+        <Pressable
+          style={styles.deleteBtn}
+          onPress={() => {
+            setConfirmDelete(false);
+            if (watch.active) watch.remove(network, watch.active.id);
+            nav.goBack();
+          }}>
+          <Text style={styles.deleteBtnText}>{t('mobile.home.delete_list')}</Text>
+        </Pressable>
+      </Sheet>
+
       <PickerSheet
         visible={picker === 'base' || picker === 'quote'}
-        title={picker === 'source' ? t('vault.asset') : picker === 'quote' ? t('mobile.trade.quote') : t('vault.select_asset')}
+        title={picker === 'source' ? t('vault.asset') : picker === 'quote' ? t('mobile.trade.select_stablecoin') : t('vault.select_asset')}
         items={pickerItems}
         selected={picker === 'source' ? spendSource : picker === 'quote' ? `${quoteSym}:free` : `${baseSym}:free`}
         onSelect={(key) => {
@@ -1671,7 +2344,11 @@ export function TradeScreen() {
             return;
           }
           const [sym] = key.split(':');
-          if (picker === 'quote') setQuoteSym(sym);
+          if (picker === 'quote') {
+            quoteChosen.current = true;
+            setQuoteSym(sym);
+            pickedPairLeg();
+          }
           else selectAsset(sym);
         }}
         onClose={() => setPicker(null)}
@@ -1684,11 +2361,42 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   container: {flex: 1, backgroundColor: c.bg},
   // paddingBottom is set inline from the tab bar's height; see the ScrollView.
   body: {flexGrow: 1, padding: 16, gap: 14},
-  headerRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10},
+  /**
+   * Inset to the cards' own content, not to the page.
+   *
+   * The pair and the ⓘ sat at 16 — hard against the page edge, further out than the chart and the
+   * orders card they sit above, so the row looked like it belonged to the screen rather than to
+   * them. 20 on top of the body's 16 puts both ends at 36, which is where the Overview's "Watch
+   * list" and "hide 0" sit; the two screens now have the same margin for the same kind of row.
+   */
+  // The nav bar's own title metrics, so the field reads as a title and not as a form control.
+  navTitle: {color: c.text, fontSize: 17, fontWeight: '700'},
+  deleteMsg: {color: c.subtext, fontSize: 15, lineHeight: 21},
+  deleteBtn: {backgroundColor: c.danger, borderRadius: 26, height: 52, alignItems: 'center', justifyContent: 'center', marginTop: 16},
+  deleteBtnText: {color: '#FFFFFF', fontSize: 16, fontWeight: '600'},
+  navTitleInput: {color: c.text, fontSize: 17, fontWeight: '700', minWidth: 170, padding: 0},
+  /**
+   * Sized AND padded, because the bar anchors this view by its bottom edge.
+   *
+   * Two measurements now agree on that: a 32pt box sat well low, a 44pt box still sits low by
+   * about six. Both fit a container taller than the box — around 56 with the transparent header's
+   * insets — anchored at the bottom, which puts the glyph's centre at `56 − height/2` instead of
+   * at 28. Padding the bottom moves the centred glyph up by half the padding.
+   *
+   * 12 overshot — it went from six low to a touch high — so 6, which lifts it by three. Measured
+   * rather than modelled at this point: each report halves the interval.
+   */
+  navAction: {width: 44, height: 44, paddingBottom: 6, alignItems: 'center', justifyContent: 'center'},
+  headerRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingHorizontal: 20},
+  /**
+   * One step down from where it started: 28pt coins and 20pt tickers next to each other made the
+   * pair the loudest thing on a page whose point is the chart and the orders under it. The price in
+   * the chart's own header is 22pt, and the pair was competing with it rather than labelling it.
+   */
   pair: {flexDirection: 'row', alignItems: 'center', flexShrink: 1},
-  pairPart: {flexDirection: 'row', alignItems: 'center', gap: 6},
-  pairText: {color: c.text, fontSize: 20, fontWeight: '700'},
-  pairSlash: {color: c.subtext, fontSize: 20, fontWeight: '600', marginHorizontal: 7},
+  pairPart: {flexDirection: 'row', alignItems: 'center', gap: 5},
+  pairText: {color: c.text, fontSize: 17, fontWeight: '700'},
+  pairSlash: {color: c.subtext, fontSize: 17, fontWeight: '600', marginHorizontal: 6},
   card: {backgroundColor: c.card, borderRadius: 20, padding: 16, gap: 0},
   catWrap: {marginTop: -4, marginBottom: -4},
   // Categories and search share one line: the tabs take what is left, the button is fixed.
@@ -1730,9 +2438,37 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   orderHead: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, gap: 10, minHeight: 52},
   orderHeadLeft: {flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1},
   orderHeadRight: {flexDirection: 'row', alignItems: 'center', gap: 10},
+  /**
+   * One leg of the trade, not both.
+   *
+   * It used to read "100 USDC → 0.0312 ETH", which is the whole trade and does not fit: beside a
+   * kind badge and a Cancel it ran out of row and ellipsed, usually through the half anyone cared
+   * about. The badge already says which direction this is, so the line says what the order is FOR
+   * — what a buy buys, what a sell sells — and the other side is a tap away in the detail, where
+   * Pay and Receive still spell out both.
+   */
+  // The icon travels with the leg, so the row says WHICH asset before it says how much of it.
+  summaryWrap: {flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, minWidth: 0},
   orderSummary: {color: c.text, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums'], flexShrink: 1},
   orderDetail: {paddingBottom: 14, gap: 10},
-  noBottom: {paddingBottom: 0},
+  // The fraction sits where a status pill does on a plain order, and says the same kind of thing:
+  // where this order has got to. Tabular so 3/10 and 10/10 are the same width.
+  filledPill: {color: c.subtext, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums']},
+  // A part is a smaller thing than an order line, so it reads one step down from the rows above it.
+  partRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10},
+  partText: {color: c.text, fontSize: 13, fontVariant: ['tabular-nums'], flexShrink: 1},
+  partStatus: {color: c.subtext, fontSize: 12, fontWeight: '600'},
+  /**
+   * The last row gives its trailing space back, so the card's own padding frames the list.
+   *
+   * This used to be done by dropping `paddingBottom` INSIDE the row — off the head while collapsed,
+   * off the detail once open. Which padding was suppressed therefore changed on every tap, and
+   * since the head also carries `minHeight`, losing 14 of bottom padding re-centred its contents:
+   * the badge and the summary slid several points up as the row opened and back down as it closed.
+   * Pulled up from the wrapper instead, the padding inside a row never changes, so nothing moves
+   * but the detail appearing — and the gap under the list is the same open or shut.
+   */
+  lastOrder: {marginBottom: -14},
   kindBadge: {borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4},
   kindText: {fontSize: 12, fontWeight: '700'},
   orderLine: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
@@ -1742,6 +2478,8 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   orderAmtSym: {color: c.subtext, fontSize: 14, fontWeight: '600'},
   orderVal: {color: c.text, fontSize: 15, fontVariant: ['tabular-nums']},
   cancelInline: {color: c.danger, fontSize: 15, fontWeight: '600'},
+  // The detail rows put every value on the right; the control that acts on them belongs there too.
+  cancelRight: {alignSelf: 'flex-end'},
   bar: {flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 18, backgroundColor: c.bg},
   barBtn: {flex: 1, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center'},
   barText: {color: c.onAccent, fontSize: 17, fontWeight: '700'},
@@ -1758,6 +2496,10 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   sheetPrice: {color: c.subtext, fontSize: 12, marginTop: 3, fontVariant: ['tabular-nums']},
   sheetClose: {color: c.subtext, fontSize: 18},
   segTrack: {flexDirection: 'row', alignItems: 'center', gap: 20, marginBottom: 4},
+  // Pushed to the right edge by its own auto margin rather than a spacer, so the marks keep an
+  // 8pt gap of their own instead of the 20pt that separates the order types — a pair reads as one
+  // group, not as two more tabs.
+  segVenues: {flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 'auto'},
   segBtn: {paddingVertical: 6},
   segText: {color: c.subtext, fontSize: 15, fontWeight: '600'},
   segTextOn: {color: c.text, fontWeight: '700'},

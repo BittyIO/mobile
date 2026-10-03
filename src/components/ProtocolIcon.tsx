@@ -2,7 +2,17 @@ import React, {useEffect, useRef, useState} from 'react';
 import {Image, Pressable, StyleSheet, Text, View, type ImageSourcePropType} from 'react-native';
 import {useStyles, type Colors} from '@/theme';
 
-/** Protocol logos, the same files the web serves from /assets. Keyed by the adapter's display name. */
+/**
+ * Protocol logos, the same files the web serves from /assets. Keyed by the adapter's display name.
+ *
+ * Bundled, so this map can only describe the protocols that existed when the client was built —
+ * and an adapter is registered on the guard without a release. `uri` is the way out: pass the URL
+ * the catalog holds and it renders straight from the server, exactly as a token icon does. These
+ * stay as the offline fallback, behind which an unknown protocol still has the lettered disc.
+ *
+ * One file each, no light/dark pair: each is drawn to hold on both cards, and a mark arriving from
+ * the server gets no per-theme treatment either, so the catalog should serve ones that do.
+ */
 const LOGOS: Record<string, ImageSourcePropType> = {
   Sky: require('@/assets/protocols/sky.png'),
   Lido: require('@/assets/protocols/lido.png'),
@@ -12,8 +22,10 @@ const LOGOS: Record<string, ImageSourcePropType> = {
   'CoW Swap': require('@/assets/protocols/cow.png'),
 };
 
-export function ProtocolIcon({name, size = 18}: {name: string; size?: number}) {
+export function ProtocolIcon({name, size = 18, uri}: {name: string; size?: number; uri?: string}) {
   const styles = useStyles(makeStyles);
+  // The catalog's own URL wins when there is one; the bundled logo is the fallback, then a letter.
+  if (uri) return <Image source={{uri}} style={{width: size, height: size, borderRadius: size / 2}} />;
   const src = LOGOS[name];
   if (!src) {
     return (
@@ -29,14 +41,14 @@ export function ProtocolIcon({name, size = 18}: {name: string; size?: number}) {
  * A row of the protocols behind a section, for the right side of a section header: each logo followed
  * by its name, in the header's muted type.
  */
-export function ProtocolBadges({names, size = 18}: {names: string[]; size?: number}) {
+export function ProtocolBadges({names, size = 18, uris}: {names: string[]; size?: number; uris?: Record<string, string>}) {
   const styles = useStyles(makeStyles);
   if (names.length === 0) return null;
   return (
     <View style={styles.badges}>
       {names.map((n) => (
         <View key={n} style={styles.badge}>
-          <ProtocolIcon name={n} size={size} />
+          <ProtocolIcon name={n} size={size} uri={uris?.[n]} />
           <Text style={styles.badgeText}>{n}</Text>
         </View>
       ))}
@@ -73,7 +85,7 @@ const OPEN_MS = 3000;
  * in beside it as a caption, in the muted header type. It closes on a second tap, when another chip
  * opens, or on its own after a few seconds, so a row never stays cluttered.
  */
-export function ProtocolChip({name, size = 14}: {name: string; size?: number}) {
+export function ProtocolChip({name, size = 14, uri}: {name: string; size?: number; uri?: string}) {
   const styles = useStyles(makeStyles);
   const [open, setOpen] = useState(false);
   const me = useRef(Symbol(name)).current;
@@ -106,7 +118,7 @@ export function ProtocolChip({name, size = 14}: {name: string; size?: number}) {
   const label = protocolDisplayName(name);
   return (
     <Pressable onPress={toggle} hitSlop={8} accessibilityRole="button" accessibilityLabel={label} style={[styles.chip, {height: size + 4}, open && styles.chipOpen]}>
-      <ProtocolIcon name={name} size={size} />
+      <ProtocolIcon name={name} size={size} uri={uri} />
       {open ? (
         <View style={styles.slot}>
           <Text style={styles.chipText} numberOfLines={1}>

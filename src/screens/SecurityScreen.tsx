@@ -60,7 +60,7 @@ export function SecurityScreen() {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
-  const account = useWallet((s) => s.account);
+  const unlocked = useWallet((s) => s.unlocked);
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
@@ -238,7 +238,7 @@ export function SecurityScreen() {
         title={busy === 'wrap' ? t('mobile.vault.wrapping') : t('mobile.vault.wrap_idle_eth')}
         variant="secondary"
         loading={busy === 'wrap'}
-        disabled={!account || !vault || !stable || busy !== null}
+        disabled={!unlocked || !vault || !stable || busy !== null}
         onPress={() =>
           run('wrap', t('mobile.vault.wrap_idle_eth'), (acct) => wrapNative({account: acct, vault: vault!, network, stableCoin: stable!.address}))
         }

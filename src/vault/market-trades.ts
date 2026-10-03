@@ -5,7 +5,8 @@
  * counterparty, with different tokens each way, is what identifies the swap. This is how completed market
  * trades show up in the Trade screen's Finished tab.
  */
-import {apiUrl, type Network} from '@/core/chain';
+import {apiFetch, apiUrl, type Network} from '@/core/chain';
+import {GPV2_SETTLEMENT} from '@/core/cow';
 import type {TransferRow} from './transactions';
 
 // The vault implementation's immutable fee sink — a relayed op pays its gas here, never a user transfer.
@@ -123,6 +124,11 @@ export function marketTradesFromTransfers(legs: TransferRow[]): MarketTrade[] {
     const opLegs = group.filter((l) => !(l.direction === 'out' && lc(l.counterparty) === BITTY_FEE_COLLECTOR));
     const swapLegs = splitMarketSwap(opLegs);
     if (swapLegs.length === 0) continue;
+    // A swap settled by CoW is a limit or TWAP order being filled, and the orderbook already has
+    // it as an order. Recovering it here as well listed one filled order twice in Finished: once
+    // from CoW with its price and expiry, once from the chain as an anonymous swap. This feed is
+    // for the trades that leave NO order record, which is what "market" means here.
+    if (swapLegs.some((l) => lc(l.counterparty) === lc(GPV2_SETTLEMENT))) continue;
     const t = netTrade(swapLegs);
     if (!t) continue;
     const ts = swapLegs.find((l) => l.timestamp)?.timestamp;
@@ -134,7 +140,7 @@ export function marketTradesFromTransfers(legs: TransferRow[]): MarketTrade[] {
 /** Fetch the vault's completed market swaps from the transfer feed. Best-effort — [] on failure. */
 export async function fetchMarketTrades(vault: string, network: Network): Promise<MarketTrade[]> {
   try {
-    const res = await fetch(apiUrl(`/api/ethereum/vaults/transfers/${vault}`, network));
+    const res = await apiFetch(apiUrl(`/api/ethereum/vaults/transfers/${vault}`, network));
     if (!res.ok) return [];
     const json = (await res.json()) as {data?: TransferRow[]};
     return marketTradesFromTransfers(json.data ?? []);

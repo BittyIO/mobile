@@ -1,9 +1,25 @@
 import React from 'react';
 import {Image, StyleSheet, Text, View} from 'react-native';
-import {useIsDark, useStyles} from '@/theme';
+import {useStyles} from '@/theme';
 import {displaySymbol} from '@/core/format';
 
-// Static requires (Metro can't resolve dynamic paths). Icons vendored from the web repo (public/assets).
+/**
+ * The bundled icons: ONE file per token, no per-theme variants.
+ *
+ * Every asset listed here ships with the binary, so this map can only ever describe the assets
+ * that existed when the client was built — and new ones are launched without a release. The real
+ * source is the catalog's `icon` URL, which `uri` below renders straight from the server; these
+ * are the offline fallback and the head start on a cold launch.
+ *
+ * That is also why there is no light/dark pair for any of them. A second file per token doubles
+ * what a release has to carry to say one thing, and says nothing at all about an asset added after
+ * it. Each icon here is instead drawn so one file works on both cards: a pale disc takes its own
+ * mark's colour (UNI, cbBTC, WBTC), and a brand-black disc is lifted to #444446, which steps off
+ * #1C1C1E and still reads as black on white (HOOD, PLTR). A server-sent icon gets neither
+ * treatment, so the catalog should serve marks that already hold on both grounds.
+ *
+ * Static requires, because Metro cannot resolve a dynamic path.
+ */
 const ICONS: Record<string, number> = {
   ETH: require('@/assets/tokens/eth.png'),
   WBTC: require('@/assets/tokens/wbtc.png'),
@@ -46,22 +62,15 @@ const ICONS: Record<string, number> = {
   BMNR: require('@/assets/tokens/stocks/bmnr.png'),
   COST: require('@/assets/tokens/stocks/cost.png'),
 };
-// Marks whose brand version is a dark disc, which sinks into a dark card: the dark theme gets the
-// same mark with its two colours swapped (light disc, dark letter).
-const ICONS_DARK: Record<string, number> = {
-  USDG: require('@/assets/tokens/usdg-dark.png'),
-};
-
 /** Round token icon by symbol, with a lettered fallback for anything unmapped. */
 export function TokenIcon({symbol, size = 28, uri}: {symbol: string; size?: number; uri?: string}) {
   const styles = useStyles(makeStyles);
-  const dark = useIsDark();
   const dim = {width: size, height: size, borderRadius: size / 2};
   // DB-managed icon URL wins when present (see the asset catalog); bundled by-symbol icons are the
   // offline fallback, then a lettered badge for anything unmapped.
   if (uri) return <Image source={{uri}} style={dim} resizeMode="contain" />;
   // WETH shows as ETH (see displaySymbol): same icon.
-  const src = (dark ? ICONS_DARK[symbol] : undefined) ?? ICONS[symbol] ?? (symbol.toUpperCase() === 'ETH' || symbol.toUpperCase() === 'WETH' ? ICONS.ETH : undefined);
+  const src = ICONS[symbol] ?? (symbol.toUpperCase() === 'ETH' || symbol.toUpperCase() === 'WETH' ? ICONS.ETH : undefined);
   if (src) return <Image source={src} style={dim} resizeMode="contain" />;
   // No logo asset: draw a colored badge with the ticker, so tokens without an icon (e.g. the Robinhood
   // stocks SPY / GLD / HIMS) read clearly instead of fading into the card.

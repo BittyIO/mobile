@@ -1,17 +1,23 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, Pressable, StyleSheet, Text, View} from 'react-native';
 import Svg, {Defs, LinearGradient, Path, Stop} from 'react-native-svg';
-import {fmtUsd, COINGECKO_ID as SHARED_ID} from '@/core/prices';
+import {fmtUsd} from '@/core/prices';
+import {API_BASE, apiFetch} from '@/core/chain';
+import {useNetwork} from '@/core/network-store';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 
-// Base symbol → CoinGecko id (for USD price history): the shared price map, with the wrapped BTC
-// tokens charted as themselves rather than as bitcoin.
-const COINGECKO_ID: Record<string, string> = {
-  ...SHARED_ID,
-  WBTC: 'wrapped-bitcoin',
-  cbBTC: 'coinbase-wrapped-btc',
-};
+/**
+ * Cached history, keyed by symbol and range.
+ *
+ * The chart used to call CoinGecko from the device, once per mount and again on every range the
+ * user tried. Nothing was cached, so flipping between 1W and 1M and back cost two more calls, and
+ * the keyless per-IP allowance ran out within a session — after which the response was an error
+ * object that parsed as JSON with no `prices` in it, and the chart showed a bare dash. It is one
+ * request per symbol per range per TTL now, answered by our own server.
+ */
+const TTL_MS: Record<number, number> = {1: 5 * 60_000, 7: 30 * 60_000, 30: 60 * 60_000, 365: 6 * 60 * 60_000};
+const cache = new Map<string, {pts: [number, number][] | null; at: number}>();
 
 // Range pills; `label` is the web translation key for the period name.
 const RANGES: {label: string; days: number}[] = [
@@ -28,36 +34,50 @@ export function PriceChart({symbol}: {symbol: string}) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
+  const network = useNetwork((st) => st.network);
   const [rangeIdx, setRangeIdx] = useState(1); // 1W
   const [pts, setPts] = useState<[number, number][] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
 
-  const id = COINGECKO_ID[symbol];
-
   useEffect(() => {
-    if (!id) {
-      setPts(null);
-      setError(true);
+    const days = RANGES[rangeIdx].days;
+    const key = `${network}:${symbol}:${days}`;
+    const hit = cache.get(key);
+    if (hit && Date.now() - hit.at < (TTL_MS[days] ?? 60 * 60_000)) {
+      setPts(hit.pts);
+      setError(hit.pts == null);
+      setLoading(false);
       return;
     }
     let live = true;
     setLoading(true);
     setError(false);
-    const days = RANGES[rangeIdx].days;
-    fetch(`https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}`)
-      .then((r) => r.json())
-      .then((j) => {
-        if (!live) return;
-        const arr = Array.isArray(j?.prices) ? (j.prices as [number, number][]) : [];
-        setPts(arr.length >= 2 ? arr : null);
+    apiFetch(`${API_BASE}/api/prices/chart?network=${network}&symbol=${encodeURIComponent(symbol)}&days=${days}`)
+      .then(async (r) => {
+        // Checked, not assumed. A refusal still returns a JSON body, so parsing it and looking
+        // for points reported "no data" for what was really "ask again later".
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
       })
-      .catch(() => live && setError(true))
+      .then((j) => {
+        const arr = Array.isArray(j?.points) ? (j.points as [number, number][]) : [];
+        const pts = arr.length >= 2 ? arr : null;
+        cache.set(key, {pts, at: Date.now()});
+        if (!live) return;
+        setPts(pts);
+        setError(pts == null);
+      })
+      .catch(() => {
+        if (!live) return;
+        setPts(null);
+        setError(true);
+      })
       .finally(() => live && setLoading(false));
     return () => {
       live = false;
     };
-  }, [id, rangeIdx]);
+  }, [network, symbol, rangeIdx]);
 
   const g = useMemo(() => {
     if (!pts) return null;

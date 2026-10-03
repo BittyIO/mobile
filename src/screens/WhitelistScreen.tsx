@@ -1,7 +1,8 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import {isAddress, type Address} from 'viem';
+import type {Address} from 'viem';
+import {isPayableAddress, isTokenAddress} from '@/core/asset-catalog';
 import {ConfirmButton} from '@/components/Button';
 import {useConfirmAction} from '@/components/ConfirmAction';
 import {shortAddress} from '@/core/format';
@@ -31,7 +32,7 @@ export function WhitelistScreen() {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
-  const account = useWallet((s) => s.account);
+  const unlocked = useWallet((s) => s.unlocked);
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
@@ -66,7 +67,7 @@ export function WhitelistScreen() {
   };
 
   const onAdd = async () => {
-    if (!vault || !stable || !isAddress(to)) return;
+    if (!vault || !stable || !isPayableAddress(to, network)) return;
     setBusy(true);
     const tx = showTx(t('vault.add_recipient'), network);
     try {
@@ -155,7 +156,7 @@ export function WhitelistScreen() {
 
         <Text style={styles.label}>{t('vault.add_recipient')}</Text>
         <TextInput
-          style={[styles.input, to.length > 0 && !isAddress(to) && styles.inputErr]}
+          style={[styles.input, to.length > 0 && !isPayableAddress(to, network) && styles.inputErr]}
           placeholder={t('mobile.vault.enter_address')}
           placeholderTextColor={c.subtext}
           autoCapitalize="none"
@@ -167,7 +168,8 @@ export function WhitelistScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-      <ConfirmButton onPress={onAdd} disabled={!account || !vault || !stable || !isAddress(to) || busy} />
+      {isTokenAddress(to, network) ? <Text style={styles.badAddr}>{t('mobile.payments.token_address_warning')}</Text> : null}
+      <ConfirmButton onPress={onAdd} disabled={!unlocked || !vault || !stable || !isPayableAddress(to, network) || busy} />
       {sheet}
       </View>
     </SafeAreaView>
@@ -201,4 +203,5 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   },
   inputErr: {borderColor: c.danger},
   hint: {color: c.subtext, fontSize: 13, marginTop: 4},
+  badAddr: {color: c.danger, fontSize: 13, lineHeight: 18},
 });

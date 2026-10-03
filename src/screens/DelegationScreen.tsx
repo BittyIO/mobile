@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
-import {isAddress, type Address} from 'viem';
+import type {Address} from 'viem';
+import {isPayableAddress, isTokenAddress} from '@/core/asset-catalog';
 import {ConfirmButton} from '@/components/Button';
 import {useConfirmAction} from '@/components/ConfirmAction';
 import {relayGasFor} from '@/vault/fee-quote';
@@ -26,7 +27,7 @@ export function DelegationScreen() {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
-  const account = useWallet((s) => s.account);
+  const unlocked = useWallet((s) => s.unlocked);
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
@@ -73,7 +74,7 @@ export function DelegationScreen() {
   };
 
   const onAddOp = () => {
-    if (!isAddress(op)) return;
+    if (!isPayableAddress(op, network)) return;
     run('add-op', t('vault.add_payout_operator'), (acct) =>
       updateOperator({account: acct, vault: vault!, network, operator: op as Address, add: true, stableCoin: stable!.address}),
     ).then((ok) => ok && setOp(''));
@@ -118,7 +119,7 @@ export function DelegationScreen() {
 
       <Text style={styles.label}>{t('vault.add_payout_operator')}</Text>
       <TextInput
-        style={[styles.input, op.length > 0 && !isAddress(op) && styles.inputErr]}
+        style={[styles.input, op.length > 0 && !isPayableAddress(op, network) && styles.inputErr]}
         placeholder={t('mobile.vault.enter_address')}
         placeholderTextColor={c.subtext}
         autoCapitalize="none"
@@ -126,7 +127,8 @@ export function DelegationScreen() {
         value={op}
         onChangeText={setOp}
       />
-      <ConfirmButton onPress={onAddOp} disabled={!account || !vault || !stable || !isAddress(op) || busy !== null} />
+      {isTokenAddress(op, network) ? <Text style={styles.badAddr}>{t('mobile.payments.token_address_warning')}</Text> : null}
+      <ConfirmButton onPress={onAddOp} disabled={!unlocked || !vault || !stable || !isPayableAddress(op, network) || busy !== null} />
       {sheet}
     </ScrollView>
   );
@@ -136,6 +138,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   container: {flex: 1, backgroundColor: c.bg},
   body: {flexGrow: 1, padding: 20, paddingBottom: 24, gap: 10},
   hint: {color: c.subtext, fontSize: 13, lineHeight: 18},
+  badAddr: {color: c.danger, fontSize: 13, lineHeight: 18},
   label: {color: c.subtext, fontSize: 13, fontWeight: '600', marginTop: 8},
   none: {color: c.subtext, fontSize: 14, fontStyle: 'italic', marginVertical: 4},
   fine: {color: c.subtext, fontSize: 11, marginTop: 2},

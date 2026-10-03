@@ -16,12 +16,14 @@ import {useVaultLp} from '@/vault/useVaultLp';
 import {useFlows} from '@/vault/useFlows';
 import {earnedRaw} from '@/vault/flows';
 import {usePrices} from '@/vault/usePrices';
+import {useMarketStats, fmtCap, fmtChange, type MarketStat, type MarketStatMap} from '@/vault/useMarketStats';
 import {usdValue, fmtUsd} from '@/core/prices';
 import {fmtNum, displaySymbol} from '@/core/format';
 
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {assetCategory, type AssetCategory} from '@/core/assets';
-import {useAssetOrder, useFavoriteSet} from '@/core/favorites-store';
+import {isAssetsList, useFavorites, useWatchLists, watchListLabel, watchListNumber} from '@/core/favorites-store';
+import {getFlag, setFlag, HIDE_BALANCES, HIDE_ZERO_BALANCES} from '@/core/prefs';
 import {balanceOfSymbol} from '@/vault/read';
 import {formatUnits} from 'viem';
 import {useColors, useStyles, type Colors} from '@/theme';
@@ -77,6 +79,16 @@ function ActionIcon({name, color, size = 22}: {name: 'send' | 'receive' | 'histo
 
 const fmt = fmtNum;
 
+/**
+ * What the eye leaves behind.
+ *
+ * Dots only — no currency sign in front of the total, because "$••••••" still tells a shoulder
+ * that the vault is denominated in dollars and roughly how many digits it holds. A fixed-width run
+ * of dots says nothing about either.
+ */
+const MASK = '••••';
+const MASK_TOTAL = '••••••';
+
 type Row = {
   symbol: string;
   icon?: string;
@@ -99,13 +111,22 @@ function AssetList({
   rows,
   loading,
   error,
+  hidden,
   onTrade,
   onReorder,
   onDragging,
+  market,
 }: {
   rows: Row[];
   loading: boolean;
   error: string | null;
+  /** The eye above the total is off: every figure that is the user's own is masked. */
+  hidden: boolean;
+  /**
+   * Price, day change and market cap by symbol — given only for a list of the user's own, which
+   * is drawn as a market list rather than a holdings one. Null on "Assets".
+   */
+  market: MarketStatMap | null;
   onTrade: (row: Row) => (() => void) | null;
   /** The new order, by symbol, once a drag settles. */
   onReorder: (symbols: string[]) => void;
@@ -274,7 +295,15 @@ function AssetList({
                 // view joined the responder negotiation after the touch had already started, and
                 // the move was never offered to it — which is why nothing moved.
                 {...responder.panHandlers}>
-                <AssetRow row={r} first={i === 0} onTrade={onTrade(r)} onHold={() => begin(i)} />
+                <AssetRow
+                  row={r}
+                  first={i === 0}
+                  hidden={hidden}
+                  onTrade={onTrade(r)}
+                  onHold={() => begin(i)}
+                  markets={market != null}
+                  stat={market?.get(r.symbol)}
+                />
               </Animated.View>
             );
           })}
@@ -296,21 +325,64 @@ function AssetList({
 function AssetRow({
   row,
   first,
+  hidden,
   onTrade,
   onHold,
+  markets,
+  stat,
 }: {
   row: Row;
   first: boolean;
+  /** Mask the balance and its value. The unit price under the ticker is market data and stays. */
+  hidden: boolean;
   /** Null when this asset has nothing to trade against, which leaves the name inert. */
   onTrade: (() => void) | null;
   /** A long press picks the row up so it can be dragged to a new place in the list. */
   onHold: () => void;
+  /**
+   * Show what the asset is doing rather than what is held of it.
+   *
+   * Off on "Assets", where the question is what you hold. On a list of your own it is the other
+   * way round: those are assets you are WATCHING, most of them at a balance of zero, so a column
+   * of dashes and another of "$0.00" said nothing at all. Here the row carries price, the day's
+   * move and the market cap instead, and no balance at all.
+   */
+  markets: boolean;
+  /** This asset's figures, absent while they load and for anything the catalog has no id for. */
+  stat: MarketStat | undefined;
 }) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
   const [open, setOpen] = useState(false);
   const splittable = row.legs.length > 0 && row.total > 0;
+
+  if (markets) {
+    const change = fmtChange(stat?.change24h);
+    return (
+      <View style={!first && styles.rowSeparator}>
+        {/* No breakdown to open and no amounts to mask: every figure here is market data, so the
+            whole row is one target and the eye leaves it alone. */}
+        <Pressable style={styles.rowInner} onPress={() => onTrade?.()} onLongPress={onHold} delayLongPress={220}>
+          <View style={styles.assetCell}>
+            <TokenIcon symbol={row.symbol} uri={row.icon} size={30} />
+            <View style={styles.assetText}>
+              <Text style={styles.sym}>{displaySymbol(row.symbol)}</Text>
+            </View>
+          </View>
+          <View style={styles.priceCol}>
+            <Text style={styles.amt}>{row.price != null ? fmtUsd(row.price) : '—'}</Text>
+            {change ? (
+              <Text style={[styles.change, {color: (stat?.change24h ?? 0) >= 0 ? c.success : c.danger}]}>{change}</Text>
+            ) : null}
+          </View>
+          <View style={styles.capCol}>
+            <Text style={styles.cap}>{fmtCap(stat?.marketCap)}</Text>
+          </View>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <View style={!first && styles.rowSeparator}>
@@ -337,7 +409,9 @@ function AssetRow({
           disabled={!splittable}
           onPress={() => setOpen((o) => !o)}>
           <Text style={styles.amt}>
-            {row.earned > 0 ? (
+            {hidden ? (
+              MASK
+            ) : row.earned > 0 ? (
               <>
                 <Amount v={fmt(row.total - row.earned)} size={15} weight="600" />{' '}
                 <Text style={styles.amtEarned}>+ <Amount v={fmt(row.earned)} size={13} color={c.success} weight="600" /></Text>
@@ -346,7 +420,7 @@ function AssetRow({
               <Amount v={fmt(row.total)} size={15} weight="600" />
             )}
           </Text>
-          {row.usd != null ? <Text style={styles.sub}>{fmtUsd(row.usd)}</Text> : null}
+          {hidden ? <Text style={styles.sub}>{MASK}</Text> : row.usd != null ? <Text style={styles.sub}>{fmtUsd(row.usd)}</Text> : null}
         </Pressable>
       </Pressable>
 
@@ -355,7 +429,7 @@ function AssetRow({
           {/* Balance first: it is the part that can be spent without unwinding anything. Which
               protocol holds the rest is a detail for the Earn tab; here the question is only how
               much of the total is free and how much is working. */}
-          <Leg label={t('vault.balance')} amount={row.free} symbol={row.symbol} />
+          <Leg label={t('vault.balance')} amount={row.free} symbol={row.symbol} hidden={hidden} />
           {row.legs.map((leg, i) => (
             <Leg
               key={`${leg.protocol}-${leg.kind}-${i}`}
@@ -363,6 +437,7 @@ function AssetRow({
               amount={leg.amount}
               earned={leg.earned}
               symbol={row.symbol}
+              hidden={hidden}
             />
           ))}
         </View>
@@ -377,7 +452,7 @@ function AssetRow({
  * A position splits into what was put in and what it has made, the same way the row's total does
  * above it, so the green figure answers "which of these is actually earning, and how much".
  */
-function Leg({label, amount, earned = 0, symbol}: {label: string; amount: number; earned?: number; symbol: string}) {
+function Leg({label, amount, earned = 0, symbol, hidden}: {label: string; amount: number; earned?: number; symbol: string; hidden: boolean}) {
   const styles = useStyles(makeStyles);
   const c = useColors();
   return (
@@ -386,7 +461,9 @@ function Leg({label, amount, earned = 0, symbol}: {label: string; amount: number
         {label}
       </Text>
       <Text style={styles.legAmt}>
-        {earned > 0 ? (
+        {hidden ? (
+          <>{MASK} </>
+        ) : earned > 0 ? (
           <>
             <Amount v={fmt(amount - earned)} size={13} weight="600" />{' '}
             <Text style={styles.legEarned}>
@@ -421,7 +498,13 @@ export function VaultHomeScreen() {
   // The hooks load once on mount; after that the data refreshes only on pull-to-refresh. Refetching on
   // every focus flashed the loading state each time the tab was opened.
 
-  const [hidden, setHidden] = useState(false);
+  // Survives a relaunch, the way the zero-balance filter below does: see HIDE_BALANCES.
+  const [hidden, setHidden] = useState(() => getFlag(HIDE_BALANCES));
+  const toggleHidden = () => {
+    const next = !hidden;
+    setFlag(HIDE_BALANCES, next);
+    setHidden(next);
+  };
   const [receiveOpen, setReceiveOpen] = useState(false);
 
   const catalog = useAssetCatalog(network);
@@ -430,6 +513,14 @@ export function VaultHomeScreen() {
   const catalogSymbols = useMemo(() => catalog.map((a) => a.symbol), [catalog]);
   const [priceNonce, setPriceNonce] = useState(0);
   const prices = usePrices(network, priceNonce, catalogSymbols);
+  /**
+   * Day change and market cap, for the watch lists.
+   *
+   * Asked for the whole catalog rather than per list, because the pager renders every list at
+   * once and swiping between them must not each time start a request to a metered third party.
+   * One answer covers all of them, and it refreshes on the same pull the prices do.
+   */
+  const marketStats = useMarketStats(network, catalogSymbols, priceNonce);
   const rows = useMemo<Row[]>(() => {
     // Stablecoins lead the list, then the rest in catalog order.
     const assets = [...catalog].sort((x, y) => Number(y.kind === 'stable') - Number(x.kind === 'stable'));
@@ -507,15 +598,89 @@ export function VaultHomeScreen() {
    * expected to hold. A balance shows whether or not it is starred — money must not be able to
    * disappear from this screen because of a display preference.
    */
-  const favorites = useFavoriteSet(network);
-  const {sort: sortByOrder, save: saveOrder, key: orderKey} = useAssetOrder(network);
+  /**
+   * Every watch list on this network, and the orders for all of them.
+   *
+   * The pager renders one page per list, so the per-list hooks (`useAssetOrder`, `useFavoriteSet`)
+   * cannot be used here: a hook called once per list changes its call count the moment a list is
+   * added or deleted, which React will not have. Reading the whole `order` map once and building a
+   * sorter per list from it keeps the hook count fixed whatever the user does.
+   */
+  const watch = useWatchLists(network);
+  const orders = useFavorites((s) => s.order);
+  const saveOrder = useFavorites((s) => s.setOrder);
+  /** Where this list's rows were dragged to, by symbol. Empty until the user has moved one. */
+  const rankFor = (listId: string) =>
+    new Map((orders[`${network}:${listId}`] ?? []).map((sym, i) => [sym, i]));
+  const sortFor = (listId: string) => {
+    const rank = rankFor(listId);
+    return <T extends {symbol: string}>(items: T[]): T[] =>
+      [...items].sort((a, b) => (rank.get(a.symbol) ?? Infinity) - (rank.get(b.symbol) ?? Infinity));
+  };
   // A row held for dragging must not also scroll the page under it.
   const [dragging, setDragging] = useState(false);
-  const shown = useMemo(
-    () => sortByOrder(rows.filter((r) => favorites.has(r.symbol) || r.total > 0)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, network, orderKey, [...favorites].sort().join(',')],
-  );
+  /**
+   * Hide the assets holding nothing.
+   *
+   * The list is the watch list plus whatever the vault holds, so a starred asset sits at zero
+   * waiting to be funded — useful when setting up, noise once there are a dozen of them. Off by
+   * default, and it never hides a balance: only rows that are empty anyway.
+   */
+  const [hideZero, setHideZero] = useState(() => getFlag(HIDE_ZERO_BALANCES));
+  const toggleHideZero = () => {
+    const next = !hideZero;
+    setFlag(HIDE_ZERO_BALANCES, next);
+    setHideZero(next);
+  };
+  /**
+   * The rows, funded ones first.
+   *
+   * What the vault actually holds is what the screen is for; a starred asset sitting at zero is a
+   * placeholder waiting to be funded, and a dozen of them pushed the real balances below the fold.
+   * The saved drag order still decides the arrangement WITHIN each group, so an order the user set
+   * is kept, not overridden — a row that is dragged while empty simply takes that place once it
+   * has a balance. With "hide 0" on every row is funded and the split is a no-op.
+   */
+  /**
+   * The rows one list shows, funded ones first.
+   *
+   * A user's own list is EXACTLY what was starred onto it and nothing else — that is what makes it
+   * worth creating. "Assets", the first one, is the exception and shows everything the vault holds
+   * as well, so a balance can never go missing because of how someone arranged their lists.
+   */
+  const rowsForList = (listId: string): Row[] => {
+    const on = new Set(watch.lists.find((l) => l.id === listId)?.symbols ?? []);
+    const held = isAssetsList(listId);
+    // Only Assets hides its empties. A list of your own IS the rows you starred onto it, so
+    // dropping the ones at zero would hide the very thing you put there — usually an asset you do
+    // not hold yet and are watching because of it.
+    const hiding = held && hideZero;
+    const visible = rows.filter(
+      (r) => (on.has(r.symbol) || (held && r.total > 0)) && (!hiding || r.total > 0),
+    );
+    const ordered = sortFor(listId)(visible);
+    // Funded first on "Assets" only. A list of the user's own no longer shows a balance at all —
+    // it shows price, the day and the market cap — so splitting it by one would be sorting on a
+    // column that is not there, and it would quietly override the order they dragged the rows into.
+    if (!held) return ordered;
+    /**
+     * A row the user has placed stays where they put it; everything else sorts itself.
+     *
+     * The two default arrangements — stablecoins first from the catalog, then funded above empty —
+     * are guesses at what someone wants to see at the top. A drag is not a guess, so it outranks
+     * both: dragging a stock above USDC used to hold for a moment and then snap back, because the
+     * funded/empty split ran afterwards and rebuilt the list from the balances.
+     *
+     * Only rows that were never placed keep the defaults. That is what a list looks like before
+     * the first drag — unchanged — and afterwards it is what happens to an asset that arrives in
+     * the vault later: it lands among the funded rows at the bottom rather than at a position
+     * nobody chose for it.
+     */
+    const rank = rankFor(listId);
+    const placed = ordered.filter((r) => rank.has(r.symbol));
+    const rest = ordered.filter((r) => !rank.has(r.symbol));
+    return [...placed, ...rest.filter((r) => r.total > 0), ...rest.filter((r) => r.total <= 0)];
+  };
 
   // Total portfolio value: every asset (free + yielding + lending) plus both sides of each LP position.
   const totalUsd = useMemo(() => {
@@ -547,6 +712,9 @@ export function VaultHomeScreen() {
   const [pulled, setPulled] = useState(false);
   const refreshing = pulled && anyLoading;
   const onRefresh = useCallback(() => {
+    // Same guard as the Earn tab: with no vault the hooks start no load, `anyLoading` never moves,
+    // and the flag would stay armed to put a spinner on whatever load came next.
+    if (!bal.vault) return;
     setPulled(true);
     bal.refresh();
     pos.refresh();
@@ -558,6 +726,74 @@ export function VaultHomeScreen() {
   React.useEffect(() => {
     if (!anyLoading) setPulled(false);
   }, [anyLoading]);
+
+  /**
+   * One page per watch list, swiped sideways — the same pager the Market directory uses for its
+   * categories, so the gesture means the same thing in both places.
+   *
+   * The pager takes the TALLEST page and an animated negative bottom margin pulls whatever follows
+   * back up to the page actually showing; without it every list would be as tall as the longest.
+   */
+  const pagerRef = React.useRef<ScrollView>(null);
+  /**
+   * The tab row follows the pager.
+   *
+   * With more lists than fit the line, swiping to one off the right-hand edge left the row showing
+   * the lists you had moved away from and no sign of the one you were looking at. Each chip
+   * reports its x and width as it lays out, and the row scrolls just far enough to bring the
+   * active one fully inside — only when it is actually out of view, so a tap on a visible tab does
+   * not drag the row around for no reason.
+   */
+  const tabsRef = React.useRef<ScrollView>(null);
+  const tabBox = React.useRef<Record<string, {x: number; w: number}>>({});
+  const tabViewW = React.useRef(0);
+  const tabScrollX = React.useRef(0);
+  const revealTab = (id: string) => {
+    const box = tabBox.current[id];
+    const view = tabViewW.current;
+    if (!box || view <= 0) return;
+    const left = tabScrollX.current;
+    const right = left + view;
+    // 12 of breathing room, so the chip never ends up flush against the edge it was clipped by.
+    if (box.x < left) tabsRef.current?.scrollTo({x: Math.max(0, box.x - 12), animated: true});
+    else if (box.x + box.w > right) tabsRef.current?.scrollTo({x: box.x + box.w - view + 12, animated: true});
+  };
+  const pagerX = React.useRef(new Animated.Value(0)).current;
+  const [pageW, setPageW] = useState(0);
+  const [pageH, setPageH] = useState<Record<string, number>>({});
+  const pages = watch.lists;
+  const activeIdx = Math.max(0, pages.findIndex((l) => l.id === watch.activeId));
+  const pickList = (id: string) => {
+    watch.select(network, id);
+    const i = pages.findIndex((l) => l.id === id);
+    if (i >= 0 && pageW > 0) pagerRef.current?.scrollTo({x: i * pageW, animated: true});
+    revealTab(id);
+  };
+  const onPagerSettle = (x: number) => {
+    if (pageW <= 0) return;
+    const l = pages[Math.max(0, Math.min(pages.length - 1, Math.round(x / pageW)))];
+    if (!l) return;
+    if (l.id !== watch.activeId) watch.select(network, l.id);
+    revealTab(l.id);
+  };
+  // A list added or removed while the pager is mounted leaves it parked on a page that has moved.
+  React.useEffect(() => {
+    if (pageW > 0) pagerRef.current?.scrollTo({x: activeIdx * pageW, animated: false});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pages.length, pageW]);
+  const knownH = pages.map((l) => pageH[l.id]);
+  const allKnown = pages.length > 1 && pageW > 0 && knownH.every((h) => h != null);
+  const maxH = allKnown ? Math.max(...(knownH as number[])) : 0;
+  const pagerStyle = allKnown
+    ? {
+        height: maxH,
+        marginBottom: pagerX.interpolate({
+          inputRange: pages.map((_, i) => i * pageW),
+          outputRange: (knownH as number[]).map((h) => h - maxH),
+          extrapolate: 'clamp' as const,
+        }),
+      }
+    : undefined;
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical
@@ -575,11 +811,11 @@ export function VaultHomeScreen() {
       <View style={styles.heroCard}>
         <View style={styles.totalHeader}>
           <Text style={styles.totalLabel}>{t('vault.total_value_label')}</Text>
-          <Pressable onPress={() => setHidden((v) => !v)} hitSlop={10}>
+          <Pressable onPress={toggleHidden} hitSlop={10}>
             <EyeIcon off={hidden} color={c.subtext} />
           </Pressable>
         </View>
-        <Text style={styles.totalValue}>{hidden ? '$••••••' : totalUsd != null ? fmtUsd(totalUsd) : '—'}</Text>
+        <Text style={styles.totalValue}>{hidden ? MASK_TOTAL : totalUsd != null ? fmtUsd(totalUsd) : '—'}</Text>
         <View style={styles.actions}>
           {([
             {label: t('vault.send'), icon: 'send', onPress: () => nav.navigate('Payments')},
@@ -596,14 +832,118 @@ export function VaultHomeScreen() {
         </View>
       </View>
 
-      <AssetList
-        rows={shown}
-        loading={bal.loading && !bal.balances}
-        error={bal.error}
-        onTrade={tradeFor}
-        onReorder={saveOrder}
-        onDragging={setDragging}
-      />
+      {/**
+        * The lists, scrolling sideways, then "hide 0" pinned at the end.
+        *
+        * A tap selects, a tap on the one already in front opens the directory to edit what is on
+        * it, and the + makes another. The row scrolls on its own so a dozen lists do not squeeze
+        * the control beside them; `hide 0` sits outside the scroller because it is about the rows
+        * below, not about which list is in front.
+        */}
+      <View style={styles.listHead}>
+        <ScrollView
+          ref={tabsRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.tabScroll}
+          contentContainerStyle={styles.tabRow}
+          keyboardShouldPersistTaps="handled"
+          scrollEventThrottle={16}
+          onLayout={(e) => (tabViewW.current = e.nativeEvent.layout.width)}
+          onScroll={(e) => (tabScrollX.current = e.nativeEvent.contentOffset.x)}>
+          {watch.lists.map((l) => {
+            const on = l.id === watch.activeId;
+            return (
+              <Pressable
+                key={l.id}
+                hitSlop={8}
+                accessibilityRole="button"
+                onLayout={(e) => {
+                  const {x, width} = e.nativeEvent.layout;
+                  tabBox.current[l.id] = {x, w: width};
+                }}
+                onPress={() => (on ? nav.navigate('Watchlist') : pickList(l.id))}>
+                <Text style={[styles.listTitle, on && styles.listTitleOn]}>
+                  {watchListLabel(
+                    l,
+                    isAssetsList(l.id)
+                      ? t('mobile.home.all_assets')
+                      : t('mobile.home.watch_list_n', {n: watchListNumber(watch.lists, l.id)}),
+                  )}
+                </Text>
+              </Pressable>
+            );
+          })}
+          {/* Straight to the list, unnamed. Asking for a name in a sheet first made the first
+              thing a new list demanded be the least interesting thing about it — the page it opens
+              has the name as a field at the top and the assets underneath, which is where both
+              questions actually get answered. */}
+          <Pressable
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={t('mobile.home.new_list')}
+            onPress={() => {
+              watch.add(network, '');
+              nav.navigate('Watchlist');
+            }}>
+            <Text style={styles.listAdd}>＋</Text>
+          </Pressable>
+        </ScrollView>
+        {/* The label is the ACTION, not the state: "Hide 0" while the empty rows are showing,
+            "Show 0" once they are not. A single label that changed colour instead asked the user
+            to remember which tint meant on — and an accent "Hide 0" reads as a heading for a list
+            that is hiding nothing. Saying what the next tap does needs no legend.
+            
+            Absent on a list of the user's own, where it would offer to hide what they chose. */}
+        {isAssetsList(watch.activeId) ? (
+        <Pressable
+          onPress={toggleHideZero}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel={t(hideZero ? 'mobile.home.show_zero' : 'mobile.home.hide_zero')}>
+          <Text style={styles.hideZero}>{t(hideZero ? 'mobile.home.show_zero' : 'mobile.home.hide_zero')}</Text>
+        </Pressable>
+        ) : null}
+      </View>
+      <View onLayout={(e) => setPageW(e.nativeEvent.layout.width)}>
+        {pageW > 0 ? (
+          <Animated.ScrollView
+            ref={pagerRef as never}
+            horizontal
+            pagingEnabled
+            bounces={false}
+            showsHorizontalScrollIndicator={false}
+            // One list, nothing to swipe to; and a row held for dragging owns the gesture.
+            scrollEnabled={pages.length > 1 && !dragging}
+            nestedScrollEnabled
+            style={pagerStyle}
+            onScroll={Animated.event([{nativeEvent: {contentOffset: {x: pagerX}}}], {useNativeDriver: false})}
+            scrollEventThrottle={16}
+            onMomentumScrollEnd={(e) => onPagerSettle(e.nativeEvent.contentOffset.x)}>
+            {pages.map((l) => (
+              <View key={l.id} style={{width: pageW}}>
+                <View
+                  onLayout={(e) => {
+                    // Read the height now: the event is recycled before a state updater runs.
+                    const h = e.nativeEvent.layout.height;
+                    setPageH((prev) => (prev[l.id] === h ? prev : {...prev, [l.id]: h}));
+                  }}>
+                  <AssetList
+                    rows={rowsForList(l.id)}
+                    loading={bal.loading && !bal.balances}
+                    error={bal.error}
+                    hidden={hidden}
+                    market={isAssetsList(l.id) ? null : marketStats}
+                    onTrade={tradeFor}
+                    onReorder={(symbols) => saveOrder(network, symbols)}
+                    onDragging={setDragging}
+                  />
+                </View>
+              </View>
+            ))}
+          </Animated.ScrollView>
+        ) : null}
+      </View>
 
       <ReceiveDialog
         visible={receiveOpen}
@@ -654,6 +994,30 @@ const makeStyles = (c: Colors) => StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: {width: 0, height: 4},
   },
+  // Inset to the cards' own content, not to the page: "Watch list" and "hide 0" line up with
+  // "Total value" and the eye in the hero card above, which is the row this one echoes. At 4 they
+  // hung off both edges, further out than anything they sit over.
+  listHead: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: -6},
+  // The same weight and colour as "hide 0" across from it: the two ends of this row are both
+  // labels on the list below, not a heading over a control. The one in front takes the text
+  // colour, which is the only thing distinguishing it — a pill or an underline would make the row
+  // heavier than the list it labels.
+  listTitle: {color: c.subtext, fontSize: 13, fontWeight: '600'},
+  listTitleOn: {color: c.text},
+  /**
+   * flexShrink lets the scroller give way to "hide 0" rather than pushing it off the row.
+   *
+   * The gap belongs on the SCROLLER, not inside it: content padding scrolls away with the content,
+   * so with enough lists to fill the row the last chip slid right up against "hide 0" and the two
+   * read as one run of text. A margin holds the gap open whatever the scroll position; the small
+   * padding inside is just so the ＋ is not flush to the edge it scrolls past.
+   */
+  tabScroll: {flexGrow: 0, flexShrink: 1, marginRight: 18},
+  tabRow: {flexDirection: 'row', alignItems: 'center', gap: 16, paddingRight: 4},
+  // The row's own grey, like the list names and "hide 0" beside it. In accent it was the loudest
+  // thing on a line of labels, and the one thing on it nobody needs to find in a hurry.
+  listAdd: {color: c.subtext, fontSize: 15, fontWeight: '600'},
+  hideZero: {color: c.subtext, fontSize: 13, fontWeight: '600'},
   listCard: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 4},
   list: {gap: 0},
   // The separator sits on TOP of every row: one between the header and the first asset, one
@@ -673,6 +1037,12 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   assetText: {flexShrink: 1, minWidth: 0},
   sym: {color: c.text, fontSize: 15, fontWeight: '600'},
   amtCol: {alignItems: 'flex-end'},
+  // A market row is three columns rather than two, and the price is the middle one — centred on
+  // the row, not pushed against the ticker, so a column of prices reads down the page.
+  priceCol: {flex: 1, alignItems: 'center'},
+  capCol: {flex: 1, alignItems: 'flex-end'},
+  change: {fontSize: 12, fontWeight: '600', marginTop: 2, fontVariant: ['tabular-nums']},
+  cap: {color: c.subtext, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums']},
   amt: {color: c.text, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums']},
   sub: {color: c.subtext, fontSize: 12, marginTop: 2},
   amtEarned: {color: c.success, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums']},

@@ -1,5 +1,7 @@
 import {useEffect, useState} from 'react';
-import {ASSETS, assetCategory, type Asset, type AssetKind} from '@/core/assets';
+import {ASSETS, RECEIPT_TOKENS, assetCategory, type Asset, type AssetKind} from '@/core/assets';
+import {isAddress} from 'viem';
+import {apiFetch} from '@/core/chain';
 import type {Network} from '@/core/chain';
 import type {Address} from 'viem';
 
@@ -50,7 +52,7 @@ function toAsset(it: ApiItem): Asset {
 export async function fetchCatalog(network: Network): Promise<Asset[] | null> {
   if (!CATALOG_API_BASE) return null;
   try {
-    const res = await fetch(
+    const res = await apiFetch(
       `${CATALOG_API_BASE}/api/ethereum/assets?network=${encodeURIComponent(network)}`,
     );
     if (!res.ok) return null;
@@ -83,4 +85,40 @@ export function useAssetCatalog(network: Network): Asset[] {
     };
   }, [network]);
   return list;
+}
+
+/**
+ * Every contract address the app knows to be a token on this network.
+ *
+ * The catalog's own rows plus the receipt tokens positions are held in — aTokens, sUSDS, stETH —
+ * since those are ERC-20s too and just as fatal to send to.
+ */
+function tokenAddresses(network: Network): Set<string> {
+  const out = new Set<string>();
+  for (const a of currentCatalog(network)) out.add(a.address.toLowerCase());
+  for (const a of ASSETS[network]) out.add(a.address.toLowerCase());
+  for (const addr of Object.keys(RECEIPT_TOKENS[network] ?? {})) out.add(addr.toLowerCase());
+  return out;
+}
+
+/**
+ * A well-formed address that is safe to send funds to.
+ *
+ * Rejects the token contracts themselves. Sending USDC to the USDC contract is a real and
+ * unrecoverable mistake — the transfer succeeds, the tokens are owned by a contract with no way
+ * to move them, and nothing about the address looks wrong. It is one paste away whenever someone
+ * copies a "token address" from an explorer or a listing page, so the one list the app already
+ * keeps of every token it touches is worth checking a recipient against.
+ *
+ * Only addresses the app can be sure about: an unknown contract is still allowed, because the
+ * alternative is refusing to pay a multisig or another vault.
+ */
+export function isPayableAddress(value: string, network: Network): boolean {
+  if (!isAddress(value)) return false;
+  return !tokenAddresses(network).has(value.toLowerCase());
+}
+
+/** True when the address is one of our known tokens — for telling the user WHY it was refused. */
+export function isTokenAddress(value: string, network: Network): boolean {
+  return isAddress(value) && tokenAddresses(network).has(value.toLowerCase());
 }

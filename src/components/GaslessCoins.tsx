@@ -5,7 +5,7 @@ import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {ownerVaultAddress} from '@/vault/read';
 import {isActivated} from '@/vault/activate';
-import {getGaslessConfig, setGaslessCoins, disableGasless, GASLESS_MAX_DAILY, GASLESS_MAX_PER_OP, type GaslessConfig} from '@/vault/gasless';
+import {getGaslessConfig, setGaslessCoins, GASLESS_MAX_DAILY, GASLESS_MAX_PER_OP, type GaslessConfig} from '@/vault/gasless';
 import {ASSETS} from '@/core/assets';
 import {TokenIcon} from '@/components/TokenIcon';
 import {PendingSwitch} from '@/components/PendingSwitch';
@@ -70,29 +70,35 @@ export function GaslessCoins() {
     const next = on
       ? [...current, coin]
       : current.filter((c) => c.toLowerCase() !== coin.toLowerCase());
+    /**
+     * The last coin cannot be turned off.
+     *
+     * An empty allowlist does not mean "no coins" to the contract, it means relaying is OFF — and
+     * relaying is how this app signs everything. A vault with no fee coin cannot trade, deposit,
+     * send or even cancel; the only way back would be a wallet this app does not have. The switch
+     * for the last one is disabled, and this is the same rule where the write happens, so no
+     * future caller can route around the UI.
+     */
+    if (next.length === 0) return;
 
     setBusy(coin);
     const tx = showTx(`${displaySymbol(stablecoins.find((s) => s.address === coin)?.symbol ?? '')} · ${t('mobile.settings.gas_token')}`, network);
     try {
       const acct = await getSigner();
       const fee = stablecoins[0]?.address ?? coin;
-      if (next.length === 0) {
-        tx.success(await disableGasless({account: acct, vault, network, stableCoin: fee}));
-      } else {
-        // Covering every coin IS the default — write [] to leave it un-narrowed (cheaper).
-        const coversAll = allCoins.every((c) => next.some((n) => n.toLowerCase() === c.toLowerCase()));
-        tx.success(
-          await setGaslessCoins({
-            account: acct,
-            vault,
-            network,
-            coins: (coversAll ? [] : next) as Address[],
-            dailyLimit: cfg.dailyLimit,
-            maxFeePerOp: cfg.maxFeePerOp,
-            stableCoin: fee,
-          }),
-        );
-      }
+      // Covering every coin IS the default — write [] to leave it un-narrowed (cheaper).
+      const coversAll = allCoins.every((c) => next.some((n) => n.toLowerCase() === c.toLowerCase()));
+      tx.success(
+        await setGaslessCoins({
+          account: acct,
+          vault,
+          network,
+          coins: (coversAll ? [] : next) as Address[],
+          dailyLimit: cfg.dailyLimit,
+          maxFeePerOp: cfg.maxFeePerOp,
+          stableCoin: fee,
+        }),
+      );
       load();
     } catch (e) {
       tx.error(String((e as Error)?.message ?? e));
@@ -105,6 +111,7 @@ export function GaslessCoins() {
   const locked = preActivation || busy !== null;
 
   const rows = stablecoins.length;
+  const onCount = stablecoins.filter((a) => allowed(a.address)).length;
   return (
     <View style={styles.wrap}>
       <View style={styles.group}>
@@ -117,7 +124,8 @@ export function GaslessCoins() {
             <PendingSwitch
               value={allowed(a.address)}
               pending={busy === a.address}
-              disabled={locked || cfg === 'loading'}
+              // The last one on cannot be turned off: see onToggle.
+              disabled={locked || cfg === 'loading' || (allowed(a.address) && onCount <= 1)}
               onValueChange={(v) =>
                 ask({
                   title: t('mobile.settings.gas_token'),
@@ -130,6 +138,8 @@ export function GaslessCoins() {
           </View>
         ))}
       </View>
+      {/* Said before the switch is reached for, not after it refuses. */}
+      {onCount <= 1 ? <Text style={styles.minNote}>{t('mobile.settings.gas_token_min')}</Text> : null}
       {sheet}
     </View>
   );
@@ -138,6 +148,7 @@ export function GaslessCoins() {
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     wrap: {gap: 8},
+    minNote: {color: c.subtext, fontSize: 12, lineHeight: 17, paddingHorizontal: 4},
     
     // The same section card as the allow lists: the card carries the side padding, rows draw a hairline
     // on their top edge, and the first/last rows drop their outer padding.

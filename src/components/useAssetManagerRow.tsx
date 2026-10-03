@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
-import {isAddress, type Address} from 'viem';
+import type {Address} from 'viem';
+import {isPayableAddress} from '@/core/asset-catalog';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {ownerVaultAddress} from '@/vault/read';
@@ -104,7 +105,7 @@ export function useAssetManagerRow(): {
    * one tap.
    */
   const appoint = () => {
-    if (!isAddress(addr)) return;
+    if (!isPayableAddress(addr, network)) return;
     setOpen(false);
     const expiresAt = days === 0 ? 0n : BigInt(Math.floor(Date.now() / 1000) + days * 86400);
     void runNow(t('mobile.vault.appoint'), (acct) =>
@@ -176,7 +177,9 @@ function AssetManagerSheet({
   const {t} = useT();
   const c = useColors();
   const styles = useStyles(makeStyles);
-  const bad = addr.length > 0 && !isAddress(addr);
+  // This sheet is its own component, so it reads the network rather than taking it as a prop.
+  const network = useNetwork((s) => s.network);
+  const bad = addr.length > 0 && !isPayableAddress(addr, network);
   return (
     <Sheet visible={visible} title={t('vault.asset_manager')} onClose={onClose}>
       <TextInput
@@ -206,7 +209,7 @@ function AssetManagerSheet({
       <View style={styles.spacer} />
       {/* Appointing is the ordinary path, so it takes the Face ID button; revoking sits under it
           as the quieter, destructive way out, and is only there when there is one to revoke. */}
-      <ConfirmButton onPress={onAppoint} disabled={!isAddress(addr)} gas={relayGasFor({})} />
+      <ConfirmButton onPress={onAppoint} disabled={!isPayableAddress(addr, network)} gas={relayGasFor({})} />
       {canRevoke ? (
         <Button title={t('vault.revoke')} variant="danger" onPress={onRevoke} />
       ) : null}

@@ -172,6 +172,9 @@ function relayError(json: {reason?: string; error?: string} | null, status: numb
       return "The vault's daily network-fee budget is used up. It resets 24 hours after the first charge.";
     case 'gasless-off':
       return 'Relaying is turned off for this vault. Turn a fee coin back on in Settings.';
+    case 'simulation-failed':
+      // The call itself reverts, so retrying it unchanged cannot work. Nothing was signed or sent.
+      return 'The vault refused this operation, so nothing was sent. Check that the assets are on the allow list and that trading is not paused.';
     default:
       return json?.reason ?? json?.error ?? `Relay failed (${status})`;
   }

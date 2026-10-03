@@ -3,6 +3,7 @@ import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-na
 import DateTimePicker from '@react-native-community/datetimepicker';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {isAddress, type Address} from 'viem';
+import {isPayableAddress, isTokenAddress} from '@/core/asset-catalog';
 import {ConfirmButton} from '@/components/Button';
 import {useConfirmAction} from '@/components/ConfirmAction';
 import {shortAddress} from '@/core/format';
@@ -47,7 +48,7 @@ export function ScheduledScreen() {
   const {t, language} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
-  const account = useWallet((s) => s.account);
+  const unlocked = useWallet((s) => s.unlocked);
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
@@ -90,7 +91,7 @@ export function ScheduledScreen() {
   const over = exceedsMax(amount, max);
   const [pickerOpen, setPickerOpen] = useState(false);
   const canAdd =
-    !!account && !!vault && !!asset && !!stable && isAddress(to) && triggerOk && Number(amount) > 0 && !over &&
+    unlocked && !!vault && !!asset && !!stable && isPayableAddress(to, network) && triggerOk && Number(amount) > 0 && !over &&
     Number(count) >= 1 && Number(count) <= 255 && intervalNum >= 1 && !busy;
 
   const load = useCallback(() => {
@@ -242,7 +243,7 @@ export function ScheduledScreen() {
         <Text style={styles.label}>{editId ? t('mobile.payments.edit_payment') : t('vault.add_scheduled_payment')}</Text>
         <View style={styles.card}>
           <TextInput
-            style={[styles.toInput, to.length > 0 && !isAddress(to) && styles.inputErr]}
+            style={[styles.toInput, to.length > 0 && !isPayableAddress(to, network) && styles.inputErr]}
             placeholder={t('mobile.vault.enter_address')}
             placeholderTextColor={c.subtext}
             autoCapitalize="none"
@@ -250,6 +251,9 @@ export function ScheduledScreen() {
             value={to}
             onChangeText={setTo}
           />
+          {isTokenAddress(to, network) ? (
+            <Text style={styles.over}>{t('mobile.payments.token_address_warning')}</Text>
+          ) : null}
 
           {/* Amount per payment: "Balance: … Max" above, the asset pill inside the field, as on Send. */}
           <View style={styles.line}>

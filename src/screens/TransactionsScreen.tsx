@@ -22,9 +22,11 @@ import {EXPLORER_TX, type Network} from '@/core/chain';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 import {CopyAddress} from '@/components/CopyAddress';
+import {GasIcon} from '@/components/GasIcon';
 import {categoryForActions, defiMoveFromActions, describeActions} from '@/vault/tx-actions';
 import {GPV2_SETTLEMENT, fetchRecentOrders, type CowOrder} from '@/vault/limit';
 import {usePending, type PendingTx} from '@/vault/pending';
+import {useDefiDetails} from '@/core/defi-details';
 import type {RouteProp} from '@react-navigation/native';
 import {useRoute} from '@react-navigation/native';
 import type {RootStackParamList} from '@/App';
@@ -33,10 +35,19 @@ import {ASSETS} from '@/core/assets';
 const fmtAmt = (v: string | null): string => fmtNum(Number(v ?? '0'));
 const fmtN = fmtNum;
 
+/**
+ * The timestamp on a history row: day, month and time, no year.
+ *
+ * The list is newest first and reaches back months, not decades, so the year repeated on every
+ * row said nothing and crowded out the time, which is what tells two transactions on the same day
+ * apart. Fields rather than a format string, so each locale still orders and punctuates its own
+ * way — 1月5日 09:30 in Chinese, 5 Jan 09:30 in English.
+ */
 function fmtDate(ts: string | null, locale: string): string {
   if (!ts) return '';
   const d = new Date(ts);
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(locale);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString(locale, {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'});
 }
 
 const lc = (s?: string | null) => (s ?? '').toLowerCase();
@@ -67,7 +78,7 @@ type OpView = {
 type T = (key: string, params?: Record<string, string | number>) => string;
 
 /** Turn a raw tx's legs into readable, typed parts — the same categories the web history shows. */
-function classify(op: Operation, network: Network, t: T, orders?: Map<string, CowOrder>): OpView {
+function classify(op: Operation, network: Network, t: T, orders: Map<string, CowOrder> | undefined, defiDetails: boolean): OpView {
   // The gasless relay fee leg (paid to Bitty's fee collector) — shown on its own line, not as a transfer.
   const fee = op.legs.find((l) => l.direction === 'out' && lc(l.counterparty) === BITTY_FEE_COLLECTOR) ?? null;
   const core = op.legs.filter((l) => l !== fee);
@@ -91,7 +102,9 @@ function classify(op: Operation, network: Network, t: T, orders?: Map<string, Co
       const boughtStable = stable.has(swap.bought.address.toLowerCase());
       const isBuy = soldStable && !boughtStable ? true : boughtStable && !soldStable ? false : false;
       const kind = op.settlement?.twap ? t('vault.twap') : t('vault.limit');
-      parts.push({title: `${kind} ${isBuy ? t('vault.buy') : t('vault.sell')}`, swap, legs: []});
+      // The badge-sized side word, as on the Trade screen's own order rows: the buttons' fuller
+      // wording (Chinese 买入 / 卖出) belongs on a button, not in a title beside the type.
+      parts.push({title: `${kind} ${t(isBuy ? 'mobile.trade.buy_short' : 'mobile.trade.sell_short')}`, swap, legs: []});
     } else {
       parts.push({title: t('vault.market_trade'), swap, legs: []});
     }
@@ -131,7 +144,7 @@ function classify(op: Operation, network: Network, t: T, orders?: Map<string, Co
     }
   }
 
-  const details = describeActions(op.actions, network, t, orders);
+  const details = describeActions(op.actions, network, t, orders, defiDetails);
   /**
    * The tab a row lands on.
    *
@@ -190,16 +203,21 @@ function Op({op, explorer, network, orders}: {op: Operation; explorer: string; n
   const {t, language} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
-  const v = classify(op, network, t, orders);
+  // The row subscribes for itself. This is the classify call the list actually RENDERS from — the
+  // one in the screen above only decides which tabs exist — so without it a flip of the switch
+  // left every line on screen as it was.
+  const defiDetails = useDefiDetails((s) => s.show);
+  const v = classify(op, network, t, orders, defiDetails);
   return (
     <Pressable style={styles.op} onPress={() => Linking.openURL(explorer + op.txHash)}>
       {v.parts.map((part, i) => (
         <View key={`${op.txHash}-${i}`} style={i > 0 ? styles.partGap : undefined}>
+          {/* The title owns the line. It shared it with the timestamp until a Russian
+              "Вывести из Гибкого кредитования" ran into the date and pushed it off the row;
+              the timestamp moved to the footer, where it belongs anyway — it describes the
+              transaction, not this one part of it. */}
           <View style={styles.opHeader}>
-            <View style={styles.titleRow}>
-              <Text style={styles.title}>{part.title}</Text>
-            </View>
-            {i === 0 ? <Text style={styles.date}>{fmtDate(op.timestamp, language)}</Text> : null}
+            <Text style={styles.title}>{part.title}</Text>
           </View>
 
           {part.swap ? (
@@ -228,13 +246,17 @@ function Op({op, explorer, network, orders}: {op: Operation; explorer: string; n
       ))}
 
       <View style={styles.footer}>
-        {v.fee ? (
-          <Text style={styles.fee}>
-            {t('mobile.settings.gas')} −<Amount v={fmtAmt(v.fee.amount)} /> {displaySymbol(v.fee.assetSymbol)}
-          </Text>
-        ) : (
-          <View />
-        )}
+        <View style={styles.meta}>
+          <Text style={styles.date}>{fmtDate(op.timestamp, language)}</Text>
+          {v.fee ? (
+            <>
+              <GasIcon color={c.subtext} size={12} />
+              <Text style={styles.fee}>
+                −<Amount v={fmtAmt(v.fee.amount)} /> {displaySymbol(v.fee.assetSymbol)}
+              </Text>
+            </>
+          ) : null}
+        </View>
         <Text style={styles.link}>{t('mobile.home.view')} ↗</Text>
       </View>
     </Pressable>
@@ -322,8 +344,20 @@ export function TransactionsScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'Transactions'>>();
   const [tab, setTab] = React.useState<Category | 'confirming' | 'all'>(route.params?.tab === 'confirming' ? 'confirming' : 'all');
 
+  /**
+   * Subscribed, not read through getState.
+   *
+   * `describeActions` used to read the DeFi-details switch itself, which meant this screen saw
+   * whatever it was when the lines were first built: flipping it in Settings re-rendered nothing
+   * here, and the memo below went on handing back the old wording. Taking it through the hook is
+   * what makes the flip arrive; passing it down is what makes it a dependency worth naming.
+   */
+  const defiDetails = useDefiDetails((s) => s.show);
   // One tab per category that has entries, as on the web, with Confirming leading when it does.
-  const views = React.useMemo(() => new Map(ops.map((op) => [op.txHash, classify(op, network, t, orders)])), [ops, network, t, orders]);
+  const views = React.useMemo(
+    () => new Map(ops.map((op) => [op.txHash, classify(op, network, t, orders, defiDetails)])),
+    [ops, network, t, orders, defiDetails],
+  );
   const tabs: {key: Category | 'confirming' | 'all'; label: string}[] = [
     ...(pendingTxs.length > 0 ? [{key: 'confirming' as const, label: t('mobile.home.confirming')}] : []),
     {key: 'all', label: t('vault.all')},
@@ -400,7 +434,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   op: {backgroundColor: c.card, borderRadius: 20, padding: 18, gap: 12},
   clear: {color: c.accent, fontSize: 14, fontWeight: '600'},
   clearAll: {alignSelf: 'flex-end', marginBottom: -8},
-  opHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10},
+  opHeader: {marginBottom: 10},
   partGap: {marginTop: 14, gap: 8},
   titleRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
   title: {color: c.text, fontSize: 15, fontWeight: '400'},
@@ -416,7 +450,9 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   outC: {color: c.warning},
   inC: {color: c.success},
   legText: {color: c.text, fontSize: 15, fontVariant: ['tabular-nums']},
-  footer: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, paddingTop: 10},
+  footer: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, paddingTop: 10},
+  // Timestamp and fee together on the left; the fee is a pump and a number, no label.
+  meta: {flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1},
   fee: {color: c.subtext, fontSize: 12, fontVariant: ['tabular-nums']},
   link: {color: c.accent, fontSize: 12, fontWeight: '600'},
   note: {color: c.subtext, fontSize: 14},

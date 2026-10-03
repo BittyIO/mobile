@@ -14,7 +14,7 @@
  *    CloudFront "Request blocked" 403, so the map came back empty and every price and portfolio
  *    total rendered as a dash. Asking it from a server works; asking it from here does not.
  */
-import {API_BASE, type Network} from '@/core/chain';
+import {API_BASE, apiFetch, type Network} from '@/core/chain';
 
 export type PriceMap = Map<string, number>; // SYMBOL -> usd
 
@@ -27,50 +27,6 @@ export type PriceMap = Map<string, number>; // SYMBOL -> usd
  */
 const USD_PEGGED = new Set(['USDC', 'USDT', 'USDG', 'DAI', 'USDS', 'PYUSD', 'FDUSD', 'USDe']);
 
-/**
- * Symbol → CoinGecko id.
- *
- * No longer used for prices — those come from Uniswap now — but the price CHART still asks
- * CoinGecko for history, which no pool can answer in one call.
- */
-export const COINGECKO_ID: Record<string, string> = {
-  ETH: 'ethereum',
-  WETH: 'ethereum',
-  WBTC: 'bitcoin',
-  cbBTC: 'bitcoin',
-  XAUt: 'tether-gold',
-  UNI: 'uniswap',
-  AAVE: 'aave',
-  USDC: 'usd-coin',
-  USDT: 'tether',
-  USDG: 'global-dollar',
-  // Robinhood Chain tokenized stocks (Robinhood's own tokens, listed on CoinGecko under these ids).
-  SPY: 'spdr-s-p-500-etf-trust-robinhood-tokenized-stock',
-  NVDA: 'nvidia-robinhood-tokenized-stock',
-  GLD: 'spdr-gold-shares-robinhood-token',
-  SPCX: 'spacex-robinhood-tokenized-stock',
-  META: 'meta-platforms-robinhood-tokenized-stock',
-  GOOGL: 'alphabet-class-a-robinhood-tokenized-stock',
-  AAPL: 'apple-robinhood-tokenized-stock',
-  HIMS: 'hims-hers-health-inc-robinhood-token',
-  MSTR: 'strategy-inc-robinhood-tokenized-stock',
-  TSLA: 'tesla-robinhood-tokenized-stock',
-  // Ondo Global Markets tokenized stocks on mainnet (tickers shared with Robinhood keep the id above).
-  CRCL: 'circle-internet-group-ondo-tokenized-stock',
-  COIN: 'coinbase-ondo-tokenized-stock',
-  SBET: 'sharplink-gaming-inc-ondo-tokenized-stock',
-  MSFT: 'microsoft-ondo-tokenized-stock',
-  AMZN: 'amazon-ondo-tokenized-stock',
-  PLTR: 'palantir-technologies-ondo-tokenized-stock',
-  AMD: 'amd-ondo-tokenized-stock',
-  TSM: 'taiwan-semiconductor-manufacturing-ondo-tokenized-stock',
-  INTC: 'intel-ondo-tokenized-stock',
-  QQQ: 'invesco-qqq-etf-ondo-tokenized-etf',
-  NFLX: 'netflix-ondo-tokenized-stock',
-  HOOD: 'robinhood-markets-ondo-tokenized-stock',
-  BMNR: 'bitmine-immersion-technologies-ondo-tokenized-stocks',
-  COST: 'costco-ondo-tokenized-stock',
-};
 
 /**
  * The app's own price endpoint: Chainlink, then Uniswap, then CoinGecko, resolved server-side.
@@ -83,7 +39,7 @@ async function bittyPrices(symbols: string[], network: Network): Promise<Map<str
   const out = new Map<string, number>();
   try {
     const url = `${API_BASE}/api/prices?network=${network}&symbols=${encodeURIComponent(symbols.join(','))}`;
-    const res = await fetch(url);
+    const res = await apiFetch(url);
     if (!res.ok) return out;
     const j = (await res.json()) as {prices?: Record<string, number>};
     for (const [k, v] of Object.entries(j?.prices ?? {})) if (typeof v === 'number' && v > 0) out.set(k, v);
@@ -106,7 +62,7 @@ async function coinbaseSpot(symbols: string[]): Promise<Map<string, number>> {
       try {
         // Wrapped tokens track the asset they wrap; ask for that.
         const base = s === 'WETH' ? 'ETH' : s === 'WBTC' || s === 'cbBTC' ? 'BTC' : s;
-        const res = await fetch(`https://api.coinbase.com/v2/prices/${base}-USD/spot`);
+        const res = await apiFetch(`https://api.coinbase.com/v2/prices/${base}-USD/spot`);
         if (!res.ok) return;
         const j = (await res.json()) as {data?: {amount?: string}};
         const n = Number(j?.data?.amount);

@@ -983,7 +983,7 @@
     "asset_manager_cannot_be_owner": "資產管理員不能與擁有者相同",
     "owner_cannot_be_asset_manager": "無法將所有權轉移給目前的管理員。請先移除該管理員。",
     "limit": "限價",
-    "twap": "時間加權",
+    "twap": "定期",
     "market": "市價",
     "limit_trade": "限價交易",
     "market_trade": "市價交易",

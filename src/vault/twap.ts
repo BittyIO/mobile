@@ -6,7 +6,7 @@
  */
 import {encodeAbiParameters, parseUnits, type Address, type Hex} from 'viem';
 import type {Signer} from '@/wallet/signer';
-import {apiUrl, CHAIN_ID, type Network} from '@/core/chain';
+import {apiFetch, apiUrl, CHAIN_ID, type Network} from '@/core/chain';
 import {
   BALANCE_ERC20,
   COW_PARTNER_FEE_BPS,
@@ -158,7 +158,7 @@ export type TwapSchedule = {
 /** The vault's TWAP schedules (all statuses) from the server. Used to list + cancel. */
 export async function fetchTwapSchedules(vault: Address, network: Network): Promise<TwapSchedule[]> {
   try {
-    const res = await fetch(apiUrl(`/api/ethereum/vaults/twap/${vault}`, network));
+    const res = await apiFetch(apiUrl(`/api/ethereum/vaults/twap/${vault}`, network));
     if (!res.ok) return [];
     const j = (await res.json()) as {data?: TwapSchedule[]};
     return j.data ?? [];

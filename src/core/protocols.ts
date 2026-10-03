@@ -16,14 +16,20 @@ const PROTOCOLS: Record<Network, Record<string, ProtocolInfo>> = {
     '0x9296f7ffe86da8b652988f07920b42f8779ce64b': {name: 'Aave V3', category: 'lending'},
     '0x35252547c41661103865d700d8fcace07afce1bd': {name: 'Lido', category: 'staking'},
     '0x0968632ad0a79220ffb2d2320de82b7c17357774': {name: 'Sky', category: 'staking'},
-    '0xce02c925850f8df20b5a6de820e6773453240dbd': {name: 'Uniswap V3', category: 'amm'},
+    // Uniswap V3 adapter 1.0.1 — the ONLY one listed here. It is what `ammAdapters` hands the
+    // market swap, and only 1.0.1 carries market buy/sell: with the 1.0.0 adapter
+    // (0xcE02C925…) in its place every market trade on mainnet reverted and came back from the
+    // relayer as "simulation-failed". The web keeps 1.0.0 listed behind it; this app does not, so a
+    // history row from a vault that traded through the old adapter names a short address instead of
+    // "Uniswap V3". LP reads are unaffected — sibling adapters share one position manager.
+    '0xf72ab1ca4dd4c8d5e747271e80ff2c71d129a664': {name: 'Uniswap V3', category: 'amm'},
     '0x3d7589cd35400e0a1b8d6f5f8ed3ae4171a5e195': {name: 'CoW Swap', category: 'intent'},
   },
   base: {
     '0x4b38baa01e6fd30163f4de7e678dc868045eb27f': {name: 'Aave V3', category: 'lending'},
     '0x8e14e91f29066ccdd9e9e2db6bafe6fef7c14ac6': {name: 'Sky', category: 'staking'},
+    // 1.0.1 only, as on mainnet above; the 1.0.0 adapter (0x7aE75624…) is deliberately not listed.
     '0xfd30f05b9d36488631c212f0421eb9a117382fd5': {name: 'Uniswap V3', category: 'amm'},
-    '0x7ae75624f265a700d011df819bed6ef10615ac38': {name: 'Uniswap V3', category: 'amm'},
     '0x5daa6aef7de9c13624a8fdfde47c10d35fd79b0a': {name: 'CoW Swap', category: 'intent'},
   },
   // Only the AMM adapter (Universal Router build, 1.0.2): no Aave, Sky or CoW on this chain.
@@ -55,6 +61,18 @@ export function ammAdapters(network: Network): Address[] {
   return Object.entries(PROTOCOLS[network])
     .filter(([, info]) => info.category === 'amm')
     .map(([addr]) => addr as Address);
+}
+
+/**
+ * The protocols that settle one kind of order, by display name, deduplicated.
+ *
+ * Which venue a trade goes through is already written down here, once, as the adapter's category:
+ * a market order is handed to the `amm` adapter and a limit or TWAP order is posted as an
+ * `intent`. The Trade sheet names its venue from this rather than from a list of its own, so a
+ * chain with no CoW adapter — Robinhood today — says nothing instead of promising CoW Swap.
+ */
+export function venueNames(network: Network, category: ProtocolCategory): string[] {
+  return [...new Set(Object.values(PROTOCOLS[network]).filter((p) => p.category === category).map((p) => p.name))];
 }
 
 /** Every known adapter for a network (all categories) — for protocol allowlist management. */

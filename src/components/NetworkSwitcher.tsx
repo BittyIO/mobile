@@ -61,12 +61,15 @@ export function NetworkSwitcher() {
 
   return (
     <>
-      <Pressable onPress={() => setOpen(true)} style={styles.pill} hitSlop={10}>
-        <NetworkIcon network={network} size={26} />
+      {/* 22, not 26. It sits opposite a 17pt vault name, and at 26 the chain's logo was taller
+          than the text's cap height — the loudest thing in a bar whose job is to be quiet. The
+          hit area is unchanged: hitSlop carries it past 44. */}
+      <Pressable onPress={() => setOpen(true)} style={styles.pill} hitSlop={12}>
+        <NetworkIcon network={network} size={22} />
       </Pressable>
       <PickerSheet
         visible={open}
-        title={t('mobile.settings.network')}
+        title={t('mobile.settings.choose_network')}
         items={NETWORKS.map((n) => ({key: n, label: networkLabel(n, t), icon: <NetworkIcon network={n} size={30} />}))}
         selected={network}
         onSelect={(n) => setNetwork(n as Network)}

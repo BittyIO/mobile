@@ -7,6 +7,16 @@ import ko from '@/translations/ko.json';
 import fr from '@/translations/fr.json';
 import es from '@/translations/es.json';
 import de from '@/translations/de.json';
+// Added for the markets with the most crypto holders and the least English (see language-store).
+// These files carry only the keys the app actually asks the web catalogue for — `resolve` falls
+// back to English per key, so a partial file is a safe way to ship a language.
+import ptBR from '@/translations/pt-BR.json';
+import hi from '@/translations/hi.json';
+import tr from '@/translations/tr.json';
+import ru from '@/translations/ru.json';
+import id from '@/translations/id.json';
+import vi from '@/translations/vi.json';
+import th from '@/translations/th.json';
 import {useLanguage, type Language} from '@/core/language-store';
 import {companyName} from '@/core/company-names';
 import {MOBILE_STRINGS} from '@/translations/mobile';
@@ -20,7 +30,7 @@ import {MOBILE_STRINGS} from '@/translations/mobile';
 // never renders as an empty label.
 
 type Dict = Record<string, unknown>;
-const WEB: Record<Language, Dict> = {en, zh, 'zh-TW': zhTW, ja, ko, fr, es, de};
+const WEB: Record<Language, Dict> = {en, zh, 'zh-TW': zhTW, ja, ko, fr, es, de, 'pt-BR': ptBR, hi, tr, ru, id, vi, th};
 
 function lookup(dict: Dict | undefined, key: string): string | undefined {
   let v: unknown = dict;
@@ -49,6 +59,28 @@ export function translate(language: Language, key: string, params?: Record<strin
   return out;
 }
 
+/**
+ * Scripts that do not put a space between words.
+ *
+ * Chinese and Japanese run words together: "Limit" + "Buy" is 限价买, not 限价 买, and a label
+ * assembled with a space in the middle reads as two separate words stuck side by side. Korean
+ * does space its words (지정가 매수) and Thai mixes a loanword with a verb clearly enough that a
+ * space helps, so both keep it — this is the narrow set where the space is simply wrong.
+ */
+const NO_WORD_SPACE = new Set<Language>(['zh', 'zh-TW', 'ja']);
+
+/**
+ * Join label fragments the way the language writes them.
+ *
+ * The order badges are built from two translated pieces — the kind and the side — because the
+ * alternative is six more keys ("limit buy", "limit sell", "market buy", …) in fifteen files,
+ * each one a copy of two strings that already exist. What the pieces cannot carry is the join,
+ * which is a property of the script and not of either word.
+ */
+export function joinWords(language: Language, ...parts: (string | false | null | undefined)[]): string {
+  return parts.filter(Boolean).join(NO_WORD_SPACE.has(language) ? '' : ' ');
+}
+
 /** `t("vault.buy")`, `t("mobile.settings.language")`; re-renders when the language changes. */
 export function useT() {
   const language = useLanguage((s) => s.language);
@@ -66,5 +98,10 @@ export function useT() {
     (symbol: string, fallback?: string) => companyName(symbol, fallback, language),
     [language],
   );
-  return {t, language, company};
+  /** `words(t('vault.limit'), t('mobile.trade.buy_short'))` → "Limit Buy", 限价买. */
+  const words = useCallback(
+    (...parts: (string | false | null | undefined)[]) => joinWords(language, ...parts),
+    [language],
+  );
+  return {t, language, company, words};
 }

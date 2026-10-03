@@ -3,10 +3,6 @@ import Svg, {Circle, Line, Path, Rect} from 'react-native-svg';
 
 export type TabName = 'Overview' | 'Earn' | 'Market' | 'Settings';
 
-/** The cog body. Only its centre fills when selected, so the gear keeps its teeth readable. */
-const COG =
-  'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z';
-
 /**
  * Minimal icons for the bottom tab bar. Monochrome and driven by `color`, so React Navigation's
  * active/inactive tint flows straight through. Drawn on a 24×24 grid.
@@ -46,24 +42,53 @@ export function TabIcon({name, color, size = 24, focused}: {name: TabName; color
           <Line x1={3} y1={22} x2={21} y2={22} {...common} />
         </>
       ) : name === 'Market' ? (
-        // lucide "ChartCandlestick" — the standard mark for a list of prices. The two arrows it
-        // replaces meant "swap", which is what the pushed pair page does; this tab only browses.
+        /**
+         * An exchange ring: two arcs chasing each other round a circle, each ending in a head.
+         *
+         * It replaced lucide's ArrowRightLeft, which was two OPEN paths — nothing enclosed an area,
+         * so there was nothing to fill and selecting the tab could only add 0.2 of stroke. Beside
+         * three neighbours that go solid, the tab looked unselected whichever one you were on.
+         *
+         * The heads are closed triangles and carry the fill; the arcs stay strokes, slightly
+         * heavier than the rest of the set so the loop reads as one continuous gesture rather than
+         * two stray curves. Drawn as a loop and not a line, which also keeps it from reading as
+         * navigation the way a sideways arrow does.
+         *
+         * CLOCKWISE: the top arc runs left to right and the bottom one returns right to left,
+         * which is the direction a reader's eye already travels. The mirrored version was tried
+         * and rejected.
+         *
+         * Each head is built ON THE ARC'S TANGENT: its base midpoint IS the arc's end point, the
+         * base is perpendicular to the direction of travel there, and the point extends outward
+         * along it. They were drawn as upright triangles sitting near the ends before, which left
+         * the base skewed to the curve — the arc ran into a CORNER, so the line appeared to join
+         * the sharp end and the head read as a bent flag rather than an arrowhead.
+         *
+         * Base 5.2 across, 4.2 deep. The bottom head is the top one rotated 180° about (12,12),
+         * which is exactly the relationship the two arcs already have.
+         */
         <>
-          <Path d="M9 5v4" {...common} />
-          <Rect x={7} y={9} width={4} height={6} rx={1} {...solid} />
-          <Path d="M9 15v2" {...common} />
-          <Path d="M17 3v2" {...common} />
-          <Rect x={15} y={5} width={4} height={8} rx={1} {...solid} />
-          <Path d="M17 13v3" {...common} />
-          <Path d="M3 3v16a2 2 0 0 0 2 2h16" {...common} />
+          <Path d="M20.4 13.2a8.6 8.6 0 0 1-13.9 5.1" {...common} strokeWidth={sw + 0.1} />
+          <Path d="M3.6 10.8a8.6 8.6 0 0 1 13.9-5.1" {...common} strokeWidth={sw + 0.1} />
+          <Path d="M20.8 8.4 15.9 7.7 19.1 3.7Z" {...solid} strokeWidth={sw - 0.2} />
+          <Path d="M3.2 15.6 8.1 16.3 4.9 20.3Z" {...solid} strokeWidth={sw - 0.2} />
         </>
       ) : (
-        // The classic cog (lucide "Settings"), in place of the sliders. Selected, only the centre
-        // fills: a solid gear is nearly all ink and swamped the other three marks, which stay
-        // mostly negative space even filled. The dot in the middle is enough to read as "on".
+        /**
+         * A framed avatar — the tab is "Me" now, and a cog named only the preferences in it, not
+         * the vault or the key on the device.
+         *
+         * The ring is the frame a face is shown in everywhere else on a phone, so it stays an
+         * OUTLINE in both states: filling it would make a solid disc and lose the person inside.
+         * The head and shoulders are what fill when the tab is selected — the shoulder path is
+         * open, but its ends sit on one baseline, so closing it fills to a dome rather than the
+         * blob an arbitrary open path would give. The dome tops out just inside the head, so the
+         * two merge into a single silhouette instead of a circle floating over an arc.
+         */
         <>
-          <Path d={COG} {...common} />
-          <Circle cx={12} cy={12} r={3} {...solid} />
+          <Circle cx={12} cy={12} r={10} {...common} />
+          <Path d="M18 19.5a6.5 6.5 0 0 0-12 0" {...solid} />
+          <Circle cx={12} cy={10} r={3.6} {...solid} />
         </>
       )}
     </Svg>

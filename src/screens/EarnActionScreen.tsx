@@ -1,6 +1,5 @@
 import React, {useState} from 'react';
 import {Pressable, StyleSheet, Text, View, ScrollView} from 'react-native';
-import {SafeAreaView} from 'react-native-safe-area-context';
 import type {RouteProp} from '@react-navigation/native';
 import {useRoute} from '@react-navigation/native';
 import {ConfirmButton} from '@/components/Button';
@@ -31,7 +30,7 @@ export function EarnActionScreen() {
   const isDeposit = params.mode === 'deposit';
   const specific = !!(params.protocol && params.asset);
 
-  const account = useWallet((s) => s.account);
+  const unlocked = useWallet((s) => s.unlocked);
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
@@ -54,10 +53,10 @@ export function EarnActionScreen() {
   // Deposit max = free balance of the coin; withdraw max = the position's amount (passed in params).
   const max = isDeposit ? balanceOfSymbol(bal.balances, targetSymbol) : params.max;
   const canSubmit =
-    !!account && !!owner && !!protocol && !!targetAsset && !!feeCoin && Number(amount) > 0 && status !== 'busy' && !exceedsMax(amount, max);
+    unlocked && !!owner && !!protocol && !!targetAsset && !!feeCoin && Number(amount) > 0 && status !== 'busy' && !exceedsMax(amount, max);
 
   const onSubmit = async () => {
-    if (!account || !owner || !protocol || !targetAsset || !feeCoin) return;
+    if (!unlocked || !owner || !protocol || !targetAsset || !feeCoin) return;
     setStatus('busy');
     setErr(null);
     const tx = showTx(`${title} · ${amount} ${displaySymbol(targetSymbol)}`, network);
@@ -89,7 +88,9 @@ export function EarnActionScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Scrolls (and bounces) like every other page, with the button held at the bottom. */}
+      {/* `contentInsetAdjustmentBehavior="automatic"` is required, not optional: the stack's
+          header is transparent and the content scrolls under it, so this is what starts the form
+          below the bar. Every pushed page in the app sets it for the same reason. */}
       <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.flex} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
       <View style={styles.body}>
         <Text style={styles.label}>{title}</Text>
@@ -121,12 +122,13 @@ export function EarnActionScreen() {
 
 
         {status === 'error' && err ? <Text style={styles.err}>{err}</Text> : null}
+
+        {/* Directly under the field, the way the order sheet puts its confirm under the amount.
+            Pinned to the bottom it floated a long way from the thing it confirms, and in a short
+            sheet it collided with it. */}
+        <ConfirmButton onPress={onSubmit} disabled={!canSubmit} style={styles.submit} />
       </View>
       </ScrollView>
-
-      <SafeAreaView edges={['bottom']} style={styles.footer}>
-      <ConfirmButton onPress={onSubmit} disabled={!canSubmit} />
-      </SafeAreaView>
     </View>
   );
 }
@@ -134,7 +136,7 @@ export function EarnActionScreen() {
 const makeStyles = (c: Colors) => StyleSheet.create({
   container: {flex: 1, backgroundColor: c.bg},
   flex: {flex: 1},
-  footer: {padding: 20, paddingTop: 8},
+  submit: {marginTop: 6},
   scroll: {flexGrow: 1, padding: 20},
   body: {gap: 14},
   label: {color: c.text, fontSize: 18, fontWeight: '700'},

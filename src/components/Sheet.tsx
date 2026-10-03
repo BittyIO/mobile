@@ -1,5 +1,5 @@
-import React from 'react';
-import {Animated, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View} from 'react-native';
+import React, {useEffect, useRef, useState} from 'react';
+import {Animated, Keyboard, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View} from 'react-native';
 import {useSheetAnim} from '@/components/useSheetAnim';
 import {useT} from '@/i18n';
 import {useStyles, type Colors} from '@/theme';
@@ -50,21 +50,59 @@ export function Sheet({
   const styles = useStyles(makeStyles);
   const {height: screenHeight} = useWindowDimensions();
   const {mounted, sheetStyle, backdropStyle, panHandlers, requestClose} = useSheetAnim(visible, onClose);
-  const sheetHeight = height ?? Math.round(screenHeight * SHEET_HEIGHT_RATIO);
+
+  /**
+   * Get out of the keyboard's way.
+   *
+   * A sheet is pinned to the bottom of the screen, which is exactly where the keyboard appears, so
+   * any sheet with a field in it had its field and its confirm button underneath one — the rename
+   * sheets were unusable. Lifting by the keyboard's own height puts the whole card above it.
+   *
+   * `keyboardWillShow` rather than `Did`: it fires BEFORE the keyboard moves and carries the
+   * duration of that movement, so the card travels with it instead of jumping once it has arrived.
+   * The height is capped as well as lifted — a tall sheet plus a keyboard is taller than the
+   * screen, and without the cap the top of the card would be pushed off it.
+   *
+   * The lift sits on its OWN view, which is not a tidiness choice. The card below it is animated by
+   * `useSheetAnim` with `useNativeDriver: true`, which hands that node to the native animation
+   * driver; a JS-driven prop on a node the native driver owns throws, and `marginBottom` is a
+   * layout property that can never be native. Putting the two animations on the same view crashed
+   * the app the moment a keyboard opened over a sheet. Two nodes, two drivers, no argument.
+   */
+  const lift = useRef(new Animated.Value(0)).current;
+  const [keyboard, setKeyboard] = useState(0);
+  useEffect(() => {
+    const move = (to: number, duration: number) => {
+      setKeyboard(to);
+      Animated.timing(lift, {toValue: to, duration: duration || 250, useNativeDriver: false}).start();
+    };
+    const show = Keyboard.addListener('keyboardWillShow', (e) => move(e.endCoordinates.height, e.duration));
+    const hide = Keyboard.addListener('keyboardWillHide', (e) => move(0, e.duration));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, [lift]);
+
+  // 72 leaves a strip of backdrop above the card, so it never reads as a full-screen page.
+  const wanted = height ?? Math.round(screenHeight * SHEET_HEIGHT_RATIO);
+  const sheetHeight = Math.min(wanted, screenHeight - keyboard - 72);
   return (
     <Modal transparent visible={mounted} animationType="none" onRequestClose={requestClose}>
       <Animated.View style={[StyleSheet.absoluteFill, styles.shade, backdropStyle]} />
       <Pressable style={styles.backdrop} onPress={requestClose}>
-        <Animated.View style={[{height: sheetHeight}, sheetStyle]} {...panHandlers}>
-          <Pressable style={styles.sheet} onPress={() => {}}>
-            <View style={styles.head}>
-              <Text style={styles.title}>{title}</Text>
-              <Pressable onPress={requestClose} hitSlop={10}>
-                <Text style={done ? styles.done : styles.close}>{done ? t('vault.done') : '✕'}</Text>
-              </Pressable>
-            </View>
-            {children}
-          </Pressable>
+        <Animated.View style={{marginBottom: lift}}>
+          <Animated.View style={[{height: sheetHeight}, sheetStyle]} {...panHandlers}>
+            <Pressable style={styles.sheet} onPress={() => {}}>
+              <View style={styles.head}>
+                <Text style={styles.title}>{title}</Text>
+                <Pressable onPress={requestClose} hitSlop={10}>
+                  <Text style={done ? styles.done : styles.close}>{done ? t('vault.done') : '✕'}</Text>
+                </Pressable>
+              </View>
+              {children}
+            </Pressable>
+          </Animated.View>
         </Animated.View>
       </Pressable>
     </Modal>

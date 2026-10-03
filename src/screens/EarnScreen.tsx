@@ -1,44 +1,27 @@
 import {useHeaderHeight} from '@react-navigation/elements';
 import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {ActivityIndicator, Animated, Keyboard, KeyboardAvoidingView, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View} from 'react-native';
+import {Pressable, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
-import {Pill} from '@/components/ui';
-import {AmountInput, exceedsMax} from '@/components/AmountInput';
 import {TokenIcon} from '@/components/TokenIcon';
-import {PendingSwitch} from '@/components/PendingSwitch';
 import {Amount} from '@/components/Amount';
-import {ConfirmButton} from '@/components/Button';
-import {showTx, ToastHost} from '@/components/Toast';
-import {useSheetAnim} from '@/components/useSheetAnim';
-import {SHEET_HEIGHT_RATIO} from '@/components/Sheet';
 import {ProtocolChip} from '@/components/ProtocolIcon';
-import {useWallet} from '@/wallet/store';
+import {useDefiDetails} from '@/core/defi-details';
 import {useNetwork} from '@/core/network-store';
-import {formatUnits, parseUnits, type Address} from 'viem';
-import type {Signer} from '@/wallet/signer';
+import {formatUnits, type Address} from 'viem';
 import {useVaultPositions} from '@/vault/useVaultPositions';
 import {useVaultLp} from '@/vault/useVaultLp';
 import {useFlows} from '@/vault/useFlows';
 import {useVaultBalances} from '@/vault/useVaultBalances';
-import {earnedRaw, recordFlow} from '@/vault/flows';
-import {relayGasFor} from '@/vault/fee-quote';
-import {useConfirmAction} from '@/components/ConfirmAction';
-import {removeLp, claimLpFees} from '@/vault/lp-actions';
-import {depositToProtocol, withdrawFromProtocol} from '@/vault/actions';
+import {earnedRaw} from '@/vault/flows';
 import {balanceOfSymbol} from '@/vault/read';
-import {publicClientFor} from '@/core/chain';
-import {getAutoYields, setAutoYield} from '@/vault/autoyield';
 import {fetchProtocolApy, EMPTY_APY, type ProtocolApy} from '@/vault/apy';
-import {zeroAddress} from 'viem';
 import {ASSETS, type Asset} from '@/core/assets';
 import {fmtNum, displaySymbol} from '@/core/format';
 import {adapterByName} from '@/core/protocols';
 import type {Position} from '@/vault/positions';
-import type {LpPosition} from '@/vault/lp';
-import Svg, {Path} from 'react-native-svg';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 
@@ -59,17 +42,9 @@ function EarnRow({
   earned,
   apy,
   protocolName,
-  autoLabel,
-  depositLabel,
-  autoOn,
-  autoBusy,
-  expanded,
   first,
   last,
-  onToggle,
-  onToggleAuto,
-  onDeposit,
-  onWithdraw,
+  onOpen,
 }: {
   row: Row;
   first: boolean;
@@ -82,28 +57,20 @@ function EarnRow({
   apy: number | null;
   /** Shown as a small logo after the APY when the section mixes protocols (Sky / Lido). */
   protocolName?: string;
-  /** "Auto-Yield" on a yield row, "Auto-Supply" on a lending one. */
-  autoLabel: string;
-  depositLabel: string;
-  autoOn: boolean;
-  autoBusy: boolean;
-  // The actions (Auto-Yield switch, Deposit / Withdraw) stay folded under the row until it is
-  // tapped, so the table reads as a list first and a control panel only for the row in hand.
-  expanded: boolean;
-  onToggle: () => void;
-  onToggleAuto: () => void;
-  onDeposit: () => void;
-  onWithdraw: () => void;
+  /** Opens this position's own page, where the actions and the explanations live. */
+  onOpen: () => void;
 }) {
   const {t} = useT();
   const c = useColors();
   const styles = useStyles(makeStyles);
   const {asset} = row.route;
   const amount = row.pos?.formatted ?? '0';
-  const hasPos = Number(amount) > 0;
   return (
     <View style={[styles.trWrap, first && styles.trFirst, last && styles.trLast]}>
-      <Pressable style={styles.trTop} onPress={onToggle}>
+      {/* The whole row opens the position's own page. It used to expand in place into a strip
+          holding a toggle and two buttons, which left no room to say what Auto-Yield does or
+          what the rate has been doing — and no room at all once the words were not English. */}
+      <Pressable style={styles.trTop} onPress={onOpen}>
         <View style={styles.assetCell}>
           <TokenIcon symbol={asset.symbol} size={30} />
           <View style={styles.assetText}>
@@ -124,31 +91,6 @@ function EarnRow({
           {earned && Number(earned) > 0 ? <Text style={styles.earned}>+ <Amount v={fmt(earned)} size={12} color={c.success} /></Text> : null}
         </View>
       </Pressable>
-      {/* Auto-Yield toggle inline with the action buttons — one row, left → right. Tapping the empty
-          space of this area folds the row back up, as tapping the row itself does; the switch and the
-          buttons keep their own taps. */}
-      {expanded ? (
-      <Pressable style={styles.actions} onPress={onToggle}>
-        <View style={styles.autoInline}>
-          <Text style={styles.autoToggleLabel}>{autoLabel}</Text>
-          <PendingSwitch
-            value={autoOn}
-            pending={autoBusy}
-            onValueChange={onToggleAuto}
-          />
-        </View>
-        <View style={styles.btnGroup}>
-          <Pressable style={styles.depBtn} onPress={onDeposit}>
-            <Text style={styles.priText}>{depositLabel}</Text>
-          </Pressable>
-          {hasPos ? (
-            <Pressable style={styles.wdBtn} onPress={onWithdraw}>
-              <Text style={styles.secText}>{t('vault.withdraw')}</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      </Pressable>
-      ) : null}
     </View>
   );
 }
@@ -187,26 +129,20 @@ function EarnTable({
 
 export function EarnScreen() {
   const tabBarHeight = useBottomTabBarHeight();
+  // Off, the rows say what the money is doing — yielding, lending — and not who with.
+  const defiDetails = useDefiDetails((s) => s.show);
   const headerHeight = useHeaderHeight();
   const {t} = useT();
   const c = useColors();
   const styles = useStyles(makeStyles);
-  // Rows with their actions open. Each row toggles on its own; opening one leaves the others as they are.
-  const [openRows, setOpenRows] = useState<Set<string>>(() => new Set());
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const network = useNetwork((s) => s.network);
   const assets = ASSETS[network];
-  const account = useWallet((s) => s.account);
-  const getSigner = useWallet((s) => s.signer);
   const bal = useVaultBalances(network);
   const pos = useVaultPositions(bal.vault, network);
   const lp = useVaultLp(bal.vault, network);
   const flows = useFlows(bal.vault, network);
-  const [lpBusy, setLpBusy] = useState<string | null>(null);
   // Auto-Yield routes: lowercased asset address → configured protocol (zero = off).
-  const [autoMap, setAutoMap] = useState<Map<string, string>>(new Map());
-  const [autoBusy, setAutoBusy] = useState<string | null>(null);
-  const [autoNonce, setAutoNonce] = useState(0);
   const [apy, setApy] = useState<ProtocolApy>(EMPTY_APY);
 
   // Route catalog: which adapters accept which assets. Lido stakes ETH (WETH); Sky is USDC savings;
@@ -231,7 +167,6 @@ export function EarnScreen() {
 
   // The protocols behind each section, shown at the right of its header.
   const lendNames = useMemo(() => Array.from(new Set(lendRoutes.map((r) => r.name))), [lendRoutes]);
-  const ammNames = useMemo(() => (adapterByName(network, 'Uniswap V3') ? ['Uniswap V3'] : []), [network]);
 
   const apyFor = (r: Route): number | null =>
     apy.protocolApy.get(r.protocol.toLowerCase()) ?? apy.assetApy.get(r.asset.address.toLowerCase()) ?? null;
@@ -252,7 +187,17 @@ export function EarnScreen() {
       .filter((row) => {
         const a = apyFor(row.route);
         return a === null || a >= MIN_APY || Number(row.pos?.formatted ?? '0') > 0;
-      });
+      })
+      /**
+       * Stablecoins lead every section, as they do on the Overview.
+       *
+       * The order was whatever the route catalog happened to build: Lido's WETH before Sky's USDC
+       * under Flexible Yield, and the asset list's own order under Flexible Lend, which puts WETH
+       * and WBTC above both dollars. Earning on a dollar is the thing almost everyone is here for,
+       * and it was the row furthest down. `sort` is stable, so within each group the catalog order
+       * is untouched.
+       */
+      .sort((x, y) => Number(y.route.asset.kind === 'stable') - Number(x.route.asset.kind === 'stable'));
 
   const earnedFor = (p: Position | null): string | null => {
     if (!p || !flows.flows) return null;
@@ -262,151 +207,11 @@ export function EarnScreen() {
   // Null while the balances are still loading — the row shows a dash rather than 0.
   const freeFor = (symbol: string): string | null => (bal.balances ? balanceOfSymbol(bal.balances, symbol) : null);
 
-  // Deposit / Withdraw happen in a compact bottom sheet (below), not a full-screen page.
-  const [act, setAct] = useState<{mode: 'deposit' | 'withdraw'; route: Route; max: string; verb: string} | null>(null);
-  const [actAmount, setActAmount] = useState('');
-  const [actErr, setActErr] = useState<string | null>(null);
 
-  const openDeposit = (r: Route, verb: string) => {
-    setAct({mode: 'deposit', route: r, max: freeFor(r.asset.symbol) ?? '0', verb});
-    setActAmount('');
-    setActErr(null);
-  };
-  const openWithdraw = (r: Route, p: Position) => {
-    setAct({mode: 'withdraw', route: r, max: p.formatted, verb: t('vault.withdraw')});
-    setActAmount('');
-    setActErr(null);
-  };
 
-  // Fee stablecoin: prefer one the vault holds that isn't the asset being deposited.
-  const pickFeeCoin = (excludeAddr?: string): Address => {
-    const held = assets.filter((a) => a.kind === 'stable' && Number(balanceOfSymbol(bal.balances, a.symbol)) > 0);
-    const ex = excludeAddr?.toLowerCase();
-    return ((held.find((s) => s.address.toLowerCase() !== ex) ?? held[0] ?? stable)?.address ?? '') as Address;
-  };
 
-  const onActionSubmit = async () => {
-    if (!act || !account || !bal.vault) return;
-    if (!(Number(actAmount) > 0)) {
-      setActErr(t('vault.enter_amount'));
-      return;
-    }
-    if (exceedsMax(actAmount, act.max)) {
-      setActErr(t('vault.insufficient_balance', {token: displaySymbol(act.route.asset.symbol)}));
-      return;
-    }
-    // The sheet closes as soon as the order is placed: the toast reports Submitting → Confirmed, so
-    // nothing sits spinning over the form the user is finished with.
-    const {verb, mode, route} = act;
-    const amount = actAmount;
-    const vault = bal.vault;
-    setAct(null);
-    setActErr(null);
-    const tx = showTx(`${verb} ${fmt(amount)} ${displaySymbol(route.asset.symbol)}`, network);
-    try {
-      const acct = await getSigner();
-      const run = mode === 'deposit' ? depositToProtocol : withdrawFromProtocol;
-      const hash = await run({
-        account: acct,
-        vault,
-        network,
-        protocol: route.protocol,
-        asset: route.asset.address,
-        amount,
-        decimals: route.asset.decimals,
-        stableCoin: pickFeeCoin(route.asset.address),
-      });
-      tx.success(hash);
-      // Ledger the move, so the earned line under this row has a principal to measure against.
-      // Keyed off the route, which is the same protocol and asset the call above used.
-      void recordFlow({
-        vault,
-        network,
-        protocol: route.protocol,
-        asset: route.asset.address,
-        kind: route.kind === 'staking' ? 'stake' : 'supply',
-        direction: mode === 'deposit' ? 'in' : 'out',
-        amount: parseUnits(amount as `${number}`, route.asset.decimals),
-        txHash: hash,
-      });
-      pos.refresh();
-      bal.refresh();
-      // The relay returns on submit, not on mine — so the immediate read is still pre-tx. Refresh
-      // again once it's mined, and on a short timer as well: on a busy chain the receipt wait can
-      // fail on a public RPC, and without the timer the row would sit at 0 until a pull-to-refresh.
-      const again = () => {
-        pos.refresh();
-        bal.refresh();
-      };
-      publicClientFor(network)
-        .waitForTransactionReceipt({hash: hash as `0x${string}`})
-        .then(again)
-        .catch(() => {});
-      for (const ms of [6000, 20000]) setTimeout(again, ms);
-    } catch (e) {
-      tx.error(String((e as Error)?.message ?? e));
-    }
-  };
 
-  const {ask, sheet: confirmSheet} = useConfirmAction();
 
-  const runLp = async (tokenId: string, title: string, build: (a: Signer) => Promise<string>) => {
-    if (!account || !bal.vault) return;
-    setLpBusy(tokenId);
-    const tx = showTx(title, network);
-    try {
-      const acct = await getSigner();
-      tx.success(await build(acct));
-      lp.refresh();
-    } catch (e) {
-      tx.error(String((e as Error)?.message ?? e));
-    } finally {
-      setLpBusy(null);
-    }
-  };
-
-  const stable = assets.find((a) => a.kind === 'stable');
-  const pairLabel = (p: LpPosition) => `${displaySymbol(p.symbol0)}/${displaySymbol(p.symbol1)}`;
-  // Both are relayed writes behind a small row button, so each asks before it signs.
-  const onRemoveLp = (p: LpPosition) =>
-    stable &&
-    ask({
-      title: t('vault.remove_liquidity'),
-      message: pairLabel(p),
-      gas: relayGasFor({withdraw: 1}),
-      run: () =>
-        runLp(p.tokenId, `${t('vault.remove_liquidity')} ${pairLabel(p)}`, (a) =>
-          removeLp({account: a, vault: bal.vault!, network, tokenId: p.tokenId, liquidity: p.liquidity, stableCoin: stable!.address}),
-        ),
-    });
-  const onClaimLp = (p: LpPosition) =>
-    stable &&
-    ask({
-      title: t('vault.claim_fees'),
-      message: pairLabel(p),
-      gas: relayGasFor({withdraw: 1}),
-      run: () =>
-        runLp(p.tokenId, `${t('vault.claim_fees')} ${pairLabel(p)}`, (a) =>
-          claimLpFees({account: a, vault: bal.vault!, network, tokenId: p.tokenId, stableCoin: stable!.address}),
-        ),
-    });
-
-  // Load each asset's configured auto-yield route; re-read after a toggle.
-  useEffect(() => {
-    if (!bal.vault) return;
-    const addrs = [...new Set([...stakeRoutes, ...lendRoutes].map((r) => r.asset.address))] as Address[];
-    if (addrs.length === 0) return;
-    let live = true;
-    getAutoYields(bal.vault, network, addrs)
-      .then((m) => live && setAutoMap(new Map(m)))
-      .catch(() => {});
-    return () => {
-      live = false;
-    };
-  }, [bal.vault, network, stakeRoutes, lendRoutes, autoNonce]);
-
-  const isAutoOn = (r: Route): boolean =>
-    (autoMap.get(r.asset.address.toLowerCase()) ?? '').toLowerCase() === r.protocol.toLowerCase();
 
   // Live APY: Aave per lend asset, Sky/Lido per staking adapter. Re-read on network/route change.
   useEffect(() => {
@@ -428,47 +233,30 @@ export function EarnScreen() {
   // one FIRST — an asset like USDC is both a Sky and an Aave market, so a Sky row must not grab Aave's rate.
   // Owner: route this asset's idle balance into `r.protocol` (on), or clear it (off). One route per asset,
   // so turning one on turns any other off — the contract stores a single route per asset.
-  const toggleAuto = async (r: Route) => {
-    if (!account || !bal.vault || !stable) return;
-    const addr = r.asset.address.toLowerCase();
-    const on = isAutoOn(r);
-    setAutoBusy(addr);
-    const tx = showTx(
-      t(on ? 'mobile.actions.auto_yield_off' : 'mobile.actions.auto_yield_set', {token: displaySymbol(r.asset.symbol)}),
-      network,
-    );
-    try {
-      const acct = await getSigner();
-      const hash = await setAutoYield({account: acct, vault: bal.vault, network, asset: r.asset.address, protocol: on ? zeroAddress : r.protocol, stableCoin: stable.address});
-      tx.success(hash);
-      setAutoMap((prev) => new Map(prev).set(addr, on ? zeroAddress : r.protocol));
-      setAutoNonce((n) => n + 1);
-    } catch (e) {
-      tx.error(String((e as Error)?.message ?? e));
-    } finally {
-      setAutoBusy(null);
-    }
-  };
 
   // The pull spinner belongs to a pull only, never to the first load.
   const anyLoading = pos.loading || lp.loading;
   const [pulled, setPulled] = useState(false);
   const refreshing = pulled && anyLoading;
-  // The deposit / withdraw sheet comes up to the same line as every other sheet in the app.
-  const {height: screenHeight} = useWindowDimensions();
-  const actHeight = Math.round(screenHeight * SHEET_HEIGHT_RATIO);
-  // Same motion as every other sheet: rises, follows a downward drag, slides back out.
-  const actSheet = useSheetAnim(act != null, () => setAct(null));
   const onRefresh = useCallback(() => {
+    /**
+     * Nothing to refresh means nothing to spin for.
+     *
+     * `refreshing` is `pulled && anyLoading`, and the flag is cleared by an effect watching
+     * `anyLoading` fall. With no vault yet the hooks below start no load at all, so `anyLoading`
+     * never moves, the effect never runs, and `pulled` stays armed — after which the NEXT load,
+     * whenever it came, wore a pull spinner the user never asked for and kept it until it finished.
+     */
+    if (!bal.vault) return;
     setPulled(true);
     pos.refresh();
     lp.refresh();
-  }, [pos, lp]);
+  }, [pos, lp, bal.vault]);
   useEffect(() => {
     if (!anyLoading) setPulled(false);
   }, [anyLoading]);
 
-  const renderRows = (routes: Route[], depositLabel: string, empty: string, showProtocol = false, lend = false) => {
+  const renderRows = (routes: Route[], empty: string, showProtocol = false, lend = false) => {
     const rows = rowsFor(routes);
     if (rows.length === 0) return <Text style={styles.empty}>{empty}</Text>;
     return rows.map((row, i) => {
@@ -478,37 +266,21 @@ export function EarnScreen() {
         key={key}
         first={i === 0}
         last={i === rows.length - 1}
-        expanded={openRows.has(key)}
-        onToggle={() =>
-          setOpenRows((cur) => {
-            const next = new Set(cur);
-            if (next.has(key)) next.delete(key);
-            else next.add(key);
-            return next;
-          })
-        }
         row={row}
         free={freeFor(row.route.asset.symbol)}
         amountKnown={!pos.loading || pos.positions.length > 0}
         earned={earnedFor(row.pos)}
         apy={apyFor(row.route)}
-        protocolName={showProtocol ? row.route.name : undefined}
-        autoLabel={t(lend ? 'mobile.earn.auto_supply' : 'mobile.earn.auto_yield')}
-        depositLabel={depositLabel}
-        autoOn={isAutoOn(row.route)}
-        autoBusy={autoBusy === row.route.asset.address.toLowerCase()}
-        onToggleAuto={() =>
-          ask({
-            title: t(isAutoOn(row.route) ? 'mobile.actions.auto_yield_off' : 'mobile.actions.auto_yield_set', {
-              token: displaySymbol(row.route.asset.symbol),
-            }),
-            message: row.route.name,
-            gas: relayGasFor({}),
-            run: () => toggleAuto(row.route),
+        protocolName={showProtocol && defiDetails ? row.route.name : undefined}
+        onOpen={() =>
+          nav.navigate('EarnDetail', {
+            protocol: row.route.protocol,
+            asset: row.route.asset.address,
+            symbol: row.route.asset.symbol,
+            name: row.route.name,
+            lend,
           })
         }
-        onDeposit={() => openDeposit(row.route, depositLabel)}
-        onWithdraw={() => row.pos && openWithdraw(row.route, row.pos)}
       />
       );
     });
@@ -529,105 +301,20 @@ export function EarnScreen() {
       {/* Flexible Yield: Sky and Lido share it, so each row carries its protocol after the APY. */}
       <View style={styles.section}>
         <EarnTable title={t('vault.flexible_yield')}>
-          {renderRows(stakeRoutes, t('vault.deposit'), t('mobile.earn.no_yield_markets'), true)}
+          {renderRows(stakeRoutes, t('mobile.earn.no_yield_markets'), true)}
         </EarnTable>
       </View>
 
       {/* Flexible Lend: one protocol, named in the header. */}
       <View style={styles.section}>
-        <EarnTable title={t('vault.flexible_lend')} right={lendNames[0] ? <ProtocolChip name={lendNames[0]} size={16} /> : undefined}>
-          {renderRows(lendRoutes, t('vault.supply'), t('mobile.earn.no_lend_markets'), false, true)}
+        <EarnTable title={t('vault.flexible_lend')} right={defiDetails && lendNames[0] ? <ProtocolChip name={lendNames[0]} size={16} /> : undefined}>
+          {renderRows(lendRoutes, t('mobile.earn.no_lend_markets'), false, true)}
         </EarnTable>
       </View>
 
-      {/* Market Maker: the same card as the two above; "+" adds a position. */}
-      <View style={styles.section}>
-        <EarnTable
-          title={t('vault.market_maker')}
-          afterTitle={
-            <Pressable onPress={() => nav.navigate('AddLiquidity')} hitSlop={10} accessibilityLabel={t('mobile.earn.add')}>
-              <Svg width={18} height={18} viewBox="0 0 24 24">
-                <Path d="M12 5v14M5 12h14" stroke={c.accent} strokeWidth={2.2} strokeLinecap="round" />
-              </Svg>
-            </Pressable>
-          }
-          right={ammNames[0] ? <ProtocolChip name={ammNames[0]} size={16} /> : undefined}>
-          {lp.loading && lp.lp.length === 0 ? (
-            <ActivityIndicator color={c.accent} style={styles.pad} />
-          ) : lp.lp.length === 0 ? (
-            <Text style={styles.empty}>{t('mobile.earn.no_lp')}</Text>
-          ) : (
-            lp.lp.map((p, i) => {
-              const hasFees = p.feesOwed0 > 0 || p.feesOwed1 > 0;
-              return (
-                <View key={p.tokenId} style={[styles.lpCell, i === 0 && styles.lpFirst, i === lp.lp.length - 1 && styles.lpLast]}>
-                  <View style={styles.lpTop}>
-                    <View style={styles.pairLine}>
-                      <Text style={styles.sym}>
-                        {displaySymbol(p.symbol0)}/{displaySymbol(p.symbol1)}
-                      </Text>
-                      <View style={styles.protoPill}>
-                        <Text style={styles.protoPillText}>{(p.fee / 10000).toFixed(2)}%</Text>
-                      </View>
-                      <Pill label={p.inRange ? t('vault.in_range') : t('vault.out_of_range')} tone={p.inRange ? 'green' : 'amber'} />
-                    </View>
-                    <Text style={styles.lpAmt}>
-                      <Amount v={fmt(p.amount0)} /> {displaySymbol(p.symbol0)} + <Amount v={fmt(p.amount1)} /> {displaySymbol(p.symbol1)}
-                    </Text>
-                  </View>
-                  <Text style={styles.lpFees}>
-                    {t('mobile.earn.fees')} <Amount v={fmt(p.feesOwed0)} /> {displaySymbol(p.symbol0)} + <Amount v={fmt(p.feesOwed1)} /> {displaySymbol(p.symbol1)}
-                  </Text>
-                  <View style={styles.rowBtns}>
-                    <Pressable disabled={lpBusy === p.tokenId || !hasFees} onPress={() => onClaimLp(p)} style={[styles.priBtn, (!hasFees || lpBusy === p.tokenId) && styles.dim]}>
-                      <Text style={styles.priText}>{lpBusy === p.tokenId ? '…' : t('vault.claim_fees')}</Text>
-                    </Pressable>
-                    <Pressable disabled={lpBusy === p.tokenId} onPress={() => onRemoveLp(p)} style={[styles.dangerBtn, lpBusy === p.tokenId && styles.dim]}>
-                      <Text style={styles.dangerText}>{t('vault.remove')}</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              );
-            })
-          )}
-        </EarnTable>
-      </View>
     </ScrollView>
 
-      {confirmSheet}
 
-      {/* Deposit / Withdraw bottom sheet */}
-      <Modal transparent visible={actSheet.mounted} animationType="none" onRequestClose={actSheet.requestClose}>
-        <Animated.View style={[StyleSheet.absoluteFill, styles.shade, actSheet.backdropStyle]} />
-        <Pressable style={styles.sheetBackdrop} onPress={actSheet.requestClose}>
-          <KeyboardAvoidingView behavior={undefined} style={{height: actHeight}}>
-            <Animated.View style={[styles.sheetWrap, actSheet.sheetStyle]} {...actSheet.panHandlers}>
-            <Pressable style={styles.sheet} onPress={() => Keyboard.dismiss()}>
-              <View style={styles.sheetHead}>
-                <Text style={styles.sheetTitle}>{act ? `${act.verb} ${displaySymbol(act.route.asset.symbol)}` : ''}</Text>
-                <Pressable onPress={actSheet.requestClose} hitSlop={10}>
-                  <Text style={styles.sheetClose}>✕</Text>
-                </Pressable>
-              </View>
-              <AmountInput
-                value={actAmount}
-                onChangeText={setActAmount}
-                placeholder={t('vault.amount')}
-                max={act?.max}
-                maxLabel={act ? `${fmt(act.max)} ${displaySymbol(act.route.asset.symbol)}` : undefined}
-              />
-              {actErr ? <Text style={styles.actErr}>{actErr}</Text> : null}
-              <ConfirmButton
-                onPress={onActionSubmit}
-                disabled={!act || !account || !bal.vault || !(Number(actAmount) > 0) || exceedsMax(actAmount, act.max)}
-                gas={relayGasFor(act?.mode === 'withdraw' ? {withdraw: 1} : {supply: 1})}
-              />
-            </Pressable>
-            </Animated.View>
-          </KeyboardAvoidingView>
-          <ToastHost />
-        </Pressable>
-      </Modal>
     </>
   );
 }
@@ -637,7 +324,6 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   // paddingBottom is set inline from the tab bar's height; see the ScrollView.
   content: {flexGrow: 1, padding: 16, gap: 20},
   section: {gap: 0},
-  pad: {paddingVertical: 20},
   empty: {color: c.subtext, fontSize: 13, paddingTop: 12, paddingBottom: 4},
   // solid card matching the Overview/Trade surfaces (c.card), header row + hairline-separated rows.
   // Same card as the Overview asset list: the card carries the padding, the header sits inside it,
@@ -660,43 +346,8 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   apyText: {color: c.success, fontSize: 12, fontWeight: '700'},
   sym: {color: c.text, fontSize: 15, fontWeight: '600'},
   rowSub: {color: c.subtext, fontSize: 13, marginTop: 2},
-  protoPill: {backgroundColor: c.card, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2},
-  protoPillText: {color: c.textMuted, fontSize: 12, fontWeight: '600'},
   amtCol: {alignItems: 'flex-end', minWidth: 64},
   amt: {color: c.text, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums']},
-  amtLabel: {color: c.subtext, fontSize: 12, marginTop: 1},
   earned: {color: c.success, fontSize: 12, fontVariant: ['tabular-nums'], marginTop: 1},
-  rowBtns: {flexDirection: 'row', gap: 8},
-  priBtn: {flex: 1, backgroundColor: c.accent, borderRadius: 8, paddingVertical: 9, alignItems: 'center'},
-  priText: {color: c.onAccent, fontSize: 13, fontWeight: '700'},
-  secBtn: {flex: 1, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, borderRadius: 8, paddingVertical: 9, alignItems: 'center'},
-  secText: {color: c.textMuted, fontSize: 13, fontWeight: '700'},
-  dangerBtn: {flex: 1, borderWidth: 1, borderColor: c.danger, borderRadius: 8, paddingVertical: 9, alignItems: 'center'},
-  dangerText: {color: c.danger, fontSize: 13, fontWeight: '700'},
-  dim: {opacity: 0.4},
-  lpCell: {paddingVertical: 12, gap: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border},
-  lpFirst: {borderTopWidth: 0},
-  lpLast: {paddingBottom: 0},
-  lpTop: {gap: 6},
-  pairLine: {flexDirection: 'row', alignItems: 'center', gap: 8},
-  lpAmt: {color: c.text, fontSize: 13, fontVariant: ['tabular-nums']},
-  lpFees: {color: c.subtext, fontSize: 12, fontVariant: ['tabular-nums']},
   secSpacer: {flex: 1},
-  // Deposit/Withdraw bottom sheet
-  shade: {backgroundColor: c.overlay},
-  sheetBackdrop: {flex: 1, justifyContent: 'flex-end'},
-  sheetWrap: {flex: 1},
-  sheet: {flex: 1, backgroundColor: c.elevated, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, gap: 14},
-  sheetHead: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
-  sheetTitle: {color: c.text, fontSize: 18, fontWeight: '700'},
-  sheetClose: {color: c.subtext, fontSize: 18},
-  hint: {color: c.subtext, fontSize: 12, lineHeight: 17},
-  actErr: {color: c.danger, fontSize: 13},
-  actions: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10},
-  autoInline: {flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1},
-  autoToggleLabel: {color: c.subtext, fontSize: 13, fontWeight: '600'},
-  autoSwitch: {transform: [{scaleX: 0.8}, {scaleY: 0.8}]},
-  btnGroup: {flexDirection: 'row', gap: 8},
-  depBtn: {backgroundColor: c.accent, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 16, alignItems: 'center'},
-  wdBtn: {backgroundColor: c.buttonSecondary, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14, alignItems: 'center'},
 });

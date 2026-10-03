@@ -81,6 +81,7 @@ export function ConfirmButton({
   style,
   gas,
   fee = true,
+  free,
 }: {
   onPress: () => void;
   loading?: boolean;
@@ -89,8 +90,10 @@ export function ConfirmButton({
   style?: StyleProp<ViewStyle>;
   /** Gas this particular operation is expected to burn; defaults to a typical relayed write. */
   gas?: bigint;
-  /** Set false where no relay fee is charged, so the line is not shown against a free action. */
+  /** Set false where the fee is UNKNOWN or irrelevant, so no line is shown at all. */
   fee?: boolean;
+  /** Set where the fee is known to be nothing: the line says $0 rather than disappearing. */
+  free?: boolean;
 }) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
@@ -113,12 +116,12 @@ export function ConfirmButton({
       )}
     </Pressable>
   );
-  if (!fee) return button;
+  if (!fee && !free) return button;
   // The cost sits with the control that incurs it, so every signing surface answers "what does this
   // cost me" in the same place without each screen having to remember to say it.
   return (
     <View style={styles.confirmWrap}>
-      <NetworkFee gas={gas} />
+      <NetworkFee gas={gas} free={free} />
       {button}
     </View>
   );

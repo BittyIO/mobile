@@ -37,6 +37,16 @@ export function useVaultPositions(vault: Address | null, network: Network): Stat
   useEffect(() => {
     if (!vault) {
       setPositions([]);
+      /**
+       * The flag too, not just the data.
+       *
+       * A run superseded mid-flight drops its own clear (`live` is false by the time the request
+       * settles), on the assumption that the run replacing it sets the flag itself. This path does
+       * not: it starts no request. So a load that was in flight when the vault went away — a
+       * switch, a lock, a wallet still deriving its owner — left `loading` true with nothing left
+       * that could ever clear it, and the screen spun for ever.
+       */
+      setLoading(false);
       return;
     }
     let live = true;
@@ -58,9 +68,19 @@ export function useVaultPositions(vault: Address | null, network: Network): Stat
         if (!live) return;
         sky = live_sky;
         const merged = merge(served);
+        /**
+         * A failed read is not an empty vault.
+         *
+         * The served list is `[]` when the request errored or timed out, and writing that over the
+         * rows already on screen made a refresh that merely failed look like the positions had been
+         * withdrawn. Keep the last good answer and say what went wrong instead.
+         */
+        if (apiError && merged.length === 0) {
+          setError(apiError);
+          return;
+        }
         setPositions(merged);
-        // An API error only matters when nothing is on screen because of it.
-        setError(merged.length === 0 ? apiError : null);
+        setError(null);
       })
       .finally(() => live && setLoading(false));
 

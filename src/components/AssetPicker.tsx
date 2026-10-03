@@ -8,7 +8,14 @@ import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 
 export type PickerAsset = {symbol: string; name?: string; company?: string};
-export type PickerItem = {key: string; label: string; sub?: string; icon?: React.ReactNode};
+export type PickerItem = {
+  key: string;
+  label: string;
+  sub?: string;
+  icon?: React.ReactNode;
+  /** A figure for the right-hand end of the row — what the vault holds of it, where that is known. */
+  value?: string;
+};
 
 /**
  * A bottom sheet listing assets with their icons, replacing the plain-text iOS action sheet. Tapping
@@ -79,6 +86,7 @@ export function PickerSheet({
                   <Text style={styles.sym}>{it.label}</Text>
                   {it.sub ? <Text style={styles.name}>{it.sub}</Text> : null}
                 </View>
+                {it.value ? <Text style={styles.val}>{it.value}</Text> : null}
                 {on ? (
                   <Svg width={18} height={18} viewBox="0 0 24 24">
                     <Path d="M20 6 9 17l-5-5" stroke={c.accent} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" fill="none" />
@@ -105,4 +113,6 @@ const makeStyles = (c: Colors) =>
     rowText: {flex: 1},
     sym: {color: c.text, fontSize: 16, fontWeight: '600'},
     name: {color: c.subtext, fontSize: 12, marginTop: 1},
+    // Tabular, so a column of balances lines up on the decimal point.
+    val: {color: c.text, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums']},
   });

@@ -23,7 +23,6 @@ import {displaySymbol} from '@/core/format';
 export function AutoYieldScreen() {
   const {t} = useT();
   const styles = useStyles(makeStyles);
-  const account = useWallet((s) => s.account);
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);

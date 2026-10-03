@@ -53,10 +53,29 @@ async function readSecret(prompt: string): Promise<string | null> {
   return creds ? creds.password : null;
 }
 
-/** Unlock: derive the account from the Keychain-stored mnemonic (Face ID). Null if cancelled/absent. */
-export async function unlock(): Promise<HDAccount | null> {
+/**
+ * Unlock: derive an account from the Keychain-stored mnemonic (Face ID). Null if cancelled/absent.
+ *
+ * `index` is the BIP-44 account index, which is what makes more than one vault possible: the
+ * factory salts on the owner's address, so one owner is one vault for ever, and a second vault
+ * means a second owner. Derived from the same phrase, so the phrase still recovers all of them.
+ * Index 0 is the wallet that has always existed and keeps the default path.
+ */
+export async function unlock(index = 0): Promise<HDAccount | null> {
   const m = await readSecret('Unlock Bitty');
-  return m ? mnemonicToAccount(m) : null;
+  return m ? mnemonicToAccount(m, {accountIndex: index}) : null;
+}
+
+/**
+ * Every owner address up to `count`, derived in one biometric prompt.
+ *
+ * Switching vaults must not ask for Face ID — the addresses are public, so they are read once and
+ * cached, and the key stays behind the prompt where it belongs.
+ */
+export async function addressesUpTo(count: number): Promise<`0x${string}`[] | null> {
+  const m = await readSecret('Add a vault');
+  if (!m) return null;
+  return Array.from({length: count}, (_, i) => mnemonicToAccount(m, {accountIndex: i}).address);
 }
 
 /** Reveal the raw recovery phrase (Face ID). Null if cancelled. */

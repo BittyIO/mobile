@@ -8,11 +8,16 @@ export type AssetCategory = 'crypto_native' | 'stock' | 'etf';
 export const ASSET_CATEGORIES: AssetCategory[] = ['crypto_native', 'stock', 'etf'];
 
 /**
- * The catalog still carries the older, finer buckets. A crypto treasury company (MSTR, COIN) is
- * a crypto asset to someone browsing, and the Mega 7 are just large stocks, so both fold into the
- * three groups above — here rather than in the data, so rows served by the assets API fold too.
+ * The catalog still carries the older, finer buckets, which fold into the three groups above —
+ * here rather than in the data, so rows served by the assets API fold the same way.
+ *
+ * A crypto treasury company — Strategy, Coinbase, Circle, SharpLink, Bitmine — is a STOCK. It was
+ * filed under Crypto on the grounds that someone browsing for crypto would look there, but the
+ * thing being traded is a share in a listed company, and putting it beside ETH and WBTC made the
+ * crypto tab a mix of two different kinds of instrument while the stock tab was missing its most
+ * recognisable names.
  */
-const MERGED: Record<string, AssetCategory> = {crypto_stock: 'crypto_native', mega7: 'stock'};
+const MERGED: Record<string, AssetCategory> = {crypto_stock: 'stock', mega7: 'stock'};
 export function assetCategory(category?: string): AssetCategory {
   const c = category ?? 'crypto_native';
   return MERGED[c] ?? (ASSET_CATEGORIES.includes(c as AssetCategory) ? (c as AssetCategory) : 'crypto_native');
@@ -47,11 +52,16 @@ export const ASSETS: Record<Network, Asset[]> = {
     {symbol: 'AAVE', address: '0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9', decimals: 18, kind: 'crypto'},
     {symbol: 'USDC', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6, kind: 'stable'},
     {symbol: 'USDT', address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', decimals: 6, kind: 'stable'},
-    // Ondo Global Markets tokenized stocks, registered in the mainnet guard without the AMM-liquid bit:
-    // limit / TWAP only (no pool to market-swap through), grouped by the web's categories.
-    {symbol: 'CRCL', company: 'Circle Internet Group', address: '0x3632DEa96A953C11dac2f00b4A05a32CD1063fAE', decimals: 18, kind: 'crypto', category: 'crypto_native'},
-    {symbol: 'COIN', company: 'Coinbase', address: '0xF042cfa86cf1D598a75Bdb55c3507a1F39f9493b', decimals: 18, kind: 'crypto', category: 'crypto_native'},
-    {symbol: 'SBET', company: 'SharpLink Gaming', address: '0xfDb46864A7C476F0914c5E82CdED3364a9F56F8a', decimals: 18, kind: 'crypto', category: 'crypto_native'},
+    // Ondo Global Markets tokenized stocks, registered in the mainnet guard without the AMM-liquid
+    // bit: limit / TWAP only (no pool to market-swap through).
+    // Crypto treasury companies lead the stock list: Circle, Coinbase, SharpLink, Strategy,
+    // Bitmine. They are stocks, and they are also the reason someone holding crypto is looking
+    // at stocks at all — buried among the Mega 7 they were the hardest things here to find.
+    {symbol: 'CRCL', company: 'Circle Internet Group', address: '0x3632DEa96A953C11dac2f00b4A05a32CD1063fAE', decimals: 18, kind: 'crypto', category: 'stock'},
+    {symbol: 'COIN', company: 'Coinbase', address: '0xF042cfa86cf1D598a75Bdb55c3507a1F39f9493b', decimals: 18, kind: 'crypto', category: 'stock'},
+    {symbol: 'SBET', company: 'SharpLink Gaming', address: '0xfDb46864A7C476F0914c5E82CdED3364a9F56F8a', decimals: 18, kind: 'crypto', category: 'stock'},
+    {symbol: 'MSTR', company: 'Strategy', address: '0xCabD955322dfbf94C084929ac5E9Eca3fEB5556F', decimals: 18, kind: 'crypto', category: 'stock'},
+    {symbol: 'BMNR', company: 'Bitmine Immersion Technologies', address: '0x33483A58079b4225b10e57958Ca28ad7b9CDbAF7', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'AAPL', company: 'Apple', address: '0x14c3abF95Cb9C93a8b82C1CdCB76D72Cb87b2d4c', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'MSFT', company: 'Microsoft', address: '0xB812837b81a3a6b81d7CD74CfB19A7f2784555E5', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'GOOGL', company: 'Alphabet', address: '0xbA47214eDd2bb43099611b208f75E4b42FDcfEDc', decimals: 18, kind: 'crypto', category: 'stock'},
@@ -67,8 +77,6 @@ export const ASSETS: Record<Network, Asset[]> = {
     {symbol: 'SPCX', company: 'SpaceX', address: '0xc9eef266834730340A55B6CC24621B31BAF55581', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'NFLX', company: 'Netflix', address: '0x032deC3372F25C41EA8054B4987a7c4832CDB338', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'HOOD', company: 'Robinhood Markets', address: '0x998f02A9E343EF6E3E6f28700d5A20F839fD74E6', decimals: 18, kind: 'crypto', category: 'stock'},
-    {symbol: 'MSTR', company: 'Strategy', address: '0xCabD955322dfbf94C084929ac5E9Eca3fEB5556F', decimals: 18, kind: 'crypto', category: 'crypto_native'},
-    {symbol: 'BMNR', company: 'Bitmine Immersion Technologies', address: '0x33483A58079b4225b10e57958Ca28ad7b9CDbAF7', decimals: 18, kind: 'crypto', category: 'crypto_native'},
     {symbol: 'COST', company: 'Costco', address: '0x0c8276E4FeC072cf7854Be69c70F7773D1610857', decimals: 18, kind: 'crypto', category: 'stock'},
   ],
   base: [
@@ -90,13 +98,13 @@ export const ASSETS: Record<Network, Asset[]> = {
     {symbol: 'GOOGL', company: 'Alphabet (Google)', address: '0x2e0847E8910a9732eB3fb1bb4b70a580ADAD4FE3', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'AAPL', company: 'Apple', address: '0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'HIMS', company: 'Hims & Hers Health', address: '0xCceE82fE024c36fA15E1005edE3E9e4787e23D09', decimals: 18, kind: 'crypto', category: 'stock'},
-    {symbol: 'MSTR', company: 'Strategy (MicroStrategy)', address: '0xec262a75e413fAfD0dF80480274532C79D42da09', decimals: 18, kind: 'crypto', category: 'crypto_native'},
+    {symbol: 'MSTR', company: 'Strategy (MicroStrategy)', address: '0xec262a75e413fAfD0dF80480274532C79D42da09', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'TSLA', company: 'Tesla', address: '0x322F0929c4625eD5bAd873c95208D54E1c003b2d', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'MSFT', company: 'Microsoft', address: '0xe93237C50D904957Cf27E7B1133b510C669c2e74', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'AMZN', company: 'Amazon', address: '0x12f190a9F9d7D37a250758b26824B97CE941bF54', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'cbBTC', address: '0xCEC185eB182c47d1bA1EFc84e6959e18cd620Be4', decimals: 8, kind: 'crypto', category: 'crypto_native'},
     {symbol: 'UNI', address: '0xF177d86a28b520e3E396E4F3B96cd8e72D7dabd8', decimals: 18, kind: 'crypto', category: 'crypto_native'},
-    {symbol: 'CRCL', company: 'Circle', address: '0xdF0992E440dD0be65BD8439b609d6D4366bf1CB5', decimals: 18, kind: 'crypto', category: 'crypto_native'},
+    {symbol: 'CRCL', company: 'Circle', address: '0xdF0992E440dD0be65BD8439b609d6D4366bf1CB5', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'COST', company: 'Costco', address: '0x4EA005168D7F09a7A0Ba9D1DEf21a479950E44C2', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'INTC', company: 'Intel', address: '0xc72b96e0E48ecd4DC75E1e45396e26300BC39681', decimals: 18, kind: 'crypto', category: 'stock'},
   ],
@@ -186,6 +194,19 @@ export const RECEIPT_TOKENS: Record<Network, Record<string, {symbol: string; dec
 /** The asset a receipt token stands for, or null when the address is not one. */
 export function underlyingOf(network: Network, address: string): string | null {
   return RECEIPT_TOKENS[network][address.toLowerCase()]?.underlying ?? null;
+}
+
+/**
+ * Whether this build can NAME a token, rather than guess at it.
+ *
+ * {@link assetMeta} answers an address it does not recognise with a shortened form of the address
+ * itself and a guessed 18 decimals — a reasonable last resort for a label, and useless for an
+ * amount, since a 6-decimal token scaled by 1e18 prints nonsense. Anything that formats a value
+ * should ask this first and decline to show the row at all.
+ */
+export function isKnownAsset(network: Network, address: string): boolean {
+  const a = address.toLowerCase();
+  return ASSETS[network].some((x) => x.address.toLowerCase() === a) || !!RECEIPT_TOKENS[network][a];
 }
 
 export function assetMeta(

@@ -5,7 +5,7 @@
  */
 import {parseUnits, type Address, type Hex} from 'viem';
 import type {Signer} from '@/wallet/signer';
-import {apiUrl, type Network} from '@/core/chain';
+import {apiFetch, apiUrl, type Network} from '@/core/chain';
 import {VAULT_PAYMENTS_ABI} from '@/core/abi';
 import {assetMeta} from '@/core/assets';
 import {relayVaultWrite} from './relay';
@@ -264,7 +264,7 @@ export async function sendToWhitelisted(o: {
 
 export async function fetchWhitelist(vault: Address, network: Network): Promise<WhitelistedRecipient[]> {
   try {
-    const res = await fetch(apiUrl(`/api/ethereum/vaults/whitelisted-recipients/${vault}`, network));
+    const res = await apiFetch(apiUrl(`/api/ethereum/vaults/whitelisted-recipients/${vault}`, network));
     if (!res.ok) return [];
     const j = (await res.json()) as {data?: WhitelistedRecipient[]};
     return j.data ?? [];
@@ -318,7 +318,7 @@ export type PaymentAction = {kind: string; action: string; itemId: string; block
 /** Pending payment-governance actions (operator proposals awaiting owner approval). */
 export async function fetchPaymentActions(vault: Address, network: Network): Promise<PaymentAction[]> {
   try {
-    const res = await fetch(apiUrl(`/api/ethereum/vaults/payment-actions/${vault}`, network));
+    const res = await apiFetch(apiUrl(`/api/ethereum/vaults/payment-actions/${vault}`, network));
     if (!res.ok) return [];
     const j = (await res.json()) as {data?: PaymentAction[]};
     return j.data ?? [];
@@ -348,7 +348,7 @@ export async function fetchScheduledPayments(
   network: Network,
 ): Promise<ScheduledPayment[]> {
   try {
-    const res = await fetch(apiUrl(`/api/ethereum/vaults/scheduled-payments/${vault}`, network));
+    const res = await apiFetch(apiUrl(`/api/ethereum/vaults/scheduled-payments/${vault}`, network));
     if (!res.ok) return [];
     const j = (await res.json()) as {data?: ScheduledPayment[]};
     return j.data ?? [];
