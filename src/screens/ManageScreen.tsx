@@ -1,9 +1,9 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {ownerVaultAddress} from '@/vault/read';
-import {isAllowlistEnabled, allowedSet, updateAsset, updateProtocol, setAllowlistEnabled} from '@/vault/manage';
+import {isAllowlistEnabled, allowedSet, updateAsset, updateProtocol, setAllowlistEnabled, vaultImplVersion} from '@/vault/manage';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {TokenIcon} from '@/components/TokenIcon';
 import {PendingSwitch} from '@/components/PendingSwitch';
@@ -11,7 +11,12 @@ import {showTx} from '@/components/Toast';
 import {useConfirmAction} from '@/components/ConfirmAction';
 import {relayGasFor} from '@/vault/fee-quote';
 import {ProtocolIcon} from '@/components/ProtocolIcon';
-import {allAdapters} from '@/core/protocols';
+import {type ProtocolCategory} from '@/core/protocols';
+import {
+  fetchVaultVersions,
+  currentServices,
+  type VaultVersionsCatalog,
+} from '@/vault/versions';
 import {useT} from '@/i18n';
 import {useStyles, type Colors} from '@/theme';
 import {displaySymbol} from '@/core/format';
@@ -20,13 +25,36 @@ import {displaySymbol} from '@/core/format';
  * Allow list management (Settings › Vault › Allow list). Vault / adapter upgrades will return here later. Gasless, Face-ID-gated. The
  * Bitty allowlist switch first, then the assets and the protocols, each in its own card.
  */
-/** Which service a protocol category powers, by web translation key. */
-const SERVICE_KEY: Record<string, string> = {
+/**
+ * Which service a protocol category powers, by translation key.
+ *
+ * Typed against ProtocolCategory rather than `string`, so adding a category to the registry fails
+ * to compile until it has a name here. It was `Record<string, string>` when the AMM split added
+ * `marketMaker`, and the lookup silently returned undefined — `t(undefined)` then threw inside
+ * `resolve` and took the whole Allow list page down.
+ */
+const SERVICE_KEY: Record<ProtocolCategory, string> = {
   staking: 'vault.flexible_yield',
   lending: 'vault.flexible_lend',
   amm: 'vault.market_trade',
+  marketMaker: 'vault.market_maker',
   intent: 'vault.limit_trade',
   unknown: 'mobile.vault.category_unknown',
+};
+
+/**
+ * The order the services are listed in: what the vault earns with, then what it trades with, then
+ * market making.
+ *
+ * Registry order put Market Maker in the middle of the trading services, between the adapter that
+ * swaps and the one that posts intents, where it reads as a third way to trade. It is the one
+ * service that puts the vault's money INTO a pool rather than through one, so it goes last.
+ * Anything with no rank here follows, in the order the registry gave it.
+ */
+const SERVICE_ORDER: ProtocolCategory[] = ['staking', 'lending', 'amm', 'intent', 'marketMaker', 'unknown'];
+const serviceRank = (c: ProtocolCategory) => {
+  const i = SERVICE_ORDER.indexOf(c);
+  return i < 0 ? SERVICE_ORDER.length : i;
 };
 
 export function ManageScreen() {
@@ -39,9 +67,34 @@ export function ManageScreen() {
   const stable = assets.find((a) => a.kind === 'stable');
   const vault = owner ? ownerVaultAddress(owner, network) : null;
 
-  // One adapter per protocol name (canonical address).
-  const protocols = Array.from(
-    new Map(allAdapters(network).map((p) => [p.name, p])).values(),
+  // The services come from the server version catalog (the single source shared with the web), not
+  // from a bundled adapter table. One adapter per name (canonical address), in service order.
+  const [catalog, setCatalog] = useState<VaultVersionsCatalog | null>(null);
+  useEffect(() => {
+    fetchVaultVersions(network).then(setCatalog);
+  }, [network]);
+  // The vault's own impl version decides which services apply: a ≤1.0.2 vault sees the combined
+  // Uniswap adapter; a 1.0.3+ vault sees the split Market Trade + Market Maker.
+  const [implVersion, setImplVersion] = useState(0);
+  useEffect(() => {
+    if (vault) vaultImplVersion(vault, network).then(setImplVersion);
+  }, [vault, network]);
+  /**
+   * One row per SERVICE per protocol, in service order.
+   *
+   * Keyed by category and name, not by name alone. Name alone was right before the AMM split,
+   * when a protocol appeared twice only because two adapter versions of it were registered and
+   * one row was wanted. Since the split two different services legitimately share a name — the
+   * catalog calls both the market-trade adapter and the market-maker adapter "Uniswap V3" — and
+   * a Map keyed on that kept whichever came last, which silently dropped Market Trade from the
+   * list. Two versions of one adapter within a category still collapse to one row.
+   */
+  const protocols = useMemo(
+    () =>
+      Array.from(
+        new Map(currentServices(catalog, implVersion).map((p) => [`${p.category}:${p.name}`, p])).values(),
+      ).sort((a, b) => serviceRank(a.category) - serviceRank(b.category)),
+    [catalog, implVersion],
   );
 
   const [restricted, setRestricted] = useState(false);
@@ -58,7 +111,7 @@ export function ManageScreen() {
     isAllowlistEnabled(vault, network).then(setRestricted);
     allowedSet(vault, network, 'asset', assets.map((a) => a.address)).then(setAssetSet);
     allowedSet(vault, network, 'protocol', protocols.map((p) => p.address)).then(setProtoSet);
-  }, [vault, network]);
+  }, [vault, network, protocols]);
   useEffect(load, [load]);
 
   const {ask, sheet} = useConfirmAction();
@@ -146,9 +199,9 @@ export function ManageScreen() {
         <View style={styles.group}>
         {protocols.map((p, i) => (
           <View key={p.address} style={[styles.row, i === 0 && styles.rowFirst, i === protocols.length - 1 && styles.rowLast]}>
-            <Text style={styles.sym}>{t(SERVICE_KEY[p.category])}</Text>
+            <Text style={styles.sym}>{t(SERVICE_KEY[p.category] ?? SERVICE_KEY.unknown)}</Text>
             <View style={styles.protoRight}>
-              <ProtocolIcon name={p.name} size={20} />
+              <ProtocolIcon name={p.name} size={20} uri={p.icon} />
               <Text style={styles.protoName}>{p.name}</Text>
             </View>
             <PendingSwitch

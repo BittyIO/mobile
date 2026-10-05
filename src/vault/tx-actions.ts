@@ -6,7 +6,7 @@
  */
 import type {Network} from '@/core/chain';
 import {assetMeta} from '@/core/assets';
-import {protocolMeta} from '@/core/protocols';
+import {protocolDisplayName, protocolMeta} from '@/core/protocols';
 import {displaySymbol, fmtNum} from '@/core/format';
 import {formatUnits} from 'viem';
 import type {CowOrder} from '@/vault/limit';
@@ -108,25 +108,13 @@ export function describeActions(
   network: Network,
   t: T,
   orders: Map<string, CowOrder> | undefined,
-  /** The DeFi-details switch. Passed in, not read here: see the note where `venues` is used. */
-  venues: boolean,
 ): string[] {
   if (!actions?.length) return [];
-  /**
-   * `venues` is whether to name the protocol a deposit or withdrawal went through.
-   *
-   * Off, the line is dropped rather than reworded: the operation's own title already says an Earn
-   * move happened, and "Deposit to Lending" under "Deposit" only repeats it. The lines that are
-   * ABOUT a protocol — enabling a service, upgrading one — keep their name either way, since
-   * without it they would say nothing.
-   *
-   * It arrives as an argument rather than being read from the store here. Read here, through
-   * getState, the caller never subscribed to it: flipping the switch in Settings re-rendered
-   * nothing and the history kept the lines it had already built. A parameter makes the dependency
-   * one the caller can see and name.
-   */
+  // A deposit or withdrawal names the protocol it went through. This used to be behind the
+  // "DeFi details" switch, which is gone: where the money actually sits is part of what the
+  // operation did, not a disclosure to opt into.
   const token = (a: string) => displaySymbol(assetMeta(network, a).symbol);
-  const proto = (a: string) => protocolMeta(network, a).name;
+  const proto = (a: string) => protocolDisplayName(protocolMeta(network, a).name);
   const k = (key: string, params?: Record<string, string | number>) => t(`mobile.actions.${key}`, params);
   const out: string[] = [];
   // Approving a token for limit trading registers the intent adapter in the same transaction the
@@ -142,10 +130,10 @@ export function describeActions(
         break;
       // Neither was described before, so an Earn move showed no line at all under its title.
       case 'deposit':
-        if (venues) out.push(k('deposit_to', {name: proto(String(g.depositProtocol ?? g.protocol))}));
+        out.push(k('deposit_to', {name: proto(String(g.depositProtocol ?? g.protocol))}));
         break;
       case 'withdraw':
-        if (venues) out.push(k('withdraw_from', {name: proto(String(g.withdrawProtocol ?? g.protocol))}));
+        out.push(k('withdraw_from', {name: proto(String(g.withdrawProtocol ?? g.protocol))}));
         break;
       case 'approveIntentRelayer':
         out.push(k('approve_intent', {token: token(String(g.token))}));

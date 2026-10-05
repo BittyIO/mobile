@@ -51,7 +51,7 @@ type TypeFilter = 'all' | 'limit' | 'market' | 'twap';
 const TYPE_OF: Record<Exclude<TypeFilter, 'all'>, Entry['kind']> = {limit: 'order', market: 'market', twap: 'twap'};
 
 export function OrderHistoryScreen() {
-  const {t, words} = useT();
+  const {t, words, language} = useT();
   const c = useColors();
   const styles = useStyles(makeStyles);
   const network = useNetwork((s) => s.network);
@@ -180,7 +180,7 @@ export function OrderHistoryScreen() {
           lines={[
             [t('mobile.trade.paid'), `${fmtShort(e.trade.sold.amount)} ${displaySymbol(e.trade.sold.symbol)}`],
             [t('vault.receive'), `${fmtShort(e.trade.bought.amount)} ${displaySymbol(e.trade.bought.symbol)}`],
-            ...(e.trade.ts ? [[t('mobile.trade.settled'), fmtExpiry(e.trade.ts)] as [string, string]] : []),
+            ...(e.trade.ts ? [[t('mobile.trade.settled'), fmtExpiry(e.trade.ts, language)] as [string, string]] : []),
           ]}
         />
       );
@@ -221,7 +221,7 @@ export function OrderHistoryScreen() {
                 ],
               ] as [string, string][])
             : []),
-          [t('vault.expires'), fmtExpiry(e.kind === 'twap' ? e.group.schedule.windowEnd : o.validTo)],
+          [t('vault.expires'), fmtExpiry(e.kind === 'twap' ? e.group.schedule.windowEnd : o.validTo, language)],
         ]}
       />
     );

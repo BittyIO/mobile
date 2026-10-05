@@ -91,6 +91,10 @@ export const ASSETS: Record<Network, Asset[]> = {
     {symbol: 'USDG', address: '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168', decimals: 6, kind: 'stable'},
     // Tokenized stocks — top holdings by Uniswap TVL on Robinhood Chain (all 18-decimal).
     {symbol: 'SPY', company: 'SPDR S&P 500 ETF Trust', address: '0x117cc2133c37B721F49dE2A7a74833232B3B4C0C', decimals: 18, kind: 'crypto', category: 'etf'},
+    // Crypto-treasury stocks lead the stock run, as on mainnet: someone holding MSTR or CRCL
+    // in a crypto vault is there for the crypto exposure, not for the S&P.
+    {symbol: 'CRCL', company: 'Circle', address: '0xdF0992E440dD0be65BD8439b609d6D4366bf1CB5', decimals: 18, kind: 'crypto', category: 'stock'},
+    {symbol: 'MSTR', company: 'Strategy (MicroStrategy)', address: '0xec262a75e413fAfD0dF80480274532C79D42da09', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'NVDA', company: 'NVIDIA', address: '0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'GLD', company: 'SPDR Gold Shares', address: '0xC9a981FEE1F9DEc688bb123ccDeCc63D0deBFC4e', decimals: 18, kind: 'crypto', category: 'etf'},
     {symbol: 'SPCX', company: 'SpaceX', address: '0x4a0E65A3EcceC6dBe60AE065F2e7bb85Fae35eEa', decimals: 18, kind: 'crypto', category: 'stock'},
@@ -98,13 +102,11 @@ export const ASSETS: Record<Network, Asset[]> = {
     {symbol: 'GOOGL', company: 'Alphabet (Google)', address: '0x2e0847E8910a9732eB3fb1bb4b70a580ADAD4FE3', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'AAPL', company: 'Apple', address: '0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'HIMS', company: 'Hims & Hers Health', address: '0xCceE82fE024c36fA15E1005edE3E9e4787e23D09', decimals: 18, kind: 'crypto', category: 'stock'},
-    {symbol: 'MSTR', company: 'Strategy (MicroStrategy)', address: '0xec262a75e413fAfD0dF80480274532C79D42da09', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'TSLA', company: 'Tesla', address: '0x322F0929c4625eD5bAd873c95208D54E1c003b2d', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'MSFT', company: 'Microsoft', address: '0xe93237C50D904957Cf27E7B1133b510C669c2e74', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'AMZN', company: 'Amazon', address: '0x12f190a9F9d7D37a250758b26824B97CE941bF54', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'cbBTC', address: '0xCEC185eB182c47d1bA1EFc84e6959e18cd620Be4', decimals: 8, kind: 'crypto', category: 'crypto_native'},
     {symbol: 'UNI', address: '0xF177d86a28b520e3E396E4F3B96cd8e72D7dabd8', decimals: 18, kind: 'crypto', category: 'crypto_native'},
-    {symbol: 'CRCL', company: 'Circle', address: '0xdF0992E440dD0be65BD8439b609d6D4366bf1CB5', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'COST', company: 'Costco', address: '0x4EA005168D7F09a7A0Ba9D1DEf21a479950E44C2', decimals: 18, kind: 'crypto', category: 'stock'},
     {symbol: 'INTC', company: 'Intel', address: '0xc72b96e0E48ecd4DC75E1e45396e26300BC39681', decimals: 18, kind: 'crypto', category: 'stock'},
   ],

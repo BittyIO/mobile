@@ -1,6 +1,10 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {Image, Pressable, StyleSheet, Text, View, type ImageSourcePropType} from 'react-native';
 import {useStyles, type Colors} from '@/theme';
+// Re-exported so the existing callers keep their import; the rule itself lives with the names.
+import {protocolDisplayName} from '@/core/protocols';
+
+export {protocolDisplayName};
 
 /**
  * Protocol logos, the same files the web serves from /assets. Keyed by the adapter's display name.
@@ -17,24 +21,55 @@ const LOGOS: Record<string, ImageSourcePropType> = {
   Sky: require('@/assets/protocols/sky.png'),
   Lido: require('@/assets/protocols/lido.png'),
   'Aave V3': require('@/assets/protocols/aave.png'),
+  // "Uniswap" flat is the Universal Router adapter — the market-TRADE half of the AMM split, and
+  // the single combined adapter on Robinhood Chain. "Uniswap V3" is the market-MAKER half, which
+  // is concentrated liquidity and v3 only. One mark serves all of them.
+  Uniswap: require('@/assets/protocols/uniswap.png'),
   'Uniswap V3': require('@/assets/protocols/uniswap.png'),
   'Uniswap V4': require('@/assets/protocols/uniswap.png'),
   'CoW Swap': require('@/assets/protocols/cow.png'),
 };
 
+/**
+ * The bundled mark for a name, tolerating a version suffix.
+ *
+ * The catalog names adapters by release — "CoW Swap V1", "Sky V1" — and the bundled map is keyed
+ * by brand, so an exact lookup missed and the chip fell back to a lettered "C" disc. Tried whole
+ * first, because "Uniswap V3" and "Uniswap V4" are deliberately separate keys from "Uniswap";
+ * only when that misses is a trailing " V<n>" dropped.
+ */
+function bundledLogo(name: string): ImageSourcePropType | undefined {
+  return LOGOS[name] ?? LOGOS[name.replace(/\s+V\d+$/i, '')];
+}
+
 export function ProtocolIcon({name, size = 18, uri}: {name: string; size?: number; uri?: string}) {
   const styles = useStyles(makeStyles);
-  // The catalog's own URL wins when there is one; the bundled logo is the fallback, then a letter.
-  if (uri) return <Image source={{uri}} style={{width: size, height: size, borderRadius: size / 2}} />;
-  const src = LOGOS[name];
+  const dim = {width: size, height: size, borderRadius: size / 2};
+  /**
+   * A remote mark that does not load falls back to the bundled one.
+   *
+   * The uri branch used to return early, so anything that stopped the image arriving — an
+   * offline device, a cold cache on a slow link, a path the host does not serve — left a blank
+   * the size of the icon and nothing else, with a perfectly good bundled logo sitting unused.
+   * `onError` is the only signal RN gives for that, so it is what switches back.
+   *
+   * A relative path is rejected before it is tried: `iconUri` absolutises the catalog's, and
+   * anything else here would load as nothing at all.
+   */
+  const [remoteFailed, setRemoteFailed] = useState(false);
+  const remote = !remoteFailed && uri && /^https?:\/\//.test(uri) ? uri : null;
+  if (remote) {
+    return <Image source={{uri: remote}} style={dim} onError={() => setRemoteFailed(true)} />;
+  }
+  const src = bundledLogo(name);
   if (!src) {
     return (
-      <View style={[styles.fallback, {width: size, height: size, borderRadius: size / 2}]}>
+      <View style={[styles.fallback, dim]}>
         <Text style={[styles.fallbackText, {fontSize: size * 0.55}]}>{name.slice(0, 1)}</Text>
       </View>
     );
   }
-  return <Image source={src} style={{width: size, height: size, borderRadius: size / 2}} />;
+  return <Image source={src} style={dim} />;
 }
 
 /**
@@ -49,7 +84,7 @@ export function ProtocolBadges({names, size = 18, uris}: {names: string[]; size?
       {names.map((n) => (
         <View key={n} style={styles.badge}>
           <ProtocolIcon name={n} size={size} uri={uris?.[n]} />
-          <Text style={styles.badgeText}>{n}</Text>
+          <Text style={styles.badgeText}>{protocolDisplayName(n)}</Text>
         </View>
       ))}
     </View>
@@ -70,11 +105,6 @@ const makeStyles = (c: Colors) =>
     badgeText: {color: c.subtext, fontSize: 13, fontWeight: '600'},
   });
 
-/** The name a chip shows for an adapter; the catalog name otherwise. */
-const DISPLAY_NAME: Record<string, string> = {
-  Lido: 'Lido V2',
-};
-export const protocolDisplayName = (name: string) => DISPLAY_NAME[name] ?? name;
 
 // One chip open at a time: opening one tells the others to close.
 const openListeners = new Set<(owner: symbol) => void>();

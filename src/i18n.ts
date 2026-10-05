@@ -52,6 +52,12 @@ function resolve(language: Language, key: string): string | undefined {
 }
 
 export function translate(language: Language, key: string, params?: Record<string, string | number>): string {
+  // A key is sometimes looked up in a map before it gets here, and a map that has not kept up with
+  // an enum hands over undefined. `resolve` then calls startsWith on it and the screen crashes
+  // rather than showing one wrong label — which is how the Allow list page went down when the AMM
+  // split added a protocol category. The type system is the real guard; this is so the next gap
+  // is a visible string instead of a white screen.
+  if (typeof key !== 'string' || !key) return '';
   let out = resolve(language, key) ?? key;
   if (params) {
     for (const [k, v] of Object.entries(params)) out = out.split(`{{${k}}}`).join(String(v));

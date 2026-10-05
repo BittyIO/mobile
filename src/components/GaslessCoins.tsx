@@ -56,10 +56,22 @@ export function GaslessCoins() {
     configured: true,
   };
   const preActivation = activated === false;
+  /** A config was actually read. Anything else — still loading, or unreadable — is not an answer. */
+  const known = cfg !== 'loading' && cfg !== null;
 
+  /**
+   * Unknown is not "none".
+   *
+   * An empty allowlist means ANY coin to the contract, and that is what a vault is born with, so
+   * every state where there is no config to read shows every coin on: before activation, while
+   * the chain is still answering, and when the read failed. It used to return false for those,
+   * which drew each switch OFF — on a chain with a single fee coin, like Robinhood's USDG, that
+   * said the vault had no way to pay for anything, and on a slow endpoint it said it for as long
+   * as the read took. Nothing can be WRITTEN in those states either (see `locked`), so this only
+   * decides what is shown.
+   */
   const allowed = (coin: Address): boolean => {
-    if (preActivation) return true;
-    if (cfg === 'loading' || cfg === null) return false;
+    if (!known) return true;
     return cfg.stableCoins.length === 0 || cfg.stableCoins.some((c) => c.toLowerCase() === coin.toLowerCase());
   };
 
@@ -107,8 +119,9 @@ export function GaslessCoins() {
     }
   };
 
-  // Nothing is writable until the vault exists; its first action activates it with the defaults.
-  const locked = preActivation || busy !== null;
+  // Nothing is writable until the vault exists and its config has been read: its first action
+  // activates it with the defaults, and a switch cannot narrow a list nobody has seen yet.
+  const locked = !known || preActivation || busy !== null;
 
   const rows = stablecoins.length;
   const onCount = stablecoins.filter((a) => allowed(a.address)).length;
@@ -125,7 +138,7 @@ export function GaslessCoins() {
               value={allowed(a.address)}
               pending={busy === a.address}
               // The last one on cannot be turned off: see onToggle.
-              disabled={locked || cfg === 'loading' || (allowed(a.address) && onCount <= 1)}
+              disabled={locked || (allowed(a.address) && onCount <= 1)}
               onValueChange={(v) =>
                 ask({
                   title: t('mobile.settings.gas_token'),

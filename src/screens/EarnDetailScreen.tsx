@@ -21,7 +21,6 @@ import {getAutoYields, setAutoYield} from '@/vault/autoyield';
 import {fetchProtocolApy, EMPTY_APY, type ProtocolApy} from '@/vault/apy';
 import {relayGasFor} from '@/vault/fee-quote';
 import {ASSETS} from '@/core/assets';
-import {useDefiDetails} from '@/core/defi-details';
 import {formatUnits} from 'viem';
 import {displaySymbol, fmtNum} from '@/core/format';
 import {useColors, useStyles, type Colors} from '@/theme';
@@ -49,7 +48,6 @@ export function EarnDetailScreen() {
   const bal = useVaultBalances(network);
   const pos = useVaultPositions(bal.vault, network);
   const flows = useFlows(bal.vault, network);
-  const defiDetails = useDefiDetails((s) => s.show);
   const {ask, sheet} = useConfirmAction();
 
   const meta = ASSETS[network].find((a) => a.address.toLowerCase() === asset.toLowerCase());
@@ -156,7 +154,7 @@ export function EarnDetailScreen() {
         <TokenIcon symbol={symbol} size={40} />
         <View style={styles.headText}>
           <Text style={styles.sym}>{sym}</Text>
-          <Text style={styles.sub}>{defiDetails ? name : t(lend ? 'vault.flexible_lend' : 'vault.flexible_yield')}</Text>
+          <Text style={styles.sub}>{name}</Text>
         </View>
         {rate != null ? (
           <View style={styles.apyPill}>
@@ -182,7 +180,7 @@ export function EarnDetailScreen() {
             onValueChange={() =>
               ask({
                 title: autoLabel,
-                message: defiDetails ? name : sym,
+                message: name,
                 gas: relayGasFor({}),
                 run: toggleAuto,
               })

@@ -10,9 +10,10 @@ import {encodeAbiParameters, parseUnits, zeroAddress, type Address, type Hex} fr
 import type {Signer} from '@/wallet/signer';
 import type {Network} from '@/core/chain';
 import {VAULT_LP_ABI} from '@/core/abi';
-import {ammAdapters} from '@/core/protocols';
+import {marketMakerAdapters} from '@/core/protocols';
 import {assetMeta} from '@/core/assets';
-import {relayVaultWrite} from './relay';
+import {relayVaultWrite, relayVaultMulticall, type VaultCall} from './relay';
+import {buildSetupCalls} from './trade-setup';
 
 const MAX128 = (BigInt(1) << BigInt(128)) - BigInt(1);
 const DEADLINE_SECS = 20 * 60;
@@ -23,10 +24,17 @@ const MAX_TICK = 887272;
 function deadline(): bigint {
   return BigInt(Math.floor(Date.now() / 1000) + DEADLINE_SECS);
 }
-function canonicalAmm(network: Network): Address {
-  const amm = ammAdapters(network)[0];
-  if (!amm) throw new Error('No AMM adapter configured');
-  return amm;
+/**
+ * The adapter liquidity is added through and removed from.
+ *
+ * Named for what it does rather than for the category it used to come from: since the AMM split
+ * this is the market-MAKER adapter, which on an unsplit chain is still the same contract that
+ * handles swaps. Sending a mint to the trade adapter on a split chain reverts.
+ */
+function canonicalMarketMaker(network: Network): Address {
+  const maker = marketMakerAdapters(network)[0];
+  if (!maker) throw new Error('No market maker adapter configured');
+  return maker;
 }
 
 type PositionRef = {
@@ -68,7 +76,7 @@ export async function removeLp(o: PositionRef & {liquidity: string}): Promise<He
     network: o.network,
     abi: VAULT_LP_ABI,
     functionName: 'removeLiquidity',
-    args: [canonicalAmm(o.network), data],
+    args: [canonicalMarketMaker(o.network), data],
     stableCoin: o.stableCoin,
   });
   return hash;
@@ -96,7 +104,7 @@ export async function claimLpFees(o: PositionRef): Promise<Hex> {
     network: o.network,
     abi: VAULT_LP_ABI,
     functionName: 'claimAMMFees',
-    args: [canonicalAmm(o.network), data],
+    args: [canonicalMarketMaker(o.network), data],
     stableCoin: o.stableCoin,
   });
   return hash;
@@ -167,14 +175,35 @@ export async function addLiquidityFullRange(o: {
   // position). Full-range add always mints, so wrap the params with isMint=true (matches the web).
   const data = encodeAbiParameters([{type: 'bool'}, {type: 'bytes'}], [true, mintParams]);
 
-  const {hash} = await relayVaultWrite({
-    account: o.account,
-    vault: o.vault,
-    network: o.network,
+  const maker = canonicalMarketMaker(o.network);
+  const add: VaultCall = {
     abi: VAULT_LP_ABI,
     functionName: 'addLiquidity',
-    args: [canonicalAmm(o.network), token0, amount0, token1, amount1, data],
-    stableCoin: o.stableCoin,
-  });
+    args: [maker, token0, amount0, token1, amount1, data],
+  };
+  /**
+   * Register the maker adapter and both tokens first, the way a market swap registers its own.
+   *
+   * Before the AMM split this was not needed: one adapter swapped and held liquidity, so any
+   * vault that had ever traded already had it listed and the mint inherited that registration.
+   * The split gives the maker its own address, so on a restricted vault the FIRST add through it
+   * reverts with `InvalidAMMProtocol` even though the same vault trades fine. Bundled ahead of
+   * the mint in one multicall, so it is one signature and the mint sees the listing.
+   *
+   * Costs nothing on an unrestricted vault or an already-registered adapter: `buildSetupCalls`
+   * returns an empty list and the plain write is used.
+   */
+  const setup = await buildSetupCalls({network: o.network, vault: o.vault, adapter: maker, tokens: [token0, token1]});
+  const {hash} = setup.length
+    ? await relayVaultMulticall({account: o.account, vault: o.vault, network: o.network, calls: [...setup, add], stableCoin: o.stableCoin})
+    : await relayVaultWrite({
+        account: o.account,
+        vault: o.vault,
+        network: o.network,
+        abi: VAULT_LP_ABI,
+        functionName: 'addLiquidity',
+        args: add.args,
+        stableCoin: o.stableCoin,
+      });
   return hash;
 }

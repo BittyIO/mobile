@@ -8,7 +8,6 @@ import type {RootStackParamList} from '@/App';
 import {TokenIcon} from '@/components/TokenIcon';
 import {Amount} from '@/components/Amount';
 import {ProtocolChip} from '@/components/ProtocolIcon';
-import {useDefiDetails} from '@/core/defi-details';
 import {useNetwork} from '@/core/network-store';
 import {formatUnits, type Address} from 'viem';
 import {useVaultPositions} from '@/vault/useVaultPositions';
@@ -130,7 +129,6 @@ function EarnTable({
 export function EarnScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   // Off, the rows say what the money is doing — yielding, lending — and not who with.
-  const defiDetails = useDefiDetails((s) => s.show);
   const headerHeight = useHeaderHeight();
   const {t} = useT();
   const c = useColors();
@@ -271,7 +269,7 @@ export function EarnScreen() {
         amountKnown={!pos.loading || pos.positions.length > 0}
         earned={earnedFor(row.pos)}
         apy={apyFor(row.route)}
-        protocolName={showProtocol && defiDetails ? row.route.name : undefined}
+        protocolName={showProtocol ? row.route.name : undefined}
         onOpen={() =>
           nav.navigate('EarnDetail', {
             protocol: row.route.protocol,
@@ -307,7 +305,7 @@ export function EarnScreen() {
 
       {/* Flexible Lend: one protocol, named in the header. */}
       <View style={styles.section}>
-        <EarnTable title={t('vault.flexible_lend')} right={defiDetails && lendNames[0] ? <ProtocolChip name={lendNames[0]} size={16} /> : undefined}>
+        <EarnTable title={t('vault.flexible_lend')} right={lendNames[0] ? <ProtocolChip name={lendNames[0]} size={16} /> : undefined}>
           {renderRows(lendRoutes, t('mobile.earn.no_lend_markets'), false, true)}
         </EarnTable>
       </View>
@@ -329,7 +327,16 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   // Same card as the Overview asset list: the card carries the padding, the header sits inside it,
   // and every row draws a hairline on its top edge (one under the header, one between rows, none
   // trailing the last).
-  tableCard: {backgroundColor: c.card, borderRadius: 20, padding: 16, gap: 6},
+  /**
+   * 20 at the top, 16 everywhere else.
+   *
+   * Both tabs open with 8pt of page padding under the header, so the first line of text sits at
+   * 8 + the card's own top padding. The Overview's hero pads 20 and this card padded 16, which
+   * put "Flexible Yield" four points higher than "Total value" on the tab next to it — not
+   * enough to look deliberate, just enough to look wrong. The sides stay at 16, which is what
+   * every other card in the app uses; only the hero is inset further.
+   */
+  tableCard: {backgroundColor: c.card, borderRadius: 20, padding: 16, paddingTop: 20, gap: 6},
   cardHeader: {flexDirection: 'row', alignItems: 'center', gap: 6, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},
   cardTitle: {color: c.subtext, fontSize: 13, fontWeight: '600'},
   list: {gap: 0},

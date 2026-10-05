@@ -1,9 +1,9 @@
 import React from 'react';
-import {Image, StyleSheet, View} from 'react-native';
+import {StyleSheet, View} from 'react-native';
 import Svg, {Circle, Line, Path, Rect} from 'react-native-svg';
 
 export type SettingsIconName =
-  | 'user'
+  | 'vault'
   | 'language'
   | 'network'
   | 'appearance'
@@ -19,10 +19,8 @@ export type SettingsIconName =
   | 'dailyLimit'
   | 'perTx'
   | 'payout'
-  | 'version'
+  | 'settings'
   | 'allowlist'
-  | 'timelock'
-  | 'limits'
   | 'follow'
   | 'terms'
   | 'privacy';
@@ -32,7 +30,7 @@ export type SettingsIconName =
 // 24×24 grid.
 const TINT: Record<SettingsIconName, string> = {
   // The app's own accent: this is the row that decides what every row below it means.
-  user: '#0E85FF',
+  vault: '#0E85FF',
   language: '#0E85FF',
   network: '#5856D6',
   appearance: '#5E5CE6',
@@ -48,20 +46,14 @@ const TINT: Record<SettingsIconName, string> = {
   dailyLimit: '#FF9500',
   perTx: '#5856D6',
   payout: '#34C759',
-  version: '#0E85FF',
+  settings: '#8E8E93',
   allowlist: '#30B0C7',
-  timelock: '#FF9500',
-  limits: '#FF2D55',
   follow: '#0E85FF',
   terms: '#8E8E93',
   privacy: '#5856D6',
 };
 
 export function SettingsIcon({name, size = 29}: {name: SettingsIconName; size?: number}) {
-  // The vault's version row wears the app's own logo, like an app's row in iOS Settings.
-  if (name === 'version') {
-    return <Image source={require('@/assets/logo.png')} style={{width: size, height: size, borderRadius: size * 0.24}} resizeMode="cover" />;
-  }
   const c = {stroke: '#fff', strokeWidth: 2, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const};
   const g = size * 0.62;
   return (
@@ -110,24 +102,19 @@ export function SettingsIcon({name, size = 29}: {name: SettingsIconName; size?: 
           </>
         ) : name === 'autoYield' ? (
           <Path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" {...c} />
-        ) : name === 'timelock' ? (
-          <>
-            {/* A clock inside a padlock's shackle: a change that has to wait out a delay. */}
-            <Rect x={3} y={11} width={18} height={11} rx={2} {...c} />
-            <Path d="M7 11V7a5 5 0 0 1 10 0v4" {...c} />
-            <Path d="M12 14v3l2 1.2" {...c} />
-          </>
-        ) : name === 'limits' ? (
-          <>
-            {/* A gauge with its needle short of the end: a ceiling, not a clock. */}
-            <Path d="M4 18a8 8 0 1 1 16 0" {...c} />
-            <Path d="M12 18l4.5-4.5" {...c} />
-            <Circle cx={12} cy={18} r={1.3} {...c} />
-          </>
         ) : name === 'follow' ? (
           <>
-            {/* The X mark, drawn rather than fetched. */}
-            <Path d="M4 3l16 18M20 3L4 21" {...c} />
+            {/* X's own mark, drawn rather than fetched.
+            
+                FILLED, where every other glyph in this file is a 2pt white stroke. It had to be:
+                the logo's two diagonals are different weights and its ends are mitred, which no
+                uniform stroke produces — two crossing lines at an even thickness is a
+                multiplication sign, which is what this row used to show. */}
+            <Path
+              fill="#fff"
+              stroke="none"
+              d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"
+            />
           </>
         ) : name === 'terms' ? (
           <>
@@ -163,9 +150,11 @@ export function SettingsIcon({name, size = 29}: {name: SettingsIconName; size?: 
           </>
         ) : name === 'allowlist' ? (
           <>
-            {/* A checklist (lucide ListChecks): items ticked as allowed. */}
-            <Path d="M10 6h11M10 12h11M10 18h11" {...c} />
-            <Path d="M3 6l1.5 1.5L7 5M3 12l1.5 1.5L7 11M3 18l1.5 1.5L7 17" {...c} />
+            {/* A guard's shield with a tick inside (lucide ShieldCheck). The list it opens is not
+                a list of preferences — it is what the guard will let the vault touch at all, so
+                the row wears the thing doing the refusing rather than the paperwork. */}
+            <Path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" {...c} />
+            <Path d="M9 12l2 2 4-4" {...c} />
           </>
         ) : name === 'delegation' ? (
           <>
@@ -173,12 +162,27 @@ export function SettingsIcon({name, size = 29}: {name: SettingsIconName; size?: 
             <Circle cx={9} cy={7} r={4} {...c} />
             <Path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" {...c} />
           </>
-        ) : name === 'user' ? (
+        ) : name === 'settings' ? (
           <>
-            {/* lucide User — ONE person, where `delegation` above is lucide Users. A vault belongs
-                to one owner; the plural mark next to it would read as a shared account. */}
-            <Path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" {...c} />
-            <Circle cx={12} cy={7} r={4} {...c} />
+            {/* lucide Settings — the cog. This row used to wear the app's own logo, the way an
+                app's row looks in iOS Settings, which said "Bitty" where the row is about the
+                VAULT's contract generation and the upgrade behind it. */}
+            <Path
+              d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"
+              {...c}
+              strokeWidth={1.6}
+            />
+            <Circle cx={12} cy={12} r={3} {...c} />
+          </>
+        ) : name === 'vault' ? (
+          <>
+            {/* A safe: the door, its dial, and the handle beside it. The row used to wear a single
+                figure, which said "account" — the thing being chosen is not a person but which
+                strongbox every row below it is about. */}
+            <Rect x={3} y={3} width={18} height={18} rx={2.5} {...c} />
+            <Circle cx={10.5} cy={12} r={3} {...c} />
+            <Path d="M10.5 8.2v-.9M10.5 15.8v.9M6.7 12h-.9M14.3 12h.9" {...c} />
+            <Path d="M17.2 10.2v3.6" {...c} />
           </>
         ) : (
           <>

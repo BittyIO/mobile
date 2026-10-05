@@ -1,7 +1,7 @@
 import {useHeaderHeight} from '@react-navigation/elements';
 import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
 import React, {useEffect, useMemo, useState} from 'react';
-import {Alert, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View} from 'react-native';
+import {ActivityIndicator, Linking, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
@@ -12,15 +12,11 @@ import {getGaslessConfig, type GaslessConfig} from '@/vault/gasless';
 import {isActivated} from '@/vault/activate';
 import {ASSETS} from '@/core/assets';
 import {TokenIcon} from '@/components/TokenIcon';
-import {revealMnemonic} from '@/wallet/keyring';
-import {useRevealGuard} from '@/core/device-security';
 import {useLanguage, LANGUAGES, languageLabel} from '@/core/language-store';
 import Svg, {Circle, Path, Rect} from 'react-native-svg';
 import {useAppearance, APPEARANCES, useColors, useStyles, type Colors} from '@/theme';
-import {useDefiDetails} from '@/core/defi-details';
 import {API_BASE} from '@/core/chain';
-import {SettingsIcon, type SettingsIconName} from '@/components/SettingsIcon';
-import {useAssetManagerRow} from '@/components/useAssetManagerRow';
+import {SettingsRow as Row, makeSettingsStyles} from '@/components/SettingsRow';
 import {useVaultPicker} from '@/components/useVaultPicker';
 import {useVaultVersionRow} from '@/components/useVaultVersionRow';
 import {PickerSheet} from '@/components/AssetPicker';
@@ -55,61 +51,6 @@ function AppearanceIcon({name, color}: {name: string; color: string}) {
   );
 }
 
-// One row of a settings group: title, an optional current value on the right, and a chevron when
-// it pushes a page. Rows inside a group are separated by a hairline.
-function Row({
-  icon,
-  title,
-  sub,
-  value,
-  onPress,
-  chevron = true,
-  last,
-  toggle,
-  right,
-}: {
-  icon: SettingsIconName;
-  title: string;
-  sub?: string;
-  value?: string;
-  onPress?: () => void;
-  chevron?: boolean;
-  last?: boolean;
-  /** A row that flips a local setting in place, rather than pushing or opening a sheet. */
-  toggle?: {value: boolean; onValueChange: (v: boolean) => void};
-  /** Where a row's current answer is a set of things rather than a word — icons, marks. */
-  right?: React.ReactNode;
-}) {
-  const styles = useStyles(makeStyles);
-  const body = (
-    <>
-      <SettingsIcon name={icon} />
-      <View style={styles.rowText}>
-        <Text style={styles.rowTitle}>{title}</Text>
-        {sub ? <Text style={styles.rowSub}>{sub}</Text> : null}
-      </View>
-      <View style={styles.rowRight}>
-        {toggle ? (
-          <Switch value={toggle.value} onValueChange={toggle.onValueChange} style={styles.rowSwitch} />
-        ) : (
-          <>
-            {right ?? null}
-            {value ? <Text style={styles.rowValue}>{value}</Text> : null}
-            {chevron ? <Text style={styles.chev}>›</Text> : null}
-          </>
-        )}
-      </View>
-    </>
-  );
-  // A switch row has nothing to press: the control is the whole interaction, and a Pressable
-  // wrapping it would fight the gesture.
-  if (toggle) return <View style={[styles.row, !last && styles.rowDivider]}>{body}</View>;
-  return (
-    <Pressable style={[styles.row, !last && styles.rowDivider]} onPress={onPress}>
-      {body}
-    </Pressable>
-  );
-}
 
 /**
  * The coins that may currently pay the relay fee, as their own marks.
@@ -180,7 +121,6 @@ function FeeCoinMarks({nonce}: {nonce: number}) {
 export function SettingsScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const {language, setLanguage} = useLanguage();
-  const manager = useAssetManagerRow();
   const vaultPicker = useVaultPicker();
   const version = useVaultVersionRow();
   const headerHeight = useHeaderHeight();
@@ -188,22 +128,7 @@ export function SettingsScreen() {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const {appearance, setAppearance} = useAppearance();
-  const {show: defiDetails, setShow: setDefiDetails} = useDefiDetails();
   const c = useColors();
-  const lock = useWallet((s) => s.lock);
-  const [phrase, setPhrase] = useState<string | null>(null);
-  // Hide the phrase while the screen is recorded, and pull it + warn if a screenshot is taken.
-  const reveal = useRevealGuard();
-  useEffect(() => {
-    if (reveal.screenshotCount > 0 && phrase) {
-      setPhrase(null);
-      Alert.alert(
-        'Screenshot detected',
-        'Your recovery phrase was hidden. Never keep it in Photos or anywhere synced to the cloud — write it on paper.',
-      );
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reveal.screenshotCount]);
 
   // Language and Theme Mode use the app's own picker sheet, the one the asset and network selectors
   // use: it is part of the React tree, so it opens on the next frame, where the native action sheet
@@ -215,21 +140,94 @@ export function SettingsScreen() {
   const [feeCoins, setFeeCoins] = useState(false);
   // Closing the sheet is the only moment the answer can have changed, so that is when it is re-read.
   const [feeCoinsNonce, setFeeCoinsNonce] = useState(0);
+  /**
+   * Pull to refresh.
+   *
+   * Everything on this page is a chain read, and the one that goes stale in a way the user
+   * notices is the version: an upgrade's own re-read fires when the relayer ACCEPTS the
+   * transaction, which is before it is mined, so the row keeps showing the version just left
+   * behind. The fee-coin marks have the same shape of problem after the sheet writes a new
+   * allowlist, so the pull re-runs both.
+   */
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = () => {
+    setRefreshing(true);
+    version.reload();
+    setFeeCoinsNonce((n) => n + 1);
+    // The reads are fired, not awaited — each row swaps itself in when its own answer lands.
+    // Holding the spinner for a beat is what makes the gesture feel like it did something.
+    setTimeout(() => setRefreshing(false), 600);
+  };
   const pickLanguage = () => setPicker('language');
 
   const pickAppearance = () => setPicker('appearance');
 
-  const onReveal = async () => {
-    try {
-      const m = await revealMnemonic();
-      if (m) setPhrase(m);
-    } catch {
-      // cancelled biometric prompt
-    }
-  };
-
   return (
-    <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical style={styles.flex} contentContainerStyle={[styles.body, {paddingTop: headerHeight + 8, paddingBottom: tabBarHeight + 16}]}>
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      alwaysBounceVertical
+      style={styles.flex}
+      // The header's height as a content INSET, not as top padding — the same as Overview and
+      // Earn. The spinner is positioned from `contentInset.top` on iOS, so with the header's
+      // height baked into the padding instead it appeared at the very top of the scroll view,
+      // underneath the translucent bar, and the pull looked like it did nothing.
+      // `progressViewOffset` does not help: RefreshControl only honours it on Android.
+      contentContainerStyle={[styles.body, {paddingTop: 8, paddingBottom: tabBarHeight + 16}]}
+      contentInset={{top: headerHeight}}
+      contentOffset={{x: 0, y: -headerHeight}}
+      scrollIndicatorInsets={{top: headerHeight}}
+      automaticallyAdjustContentInsets={false}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.text} colors={[c.accent]} />
+      }>
+      <View style={styles.section}>
+        <Text style={styles.groupLabel}>{t('mobile.settings.vault')}</Text>
+        <View style={styles.group}>
+          {/* First, because which vault you are looking at decides what every row below means. It
+              lived in the header for a while, where it was permanently on screen for a control
+              almost nobody touches; this is where someone goes LOOKING for it. */}
+          <Row icon="vault" title={t('mobile.settings.choose_vault')} value={vaultPicker.value} onPress={vaultPicker.open} />
+          <Row
+            icon="gasless"
+            title={t('mobile.settings.gas_token')}
+            onPress={() => setFeeCoins(true)}
+            chevron={false}
+            right={<FeeCoinMarks nonce={feeCoinsNonce} />}
+          />
+          <Row icon="allowlist" title={t('mobile.settings.allow_list')} onPress={() => nav.navigate('VaultAssets')} />
+          {/* The vault's guardrails — how long a loosening has to wait, and how much may leave —
+              behind one row. They were two, which was two ways of saying "open the security page":
+              both already pushed the same screen, and splitting it only asked the user to decide
+              which half they wanted before they could see either. The row now carries the page's
+              own title, so the label they tap is the heading they land on. */}
+          <Row icon="security" title={t('mobile.app.security')} onPress={() => nav.navigate('VaultSecurity')} />
+          {/* Who else may act for the vault. A section of its own for two rows read as a leftover
+              beside the group that now holds everything else about the vault.
+              
+              It wears the asset manager's own mark — lucide Users, the plural of the single
+              figure on Choose vault above it. The card glyph it had belongs to payouts, which is
+              the SECOND row on the page; the row should look like what the page leads with. */}
+          <Row icon="delegation" title={t('mobile.settings.team')} onPress={() => nav.navigate('VaultTeam')} />
+          {/* Last, and in THIS section rather than under About: the version it shows is the
+              vault's contract generation, not the app's, and tapping it upgrades the vault. That
+              is a vault setting that happens to read like a credit, and it sat among the links to
+              the website where nobody looking to upgrade would think to open it. */}
+          {/* While the upgrade is being mined the row is inert and says so: a spinner beside
+              "Confirming", no chevron, and `onPress` already refuses. Tapping again would submit
+              a second upgrade to the same implementation and pay for it. */}
+          <Row
+            icon="settings"
+            title={t('mobile.settings.vault_version')}
+            value={version.value}
+            sub={version.sub}
+            right={version.confirming ? <ActivityIndicator color={c.subtext} size="small" /> : undefined}
+            onPress={version.confirming ? undefined : version.onPress}
+            chevron={version.upgradeable}
+            last
+          />
+        </View>
+      </View>
+
       <View style={styles.section}>
         <Text style={styles.groupLabel}>{t('mobile.settings.system')}</Text>
         <View style={styles.group}>
@@ -239,85 +237,14 @@ export function SettingsScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.groupLabel}>{t('mobile.settings.vault')}</Text>
-        <View style={styles.group}>
-          {/* First, because which vault you are looking at decides what every row below means. It
-              lived in the header for a while, where it was permanently on screen for a control
-              almost nobody touches; this is where someone goes LOOKING for it. */}
-          <Row icon="user" title={t('mobile.settings.choose_vault')} value={vaultPicker.value} onPress={vaultPicker.open} />
-          <Row
-            icon="gasless"
-            title={t('mobile.settings.gas_token')}
-            onPress={() => setFeeCoins(true)}
-            chevron={false}
-            right={<FeeCoinMarks nonce={feeCoinsNonce} />}
-          />
-          <Row icon="allowlist" title={t('mobile.settings.allow_list')} onPress={() => nav.navigate('VaultAssets')} />
-          {/* The two halves of the vault's guardrails, each its own row: how long a loosening has
-              to wait, and how much may leave. Both open the same page — it holds both — but the
-              row that got you there says which one you came for. */}
-          <Row icon="timelock" title={t('mobile.settings.timelock')} onPress={() => nav.navigate('VaultSecurity')} />
-          <Row icon="limits" title={t('mobile.settings.limits')} onPress={() => nav.navigate('VaultSecurity')} />
-          {/* Whether the vault names the protocols it routes through, on Earn and in history. */}
-          <Row
-            icon="protocols"
-            title={t('mobile.settings.defi_details')}
-            toggle={{value: defiDetails, onValueChange: setDefiDetails}}
-            last
-          />
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.groupLabel}>{t('mobile.settings.team')}</Text>
-        <View style={styles.group}>
-          <Row icon="delegation" title={t('vault.asset_manager')} value={manager.value} sub={manager.sub} onPress={manager.onPress} />
-          <Row icon="payout" title={t('vault.payout_operators')} onPress={() => nav.navigate('Delegation')} last />
-        </View>
-      </View>
-
-      <View style={styles.section}>
         <Text style={styles.groupLabel}>{t('mobile.settings.about_us')}</Text>
         <View style={styles.group}>
-          <Row icon="version" title={t('mobile.settings.current_version')} value={version.value} sub={version.sub} onPress={version.onPress} chevron={version.upgradeable} />
           <Row icon="follow" title={t('mobile.settings.follow_us')} onPress={() => Linking.openURL('https://x.com/bitty_io')} />
           <Row icon="terms" title={t('mobile.settings.terms_of_use')} onPress={() => Linking.openURL(`${API_BASE}/content/terms-of-use`)} />
           <Row icon="privacy" title={t('mobile.settings.privacy_policy')} onPress={() => Linking.openURL(`${API_BASE}/content/privacy-policy`)} last />
         </View>
       </View>
 
-      <View style={styles.section}>
-        {/* Recovery phrase and Lock Vault — what the section holds is the key, not the wallet. */}
-        <Text style={styles.groupLabel}>{t('mobile.settings.security')}</Text>
-        <View style={styles.group}>
-          {phrase ? (
-            <View style={[styles.phraseBox, styles.rowDivider]}>
-              {reveal.captured ? (
-                <Text style={styles.warn}>
-                  Hidden while your screen is being recorded or mirrored. Stop the recording to view
-                  your recovery phrase.
-                </Text>
-              ) : (
-                <View style={styles.grid}>
-                  {phrase.split(' ').map((w, i) => (
-                    <View key={`${w}-${i}`} style={styles.word}>
-                      <Text style={styles.wordIdx}>{i + 1}</Text>
-                      <Text style={styles.wordText}>{w}</Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-              <Text style={styles.warn}>{t('mobile.settings.never_share')}</Text>
-              <Pressable style={styles.smBtn} onPress={() => setPhrase(null)}>
-                <Text style={styles.smBtnText}>{t('mobile.settings.hide')}</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <Row icon="recovery" title={t('mobile.settings.recovery_phrase')} sub={t('mobile.settings.reveal_face_id')} onPress={onReveal} />
-          )}
-          <Row icon="lock" title={t('mobile.settings.lock')} onPress={lock} chevron={false} last />
-        </View>
-      </View>
       {vaultPicker.sheet}
       <PickerSheet
         visible={picker === 'language'}
@@ -328,7 +255,6 @@ export function SettingsScreen() {
         onClose={() => setPicker(null)}
       />
       {/* The confirmations for the two rows that write on their own (asset manager, upgrade). */}
-      {manager.sheet}
       {version.sheet}
       <Sheet visible={feeCoins} title={t('mobile.settings.gas_token')} onClose={() => setFeeCoins(false)}>
         <GaslessCoins />
@@ -349,31 +275,11 @@ export function SettingsScreen() {
   );
 }
 
+// The row and group styles live with the row itself; these are what only this page uses.
 const makeStyles = (c: Colors) => StyleSheet.create({
+  ...makeSettingsStyles(c),
   flex: {flex: 1, backgroundColor: c.bg},
   // paddingBottom is set inline from the tab bar's height; see the ScrollView.
   body: {flexGrow: 1, padding: 16, gap: 20},
-  groupLabel: {color: c.subtext, fontSize: 15, fontWeight: '600', paddingHorizontal: 16, marginTop: 8, marginBottom: 6},
-  section: {gap: 0},
-  group: {backgroundColor: c.card, borderRadius: 20, overflow: 'hidden'},
-  row: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 15, paddingHorizontal: 16, gap: 12},
-  rowDivider: {borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},
-  // A chevron's glyph sits a few points inside its box; a switch fills its own exactly, so
-  // without this it looks nearer the edge than every other row in the group.
   feeCoins: {flexDirection: 'row', alignItems: 'center', gap: 4},
-  rowSwitch: {marginRight: 10},
-  rowText: {gap: 3, flexShrink: 1, flex: 1},
-  rowTitle: {color: c.text, fontSize: 15, fontWeight: '600'},
-  rowSub: {color: c.subtext, fontSize: 12},
-  rowRight: {flexDirection: 'row', alignItems: 'center', gap: 6},
-  rowValue: {color: c.subtext, fontSize: 14},
-  chev: {color: c.subtext, fontSize: 22, fontWeight: '300'},
-  phraseBox: {padding: 16, gap: 10},
-  smBtn: {backgroundColor: c.bg, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14, borderWidth: 1, borderColor: c.border, alignSelf: 'flex-start'},
-  smBtnText: {color: c.text, fontSize: 13, fontWeight: '600'},
-  grid: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between'},
-  word: {width: '47%', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.bg, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12},
-  wordIdx: {color: c.subtext, fontSize: 12, width: 18},
-  wordText: {color: c.text, fontSize: 14, fontWeight: '600'},
-  warn: {color: c.danger, fontSize: 12, lineHeight: 17},
 });

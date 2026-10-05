@@ -42,8 +42,19 @@ export function statusPill(s: string): {key: string; tone: 'sky' | 'green' | 'gr
   return {key: 'vault.open', tone: 'sky'};
 }
 
-export const fmtExpiry = (validTo: number): string =>
-  new Date(validTo * 1000).toLocaleString(undefined, {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'});
+/**
+ * A timestamp in the APP's language, not the phone's.
+ *
+ * `toLocaleString(undefined, …)` reads the device locale, so a phone set to English rendered
+ * "Oct 5, 3:42 PM" next to a Chinese label however the app's own language was set — and the
+ * language picker exists precisely because the two are not the same choice. The locale also
+ * decides 12- versus 24-hour, so passing it fixes more than the month name.
+ *
+ * Defaults to the device locale when no language is given, which is what every caller did
+ * before.
+ */
+export const fmtExpiry = (validTo: number, locale?: string): string =>
+  new Date(validTo * 1000).toLocaleString(locale, {month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'});
 
 /** One TWAP schedule and the part orders CoW has posted for it so far. */
 export type TwapGroup = {

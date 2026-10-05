@@ -1,5 +1,6 @@
 import {useEffect, useMemo, useState} from 'react';
 import {API_BASE, apiFetch, type Network} from '@/core/chain';
+import type {Language} from '@/core/language-store';
 
 /** What a watch list shows about an asset beyond its price. */
 export type MarketStat = {
@@ -58,20 +59,48 @@ export function useMarketStats(network: Network, symbols: string[], nonce = 0): 
 }
 
 /**
- * A market cap in the shorthand every markets screen uses: $2.1T, $412.5B, $38.2M.
+ * How each language abbreviates a large number, largest unit first.
+ *
+ * Not a translation of "B" and "T" — the grouping itself differs. Chinese, Japanese and Korean
+ * count in ten-thousands: 万 is 10⁴ and 亿 is 10⁸, so a figure a English speaker reads as 48.3B is
+ * 483亿, and there is no unit at 10⁹ at all to translate "B" into. Getting that wrong is not a
+ * clumsy label, it is the wrong number of digits.
+ *
+ * Each suffix carries its own leading space where the language wants one: CJK runs the unit
+ * straight onto the figure, European abbreviations take a space.
+ *
+ * Everything not listed takes the Latin K/M/B/T, and that is a choice rather than a gap. The
+ * four CJK languages have to be here because their grouping is different; German, Russian and
+ * Brazilian Portuguese are here because their abbreviations are unambiguous and in daily use.
+ * The rest — French, Spanish, Turkish, Indonesian, Vietnamese, Hindi, Thai — have several
+ * competing short forms each, and their financial press quotes USD market caps in the Latin
+ * letters anyway. A confident wrong abbreviation reads worse than the one every market knows.
+ */
+const CAP_UNITS: Partial<Record<Language, [number, string][]>> = {
+  zh: [[1e12, '万亿'], [1e8, '亿'], [1e4, '万']],
+  'zh-TW': [[1e12, '兆'], [1e8, '億'], [1e4, '萬']],
+  ja: [[1e12, '兆'], [1e8, '億'], [1e4, '万']],
+  ko: [[1e12, '조'], [1e8, '억'], [1e4, '만']],
+  de: [[1e12, ' Bio.'], [1e9, ' Mrd.'], [1e6, ' Mio.'], [1e3, ' Tsd.']],
+  ru: [[1e12, ' трлн'], [1e9, ' млрд'], [1e6, ' млн'], [1e3, ' тыс.']],
+  'pt-BR': [[1e12, ' tri'], [1e9, ' bi'], [1e6, ' mi'], [1e3, ' mil']],
+};
+const DEFAULT_CAP_UNITS: [number, string][] = [
+  [1e12, 'T'],
+  [1e9, 'B'],
+  [1e6, 'M'],
+  [1e3, 'K'],
+];
+
+/**
+ * A market cap in the shorthand the reader's own market uses: $2.1T, 4.87万亿, 412 млрд.
  *
  * Full digits would be a dozen characters in the narrowest column on the row, and nobody reads a
  * market cap to the dollar. Three significant figures is what fits and what the number is worth.
  */
-export function fmtCap(n: number | null | undefined): string {
+export function fmtCap(n: number | null | undefined, language: Language = 'en'): string {
   if (n == null || !Number.isFinite(n) || n <= 0) return '—';
-  const units: [number, string][] = [
-    [1e12, 'T'],
-    [1e9, 'B'],
-    [1e6, 'M'],
-    [1e3, 'K'],
-  ];
-  for (const [size, suffix] of units) {
+  for (const [size, suffix] of CAP_UNITS[language] ?? DEFAULT_CAP_UNITS) {
     if (n >= size) {
       const v = n / size;
       return `$${v >= 100 ? v.toFixed(0) : v.toFixed(v >= 10 ? 1 : 2)}${suffix}`;

@@ -8,7 +8,7 @@ import type {Signer} from '@/wallet/signer';
 import {apiFetch, apiUrl, type Network} from '@/core/chain';
 import {VAULT_PAYMENTS_ABI} from '@/core/abi';
 import {assetMeta} from '@/core/assets';
-import {relayVaultWrite} from './relay';
+import {relayVaultWrite, relayVaultMulticall, type VaultCall} from './relay';
 
 const ZERO = '0x0000000000000000000000000000000000000000' as const;
 
@@ -146,6 +146,88 @@ export async function batchSendPayment(o: {
     abi: VAULT_PAYMENTS_ABI,
     functionName: 'batchSend',
     args: [recipients, assets, amounts, withdrawProtocols, withdrawAmounts],
+    stableCoin: o.stableCoin,
+  });
+  return hash;
+}
+
+/** One row of a send: who, what, how much, and which positions to unwind to cover it. */
+export type SendRow = {
+  recipient: Address;
+  asset: Address;
+  amount: string;
+  withdrawProtocols?: Address[];
+  withdrawAmounts?: bigint[];
+};
+
+/**
+ * Add recipients to the address book and pay them, in ONE transaction.
+ *
+ * A vault with new-payment protection on will not pay an address it has never seen, so sending to
+ * someone new is two steps — whitelist, then send. As two transactions that is two Face ID prompts
+ * and two relay fees, and a window in between where the book has an entry that was never paid. As
+ * one `vault.multicall` it is one signature, one fee, and either both land or neither does.
+ *
+ * `addRecipients` is only the addresses not already in the book; the caller works that out, since
+ * it is the one holding the book. An empty list falls through to the plain send, which is cheaper
+ * to encode and identical in effect.
+ *
+ * Order matters and is the whole point: every `addWhitelistedRecipient` is encoded before the
+ * send, and multicall preserves it, so the send is validated against a book that already has the
+ * recipient in it.
+ */
+export async function sendWithWhitelist(o: {
+  account: Signer;
+  vault: Address;
+  network: Network;
+  rows: SendRow[];
+  /**
+   * Entries to write into the book first, deduplicated by the caller.
+   *
+   * `allowedAsset` is what that entry may be paid in; the zero address means any of them, which
+   * is what the contract reads an unset asset as.
+   */
+  addRecipients: {recipient: Address; allowedAsset?: Address}[];
+  stableCoin: Address;
+}): Promise<Hex> {
+  if (o.addRecipients.length === 0) {
+    return o.rows.length === 1
+      ? sendPayment({...o, ...o.rows[0]})
+      : batchSendPayment({account: o.account, vault: o.vault, network: o.network, rows: o.rows, stableCoin: o.stableCoin});
+  }
+
+  const amount = (r: SendRow) => parseUnits(r.amount, assetMeta(o.network, r.asset).decimals);
+  const send: VaultCall =
+    o.rows.length === 1
+      ? {
+          abi: VAULT_PAYMENTS_ABI,
+          functionName: 'send',
+          args: [o.rows[0].recipient, o.rows[0].asset, amount(o.rows[0]), o.rows[0].withdrawProtocols ?? [], o.rows[0].withdrawAmounts ?? []],
+        }
+      : {
+          abi: VAULT_PAYMENTS_ABI,
+          functionName: 'batchSend',
+          args: [
+            o.rows.map((r) => r.recipient),
+            o.rows.map((r) => r.asset),
+            o.rows.map(amount),
+            o.rows.map((r) => r.withdrawProtocols ?? []),
+            o.rows.map((r) => r.withdrawAmounts ?? []),
+          ],
+        };
+
+  const {hash} = await relayVaultMulticall({
+    account: o.account,
+    vault: o.vault,
+    network: o.network,
+    calls: [
+      ...o.addRecipients.map((r): VaultCall => ({
+        abi: VAULT_PAYMENTS_ABI,
+        functionName: 'addWhitelistedRecipient',
+        args: [r.recipient, r.allowedAsset ?? ZERO],
+      })),
+      send,
+    ],
     stableCoin: o.stableCoin,
   });
   return hash;

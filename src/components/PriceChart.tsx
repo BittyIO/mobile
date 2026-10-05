@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {ActivityIndicator, Pressable, StyleSheet, Text, View} from 'react-native';
 import Svg, {Defs, LinearGradient, Path, Stop} from 'react-native-svg';
 import {fmtUsd} from '@/core/prices';
@@ -40,12 +40,26 @@ export function PriceChart({symbol}: {symbol: string}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
 
+  // The current price must be identical whichever range is selected. Each range's series ends on a
+  // coarser, staler granularity (7d/30d/1y lag the 24h one), so pin the freshest price SEEN across
+  // ranges (by timestamp) as the series' last point. Persists across range switches; keyed by asset.
+  const latestRef = useRef<{key: string; ts: number; price: number} | null>(null);
+  const pinLatest = (arr: [number, number][] | null): [number, number][] | null => {
+    if (!arr || arr.length === 0) return arr;
+    const assetKey = `${network}:${symbol}`;
+    const [lastTs, lastPrice] = arr[arr.length - 1];
+    if (!latestRef.current || latestRef.current.key !== assetKey || lastTs > latestRef.current.ts) {
+      latestRef.current = {key: assetKey, ts: lastTs, price: lastPrice};
+    }
+    return [...arr.slice(0, -1), [lastTs, latestRef.current.price]];
+  };
+
   useEffect(() => {
     const days = RANGES[rangeIdx].days;
     const key = `${network}:${symbol}:${days}`;
     const hit = cache.get(key);
     if (hit && Date.now() - hit.at < (TTL_MS[days] ?? 60 * 60_000)) {
-      setPts(hit.pts);
+      setPts(pinLatest(hit.pts));
       setError(hit.pts == null);
       setLoading(false);
       return;
@@ -65,7 +79,7 @@ export function PriceChart({symbol}: {symbol: string}) {
         const pts = arr.length >= 2 ? arr : null;
         cache.set(key, {pts, at: Date.now()});
         if (!live) return;
-        setPts(pts);
+        setPts(pinLatest(pts));
         setError(pts == null);
       })
       .catch(() => {

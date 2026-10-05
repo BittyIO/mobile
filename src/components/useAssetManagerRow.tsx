@@ -43,7 +43,7 @@ export function useAssetManagerRow(): {
   /** Mount this in the settings page: the editor, and the confirmation it leads to. */
   sheet: React.ReactNode;
 } {
-  const {t} = useT();
+  const {t, language} = useT();
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);

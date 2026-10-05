@@ -7,12 +7,17 @@ import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {Animated, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type StyleProp, type TextStyle} from 'react-native';
 import Svg, {Circle, Path} from 'react-native-svg';
 import {TokenIcon} from '@/components/TokenIcon';
+import {TradeMenu} from '@/components/TradeMenu';
+import {WatchlistMenu} from '@/components/WatchlistMenu';
 import {ProtocolChip} from '@/components/ProtocolIcon';
-import {venueNames} from '@/core/protocols';
-import {useDefiDetails} from '@/core/defi-details';
+import {ammAdapters, intentAdapters, venueNames, isNamedProtocol} from '@/core/protocols';
+import {fetchVaultVersions, currentServices, type VaultVersionsCatalog} from '@/vault/versions';
 import {isAssetsList, useFavorites, useWatchLists, watchListLabel, watchListNumber} from '@/core/favorites-store';
+import {useWatchDraft} from '@/core/watch-draft';
 import {Amount} from '@/components/Amount';
 import {ConfirmButton} from '@/components/Button';
+import {PercentSlider} from '@/components/PercentSlider';
+import {ClearBtn} from '@/components/ClearBtn';
 import {useSheetAnim} from '@/components/useSheetAnim';
 import {FundRow} from '@/components/FundRow';
 import {useEndCaret} from '@/components/useEndCaret';
@@ -112,16 +117,30 @@ function WatchlistTitle({network}: {network: Network}) {
   const c = useColors();
   const styles = useStyles(makeStyles);
   const watch = useWatchLists(network);
-  const builtIn = isAssetsList(watch.active?.id);
-  const fallback = builtIn
-    ? t('mobile.home.all_assets')
-    : t('mobile.home.watch_list_n', {n: watchListNumber(watch.lists, watch.active?.id ?? '')});
+  /**
+   * A draft has no list to read a name off, and nothing to rename.
+   *
+   * The typed name is held in the draft store until the first tick creates the list, which is
+   * what makes naming-before-adding work. Subscribed here rather than passed in: this component
+   * is set once through `setOptions` so typing cannot remount it.
+   */
+  const drafting = useWatchDraft((st) => st.drafting);
+  const draftName = useWatchDraft((st) => st.name);
+  const setDraftName = useWatchDraft((st) => st.setName);
+  const builtIn = !drafting && isAssetsList(watch.active?.id);
+  // One past the lists that already exist, since this one is not among them yet.
+  const draftNumber = watch.lists.filter((l) => !isAssetsList(l.id)).length + 1;
+  const fallback = drafting
+    ? t('mobile.home.watch_list_n', {n: draftNumber})
+    : builtIn
+      ? t('mobile.home.all_assets')
+      : t('mobile.home.watch_list_n', {n: watchListNumber(watch.lists, watch.active?.id ?? '')});
   if (builtIn) return <Text style={styles.navTitle}>{fallback}</Text>;
   return (
     <TextInput
       style={styles.navTitleInput}
-      value={watch.active?.name ?? ''}
-      onChangeText={(v) => watch.active && watch.rename(network, watch.active.id, v)}
+      value={drafting ? draftName : watch.active?.name ?? ''}
+      onChangeText={(v) => (drafting ? setDraftName(v) : watch.active && watch.rename(network, watch.active.id, v))}
       placeholder={fallback}
       placeholderTextColor={c.subtext}
       maxLength={24}
@@ -132,18 +151,6 @@ function WatchlistTitle({network}: {network: Network}) {
   );
 }
 
-/** lucide Trash2, for the header. */
-function TrashMark({color}: {color: string}) {
-  const st = {stroke: color, strokeWidth: 1.9, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const};
-  return (
-    <Svg width={20} height={20} viewBox="0 0 24 24">
-      <Path d="M3 6h18" {...st} />
-      <Path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" {...st} />
-      <Path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" {...st} />
-      <Path d="M10 11v6M14 11v6" {...st} />
-    </Svg>
-  );
-}
 
 /**
  * Trade — the market directory on the tab; on the pushed pair screen the chart, the ORDERS list
@@ -209,15 +216,29 @@ export function TradeScreen() {
   // Read through the context, not the hook: this screen is also PUSHED from the Overview, and
   // there it sits outside the tab navigator, where the hook throws. No bar means no gap to leave.
   const tabBarHeight = React.useContext(BottomTabBarHeightContext) ?? 0;
-  const {t, company, words} = useT();
-  // Same switch the Earn card's protocol mark obeys.
-  const defiDetails = useDefiDetails((s) => s.show);
+  const {t, company, words, language} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
   const unlocked = useWallet((s) => s.unlocked);
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
+
+  /**
+   * The server's service catalog, for protocol NAMES the vendored registry cannot supply.
+   *
+   * Same source the Allow list reads, cached per network by the client, so this costs one
+   * request per network per launch.
+   */
+  const [versions, setVersions] = useState<VaultVersionsCatalog | null>(null);
+  useEffect(() => {
+    let live = true;
+    fetchVaultVersions(network).then((v) => live && setVersions(v));
+    return () => {
+      live = false;
+    };
+  }, [network]);
+  const services = useMemo(() => currentServices(versions), [versions]);
   const assets = ASSETS[network];
   const stables = useMemo(() => assets.filter((a) => a.kind === 'stable'), [assets]);
 
@@ -272,7 +293,8 @@ export function TradeScreen() {
    * which assets to keep, not what they cost, and a price beside a star invites a tap that would
    * leave the screen.
    */
-  const routeName = useRoute().name;
+  const route = useRoute();
+  const routeName = route.name;
   const isWatchlist = routeName === 'Watchlist';
   const isPair = !isWatchlist;
   const toggleFavorite = useFavorites((st) => st.toggle);
@@ -285,7 +307,25 @@ export function TradeScreen() {
    */
   const watch = useWatchLists(network);
   const builtIn = isAssetsList(watch.active?.id);
-  const onList = new Set(watch.active?.symbols ?? []);
+  const drafting = useWatchDraft((st) => st.drafting);
+  const draftName = useWatchDraft((st) => st.name);
+  const endDraft = useWatchDraft((st) => st.end);
+  // A draft is empty by definition — the previously active list's ticks are not this list's.
+  const onList = new Set(drafting ? [] : watch.active?.symbols ?? []);
+  /**
+   * The first tick is what creates the list.
+   *
+   * `add` writes the name typed into the nav bar and selects the new list in the same call, so
+   * the `toggle` straight after it lands on the right one — the store is read through `get()`,
+   * not through this render's snapshot.
+   */
+  const star = (symbol: string) => {
+    if (drafting) {
+      watch.add(network, draftName);
+      endDraft();
+    }
+    toggleFavorite(network, symbol);
+  };
   /** What an unnamed list is called: "Assets" for the built-in one, "Watch list #2" for the rest. */
   const listFallback = builtIn
     ? t('mobile.home.all_assets')
@@ -307,33 +347,87 @@ export function TradeScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isWatchlist, network]);
   /**
-   * The bin, as the bar's right-hand item.
+   * The ⋯ menu, as the bar's right-hand item — the same shape the Trade screen uses.
    *
-   * It is sized to the bar's full 44, not to the glyph. react-native-screens hands `headerRight`
-   * to a bar-button custom view and anchors it by its BOTTOM edge — which is what the one
-   * measurement we have says: a 32pt box put the glyph 28 down from the top of a 44pt bar, too
-   * low by six. A box the height of the bar puts its centre at the bar's centre, so where the
-   * native side anchors it stops mattering.
+   * It was a bare bin, which handed the one destructive action on the page the most prominent
+   * spot in the bar and left nowhere to put anything else. The menu holds Share and Delete, and
+   * the confirmation still lives here: the menu asks, this screen does.
    */
-  const canDelete = !builtIn && watch.lists.length > 1;
+  // A draft is not on the Overview yet, so there is nothing to remove or to share.
+  const canDelete = !builtIn && !drafting && watch.lists.length > 1;
+  const listSymbols = watch.active?.symbols ?? [];
+  /**
+   * Star a shared list's tickers onto the one in front, and report how many were recognised.
+   *
+   * Matched against THIS network's catalog, by the symbol as stored and as displayed — a shared
+   * "ETH" has to find WETH, which is what the row is labelled. Already-starred tickers are
+   * skipped rather than toggled off, so importing a list that overlaps the current one adds to
+   * it instead of punching holes in it. Zero means nothing matched, and the sheet says so rather
+   * than closing on a no-op.
+   */
+  const importSymbols = (incoming: string[]): number => {
+    const want = new Set(incoming.map((x) => x.toUpperCase()));
+    // A draft holds nothing yet; the list in front belongs to whatever was open before it.
+    const already = new Set(drafting ? [] : watch.active?.symbols ?? []);
+    const hits = assets.filter(
+      (a) =>
+        !already.has(a.symbol) &&
+        (want.has(a.symbol.toUpperCase()) || want.has(displaySymbol(a.symbol).toUpperCase())),
+    );
+    if (hits.length === 0) return 0;
+    // An import is a first tick like any other: it is what creates the list.
+    if (drafting) {
+      watch.add(network, draftName);
+      endDraft();
+    }
+    hits.forEach((a) => toggleFavorite(network, a.symbol));
+    return hits.length;
+  };
   useEffect(() => {
     if (!isWatchlist) return;
     nav.setOptions({
-      headerRight: canDelete
-        ? () => (
-            <Pressable
-              style={styles.navAction}
-              onPress={() => setConfirmDelete(true)}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={t('mobile.home.delete_list')}>
-              <TrashMark color={c.danger} />
-            </Pressable>
-          )
-        : undefined,
+      headerRight: () => (
+        <WatchlistMenu
+          label={listName}
+          symbols={listSymbols}
+          canDelete={canDelete}
+          onDelete={() => setConfirmDelete(true)}
+          onImport={importSymbols}
+          importOnly={drafting}
+        />
+      ),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isWatchlist, canDelete, c.danger]);
+  }, [isWatchlist, canDelete, drafting, listName, listSymbols.join(',')]);
+
+  /**
+   * An abandoned draft is just forgotten.
+   *
+   * Nothing was created, so there is nothing to delete and the Overview never saw it — which is
+   * the whole point of deferring creation to the first tick.
+   */
+  useEffect(() => {
+    if (!isWatchlist) return;
+    return () => endDraft();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isWatchlist]);
+
+  /**
+   * The ⋯ menu, for every route this screen serves except the watch list.
+   *
+   * Set here rather than in the navigator because it needs the base asset, which only this screen
+   * knows — and because the same component has to carry it on the TAB, where the navigator's own
+   * `headerRight` is the network switcher, and on the PUSHED pair page, where there is none. One
+   * `setOptions` covers both: a tab screen's options win over the navigator's.
+   *
+   * `TradeMenu` is a module-scope component so the element's type is stable; the arrow rebuilt on
+   * each run only changes props, and the open sheet survives.
+   */
+  useEffect(() => {
+    if (isWatchlist) return;
+    nav.setOptions({headerRight: () => <TradeMenu symbol={baseSym} stack={routeName === 'TradePair'} />});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isWatchlist, baseSym, routeName]);
 
 
   const params = useRoute().params as TradeParams;
@@ -833,7 +927,7 @@ export function TradeScreen() {
     <Pressable
       key={a.symbol}
       style={[styles.resultRow, i > 0 && styles.resultDivided]}
-      onPress={() => (isWatchlist ? toggleFavorite(network, a.symbol) : openPair(a.symbol))}>
+      onPress={() => (isWatchlist ? star(a.symbol) : openPair(a.symbol))}>
       <TokenIcon symbol={a.symbol} size={30} />
       <View style={styles.resultName}>
         <Highlight text={displaySymbol(a.symbol)} q={query.trim()} style={styles.resultText} />
@@ -1493,7 +1587,27 @@ export function TradeScreen() {
    * the venue is the adapter category — read from the same registry the history rows name their
    * protocol from, not from a list kept here. A network without that category shows nothing.
    */
-  const venues = venueNames(network, mode === 'Market' ? 'amm' : 'intent');
+  /**
+   * Who settles the order type currently selected, by name.
+   *
+   * The guard stores addresses and categories, not names, so an adapter deployed after this
+   * build has none in the vendored registry — which is every chain's split trade adapter. The
+   * server's service catalog does carry names (it is what the Allow list reads), so that is
+   * asked first and the registry is the fallback. An adapter neither of them can name shows no
+   * chip at all: a mark that cannot say what it is is worse than no mark.
+   */
+  const venues = useMemo(() => {
+    const category = mode === 'Market' ? ('amm' as const) : ('intent' as const);
+    const canonical = (category === 'amm' ? ammAdapters(network) : intentAdapters(network))[0];
+    if (!canonical) return [];
+    const service = services.find((s2) => s2.address.toLowerCase() === canonical.toLowerCase());
+    const name =
+      service?.name && isNamedProtocol(service.name) ? service.name : venueNames(network, category)[0];
+    if (!name || !isNamedProtocol(name)) return [];
+    // The catalog's icon travels with the name: a mark for an adapter deployed after this build
+    // is not in the bundle, and the server has both.
+    return [{name, uri: service?.icon}];
+  }, [network, mode, services]);
   const busy = status === 'busy';
   // The sheet slides up and fills the screen below a strip of backdrop at the top: the keyboard then
   // opens over its lower half, where nothing is, so a tapped field is never covered and the sheet
@@ -1528,6 +1642,77 @@ export function TradeScreen() {
     setTimeout(() => setPulled(false), 1200);
   };
 
+  /**
+   * The two amount fields, hoisted so the sheet can order them as the web does.
+   *
+   * Each label follows its TOKEN, not the side: the base asset is always "Amount" and the
+   * stablecoin always "Total". On a buy you pay the stablecoin, so Total is the pay field; on a
+   * sell you pay the base, so Amount is. Labelling by side instead ("You pay") made the same
+   * number change its name depending on which way round the trade was.
+   */
+  const payField = (
+    <>
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>{shownSide === 'buy' ? t('vault.total') : t('vault.trade_amount')}</Text>
+        <View style={styles.fieldRight}>
+          <TextInput style={[styles.fieldInput, overBalance && styles.fieldInputOver]} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={c.subtext} value={amount} onChangeText={applyPay} {...amountCaret} />
+          {/* One control, like the Send rows: Max over an empty field, Clear over a filled one.
+              Offering Max beside a number the user has already typed asks them to work out
+              whether it would replace what is there. */}
+          {Number(amount) > 0 ? (
+            <ClearBtn onPress={() => applyPay('')} />
+          ) : balKnown && Number(spendBal) > 0 ? (
+            <Pressable onPress={maxPay} style={styles.maxPill}>
+              <Text style={styles.maxText}>{t('common.max')}</Text>
+            </Pressable>
+          ) : null}
+          <Pressable style={styles.sourcePill} onPress={() => setPicker('source')}>
+            <TokenIcon symbol={spendSym} size={20} />
+            <Text style={styles.fieldSym}>{displaySymbol(spendSym)}</Text>
+            {spendSource !== 'free' ? (
+              <Text style={styles.sourceTag}>{spendSource === 'yield' ? t('vault.yielding') : t('vault.lending')}</Text>
+            ) : null}
+          </Pressable>
+        </View>
+      </View>
+      {/* The error stays with the field that caused it — the pay field, which is the base on a
+          sell and the total on a buy, so it travels with it rather than sitting at a fixed place
+          in the form. */}
+      {overBalance ? (
+        <Text style={styles.overText}>
+          {t('vault.exceeds_balance')} · <Amount v={fmtNum(Number(spendBal))} /> {displaySymbol(spendSym)}
+        </Text>
+      ) : null}
+    </>
+  );
+  const receiveField = (
+    <View style={styles.field}>
+      {/* The ≈ stays on a market order, where the figure really is an estimate that moves with
+          the pool. A limit or TWAP order has a price the user set, so this side is exactly what
+          it says — a ≥ implied the fill might be better than asked, which is not what it meant. */}
+      <Text style={styles.fieldLabel}>
+        {shownSide === 'buy' ? t('vault.trade_amount') : t('vault.total')}
+        {mode === 'Market' ? ' ≈' : ''}
+      </Text>
+      <View style={styles.fieldRight}>
+        <TextInput style={styles.fieldInput} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={c.subtext} value={receiveInput} onChangeText={applyReceive} {...receiveCaret} />
+        <TokenIcon symbol={recvSym} size={20} />
+        <Text style={styles.fieldSym}>{displaySymbol(recvSym)}</Text>
+      </View>
+    </View>
+  );
+  /** The base asset's line leads, the stablecoin total closes — with the slider between them. */
+  const baseField = shownSide === 'buy' ? receiveField : payField;
+  const totalField = shownSide === 'buy' ? payField : receiveField;
+  /**
+   * The pay amount as a whole percent of what is available, and the setter the slider drives.
+   *
+   * Driven off the PAY field in both directions, because that is the one bounded by a balance —
+   * a percentage of what you are receiving has nothing to be a percentage of.
+   */
+  const payPct = Number(spendBal) > 0 ? (Number(amount) / Number(spendBal)) * 100 : 0;
+  const setPayPct = (p: number) => applyPay(p >= 100 ? spendBal : toField((Number(spendBal) * p) / 100));
+
   return (
     <>
       <ScrollView showsVerticalScrollIndicator={false}
@@ -1555,25 +1740,6 @@ export function TradeScreen() {
                   <Text style={styles.pairText}>{displaySymbol(quoteSym)}</Text>
                 </Pressable>
               </View>
-              {/* Beside the asset it is about, rather than in the nav bar where iOS draws a glass
-                  capsule behind every custom bar button.
-                  
-                  This was the star that puts the asset on the Overview. The pair page says what the
-                  asset COSTS and nothing about what it IS, so the contract behind a ticker, and
-                  whether a balance is free or sitting in Earn, had nowhere to be read; the star is
-                  still on every row of the asset directory and the watch list, which is where
-                  choosing what to follow happens anyway. */}
-              <Pressable
-                onPress={() => nav.navigate('AssetDetail', {symbol: baseSym})}
-                hitSlop={10}
-                accessibilityRole="button"
-                accessibilityLabel={t('mobile.trade.asset_details')}>
-                <Svg width={21} height={21} viewBox="0 0 24 24">
-                  <Circle cx={12} cy={12} r={9.5} stroke={c.subtext} strokeWidth={1.8} fill="none" />
-                  <Path d="M12 11v5.5" stroke={c.subtext} strokeWidth={2} strokeLinecap="round" fill="none" />
-                  <Circle cx={12} cy={7.9} r={1.15} fill={c.subtext} />
-                </Svg>
-              </Pressable>
             </>
           ) : null}
         </View>
@@ -1681,17 +1847,18 @@ export function TradeScreen() {
                   </Text>
                 </Pressable>
               ))}
-              {/* Not a third tab: it leaves the screen. Everything the two tabs leave out — the
-                  cancelled orders, and every pair other than this one — is on the page it pushes,
-                  so this is doing the work the Cancelled tab used to without spending a tab on
-                  orders that never happened.
+              {/* The record, beside the two tabs that are the live list — and ALWAYS, including
+                  when both tabs are empty. An empty card is exactly when someone wants to know
+                  whether anything ever happened on this pair, so hiding the way to the history
+                  until there is something here would withhold it at the one moment it is asked
+                  for. It is also the only route to the cancelled orders and to every other pair.
                   
-                  A mark rather than a label: beside two words that ARE the list, a third word that
-                  is a destination read as a tab, and the clock says "the record" in a tenth of the
-                  room. The same clock the Overview's History action wears, in the tab row's own
-                  muted grey rather than accent — it sits among labels, not among buttons, and blue
-                  made it the loudest thing in a row of quiet ones. The name goes to the screen
-                  reader, which sees no clock. */}
+                  A mark rather than a label: beside two words that ARE the list, a third word
+                  that is a destination read as a tab, and the clock says "the record" in a tenth
+                  of the room. The same clock the Overview's History action wears, in the tab
+                  row's own muted grey rather than accent. The name goes to the screen reader,
+                  which sees no clock. The ⋯ menu carries it too, for the pages that have no
+                  orders card at all. */}
               <Pressable
                 onPress={() => nav.navigate('OrderHistory')}
                 hitSlop={10}
@@ -1783,9 +1950,12 @@ export function TradeScreen() {
                     {g.filled}/{g.total} {t('mobile.trade.filled_parts')}
                   </Text>
                 </Pressable>
-
+                {/* The open detail closes it again. The head is a 56pt strip and the panel under it is
+                    the bigger target by far; having to go back up to the row to put it away read as the
+                    panel being a separate thing rather than the row's own second half. The TWAP cancel
+                    inside is a nested pressable and still wins the tap. */}
                 {isExp ? (
-                  <View style={styles.orderDetail}>
+                  <Pressable style={styles.orderDetail} onPress={() => toggleExpanded(key)}>
                     <View style={styles.orderLine}>
                       <Text style={styles.orderLabel}>{t('vault.pay')}</Text>
                       <View style={styles.orderAmt}>
@@ -1818,7 +1988,7 @@ export function TradeScreen() {
                     </View>
                     <View style={styles.orderLine}>
                       <Text style={styles.orderLabel}>{t('vault.expires')}</Text>
-                      <Text style={styles.orderVal}>{fmtExpiry(g.schedule.windowEnd)}</Text>
+                      <Text style={styles.orderVal}>{fmtExpiry(g.schedule.windowEnd, language)}</Text>
                     </View>
 
                     {/**
@@ -1871,7 +2041,7 @@ export function TradeScreen() {
                         </Text>
                       </Pressable>
                     ) : null}
-                  </View>
+                  </Pressable>
                 ) : null}
               </View>
             );
@@ -1978,9 +2148,12 @@ export function TradeScreen() {
                       </View>
                     ) : null}
                   </Pressable>
-
+                  {/* The open detail closes it again. The head is a 56pt strip and the panel under it is
+                      the bigger target by far; having to go back up to the row to put it away read as the
+                      panel being a separate thing rather than the row's own second half. The TWAP cancel
+                      inside is a nested pressable and still wins the tap. */}
                   {isExp ? (
-                    <View style={styles.orderDetail}>
+                    <Pressable style={styles.orderDetail} onPress={() => toggleExpanded(o.uid)}>
                       <View style={styles.orderLine}>
                         <Text style={styles.orderLabel}>{t('vault.pay')}</Text>
                         <View style={styles.orderAmt}>
@@ -2003,9 +2176,9 @@ export function TradeScreen() {
                       </View>
                       <View style={styles.orderLine}>
                         <Text style={styles.orderLabel}>{t('vault.expires')}</Text>
-                        <Text style={styles.orderVal}>{fmtExpiry(o.validTo)}</Text>
+                        <Text style={styles.orderVal}>{fmtExpiry(o.validTo, language)}</Text>
                       </View>
-                    </View>
+                    </Pressable>
                   ) : null}
                 </View>
               );
@@ -2039,8 +2212,12 @@ export function TradeScreen() {
                         </View>
                       </View>
                     </Pressable>
+                    {/* The open detail closes it again. The head is a 56pt strip and the panel under it is
+                        the bigger target by far; having to go back up to the row to put it away read as the
+                        panel being a separate thing rather than the row's own second half. The TWAP cancel
+                        inside is a nested pressable and still wins the tap. */}
                     {isExp ? (
-                      <View style={styles.orderDetail}>
+                      <Pressable style={styles.orderDetail} onPress={() => toggleExpanded(m.txHash)}>
                         <View style={styles.orderLine}>
                           <Text style={styles.orderLabel}>{t('mobile.trade.paid')}</Text>
                           <View style={styles.orderAmt}>
@@ -2064,10 +2241,10 @@ export function TradeScreen() {
                         {m.ts ? (
                           <View style={styles.orderLine}>
                             <Text style={styles.orderLabel}>{t('vault.fulfilled')}</Text>
-                            <Text style={styles.orderVal}>{fmtExpiry(m.ts)}</Text>
+                            <Text style={styles.orderVal}>{fmtExpiry(m.ts, language)}</Text>
                           </View>
                         ) : null}
-                      </View>
+                      </Pressable>
                     ) : null}
                   </View>
                 );
@@ -2121,60 +2298,40 @@ export function TradeScreen() {
                 </Pressable>
               ))}
               {/* Pushed to the right edge of the same line, exactly as the Earn card's header
-                  carries its protocol: the mark alone, tapped to name itself, and shown only
-                  while "DeFi details" is on. Same component, same switch, same rule. */}
-              {defiDetails && venues.length > 0 ? (
+                  carries its protocol: the mark alone, tapped to name itself. */}
+              {venues.length > 0 ? (
                 <View style={styles.segVenues}>
-                  {venues.map((name) => (
-                    <ProtocolChip key={name} name={name} size={16} />
+                  {venues.map((v) => (
+                    <ProtocolChip key={v.name} name={v.name} uri={v.uri} size={16} />
                   ))}
                 </View>
               ) : null}
             </View>
 
-            {/* Amount (base) */}
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>{shownSide === 'buy' ? t('vault.you_pay') : t('vault.trade_amount')}</Text>
-              <View style={styles.fieldRight}>
-                <TextInput style={[styles.fieldInput, overBalance && styles.fieldInputOver]} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={c.subtext} value={amount} onChangeText={applyPay} {...amountCaret} />
-                {balKnown && Number(spendBal) > 0 ? (
-                  <Pressable onPress={maxPay} style={styles.maxPill}>
-                    <Text style={styles.maxText}>{t('common.max')}</Text>
-                  </Pressable>
-                ) : null}
-                <Pressable style={styles.sourcePill} onPress={() => setPicker('source')}>
-                  <TokenIcon symbol={spendSym} size={20} />
-                  <Text style={styles.fieldSym}>{displaySymbol(spendSym)}</Text>
-                  {spendSource !== 'free' ? (
-                    <Text style={styles.sourceTag}>{spendSource === 'yield' ? t('vault.yielding') : t('vault.lending')}</Text>
-                  ) : null}
-                </Pressable>
-              </View>
-            </View>
-            {/* The ceiling this order can actually reach, which for a market order already has the
-                positions added and the relayer's reserve taken off — the same number Max fills in.
-                Where it comes from is the funding rows' job, so no breakdown is repeated here. */}
-            {overBalance ? (
-              <Text style={styles.overText}>
-                {t('vault.exceeds_balance')} · <Amount v={fmtNum(Number(spendBal))} /> {displaySymbol(spendSym)}
-              </Text>
-            ) : balKnown && Number(spendBal) > 0 ? (
-              <Text style={styles.availText}>
-                {t('vault.available')} <Amount v={fmtNum(Number(spendBal))} size={11} /> {displaySymbol(spendSym)}
-              </Text>
-            ) : null}
-
-
-
+            {/* Limit and TWAP lead with the price, as on the web. A market order has no user
+                price — it fills at the live quote — so the field is simply absent. */}
             {mode !== 'Market' ? (
               <View style={styles.field}>
                 <Text style={styles.fieldLabel}>{t('vault.price')}</Text>
                 <View style={styles.fieldRight}>
-                  <TextInput style={styles.fieldInput} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={c.subtext} value={price} onChangeText={(v) => { setPrice(v); setPriceEdited(true); }} {...priceCaret} onFocus={(e) => { priceCaret.onFocus?.(e); setPriceEdited(true); }} />
-                  <Text style={styles.fieldSym}>{displaySymbol(quoteSym)}</Text>
+                  {/* No token on this row. Price is a RATIO — quote per base — so one symbol
+                      beside it names half of it and reads as the price being denominated in
+                      something other than the pair already states. The web shows none either. */}
+                  {/* The live pool price as the placeholder, not "0".
+                  
+                      An empty limit price is not a zero price, it is "the market" — and the
+                      number someone is about to adjust up or down is the one they need in front
+                      of them to do it. "0" said nothing and read as a price of nothing. Formatted
+                      with the same precision rule the fields use, so typing over it does not
+                      change how many digits are shown. */}
+                  <TextInput style={styles.fieldInput} keyboardType="decimal-pad" placeholder={poolPrice && poolPrice > 0 ? toField(poolPrice) : '0'} placeholderTextColor={c.subtext} value={price} onChangeText={(v) => { setPrice(v); setPriceEdited(true); }} {...priceCaret} onFocus={(e) => { priceCaret.onFocus?.(e); setPriceEdited(true); }} />
                 </View>
               </View>
             ) : null}
+
+            {baseField}
+
+
 
             {mode === 'TWAP' ? (
               <View style={styles.field}>
@@ -2185,15 +2342,11 @@ export function TradeScreen() {
               </View>
             ) : null}
 
-            {/* Receive (the other leg) — editable; kept in sync with Amount through the price. */}
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>{t('vault.receive_amount')} {mode === 'Market' ? '≈' : '≥'}</Text>
-              <View style={styles.fieldRight}>
-                <TextInput style={styles.fieldInput} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={c.subtext} value={receiveInput} onChangeText={applyReceive} {...receiveCaret} />
-                <TokenIcon symbol={recvSym} size={20} />
-                <Text style={styles.fieldSym}>{displaySymbol(recvSym)}</Text>
-              </View>
-            </View>
+            {/* The % slider sits between the two amount lines, so it is in the same place on a
+                buy and on a sell — and the Total it drives is the field directly under it. */}
+            <PercentSlider value={payPct} onChange={setPayPct} disabled={!balKnown || Number(spendBal) <= 0} />
+
+            {totalField}
 
             {/* Validity: the usual answers as chips, and a field for anything else. A preset is one
                 tap where it fits, and 45 days was previously unreachable without picking 30. */}
@@ -2375,18 +2528,6 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   deleteBtn: {backgroundColor: c.danger, borderRadius: 26, height: 52, alignItems: 'center', justifyContent: 'center', marginTop: 16},
   deleteBtnText: {color: '#FFFFFF', fontSize: 16, fontWeight: '600'},
   navTitleInput: {color: c.text, fontSize: 17, fontWeight: '700', minWidth: 170, padding: 0},
-  /**
-   * Sized AND padded, because the bar anchors this view by its bottom edge.
-   *
-   * Two measurements now agree on that: a 32pt box sat well low, a 44pt box still sits low by
-   * about six. Both fit a container taller than the box — around 56 with the transparent header's
-   * insets — anchored at the bottom, which puts the glyph's centre at `56 − height/2` instead of
-   * at 28. Padding the bottom moves the centred glyph up by half the padding.
-   *
-   * 12 overshot — it went from six low to a touch high — so 6, which lifts it by three. Measured
-   * rather than modelled at this point: each report halves the interval.
-   */
-  navAction: {width: 44, height: 44, paddingBottom: 6, alignItems: 'center', justifyContent: 'center'},
   headerRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingHorizontal: 20},
   /**
    * One step down from where it started: 28pt coins and 20pt tickers next to each other made the
@@ -2514,7 +2655,6 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   sourcePill: {flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.neutralSoft, borderRadius: 16, paddingVertical: 5, paddingHorizontal: 8},
   sourceTag: {color: c.subtext, fontSize: 11, fontWeight: '600'},
   maxText: {color: c.accent, fontSize: 11, fontWeight: '700'},
-  availText: {color: c.subtext, fontSize: 11, marginTop: -6, marginLeft: 2},
   overText: {color: c.danger, fontSize: 12},
   fieldInputOver: {color: c.danger},
   validRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: c.input, borderRadius: 12, borderWidth: 1, borderColor: c.border, paddingLeft: 14, paddingRight: 6, height: 52},

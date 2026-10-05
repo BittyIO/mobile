@@ -13,7 +13,7 @@
 import {parseAbi, zeroAddress, type Address} from 'viem';
 import {publicClientFor, type Network} from '@/core/chain';
 import {assetMeta} from '@/core/assets';
-import {ammAdapters} from '@/core/protocols';
+import {marketMakerAdapters} from '@/core/protocols';
 
 export type LpPosition = {
   tokenId: string;
@@ -61,7 +61,9 @@ export async function readLpPositions(
   const client = publicClientFor(network);
 
   // Resolve each adapter's position manager, dedupe (sibling adapters share one).
-  const adapters = ammAdapters(network);
+  // The MAKER adapters: positions live with the contract that minted them, which on a chain that
+  // has taken the AMM split is no longer the one that swaps.
+  const adapters = marketMakerAdapters(network);
   const pms = await Promise.all(
     adapters.map((a) =>
       client

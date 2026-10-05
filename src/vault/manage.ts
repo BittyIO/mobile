@@ -109,6 +109,35 @@ export function formatVaultVersion(v: bigint): string {
   return `${Math.floor(n / 1e6)}.${Math.floor((n % 1e6) / 1e3)}.${n % 1000}`;
 }
 
+/**
+ * The vault's running impl version as the ENCODED number (major*1e6+minor*1e3+patch), 0 if
+ * unreadable. A counterfactual vault has no code of its own; it will be born on the guard's latest
+ * impl, so that version is returned — which is what decides the services the Manage screen shows.
+ */
+export async function vaultImplVersion(vault: Address, network: Network): Promise<number> {
+  try {
+    const client = publicClientFor(network);
+    const own = await (
+      client.readContract({address: vault, abi: VAULT_VERSION_ABI, functionName: 'vaultVersion'}) as Promise<bigint>
+    )
+      .then((v) => Number(v))
+      .catch(() => 0);
+    if (own) return own;
+    const latest = (await client.readContract({
+      address: GUARD_ADDRESS,
+      abi: GUARD_IMPL_ABI,
+      functionName: 'latestImplementation',
+      args: [IMPLEMENTATION_VAULT],
+    })) as Address;
+    if (!latest || /^0x0+$/.test(latest)) return 0;
+    return Number(
+      (await client.readContract({address: latest, abi: VAULT_VERSION_ABI, functionName: 'vaultVersion'})) as bigint,
+    );
+  } catch {
+    return 0;
+  }
+}
+
 export type VaultUpgrade = {
   current: Address | null; // the implementation the vault runs (null before activation)
   latest: Address | null; // the guard's current implementation

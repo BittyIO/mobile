@@ -23,7 +23,8 @@ import {fmtNum, displaySymbol} from '@/core/format';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {assetCategory, type AssetCategory} from '@/core/assets';
 import {isAssetsList, useFavorites, useWatchLists, watchListLabel, watchListNumber} from '@/core/favorites-store';
-import {getFlag, setFlag, HIDE_BALANCES, HIDE_ZERO_BALANCES} from '@/core/prefs';
+import {getFlag, setFlag, HIDE_BALANCES} from '@/core/prefs';
+import {useWatchDraft} from '@/core/watch-draft';
 import {balanceOfSymbol} from '@/vault/read';
 import {formatUnits} from 'viem';
 import {useColors, useStyles, type Colors} from '@/theme';
@@ -78,6 +79,19 @@ function ActionIcon({name, color, size = 22}: {name: 'send' | 'receive' | 'histo
 }
 
 const fmt = fmtNum;
+
+/**
+ * The rows "Assets" always shows, funded or not.
+ *
+ * Every stablecoin, because that is what a vault is funded in and what every fee is paid from,
+ * plus bitcoin and ether — the two a balance is most often moved into. A row that is already
+ * there is a row someone can act on; an asset that only appears once it has a balance cannot be
+ * the thing you tap to get one.
+ *
+ * Deliberately short. Everything else earns its place by having a balance.
+ */
+const CORE_SYMBOLS = new Set(['ETH', 'WETH', 'WBTC', 'cbBTC']);
+const isCoreAsset = (symbol: string, stable: boolean) => stable || CORE_SYMBOLS.has(symbol);
 
 /**
  * What the eye leaves behind.
@@ -351,7 +365,7 @@ function AssetRow({
   /** This asset's figures, absent while they load and for anything the catalog has no id for. */
   stat: MarketStat | undefined;
 }) {
-  const {t} = useT();
+  const {t, language} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
   const [open, setOpen] = useState(false);
@@ -377,7 +391,7 @@ function AssetRow({
             ) : null}
           </View>
           <View style={styles.capCol}>
-            <Text style={styles.cap}>{fmtCap(stat?.marketCap)}</Text>
+            <Text style={styles.cap}>{fmtCap(stat?.marketCap, language)}</Text>
           </View>
         </Pressable>
       </View>
@@ -607,6 +621,7 @@ export function VaultHomeScreen() {
    * sorter per list from it keeps the hook count fixed whatever the user does.
    */
   const watch = useWatchLists(network);
+  const beginDraft = useWatchDraft((s2) => s2.begin);
   const orders = useFavorites((s) => s.order);
   const saveOrder = useFavorites((s) => s.setOrder);
   /** Where this list's rows were dragged to, by symbol. Empty until the user has moved one. */
@@ -626,12 +641,6 @@ export function VaultHomeScreen() {
    * waiting to be funded — useful when setting up, noise once there are a dozen of them. Off by
    * default, and it never hides a balance: only rows that are empty anyway.
    */
-  const [hideZero, setHideZero] = useState(() => getFlag(HIDE_ZERO_BALANCES));
-  const toggleHideZero = () => {
-    const next = !hideZero;
-    setFlag(HIDE_ZERO_BALANCES, next);
-    setHideZero(next);
-  };
   /**
    * The rows, funded ones first.
    *
@@ -645,19 +654,20 @@ export function VaultHomeScreen() {
    * The rows one list shows, funded ones first.
    *
    * A user's own list is EXACTLY what was starred onto it and nothing else — that is what makes it
-   * worth creating. "Assets", the first one, is the exception and shows everything the vault holds
-   * as well, so a balance can never go missing because of how someone arranged their lists.
+   * worth creating.
+   *
+   * "Assets" is not a list at all, it is a view of the vault, and nothing can be added to or
+   * removed from it: it shows the core set — the stablecoins, bitcoin and ether — always, plus
+   * every other asset with a balance. Always-on means the rows someone funds first are already
+   * there to be funded; a balance in anything else can never go missing, whatever the user has
+   * starred elsewhere. Starring deliberately has no effect here, which is why the watch-list
+   * symbols are not consulted.
    */
   const rowsForList = (listId: string): Row[] => {
-    const on = new Set(watch.lists.find((l) => l.id === listId)?.symbols ?? []);
     const held = isAssetsList(listId);
-    // Only Assets hides its empties. A list of your own IS the rows you starred onto it, so
-    // dropping the ones at zero would hide the very thing you put there — usually an asset you do
-    // not hold yet and are watching because of it.
-    const hiding = held && hideZero;
-    const visible = rows.filter(
-      (r) => (on.has(r.symbol) || (held && r.total > 0)) && (!hiding || r.total > 0),
-    );
+    const visible = held
+      ? rows.filter((r) => isCoreAsset(r.symbol, r.stable) || r.total > 0)
+      : rows.filter((r) => new Set(watch.lists.find((l) => l.id === listId)?.symbols ?? []).has(r.symbol));
     const ordered = sortFor(listId)(visible);
     // Funded first on "Assets" only. A list of the user's own no longer shows a balance at all —
     // it shows price, the day and the market cap — so splitting it by one would be sorting on a
@@ -862,7 +872,18 @@ export function VaultHomeScreen() {
                   const {x, width} = e.nativeEvent.layout;
                   tabBox.current[l.id] = {x, w: width};
                 }}
-                onPress={() => (on ? nav.navigate('Watchlist') : pickList(l.id))}>
+                /**
+                 * A tap selects the list; a tap on the one already in front opens it for editing.
+                 *
+                 * Except "Assets", which has nothing to edit — it is a view of the vault, a fixed
+                 * core set plus whatever has a balance, and starring cannot add to or remove from
+                 * it. Opening the editor there offered a page whose every control was inert, so
+                 * the second tap does nothing instead.
+                 */
+                onPress={() => {
+                  if (!on) return pickList(l.id);
+                  if (!isAssetsList(l.id)) nav.navigate('Watchlist');
+                }}>
                 <Text style={[styles.listTitle, on && styles.listTitleOn]}>
                   {watchListLabel(
                     l,
@@ -883,27 +904,15 @@ export function VaultHomeScreen() {
             accessibilityRole="button"
             accessibilityLabel={t('mobile.home.new_list')}
             onPress={() => {
-              watch.add(network, '');
+              // No list yet: the page opens on a draft and the first tick creates it. Creating it
+              // here meant the Overview gained an empty list and, if the visit starred nothing,
+              // visibly lost it again on the way back.
+              beginDraft();
               nav.navigate('Watchlist');
             }}>
             <Text style={styles.listAdd}>＋</Text>
           </Pressable>
         </ScrollView>
-        {/* The label is the ACTION, not the state: "Hide 0" while the empty rows are showing,
-            "Show 0" once they are not. A single label that changed colour instead asked the user
-            to remember which tint meant on — and an accent "Hide 0" reads as a heading for a list
-            that is hiding nothing. Saying what the next tap does needs no legend.
-            
-            Absent on a list of the user's own, where it would offer to hide what they chose. */}
-        {isAssetsList(watch.activeId) ? (
-        <Pressable
-          onPress={toggleHideZero}
-          hitSlop={10}
-          accessibilityRole="button"
-          accessibilityLabel={t(hideZero ? 'mobile.home.show_zero' : 'mobile.home.hide_zero')}>
-          <Text style={styles.hideZero}>{t(hideZero ? 'mobile.home.show_zero' : 'mobile.home.hide_zero')}</Text>
-        </Pressable>
-        ) : null}
       </View>
       <View onLayout={(e) => setPageW(e.nativeEvent.layout.width)}>
         {pageW > 0 ? (
@@ -1017,7 +1026,6 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   // The row's own grey, like the list names and "hide 0" beside it. In accent it was the loudest
   // thing on a line of labels, and the one thing on it nobody needs to find in a hurry.
   listAdd: {color: c.subtext, fontSize: 15, fontWeight: '600'},
-  hideZero: {color: c.subtext, fontSize: 13, fontWeight: '600'},
   listCard: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 4},
   list: {gap: 0},
   // The separator sits on TOP of every row: one between the header and the first asset, one

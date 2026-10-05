@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import type {Address} from 'viem';
 import {Button} from '@/components/Button';
 import {useWallet} from '@/wallet/store';
@@ -23,6 +23,9 @@ import {showTx} from '@/components/Toast';
 import {useConfirmAction} from '@/components/ConfirmAction';
 import {relayGasFor} from '@/vault/fee-quote';
 import {useColors, useStyles, type Colors} from '@/theme';
+import {SettingsRow, SettingsGroup, makeSettingsStyles} from '@/components/SettingsRow';
+import {revealMnemonic} from '@/wallet/keyring';
+import {useRevealGuard} from '@/core/device-security';
 
 const HOUR = 3600;
 const now = () => Math.floor(Date.now() / 1000);
@@ -58,6 +61,29 @@ function fmtUntil(t: T, ts: bigint): string {
  */
 export function SecurityScreen() {
   const {t} = useT();
+  const lock = useWallet((s) => s.lock);
+  const [phrase, setPhrase] = useState<string | null>(null);
+  // Hide the phrase while the screen is recorded, and pull it + warn if a screenshot is taken.
+  const reveal = useRevealGuard();
+  useEffect(() => {
+    if (reveal.screenshotCount > 0 && phrase) {
+      setPhrase(null);
+      Alert.alert(
+        'Screenshot detected',
+        'Your recovery phrase was hidden. Never keep it in Photos or anywhere synced to the cloud — write it on paper.',
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reveal.screenshotCount]);
+  const onReveal = async () => {
+    try {
+      const m = await revealMnemonic();
+      if (m) setPhrase(m);
+    } catch {
+      // cancelled biometric prompt
+    }
+  };
+
   const styles = useStyles(makeStyles);
   const c = useColors();
   const unlocked = useWallet((s) => s.unlocked);
@@ -172,8 +198,46 @@ export function SecurityScreen() {
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
+      {/**
+        * The key, first.
+        *
+        * It used to be a "Security" group at the bottom of the Settings page, below the links to
+        * the website, while this page — also called Security — held the vault's guardrails. Two
+        * headings with one name, and the single most sensitive thing in the app was the furthest
+        * from the row that claimed to be about security. It leads here instead: everything below
+        * limits what the vault may do, and this is what grants it in the first place.
+        */}
+      <SettingsGroup>
+        {phrase ? (
+          <View style={[styles.phraseBox, styles.rowDivider]}>
+            {reveal.captured ? (
+              <Text style={styles.warn}>
+                Hidden while your screen is being recorded or mirrored. Stop the recording to view
+                your recovery phrase.
+              </Text>
+            ) : (
+              <View style={styles.grid}>
+                {phrase.split(' ').map((w, i) => (
+                  <View key={`${w}-${i}`} style={styles.word}>
+                    <Text style={styles.wordIdx}>{i + 1}</Text>
+                    <Text style={styles.wordText}>{w}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            <Text style={styles.warn}>{t('mobile.settings.never_share')}</Text>
+            <Pressable style={styles.smBtn} onPress={() => setPhrase(null)}>
+              <Text style={styles.smBtnText}>{t('mobile.settings.hide')}</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <SettingsRow icon="recovery" title={t('mobile.settings.recovery_phrase')} sub={t('mobile.settings.reveal_face_id')} onPress={onReveal} />
+        )}
+        <SettingsRow icon="lock" title={t('mobile.settings.lock')} onPress={lock} chevron={false} last />
+      </SettingsGroup>
+
       {/* ── Payment risk ──────────────────────────────────────────────── */}
-      <Text style={styles.h}>{t('mobile.vault.payment_risk')}</Text>
+      <Text style={[styles.h, styles.h2]}>{t('mobile.vault.payment_risk')}</Text>
       <Text style={styles.hint}>{t('mobile.vault.payment_risk_hint')}</Text>
 
       {RISK_FIELDS.map((f) => {
@@ -250,7 +314,17 @@ export function SecurityScreen() {
 }
 
 const makeStyles = (c: Colors) => StyleSheet.create({
+  // The row and group styles come from the shared settings row; the rest is this page's own.
+  ...makeSettingsStyles(c),
   container: {flex: 1, backgroundColor: c.bg},
+  phraseBox: {padding: 16, gap: 10},
+  smBtn: {backgroundColor: c.bg, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14, borderWidth: 1, borderColor: c.border, alignSelf: 'flex-start'},
+  smBtnText: {color: c.text, fontSize: 13, fontWeight: '600'},
+  grid: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between'},
+  word: {width: '47%', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.bg, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12},
+  wordIdx: {color: c.subtext, fontSize: 12, width: 18},
+  wordText: {color: c.text, fontSize: 14, fontWeight: '600'},
+  warn: {color: c.danger, fontSize: 12, lineHeight: 17},
   body: {flexGrow: 1, padding: 20, paddingBottom: 24, gap: 10},
   h: {color: c.text, fontSize: 20, fontWeight: '700'},
   h2: {marginTop: 24},

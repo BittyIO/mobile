@@ -22,7 +22,6 @@ export function setFlag(key: string, value: boolean): void {
 export const SHOW_OTHER_ORDERS = 'trade.showOthers';
 
 /** Keep assets with nothing in them off the Overview. Off, so a starred asset still shows at zero. */
-export const HIDE_ZERO_BALANCES = 'overview.hideZero';
 
 /**
  * The eye above the total: every figure that is the user's own is masked.

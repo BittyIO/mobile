@@ -1,7 +1,17 @@
 import type {Address} from 'viem';
 import type {Network} from '@/core/chain';
+import {currentGuardProtocols} from '@/core/guard-catalog';
 
-export type ProtocolCategory = 'staking' | 'lending' | 'amm' | 'intent' | 'unknown';
+/**
+ * Guard categories, as the guard itself numbers them.
+ *
+ * `amm` and `marketMaker` are one adapter on most chains and two on a chain that has taken the
+ * AMM split: the trade side (guard category 3) swaps through the Universal Router, the maker side
+ * (category 5) holds concentrated liquidity. Code that swaps asks for `amm`, code that provides
+ * liquidity asks for `marketMaker`, and on an unsplit chain the latter resolves to the former —
+ * see {ammAdapters} and {marketMakerAdapters}.
+ */
+export type ProtocolCategory = 'staking' | 'lending' | 'amm' | 'marketMaker' | 'intent' | 'unknown';
 
 type ProtocolInfo = {name: string; category: ProtocolCategory};
 
@@ -13,6 +23,15 @@ type ProtocolInfo = {name: string; category: ProtocolCategory};
  */
 const PROTOCOLS: Record<Network, Record<string, ProtocolInfo>> = {
   mainnet: {
+    // The 1.0.3 AMM split, registered on the guard 2026-10-04. Listed for their NAMES, not for
+    // routing: `ammAdapters` and `marketMakerAdapters` read the guard, so what an order is sent
+    // to still changes without a release. A name cannot be read from the guard at all, and
+    // without one the Trade screen's venue chip had nothing to draw — it fell back to a lettered
+    // disc of a shortened address, and then to nothing once unnamed venues were dropped. The
+    // server's service catalog carries names too and wins when it has answered; this is what
+    // makes the mark correct on the first frame and offline.
+    '0x73d16efa39e2195cfac4b0f18bda3aa35056663a': {name: 'Uniswap', category: 'amm'},
+    '0xad5a7fd77457195ddf9221270dbcc0245ecdd698': {name: 'Uniswap V3', category: 'marketMaker'},
     '0x9296f7ffe86da8b652988f07920b42f8779ce64b': {name: 'Aave V3', category: 'lending'},
     '0x35252547c41661103865d700d8fcace07afce1bd': {name: 'Lido', category: 'staking'},
     '0x0968632ad0a79220ffb2d2320de82b7c17357774': {name: 'Sky', category: 'staking'},
@@ -26,6 +45,15 @@ const PROTOCOLS: Record<Network, Record<string, ProtocolInfo>> = {
     '0x3d7589cd35400e0a1b8d6f5f8ed3ae4171a5e195': {name: 'CoW Swap', category: 'intent'},
   },
   base: {
+    // The 1.0.3 AMM split, registered on the guard 2026-10-04. Listed for their NAMES, not for
+    // routing: `ammAdapters` and `marketMakerAdapters` read the guard, so what an order is sent
+    // to still changes without a release. A name cannot be read from the guard at all, and
+    // without one the Trade screen's venue chip had nothing to draw — it fell back to a lettered
+    // disc of a shortened address, and then to nothing once unnamed venues were dropped. The
+    // server's service catalog carries names too and wins when it has answered; this is what
+    // makes the mark correct on the first frame and offline.
+    '0x4753f9a82659edcffc940fe8e330741d14bad82b': {name: 'Uniswap', category: 'amm'},
+    '0xb445619c0a2936591c7712739c82204c8901b56a': {name: 'Uniswap V3', category: 'marketMaker'},
     '0x4b38baa01e6fd30163f4de7e678dc868045eb27f': {name: 'Aave V3', category: 'lending'},
     '0x8e14e91f29066ccdd9e9e2db6bafe6fef7c14ac6': {name: 'Sky', category: 'staking'},
     // 1.0.1 only, as on mainnet above; the 1.0.0 adapter (0x7aE75624…) is deliberately not listed.
@@ -34,33 +62,117 @@ const PROTOCOLS: Record<Network, Record<string, ProtocolInfo>> = {
   },
   // Only the AMM adapter (Universal Router build, 1.0.2): no Aave, Sky or CoW on this chain.
   robinhood: {
+    // The 1.0.3 AMM split, registered on the guard 2026-10-04. Listed for their NAMES, not for
+    // routing: `ammAdapters` and `marketMakerAdapters` read the guard, so what an order is sent
+    // to still changes without a release. A name cannot be read from the guard at all, and
+    // without one the Trade screen's venue chip had nothing to draw — it fell back to a lettered
+    // disc of a shortened address, and then to nothing once unnamed venues were dropped. The
+    // server's service catalog carries names too and wins when it has answered; this is what
+    // makes the mark correct on the first frame and offline.
+    '0x7ae75624f265a700d011df819bed6ef10615ac38': {name: 'Uniswap', category: 'amm'},
+    '0x5daa6aef7de9c13624a8fdfde47c10d35fd79b0a': {name: 'Uniswap V3', category: 'marketMaker'},
     '0x2b2ecfad219fe9fd358ba196962d1536665b2041': {name: 'Uniswap V3', category: 'amm'},
   },
+  // Sepolia took the AMM split on 2026-10-02 and is the only chain that has. The two adapters that
+  // used to sit here (0x88b9f031…, 0xc701e8d6…) were the combined Uniswap V3 adapter of the
+  // previous guard generation and are deliberately NOT listed: the whole set was redeployed, so
+  // keeping them would hand `ammAdapters` a superseded address to trade through.
+  //
+  // The names differ because the adapters differ. The trade side routes v2/v3/v4 through the
+  // Universal Router, so it is "Uniswap" flat, matching what Robinhood Chain's Universal adapter
+  // is called; the maker side is concentrated liquidity and v3 only, so it keeps "Uniswap V3".
+  // Distinct names also keep them as two rows in the protocol allowlist, which is what they are —
+  // a vault has to register each one.
   sepolia: {
     '0x9c01f9b6ed7bbd86f7a309a3414595608ab9d80d': {name: 'Aave V3', category: 'lending'},
     '0x9f6d7b2defcf45cb837560209099083ddf59840a': {name: 'Lido', category: 'staking'},
-    '0x88b9f0310b891f1bd00789f65d49b8331ed32a52': {name: 'Uniswap V3', category: 'amm'},
-    '0xc701e8d66d2762044b34303509a2606e6b05bb73': {name: 'Uniswap V3', category: 'amm'},
+    '0x67bd4c240d513e7eb35bf8d871cbed314856b125': {name: 'Uniswap', category: 'amm'},
+    '0x001522fb856c3c6f815dfdd5d023eae5b9000058': {name: 'Uniswap V3', category: 'marketMaker'},
     '0x5a365990111b5a460526a25a8d4493df103759df': {name: 'CoW Swap', category: 'intent'},
   },
 };
 
+/**
+ * What a protocol is CALLED on screen, where that differs from the adapter's registry name.
+ *
+ * The registry name is an identity — code compares against it ("is this the Lido adapter?") — so
+ * it cannot carry a version the user should see. Lido's adapter wraps Lido V2, and a row that
+ * says "Lido" beside a V2 position is naming the brand rather than the thing it routes to.
+ *
+ * Lives here rather than beside the icon, which is where it started: three screens render a
+ * protocol name without rendering its mark, and a lookup kept in a component is one those
+ * screens have to remember to import. The rule is about the name, so it sits with the names.
+ */
+const DISPLAY_NAME: Record<string, string> = {
+  Lido: 'Lido V2',
+  Sky: 'Sky V1',
+  'CoW Swap': 'CoW Swap V1',
+};
+export const protocolDisplayName = (name: string) => DISPLAY_NAME[name] ?? name;
+
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
+/**
+ * Every adapter the guard is running, newest first — or the vendored table when it has not
+ * answered yet.
+ *
+ * The table above is a BOOT FALLBACK and a name source, not the truth. The truth is on chain and
+ * read by {fetchGuardProtocols}, which is what lets a vault move to a new release without this
+ * app moving with it: when 1.0.3 split trading from liquidity, the routing changed in the guard
+ * and every accessor below followed it. Shipping the addresses in the binary would mean a release
+ * per chain per deployment — and the table was already behind, which is the whole argument: on
+ * 2026-10-05 the guard served a market-maker adapter and a newer trade adapter on mainnet and
+ * Base that the table had never heard of.
+ */
+function adapters(network: Network): {address: Address; category: ProtocolCategory}[] {
+  const live = currentGuardProtocols(network);
+  if (live) return live.map((p) => ({address: p.address, category: p.category}));
+  return Object.entries(PROTOCOLS[network]).map(([addr, info]) => ({address: addr as Address, category: info.category}));
+}
+const byCategory = (network: Network, category: ProtocolCategory): Address[] =>
+  adapters(network)
+    .filter((p) => p.category === category)
+    .map((p) => p.address);
+
+/**
+ * What an address IS, for naming a history row or a position.
+ *
+ * The name still comes from the table, because the guard stores no names — it stores addresses
+ * and categories. An adapter it knows and the table does not is named by its address, which is
+ * what already happened for anything unrecognised. The CATEGORY, though, comes from the chain
+ * where it can, so a row for an adapter deployed after this build still says which service it
+ * belongs to.
+ */
 export function protocolMeta(network: Network, address: string): ProtocolInfo {
-  return (
-    PROTOCOLS[network][address.toLowerCase()] ?? {
-      name: short(address),
-      category: 'unknown',
-    }
-  );
+  const vendored = PROTOCOLS[network][address.toLowerCase()];
+  if (vendored) return vendored;
+  const live = currentGuardProtocols(network)?.find((p) => p.address.toLowerCase() === address.toLowerCase());
+  return {name: short(address), category: live?.category ?? 'unknown'};
 }
 
-/** The known AMM adapter addresses for a network (both versions of Uniswap V3). */
+/**
+ * The adapters that SWAP, newest first — what a market order is routed through.
+ *
+ * On a chain that has taken the AMM split this is the market-trade adapter alone, and the maker
+ * adapter is deliberately absent: handing a swap to the liquidity adapter is not a degraded route,
+ * it is a revert.
+ */
 export function ammAdapters(network: Network): Address[] {
-  return Object.entries(PROTOCOLS[network])
-    .filter(([, info]) => info.category === 'amm')
-    .map(([addr]) => addr as Address);
+  return byCategory(network, 'amm');
+}
+
+/**
+ * The adapters that hold LIQUIDITY — what an LP position is read from and added through.
+ *
+ * Falls back to the swap adapters where no maker adapter is registered, which is every chain but
+ * Sepolia today. Before the split one adapter did both jobs, and on mainnet, Base and Robinhood it
+ * still does, so the fallback is not a guess: it is the same contract under its other hat. The day
+ * one of those chains gets its own maker adapter, adding it to the table above is the whole change
+ * — nothing here or at either call site has to move.
+ */
+export function marketMakerAdapters(network: Network): Address[] {
+  const makers = byCategory(network, 'marketMaker');
+  return makers.length > 0 ? makers : ammAdapters(network);
 }
 
 /**
@@ -72,27 +184,40 @@ export function ammAdapters(network: Network): Address[] {
  * chain with no CoW adapter — Robinhood today — says nothing instead of promising CoW Swap.
  */
 export function venueNames(network: Network, category: ProtocolCategory): string[] {
-  return [...new Set(Object.values(PROTOCOLS[network]).filter((p) => p.category === category).map((p) => p.name))];
+  /**
+   * The CANONICAL adapter only — the one an order will actually be routed through.
+   *
+   * It used to return every adapter the guard still lists in the category, which on mainnet is
+   * three: the live trade adapter plus two superseded ones the guard keeps so an un-upgraded
+   * vault can still resolve its clone. Naming all three told the user their order went three
+   * places, and the two the vendored table has never heard of each rendered as a lettered disc
+   * showing "0" — the first character of a shortened address.
+   */
+  const [canonical] = byCategory(network, category);
+  if (!canonical) return [];
+  return [protocolMeta(network, canonical).name];
 }
+
+/** The adapters that post INTENTS — what a limit or TWAP order is signed against. */
+export function intentAdapters(network: Network): Address[] {
+  return byCategory(network, 'intent');
+}
+
+/** Does this name come from the registry, or is it a shortened address standing in for one? */
+export const isNamedProtocol = (name: string) => !name.startsWith('0x');
 
 /** Every known adapter for a network (all categories) — for protocol allowlist management. */
 export function allAdapters(
   network: Network,
 ): {address: Address; name: string; category: ProtocolCategory}[] {
-  return Object.entries(PROTOCOLS[network]).map(([addr, info]) => ({
-    address: addr as Address,
-    name: info.name,
-    category: info.category,
-  }));
+  return adapters(network).map((p) => ({address: p.address, name: protocolMeta(network, p.address).name, category: p.category}));
 }
 
 /** Yield adapters (staking + lending) for a network — the auto-yield route options. */
 export function yieldAdapters(
   network: Network,
 ): {address: Address; name: string; category: ProtocolCategory}[] {
-  return Object.entries(PROTOCOLS[network])
-    .filter(([, info]) => info.category === 'staking' || info.category === 'lending')
-    .map(([addr, info]) => ({address: addr as Address, name: info.name, category: info.category}));
+  return allAdapters(network).filter((p) => p.category === 'staking' || p.category === 'lending');
 }
 
 /** Resolve a protocol adapter address by display name (e.g. "Sky", "Aave V3"). Null if unknown. */

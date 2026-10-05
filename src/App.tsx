@@ -7,6 +7,8 @@ import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {useWallet} from '@/wallet/store';
 import {TabIcon, type TabName} from '@/components/TabIcon';
 import {NetworkSwitcher} from '@/components/NetworkSwitcher';
+import {useGuardProtocols} from '@/core/guard-catalog';
+import {useNetwork} from '@/core/network-store';
 import {ToastHost} from '@/components/Toast';
 import {ConfirmingBadge} from '@/components/ConfirmingBadge';
 import {resumePending} from '@/vault/pending';
@@ -30,6 +32,7 @@ export type TabParamList = {
 export type RootStackParamList = {
   Main: undefined;
   Payments: undefined;
+  SelectRecipient: {slot: number};
   /** The asset directory as a watch list editor: no prices, a star on every row. */
   Watchlist: undefined;
   /** One Earn position in full: its rate over time, what Auto-Yield does, and both actions. */
@@ -72,6 +75,7 @@ export type RootStackParamList = {
   Delegation: undefined;
   VaultAssets: undefined;
   VaultSecurity: undefined;
+  VaultTeam: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -229,6 +233,15 @@ function Root() {
   const navTheme = React.useMemo(() => navThemeFor(colors, dark), [colors, dark]);
   const status = useWallet((s) => s.status);
   const init = useWallet((s) => s.init);
+  const network = useNetwork((s) => s.network);
+  /**
+   * The guard's protocol catalog, read before anything needs it.
+   *
+   * Every relayed write resolves its adapter through a plain function, which cannot wait on a
+   * hook — so the read has to be in flight by the time the first trade or deposit is signed.
+   * Here, and on every network change, which is the only other moment the answer changes.
+   */
+  useGuardProtocols(network);
 
   useEffect(() => {
     init();
@@ -265,6 +278,11 @@ function Root() {
         }}>
         <Stack.Screen name="Main" component={MainTabs} options={{headerShown: false}} />
         <Stack.Screen name="Payments" getComponent={() => require('@/screens/PaymentsScreen').PaymentsScreen} options={{title: t('vault.send')}} />
+        <Stack.Screen
+          name="SelectRecipient"
+          getComponent={() => require('@/screens/SelectRecipientScreen').SelectRecipientScreen}
+          options={{title: t('mobile.payments.select_recipient')}}
+        />
         <Stack.Screen
           name="Watchlist"
           getComponent={() => require('@/screens/TradeScreen').TradeScreen}
@@ -313,6 +331,7 @@ function Root() {
         <Stack.Screen name="Delegation" getComponent={() => require('@/screens/DelegationScreen').DelegationScreen} options={{title: t('vault.payout_operators')}} />
         <Stack.Screen name="VaultAssets" getComponent={() => require('@/screens/ManageScreen').ManageScreen} options={{title: t('mobile.settings.allow_list')}} />
         <Stack.Screen name="VaultSecurity" getComponent={() => require('@/screens/SecurityScreen').SecurityScreen} options={{title: t('mobile.app.security')}} />
+        <Stack.Screen name="VaultTeam" getComponent={() => require('@/screens/TeamScreen').TeamScreen} options={{title: t('mobile.settings.team')}} />
       </Stack.Navigator>
     </NavigationContainer>
   );

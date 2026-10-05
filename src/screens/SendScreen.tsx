@@ -1,10 +1,15 @@
 import React, {useEffect, useMemo, useState} from 'react';
-import {ActionSheetIOS, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View} from 'react-native';
+import {Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {formatUnits, parseUnits, type Address} from 'viem';
-import {isPayableAddress, isTokenAddress} from '@/core/asset-catalog';
+import {isPayableAddress} from '@/core/asset-catalog';
 import {exceedsMax} from '@/components/AmountInput';
+import {useRecipientPick} from '@/core/recipient-pick';
 import {TokenIcon} from '@/components/TokenIcon';
+import {ClearBtn} from '@/components/ClearBtn';
+import {useNavigation} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import type {RootStackParamList} from '@/App';
 import Svg, {Circle, Path} from 'react-native-svg';
 import {Sheet} from '@/components/Sheet';
 import {ConfirmButton} from '@/components/Button';
@@ -14,7 +19,7 @@ import {useNetwork} from '@/core/network-store';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {useVaultPositions} from '@/vault/useVaultPositions';
 import {ownerVaultAddress, balanceOfSymbol} from '@/vault/read';
-import {sendPayment, batchSendPayment, fetchWhitelist, type WhitelistedRecipient} from '@/vault/payments';
+import {sendWithWhitelist, fetchWhitelist, type WhitelistedRecipient} from '@/vault/payments';
 import type {Position} from '@/vault/positions';
 import {ASSETS} from '@/core/assets';
 import {useT} from '@/i18n';
@@ -26,7 +31,16 @@ import {FEE_RESERVE} from '@/vault/gasless';
 /** Where a line's tokens come from: the vault's free balance, its Sky position, or its Aave supply. */
 type Source = 'free' | 'yield' | 'lend';
 type Line = {sym: string; source: Source; amount: string};
-type Recipient = {to: string; lines: Line[]};
+type Recipient = {
+  to: string;
+  lines: Line[];
+  /** What to show instead of the raw address — a vault's own name, where it has one. */
+  label?: string;
+  /** Typed in and not yet in the book: the send writes the entry in the same transaction. */
+  needsWhitelist?: boolean;
+  /** What that entry may be paid in. Undefined means any asset. */
+  allowedAsset?: Address;
+};
 
 const short = (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}`;
 const lineKey = (l: {sym: string; source: Source}) => `${l.sym}:${l.source}`;
@@ -47,29 +61,6 @@ const parse = (v: string, d: number): bigint => {
   }
 };
 
-/**
- * Clear what is typed in an amount field.
- *
- * It stands exactly where the Max badge does and only one of the two is ever on screen: an empty
- * field offers Max, a filled one offers this. It takes over from the per-row delete control that
- * used to sit above each line — a row whose amount is empty contributes nothing to the batch, so
- * clearing IS how a token is dropped from a payment, and one ✕ now undoes a mistake instead of
- * destroying a row the user may still want to type into.
- *
- * Drawn rather than typed: the ✕ character renders at whatever weight the system font gives it and
- * sits off its optical centre, which is what made it read as a stray glyph.
- */
-function ClearBtn({onPress}: {onPress: () => void}) {
-  const c = useColors();
-  const styles = useStyles(makeStyles);
-  return (
-    <Pressable style={styles.clearBtn} onPress={onPress} hitSlop={12} accessibilityRole="button">
-      <Svg width={11} height={11} viewBox="0 0 24 24">
-        <Path d="M6 6l12 12M18 6 6 18" stroke={c.subtext} strokeWidth={3} strokeLinecap="round" fill="none" />
-      </Svg>
-    </Pressable>
-  );
-}
 
 /**
  * The one control at the end of a recipient's address row: add another recipient, or drop this one.
@@ -146,6 +137,22 @@ export function SendScreen() {
 
   const [recipients, setRecipients] = useState<Recipient[]>([{to: '', lines: [newLine(first)]}]);
   const [book, setBook] = useState<WhitelistedRecipient[]>([]);
+  /** Which recipient card's address is being chosen, if any. */
+  const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  /**
+   * A recipient chosen on the pushed page is left in a one-slot store and the page unwinds.
+   *
+   * Applied and then cleared, so returning to this screen later does not re-apply the last
+   * pick over whatever is there now.
+   */
+  const picked = useRecipientPick((st) => st.picked);
+  const clearPicked = useRecipientPick((st) => st.clear);
+  useEffect(() => {
+    if (!picked) return;
+    patchR(picked.slot, {to: picked.address, label: picked.label, needsWhitelist: picked.addToBook, allowedAsset: picked.allowedAsset});
+    clearPicked();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picked]);
   const [status, setStatus] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
   const [err, setErr] = useState<string | null>(null);
 
@@ -249,16 +256,6 @@ export function SendScreen() {
     setPicker(null);
   };
 
-  const pickRecipient = (i: number) => {
-    if (book.length === 0) {
-      Alert.alert(t('mobile.payments.book_empty_title'), t('mobile.payments.book_empty_msg'));
-      return;
-    }
-    ActionSheetIOS.showActionSheetWithOptions(
-      {title: t('vault.address_book'), options: [...book.map((b) => short(b.recipientAddress)), t('common.cancel')], cancelButtonIndex: book.length},
-      (idx) => idx < book.length && patchR(i, {to: book[idx].recipientAddress}),
-    );
-  };
 
   // Line → {amount, withdrawProtocols, withdrawAmounts}. A position source withdraws exactly what it
   // sends; the free balance withdraws nothing. Null if it sends nothing.
@@ -331,10 +328,23 @@ export function SendScreen() {
     );
     try {
       const acct = await getSigner();
-      const h =
-        rows.length === 1
-          ? await sendPayment({account: acct, vault, network, recipient: rows[0].recipient, asset: rows[0].asset, amount: rows[0].amount, withdrawProtocols: rows[0].withdrawProtocols, withdrawAmounts: rows[0].withdrawAmounts, stableCoin: stable.address})
-          : await batchSendPayment({account: acct, vault, network, rows, stableCoin: stable.address});
+      /**
+       * Addresses this payment has to write into the book first.
+       *
+       * Only the ones typed in that are not already there, deduplicated — two recipient cards
+       * pointing at the same new address must not add it twice, which the contract would
+       * refuse. `sendWithWhitelist` bundles them ahead of the send in one multicall, so the
+       * send is validated against a book that already contains them, and a vault with
+       * new-payment protection on does not reject its own first payment.
+       */
+      const toAdd = [
+        ...new Map(
+          recipients
+            .filter((r) => r.needsWhitelist && isPayableAddress(r.to, network))
+            .map((r) => [r.to.toLowerCase(), {recipient: r.to.toLowerCase() as Address, allowedAsset: r.allowedAsset}]),
+        ).values(),
+      ];
+      const h = await sendWithWhitelist({account: acct, vault, network, rows, addRecipients: toAdd, stableCoin: stable.address});
       tx.success(h);
       setStatus('done');
       setRecipients([{to: '', lines: defaultLines}]);
@@ -353,45 +363,49 @@ export function SendScreen() {
       <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.scroll} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         {recipients.map((r, i) => (
           <View key={i} style={styles.card}>
-            {/* The address, as on the web: the book is a mark INSIDE the field, and the one button
-                at the end of the row adds the next recipient or drops this one. The card no longer
-                carries a delete of its own — there was nothing for a second control to mean. */}
+            {/* Chosen, not typed. The common case on this screen is paying somewhere the vault
+                has paid before, or one of the owner's own vaults, and both are lists the app
+                already holds; typing an address is the exception and lives inside the picker.
+                The one button at the end of the row adds the next recipient or drops this one. */}
             <View style={styles.toRow}>
-              <View style={[styles.toField, r.to.length > 0 && !isPayableAddress(r.to, network) && styles.inputErr]}>
-                {/* A tinted tile, not a bare glyph: inside a field an icon on its own reads as
-                    decoration — a label for what the field holds — and nobody tries tapping it.
-                    The fill gives it an edge, the accent says it does something, and it dims on
-                    press like every other button in the app. */}
-                <Pressable
-                  style={({pressed}) => [styles.bookBtn, pressed && styles.bookBtnOn]}
-                  onPress={() => pickRecipient(i)}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('vault.address_book')}>
-                  <AvatarIcon color={c.accent} />
-                </Pressable>
-                <TextInput
-                  style={styles.toInput}
-                  placeholder={t('mobile.vault.enter_address')}
-                  placeholderTextColor={c.subtext}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  value={r.to}
-                  onChangeText={(v) => patchR(i, {to: v})}
-                />
-              </View>
+              <Pressable
+                style={({pressed}) => [styles.toField, pressed && styles.pressed]}
+                onPress={() => nav.navigate('SelectRecipient', {slot: i})}
+                accessibilityRole="button"
+                accessibilityLabel={t('mobile.payments.select_recipient')}>
+                {/* The mark alone, no disc. It was a tinted tile when it was a BUTTON inside a
+                    text field and had to look tappable; the whole row is the button now, so the
+                    disc was a second target drawn around nothing. */}
+                <AvatarIcon color={c.accent} />
+                {/* One line, name AND address: the name is what the user recognises and the
+                    address is what actually gets paid, so neither can be the only thing shown.
+                    Stacking them made the bar taller than every other control on the card, so
+                    they run across instead — the name truncates under pressure, the address
+                    does not, because a half-shown address is worse than none. */}
+                {r.to ? (
+                  <View style={styles.toLine}>
+                    {r.label ? (
+                      <Text style={styles.toValue} numberOfLines={1}>
+                        {r.label}
+                      </Text>
+                    ) : null}
+                    <Text style={r.label ? styles.toAddrMuted : styles.toAddr} numberOfLines={1}>
+                      {short(r.to)}
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={styles.toPlaceholder} numberOfLines={1}>
+                    {t('mobile.payments.select_recipient')}
+                  </Text>
+                )}
+                <Text style={styles.chev}>›</Text>
+              </Pressable>
               <RecipientBtn
                 mode={i === 0 ? 'add' : 'remove'}
                 label={i === 0 ? t('vault.add_recipient') : t('vault.remove')}
                 onPress={() => (i === 0 ? addRecipient() : removeRecipient(i))}
               />
             </View>
-            {/* Named, not just refused: a well-formed address that the field rejects looks like a
-                bug unless the screen says what is wrong with it. */}
-            {isTokenAddress(r.to, network) ? (
-              <Text style={styles.over}>{t('mobile.payments.token_address_warning')}</Text>
-            ) : null}
-
             {r.lines.map((l, k) => {
               const max = maxFor(l, i);
               const over = exceedsMax(l.amount, max);
@@ -493,6 +507,7 @@ export function SendScreen() {
               })}
         </ScrollView>
       </Sheet>
+
     </SafeAreaView>
   );
 }
@@ -504,14 +519,17 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   footer: {paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16},
   card: {backgroundColor: c.card, borderRadius: 20, borderCurve: 'continuous', padding: 12, gap: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border},
   toRow: {flexDirection: 'row', alignItems: 'center', gap: 2},
-  // The book icon lives in here, so the field is the container and the input is what sits beside it.
-  toField: {flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, borderRadius: 10, backgroundColor: c.input, paddingLeft: 5, paddingRight: 12},
-  // Inset by the field's own 5 on every side, so the tile sits in the bar rather than against it.
-  // A full circle now that it holds an avatar: that is the shape a face is framed in everywhere
-  // else on a phone, and it is what tells the mark apart from the squared controls on the row.
-  bookBtn: {width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: c.card},
-  bookBtnOn: {opacity: 0.6},
-  toInput: {flex: 1, color: c.text, fontSize: 15, fontFamily: 'Menlo', paddingVertical: 0},
+  // The whole bar is the button: the mark, the chosen recipient, and a chevron.
+  toField: {flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, height: 44, borderRadius: 10, backgroundColor: c.input, paddingHorizontal: 12},
+  pressed: {opacity: 0.6},
+  // Two lines where a vault has a name, one where the address is all there is.
+  toLine: {flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0},
+  // The name yields first; the address is the part that must stay whole.
+  toValue: {color: c.text, fontSize: 15, fontWeight: '600', flexShrink: 1},
+  toAddr: {color: c.text, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums']},
+  toAddrMuted: {color: c.subtext, fontSize: 13, fontVariant: ['tabular-nums']},
+  toPlaceholder: {color: c.subtext, fontSize: 15, flex: 1},
+  chev: {color: c.subtext, fontSize: 20, fontWeight: '300'},
   inputErr: {borderWidth: 1, borderColor: c.danger},
   /**
    * Borderless and only as wide as the glyph: it is one mark at the end of the row, not a second
@@ -524,7 +542,6 @@ const makeStyles = (c: Colors) => StyleSheet.create({
    * Full field height, so the mark centres on the field rather than floating beside it.
    */
   recipBtn: {width: 26, height: 44, alignItems: 'center', justifyContent: 'center'},
-  clearBtn: {width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: c.neutralSoft},
   // No rule between rows: the card's own gap separates them, and each field is a filled bar that
   // already reads as its own object.
   line: {gap: 6},

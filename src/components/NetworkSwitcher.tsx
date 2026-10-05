@@ -46,7 +46,7 @@ function RobinhoodIcon({size}: {size: number}) {
   );
 }
 
-function NetworkIcon({network, size}: {network: Network; size: number}) {
+export function NetworkIcon({network, size}: {network: Network; size: number}) {
   if (network === 'base') return <BaseIcon size={size} />;
   if (network === 'robinhood') return <RobinhoodIcon size={size} />;
   return <Image source={ICONS[network]} style={{width: size, height: size}} resizeMode="contain" />;

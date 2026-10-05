@@ -11,6 +11,7 @@ import type {Signer} from '@/wallet/signer';
 import {publicClientFor, QUOTER_V2, type Network} from '@/core/chain';
 import {QUOTER_V2_ABI, VAULT_TRADE_ABI} from '@/core/abi';
 import {ammAdapters} from '@/core/protocols';
+import {ammSpeaksUniversal, fetchUniversalRoute} from './universal-route';
 import {assetMeta} from '@/core/assets';
 import {relayVaultWrite, relayVaultMulticall, type VaultCall} from './relay';
 import {buildSetupCalls} from './trade-setup';
@@ -18,7 +19,45 @@ import {buildSetupCalls} from './trade-setup';
 const FEE_TIERS = [500, 3000, 10000] as const;
 const NO_PRICE_LIMIT = BigInt(0);
 
+/**
+ * What a swap was quoted at. `fee` is the v3 fee tier the route used, and 0 for a Universal route
+ * — one route can cross several pools at different tiers, so a single number stops meaning
+ * anything. Nothing renders it today; it is kept because the type is exported.
+ */
 export type Quote = {fee: number; out: string; min: string};
+
+/**
+ * The `path` slot, and the floor that goes with it.
+ *
+ * A market-trade adapter since 1.0.3 takes a Universal Router route and refuses a v3 path; the
+ * combined adapter before it takes a v3 path and knows nothing of routes. The adapter is asked
+ * which it is, so one code path serves a chain mid-migration — see {ammSpeaksUniversal}.
+ */
+async function sellRoute(
+  network: Network,
+  amm: Address,
+  tokenIn: Address,
+  tokenOut: Address,
+  amountIn: bigint,
+  slippageBps: number,
+): Promise<{path: Hex; minOut: bigint; out: bigint; fee: number}> {
+  if (await ammSpeaksUniversal(amm, network)) {
+    const q = await fetchUniversalRoute({network, tokenIn, tokenOut, amountIn, slippageBps});
+    if (!q) throw new Error('No Uniswap pool to price this pair');
+    // `minOut` is the adapter's own floor, built by the service against the amount the adapter
+    // will actually swap. Deriving one here from a client-side quote would fight it.
+    return {path: q.route, minOut: q.minOut, out: q.amountOut, fee: 0};
+  }
+  const q = await bestSellQuote(network, tokenIn, tokenOut, amountIn);
+  if (!q) throw new Error('No Uniswap pool to price this pair');
+  // exact-input v3 path is forward: sell → fee → buy.
+  return {
+    path: encodePacked(['address', 'uint24', 'address'], [tokenIn, q.fee, tokenOut]),
+    minOut: q.amountOut - (q.amountOut * BigInt(slippageBps)) / BigInt(10000),
+    out: q.amountOut,
+    fee: q.fee,
+  };
+}
 
 /** Best (fee tier, amountOut) for an exact-in swap, or null if no pool prices it. */
 async function bestSellQuote(
@@ -145,13 +184,10 @@ export async function buildMarketSell(o: {
 }): Promise<{setup: VaultCall[]; swap: VaultCall}> {
   const sell = assetMeta(o.network, o.sellToken);
   const amountIn = parseUnits(o.sellAmount, sell.decimals);
-  const q = await bestSellQuote(o.network, o.sellToken, o.buyToken, amountIn);
-  if (!q) throw new Error('No Uniswap pool to price this pair');
-  const buyAmountMin = q.amountOut - (q.amountOut * BigInt(o.slippageBps)) / BigInt(10000);
   const amm = ammAdapters(o.network)[0];
   if (!amm) throw new Error('No AMM adapter configured');
-  const path = encodePacked(['address', 'uint24', 'address'], [o.sellToken, q.fee, o.buyToken]);
-  const swap: VaultCall = {abi: VAULT_TRADE_ABI, functionName: 'marketSell', args: [amm, o.sellToken, amountIn, o.buyToken, buyAmountMin, path]};
+  const r = await sellRoute(o.network, amm, o.sellToken, o.buyToken, amountIn, o.slippageBps);
+  const swap: VaultCall = {abi: VAULT_TRADE_ABI, functionName: 'marketSell', args: [amm, o.sellToken, amountIn, o.buyToken, r.minOut, r.path]};
   const setup = await buildSetupCalls({network: o.network, vault: o.vault, adapter: amm, tokens: [o.sellToken, o.buyToken]});
   return {setup, swap};
 }
@@ -162,17 +198,12 @@ export async function marketSell(o: SellOpts): Promise<{hash: Hex; quote: Quote}
   const buy = assetMeta(o.network, o.buyToken);
   const amountIn = parseUnits(o.sellAmount, sell.decimals);
 
-  const q = await bestSellQuote(o.network, o.sellToken, o.buyToken, amountIn);
-  if (!q) throw new Error('No Uniswap pool to price this pair');
-  const buyAmountMin = q.amountOut - (q.amountOut * BigInt(o.slippageBps)) / BigInt(10000);
-
   const amm = ammAdapters(o.network)[0];
   if (!amm) throw new Error('No AMM adapter configured');
 
-  // exact-input path is forward: sell → fee → buy.
-  const path = encodePacked(['address', 'uint24', 'address'], [o.sellToken, q.fee, o.buyToken]);
+  const r = await sellRoute(o.network, amm, o.sellToken, o.buyToken, amountIn, o.slippageBps);
 
-  const swapCall: VaultCall = {abi: VAULT_TRADE_ABI, functionName: 'marketSell', args: [amm, o.sellToken, amountIn, o.buyToken, buyAmountMin, path]};
+  const swapCall: VaultCall = {abi: VAULT_TRADE_ABI, functionName: 'marketSell', args: [amm, o.sellToken, amountIn, o.buyToken, r.minOut, r.path]};
   // If the vault's restricted allowlist requires the adapter/assets listed, bundle those updates ahead of
   // the swap in ONE multicall (one signature, mined atomically) so the swap sees them registered.
   const setup = await buildSetupCalls({network: o.network, vault: o.vault, adapter: amm, tokens: [o.sellToken, o.buyToken]});
@@ -182,11 +213,7 @@ export async function marketSell(o: SellOpts): Promise<{hash: Hex; quote: Quote}
 
   return {
     hash,
-    quote: {
-      fee: q.fee,
-      out: formatUnits(q.amountOut, buy.decimals),
-      min: formatUnits(buyAmountMin, buy.decimals),
-    },
+    quote: {fee: r.fee, out: formatUnits(r.out, buy.decimals), min: formatUnits(r.minOut, buy.decimals)},
   };
 }
 
@@ -201,18 +228,30 @@ type BuyOpts = {
   stableCoin: Address;
 };
 
-/** Market BUY (exact-out): receive exactly `buyAmount`, spend at most the quoted input plus slippage. */
+/**
+ * Market BUY (exact-out): receive exactly `buyAmount`, spend at most the quoted input plus slippage.
+ *
+ * ONLY on a pre-split adapter. The split trade adapter's `swapExactOut` demands a Universal route
+ * exactly as `swap` does, and the quoting service builds exact-IN routes only — so there is no
+ * route to send and this refuses rather than letting the relay come back as `simulation-failed`.
+ *
+ * Nothing calls it: the Trade screen places both sides as exact-in, which is why this gap has no
+ * user-facing consequence today. Kept, and kept honest, for whatever reaches for it next.
+ */
 export async function marketBuy(o: BuyOpts): Promise<{hash: Hex; quote: Quote}> {
   const sell = assetMeta(o.network, o.sellToken);
   const buy = assetMeta(o.network, o.buyToken);
   const amountOut = parseUnits(o.buyAmount, buy.decimals);
 
+  const amm = ammAdapters(o.network)[0];
+  if (!amm) throw new Error('No AMM adapter configured');
+  if (await ammSpeaksUniversal(amm, o.network)) {
+    throw new Error('Exact-out market orders are not supported on this chain yet — sell exact-in instead');
+  }
+
   const q = await bestBuyQuote(o.network, o.sellToken, o.buyToken, amountOut);
   if (!q) throw new Error('No Uniswap pool to price this pair');
   const sellAmountMax = q.amountIn + (q.amountIn * BigInt(o.slippageBps)) / BigInt(10000);
-
-  const amm = ammAdapters(o.network)[0];
-  if (!amm) throw new Error('No AMM adapter configured');
 
   // exact-output path is REVERSED: buy → fee → sell.
   const reversedPath = encodePacked(['address', 'uint24', 'address'], [o.buyToken, q.fee, o.sellToken]);

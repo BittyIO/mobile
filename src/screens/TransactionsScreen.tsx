@@ -26,7 +26,6 @@ import {GasIcon} from '@/components/GasIcon';
 import {categoryForActions, defiMoveFromActions, describeActions} from '@/vault/tx-actions';
 import {GPV2_SETTLEMENT, fetchRecentOrders, type CowOrder} from '@/vault/limit';
 import {usePending, type PendingTx} from '@/vault/pending';
-import {useDefiDetails} from '@/core/defi-details';
 import type {RouteProp} from '@react-navigation/native';
 import {useRoute} from '@react-navigation/native';
 import type {RootStackParamList} from '@/App';
@@ -78,7 +77,14 @@ type OpView = {
 type T = (key: string, params?: Record<string, string | number>) => string;
 
 /** Turn a raw tx's legs into readable, typed parts — the same categories the web history shows. */
-function classify(op: Operation, network: Network, t: T, orders: Map<string, CowOrder> | undefined, defiDetails: boolean): OpView {
+function classify(
+  op: Operation,
+  network: Network,
+  t: T,
+  orders: Map<string, CowOrder> | undefined,
+  /** Joins the two halves of a trade title the way the language writes them. See {joinWords}. */
+  words: (...parts: (string | false | null | undefined)[]) => string,
+): OpView {
   // The gasless relay fee leg (paid to Bitty's fee collector) — shown on its own line, not as a transfer.
   const fee = op.legs.find((l) => l.direction === 'out' && lc(l.counterparty) === BITTY_FEE_COLLECTOR) ?? null;
   const core = op.legs.filter((l) => l !== fee);
@@ -104,7 +110,11 @@ function classify(op: Operation, network: Network, t: T, orders: Map<string, Cow
       const kind = op.settlement?.twap ? t('vault.twap') : t('vault.limit');
       // The badge-sized side word, as on the Trade screen's own order rows: the buttons' fuller
       // wording (Chinese 买入 / 卖出) belongs on a button, not in a title beside the type.
-      parts.push({title: `${kind} ${t(isBuy ? 'mobile.trade.buy_short' : 'mobile.trade.sell_short')}`, swap, legs: []});
+      //
+      // Joined through `words`, not with a template literal: Chinese and Japanese run the two
+      // halves together (限价买, not 限价 买), and a hardcoded space put one here long after the
+      // Trade screen's own rows had stopped using one.
+      parts.push({title: words(kind, t(isBuy ? 'mobile.trade.buy_short' : 'mobile.trade.sell_short')), swap, legs: []});
     } else {
       parts.push({title: t('vault.market_trade'), swap, legs: []});
     }
@@ -144,7 +154,7 @@ function classify(op: Operation, network: Network, t: T, orders: Map<string, Cow
     }
   }
 
-  const details = describeActions(op.actions, network, t, orders, defiDetails);
+  const details = describeActions(op.actions, network, t, orders);
   /**
    * The tab a row lands on.
    *
@@ -200,14 +210,13 @@ function Leg({r, counterparty}: {r: TransferRow; counterparty?: Part['counterpar
 }
 
 function Op({op, explorer, network, orders}: {op: Operation; explorer: string; network: Network; orders?: Map<string, CowOrder>}) {
-  const {t, language} = useT();
+  const {t, language, words} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
   // The row subscribes for itself. This is the classify call the list actually RENDERS from — the
   // one in the screen above only decides which tabs exist — so without it a flip of the switch
   // left every line on screen as it was.
-  const defiDetails = useDefiDetails((s) => s.show);
-  const v = classify(op, network, t, orders, defiDetails);
+  const v = classify(op, network, t, orders, words);
   return (
     <Pressable style={styles.op} onPress={() => Linking.openURL(explorer + op.txHash)}>
       {v.parts.map((part, i) => (
@@ -304,7 +313,7 @@ function PendingRow({tx, explorer}: {tx: PendingTx; explorer: string}) {
 }
 
 export function TransactionsScreen() {
-  const {t} = useT();
+  const {t, words} = useT();
   const c = useColors();
   const styles = useStyles(makeStyles);
   const owner = useWallet((s) => s.address);
@@ -344,19 +353,10 @@ export function TransactionsScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'Transactions'>>();
   const [tab, setTab] = React.useState<Category | 'confirming' | 'all'>(route.params?.tab === 'confirming' ? 'confirming' : 'all');
 
-  /**
-   * Subscribed, not read through getState.
-   *
-   * `describeActions` used to read the DeFi-details switch itself, which meant this screen saw
-   * whatever it was when the lines were first built: flipping it in Settings re-rendered nothing
-   * here, and the memo below went on handing back the old wording. Taking it through the hook is
-   * what makes the flip arrive; passing it down is what makes it a dependency worth naming.
-   */
-  const defiDetails = useDefiDetails((s) => s.show);
   // One tab per category that has entries, as on the web, with Confirming leading when it does.
   const views = React.useMemo(
-    () => new Map(ops.map((op) => [op.txHash, classify(op, network, t, orders, defiDetails)])),
-    [ops, network, t, orders, defiDetails],
+    () => new Map(ops.map((op) => [op.txHash, classify(op, network, t, orders, words)])),
+    [ops, network, t, orders, words],
   );
   const tabs: {key: Category | 'confirming' | 'all'; label: string}[] = [
     ...(pendingTxs.length > 0 ? [{key: 'confirming' as const, label: t('mobile.home.confirming')}] : []),
