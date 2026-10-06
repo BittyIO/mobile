@@ -97,7 +97,31 @@ export function usdValue(amount: number, symbol: string, prices: PriceMap): numb
   return p != null ? amount * p : null;
 }
 
+/**
+ * A dollar figure, with enough of it to be worth reading.
+ *
+ * Two decimals is right for a dollar and wrong below one: a token at $0.0914 printed as "$0.09"
+ * loses the digit that moves, and a chart whose whole range renders as the same four characters
+ * says nothing at all. So the precision follows the magnitude —
+ *
+ *   $1,234.56   ·   $0.0914   ·   $0.0099   ·   $0.0000123
+ *
+ * Down to a cent it counts DECIMALS, with a floor of two so a round fifty cents is still "$0.50"
+ * and not "$0.5"; `maximumFractionDigits` carries no minimum of its own, so nothing is padded.
+ *
+ * Below a cent it counts SIGNIFICANT DIGITS instead, because a fixed decimal cap is the wrong
+ * instrument there: eight of them renders 0.00001234 as "$0.00001234", eleven characters of
+ * which four are leading zeros and the last is noise. Three significant digits is the same amount
+ * of information at any size — "$0.0000123" — and it is what every price page shows. The
+ * two-decimal floor is dropped in that branch: Intl lets significant digits win when both are
+ * given, and a number this small has no use for it anyway.
+ */
 export function fmtUsd(v: number | null): string {
   if (v == null) return '';
-  return v.toLocaleString(undefined, {style: 'currency', currency: 'USD', maximumFractionDigits: 2});
+  const abs = Math.abs(v);
+  const digits: Intl.NumberFormatOptions =
+    abs > 0 && abs < 0.01
+      ? {maximumSignificantDigits: 3}
+      : {minimumFractionDigits: 2, maximumFractionDigits: abs >= 1 ? 2 : 4};
+  return v.toLocaleString(undefined, {style: 'currency', currency: 'USD', ...digits});
 }

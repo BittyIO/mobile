@@ -1505,6 +1505,34 @@ export function TradeScreen() {
   const marketInPair = (m: MarketTrade): boolean => pairSet.has(m.sold.address.toLowerCase()) && pairSet.has(m.bought.address.toLowerCase());
 
   /**
+   * Open a row, and go to the pair it belongs to.
+   *
+   * With "others" ticked the list carries orders from every pair the vault has traded, and
+   * tapping one used to expand it against a chart and a price for a different asset entirely —
+   * the panel said CRCL while everything above it said ETH. Tapping an order is a statement about
+   * which order you are looking at, so the screen follows it.
+   *
+   * The quote leg is whichever side is a stablecoin, which is how the pair picker is built; a leg
+   * held as a receipt token resolves to what it stands for, since an order selling sUSDS is a
+   * USDC-quoted order and there is no sUSDS pair to switch to. If neither side is a stablecoin,
+   * or the base is not in the catalog, there is no pair to show and the row simply opens.
+   */
+  const showPairFor = (sellToken: string, buyToken: string) => {
+    const legs = [sellToken, buyToken].map(
+      (addr) => underlyingOf(network, addr) ?? assetMeta(network, addr as Address).symbol,
+    );
+    const quote = legs.find((sym) => stables.some((st) => st.symbol === sym));
+    const next = legs.find((sym) => sym !== quote);
+    if (!quote || !next || !assets.some((a) => a.symbol === next)) return;
+    setBaseSym(next);
+    setQuoteSym(quote);
+  };
+  const openOrderRow = (key: string, sellToken: string, buyToken: string) => {
+    showPairFor(sellToken, buyToken);
+    toggleExpanded(key);
+  };
+
+  /**
    * A part order belongs to a schedule; it is not an order the user placed.
    *
    * The appData is the only link — CoW has no notion of a TWAP — and a schedule's is salted at
@@ -1980,7 +2008,7 @@ export function TradeScreen() {
                   which sees no clock. The ⋯ menu carries it too, for the pages that have no
                   orders card at all. */}
               <Pressable
-                onPress={() => nav.navigate('OrderHistory')}
+                onPress={() => nav.navigate('OrderHistory', {symbol: baseSym})}
                 hitSlop={10}
                 accessibilityRole="button"
                 accessibilityLabel={t('mobile.trade.order_history')}>
@@ -2079,7 +2107,9 @@ export function TradeScreen() {
             );
             return (
               <View key={key} style={[styles.orderCard, isLast && styles.lastOrder]}>
-                <Pressable style={styles.orderHead} onPress={() => toggleExpanded(key)}>
+                <Pressable
+                  style={styles.orderHead}
+                  onPress={() => openOrderRow(key, g.rep.sellToken, g.rep.buyToken)}>
                   <View style={styles.orderHeadLeft}>
                     <View style={[styles.kindBadge, {backgroundColor: isBuy ? c.successSoft : c.dangerSoft}]}>
                       <Text style={[styles.kindText, {color: isBuy ? c.success : c.danger}]}>
@@ -2272,7 +2302,7 @@ export function TradeScreen() {
                 <View key={o.uid} style={[styles.orderCard, isLast && styles.lastOrder]}>
                   <Pressable
                     style={styles.orderHead}
-                    onPress={() => toggleExpanded(o.uid)}>
+                    onPress={() => openOrderRow(o.uid, o.sellToken, o.buyToken)}>
                     <View style={styles.orderHeadLeft}>
                       {/* The side, and the type where the list holds more than one kind.
                           Open and Cancelled are limit orders unless they say TWAP, so naming the
@@ -2363,7 +2393,7 @@ export function TradeScreen() {
                       {filled ? (
                         filledAt ? (
                           <View style={styles.orderLine}>
-                            <Text style={styles.orderLabel}>{t('mobile.trade.settled')}</Text>
+                            <Text style={styles.orderLabel}>{t('vault.fulfilled')}</Text>
                             <Text style={styles.orderVal}>{fmtExpiry(filledAt, language)}</Text>
                           </View>
                         ) : null
@@ -2391,7 +2421,9 @@ export function TradeScreen() {
                 const isExp = expanded.has(m.txHash);
                 return (
                   <View key={m.txHash} style={[styles.orderCard, isLast && styles.lastOrder]}>
-                    <Pressable style={styles.orderHead} onPress={() => toggleExpanded(m.txHash)}>
+                    <Pressable
+                      style={styles.orderHead}
+                      onPress={() => openOrderRow(m.txHash, m.sold.address, m.bought.address)}>
                       <View style={styles.orderHeadLeft}>
                         <View style={[styles.kindBadge, {backgroundColor: isBuy ? c.successSoft : c.dangerSoft}]}>
                           <Text style={[styles.kindText, {color: isBuy ? c.success : c.danger}]}>
@@ -2442,7 +2474,7 @@ export function TradeScreen() {
                         </View>
                         {m.ts ? (
                           <View style={styles.orderLine}>
-                            <Text style={styles.orderLabel}>{t('mobile.trade.settled')}</Text>
+                            <Text style={styles.orderLabel}>{t('vault.fulfilled')}</Text>
                             <Text style={styles.orderVal}>{fmtExpiry(m.ts, language)}</Text>
                           </View>
                         ) : null}

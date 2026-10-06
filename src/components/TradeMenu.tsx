@@ -141,7 +141,8 @@ export function TradeMenu({symbol, stack}: {symbol: string | null; stack?: boole
       key: 'history',
       label: t('mobile.trade.order_history'),
       icon: <ClockIcon color={c.subtext} />,
-      onPress: () => go(() => nav.navigate('OrderHistory')),
+      // Null on the market directory, where no one pair is in view — the page then opens on all.
+      onPress: () => go(() => nav.navigate('OrderHistory', {symbol: symbol ?? undefined})),
     },
     {key: 'network', label: t('mobile.settings.choose_network'), icon: <NodesIcon color={c.subtext} />},
   ];

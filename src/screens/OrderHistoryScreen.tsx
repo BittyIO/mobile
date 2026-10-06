@@ -6,9 +6,11 @@ import {TokenIcon} from '@/components/TokenIcon';
 import {Pill} from '@/components/ui';
 import {PickerSheet} from '@/components/AssetPicker';
 import Svg, {Path} from 'react-native-svg';
-import {assetMeta, isKnownAsset} from '@/core/assets';
+import {assetMeta, isKnownAsset, underlyingOf} from '@/core/assets';
 import {displaySymbol, fmtShort} from '@/core/format';
 import {useNetwork} from '@/core/network-store';
+import {useRoute, type RouteProp} from '@react-navigation/native';
+import type {RootStackParamList} from '@/App';
 import {fetchMarketTrades, type MarketTrade} from '@/vault/market-trades';
 import {fetchRecentOrders, type CowOrder} from '@/vault/limit';
 import {
@@ -83,6 +85,17 @@ export function OrderHistoryScreen() {
   const [nonce, setNonce] = useState(0);
   const [filter, setFilter] = useState<Filter>('all');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  /**
+   * Which asset the list is about. 'all' is every one.
+   *
+   * Seeded from the pair the user came from, because that is what they were looking at a moment
+   * ago: opening the record of a CRCL position onto a list led by last week's ETH orders is a
+   * page about somebody else's day. It is a filter and not a lock — the chip beside the
+   * categories changes it, and 'all' is the first entry.
+   */
+  const route = useRoute<RouteProp<RootStackParamList, 'OrderHistory'>>();
+  const [asset, setAsset] = useState<string>(route.params?.symbol ?? 'all');
+  const [assetOpen, setAssetOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
 
   useEffect(() => {
@@ -140,12 +153,40 @@ export function OrderHistoryScreen() {
     return out.sort((a, b) => b.at - a.at);
   }, [orders, trades, twaps, network]);
 
+  /**
+   * The assets an entry is about — one leg each side, as the user would name them.
+   *
+   * Compared on the DISPLAYED symbol so ETH matches the WETH the order was actually written in,
+   * and a leg held as a receipt token answers with what it stands for: a limit order selling
+   * sUSDS belongs to the USDC the owner thinks they hold, not to a share class they never chose.
+   */
+  const legsOf = useCallback(
+    (e: Entry): string[] => {
+      const name = (addr: string) => displaySymbol(underlyingOf(network, addr) ?? assetMeta(network, addr as Address).symbol);
+      if (e.kind === 'market') return [displaySymbol(e.trade.sold.symbol), displaySymbol(e.trade.bought.symbol)];
+      const o = e.kind === 'twap' ? e.group.rep : e.order;
+      return [name(o.sellToken), name(o.buyToken)];
+    },
+    [network],
+  );
+
+  /** Every asset the record actually mentions, for the chip's list. Nothing else is worth offering. */
+  const assetsSeen = useMemo(() => {
+    const seen = new Set<string>();
+    for (const e of entries) for (const sym of legsOf(e)) seen.add(sym);
+    if (asset !== 'all') seen.add(displaySymbol(asset));
+    return [...seen].sort();
+  }, [entries, legsOf, asset]);
+
   const shown = useMemo(
     () =>
       entries.filter(
-        (e) => (typeFilter === 'all' || e.kind === TYPE_OF[typeFilter]) && (filter === 'all' || e.bucket === filter),
+        (e) =>
+          (typeFilter === 'all' || e.kind === TYPE_OF[typeFilter]) &&
+          (filter === 'all' || e.bucket === filter) &&
+          (asset === 'all' || legsOf(e).includes(displaySymbol(asset))),
       ),
-    [entries, typeFilter, filter],
+    [entries, typeFilter, filter, asset, legsOf],
   );
 
   const STATUS_LABEL: Record<Filter, string> = {
@@ -178,11 +219,11 @@ export function OrderHistoryScreen() {
               ? `${fmtShort(e.trade.bought.amount)} ${displaySymbol(e.trade.bought.symbol)}`
               : `${fmtShort(e.trade.sold.amount)} ${displaySymbol(e.trade.sold.symbol)}`
           }
-          right={<Pill label={t('mobile.trade.settled_status')} tone="green" />}
+          right={<Pill label={t('vault.fulfilled')} tone="green" />}
           lines={[
             [t('mobile.trade.paid'), `${fmtShort(e.trade.sold.amount)} ${displaySymbol(e.trade.sold.symbol)}`],
             [t('vault.receive'), `${fmtShort(e.trade.bought.amount)} ${displaySymbol(e.trade.bought.symbol)}`],
-            ...(e.trade.ts ? [[t('mobile.trade.settled'), fmtExpiry(e.trade.ts, language)] as [string, string]] : []),
+            ...(e.trade.ts ? [[t('vault.fulfilled'), fmtExpiry(e.trade.ts, language)] as [string, string]] : []),
           ]}
         />
       );
@@ -284,6 +325,26 @@ export function OrderHistoryScreen() {
             <Text style={[styles.cat, typeFilter === f.key && styles.catOn]}>{f.label}</Text>
           </Pressable>
         ))}
+        {/* The asset, at the far end of the same line.
+            A third cut, and a different kind from the two beside it: those ask what a row IS,
+            this asks what it is ABOUT. It sits apart for that reason, and carries the token's
+            mark rather than a word, so the line reads as two filters and a subject. */}
+        <Pressable style={styles.assetChip} onPress={() => setAssetOpen(true)} hitSlop={6} accessibilityRole="button">
+          {asset === 'all' ? null : <TokenIcon symbol={asset} size={16} />}
+          <Text style={[styles.cat, asset !== 'all' && styles.catOn]}>
+            {asset === 'all' ? t('vault.all') : displaySymbol(asset)}
+          </Text>
+          <Svg width={12} height={12} viewBox="0 0 24 24">
+            <Path
+              d="M6 9l6 6 6-6"
+              stroke={asset === 'all' ? c.subtext : c.text}
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+            />
+          </Svg>
+        </Pressable>
       </View>
       {/* The first load spins HERE, where the list will be — the pull control is for a pull. A
           refresh after that leaves the rows up and spins in the control instead, so the page does
@@ -297,6 +358,18 @@ export function OrderHistoryScreen() {
           shown.map(row)
         )}
       </View>
+
+      <PickerSheet
+        visible={assetOpen}
+        title={t('vault.select_asset')}
+        items={[
+          {key: 'all', label: t('vault.all')},
+          ...assetsSeen.map((sym) => ({key: sym, label: sym, icon: <TokenIcon symbol={sym} size={30} />})),
+        ]}
+        selected={asset === 'all' ? 'all' : displaySymbol(asset)}
+        onSelect={setAsset}
+        onClose={() => setAssetOpen(false)}
+      />
 
       <PickerSheet
         visible={statusOpen}
@@ -371,6 +444,8 @@ const makeStyles = (c: Colors) =>
     tabs: {flexDirection: 'row', alignItems: 'center', gap: 20, paddingHorizontal: 4},
     statusChip: {flexDirection: 'row', alignItems: 'center', gap: 3, paddingVertical: 6},
     catTab: {paddingVertical: 6},
+    // Pushed to the far end of the row; the gap before it is the auto margin, not the row's gap.
+    assetChip: {flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 6, marginLeft: 'auto'},
     cat: {color: c.subtext, fontSize: 15, fontWeight: '600'},
     catOn: {color: c.text, fontWeight: '700'},
     card: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 16},

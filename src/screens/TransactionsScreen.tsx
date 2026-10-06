@@ -32,6 +32,7 @@ import {useRoute} from '@react-navigation/native';
 import type {RootStackParamList} from '@/App';
 
 import {currentCatalog} from '@/core/asset-catalog';
+import {openLink} from '@/core/open-link';
 
 const fmtAmt = (v: string | null): string => fmtNum(Number(v ?? '0'));
 const fmtN = fmtNum;
@@ -220,7 +221,7 @@ function Op({op, explorer, network, orders}: {op: Operation; explorer: string; n
   // left every line on screen as it was.
   const v = classify(op, network, t, orders, words);
   return (
-    <Pressable style={styles.op} onPress={() => Linking.openURL(explorer + op.txHash)}>
+    <Pressable style={styles.op} onPress={() => openLink(explorer + op.txHash, 'Etherscan')}>
       {v.parts.map((part, i) => (
         <View key={`${op.txHash}-${i}`} style={i > 0 ? styles.partGap : undefined}>
           {/* The title owns the line. It shared it with the timestamp until a Russian
@@ -291,7 +292,7 @@ function PendingRow({tx, explorer}: {tx: PendingTx; explorer: string}) {
         ? 'vault.confirmed'
         : 'mobile.home.confirming';
   return (
-    <Pressable style={styles.op} onPress={() => !dropped && Linking.openURL(explorer + tx.hash)}>
+    <Pressable style={styles.op} onPress={() => !dropped && openLink(explorer + tx.hash, 'Etherscan')}>
       <View style={styles.opHeader}>
         <View style={styles.titleRow}>
           <Text style={styles.title}>{tx.title}</Text>

@@ -1,7 +1,7 @@
 import {useHeaderHeight} from '@react-navigation/elements';
 import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
 import React, {useEffect, useMemo, useState} from 'react';
-import {ActivityIndicator, Linking, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
@@ -24,6 +24,7 @@ import {Sheet} from '@/components/Sheet';
 import {GaslessCoins} from '@/components/GaslessCoins';
 import {useT} from '@/i18n';
 import {useAssetCatalog} from '@/core/asset-catalog';
+import {openLink} from '@/core/open-link';
 
 /**
  * Sun, moon, phone — one per appearance option, so the sheet is readable at a glance instead of
@@ -241,9 +242,9 @@ export function SettingsScreen() {
       <View style={styles.section}>
         <Text style={styles.groupLabel}>{t('mobile.settings.about_us')}</Text>
         <View style={styles.group}>
-          <Row icon="follow" title={t('mobile.settings.follow_us')} onPress={() => Linking.openURL('https://x.com/bitty_io')} />
-          <Row icon="terms" title={t('mobile.settings.terms_of_use')} onPress={() => Linking.openURL(`${API_BASE}/content/terms-of-use`)} />
-          <Row icon="privacy" title={t('mobile.settings.privacy_policy')} onPress={() => Linking.openURL(`${API_BASE}/content/privacy-policy`)} last />
+          <Row icon="follow" title={t('mobile.settings.follow_us')} onPress={() => openLink('https://x.com/bitty_io', 'X')} />
+          <Row icon="terms" title={t('mobile.settings.terms_of_use')} onPress={() => openLink(`${API_BASE}/content/terms-of-use`, t('mobile.settings.terms_of_use'))} />
+          <Row icon="privacy" title={t('mobile.settings.privacy_policy')} onPress={() => openLink(`${API_BASE}/content/privacy-policy`, t('mobile.settings.privacy_policy'))} last />
         </View>
       </View>
 

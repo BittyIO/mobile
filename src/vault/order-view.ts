@@ -36,16 +36,10 @@ export const orderBucket = (s: string): OrderBucket => {
 /** The translation key for the pill label, and its tone; the caller resolves the key with `t`. */
 export function statusPill(s: string): {key: string; tone: 'sky' | 'green' | 'gray' | 'amber'} {
   const x = s.toLowerCase();
-  /**
-   * "Settled", not "Filled".
-   *
-   * A CoW order ends when a solver settles it on chain, and that is the word for the fact;
-   * "filled" is a quantity on an order that can fill in parts. `settled_status` and not `settled`
-   * because the latter labels a TIMESTAMP ("Settled · Oct 6") and reads as "settlement time" in
-   * the languages that distinguish them. The web's own `vault.fulfilled` still says Filled and is
-   * left alone — those JSON files are byte copies of the web's.
-   */
-  if (x.includes('fulfil') || x.includes('filled')) return {key: 'mobile.trade.settled_status', tone: 'green'};
+  // One word for this state across the whole app, and it is "Filled" — the same word the TWAP
+  // row's own 3/10 fraction counts in. "Settled" was tried and read as a second, different state
+  // sitting beside it.
+  if (x.includes('fulfil') || x.includes('filled')) return {key: 'vault.fulfilled', tone: 'green'};
   if (x.includes('cancel')) return {key: 'vault.cancelled', tone: 'gray'};
   if (x.includes('expire')) return {key: 'vault.expired', tone: 'amber'};
   return {key: 'vault.open', tone: 'sky'};
@@ -108,17 +102,32 @@ export function splitTwapGroups(
     const schedule = twaps.get(appData)!;
     const ordered = [...parts].sort((a, b) => b.validTo - a.validTo);
     const st = schedule.status.toLowerCase();
+    const total = schedule.parts || parts.length;
+    const openUids = parts.filter((p) => effectiveStatus(p, cancelled) === 'open').map((p) => p.uid);
+    /**
+     * Nothing more can happen to this schedule: every slot has been posted and none is still open.
+     *
+     * The schedule's own status is the server's, and it is written by the cron that posts the
+     * parts — which has no reason to run again once the last one is out, so a TWAP whose final
+     * part filled went on calling itself `active` and sat in Open with 10/10 beside it. The parts
+     * are the evidence and they are already here, so the client can see the end a poll before the
+     * record does.
+     *
+     * Posted AND none open, not "all filled": a last slot that expired unfilled ends the schedule
+     * just as finally, and it would otherwise be stuck in Open for ever.
+     */
+    const over = ordered.length >= total && openUids.length === 0;
     groups.push({
       appData,
       schedule,
       rep: ordered[0],
       parts: ordered,
       filled: parts.filter((p) => effectiveStatus(p, cancelled).toLowerCase().includes('fulfil')).length,
-      total: schedule.parts || parts.length,
-      openUids: parts.filter((p) => effectiveStatus(p, cancelled) === 'open').map((p) => p.uid),
-      // The SCHEDULE decides the bucket: a TWAP whose posted parts have all filled is still running
-      // while the cron has slots left to post.
-      bucket: st.includes('cancel') ? 'cancelled' : st.includes('active') ? 'open' : 'finished',
+      total,
+      openUids,
+      // Cancelled is the server's to say — a cancel invalidates the uids on chain, and the parts
+      // alone cannot tell a cancelled slot from an expired one.
+      bucket: st.includes('cancel') ? 'cancelled' : over ? 'finished' : st.includes('active') ? 'open' : 'finished',
     });
   }
   return {plain, groups};

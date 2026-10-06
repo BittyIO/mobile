@@ -99,14 +99,26 @@ const DEFAULT_CAP_UNITS: [number, string][] = [
  * market cap to the dollar. Three significant figures is what fits and what the number is worth.
  */
 export function fmtCap(n: number | null | undefined, language: Language = 'en'): string {
+  const v = fmtCompact(n, language);
+  return v === '—' ? v : `$${v}`;
+}
+
+/**
+ * The same number without the dollar sign, for a quantity that is not money.
+ *
+ * A circulating supply is 625 million TOKENS, and "$625M" would be a different and much larger
+ * claim. Same units and same three significant figures, since the reason for both is the column
+ * they have to fit in rather than anything about currency.
+ */
+export function fmtCompact(n: number | null | undefined, language: Language = 'en'): string {
   if (n == null || !Number.isFinite(n) || n <= 0) return '—';
   for (const [size, suffix] of CAP_UNITS[language] ?? DEFAULT_CAP_UNITS) {
     if (n >= size) {
       const v = n / size;
-      return `$${v >= 100 ? v.toFixed(0) : v.toFixed(v >= 10 ? 1 : 2)}${suffix}`;
+      return `${v >= 100 ? v.toFixed(0) : v.toFixed(v >= 10 ? 1 : 2)}${suffix}`;
     }
   }
-  return `$${n.toFixed(0)}`;
+  return n.toFixed(0);
 }
 
 /** A day change as a signed percentage, with the sign always written out. */

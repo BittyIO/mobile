@@ -1,5 +1,5 @@
 import React, {useEffect, useRef} from 'react';
-import {ActivityIndicator, Animated, Easing, Linking, Pressable, StyleSheet, Text, View} from 'react-native';
+import {ActivityIndicator, Animated, Easing, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Svg, {Path} from 'react-native-svg';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -8,6 +8,7 @@ import {EXPLORER_TX, type Network} from '@/core/chain';
 import {trackTx, usePending} from '@/vault/pending';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
+import {openLink} from '@/core/open-link';
 
 export type ToastKind = 'pending' | 'success' | 'error';
 
@@ -167,7 +168,7 @@ function Row({item, index}: {item: Toast; index: number}) {
           </Text>
         </View>
         {item.hash && explorer ? (
-          <Pressable hitSlop={8} onPress={() => Linking.openURL(explorer + item.hash)}>
+          <Pressable hitSlop={8} onPress={() => openLink(explorer + item.hash, 'Etherscan')}>
             <Text style={styles.view}>{t('vault.view')} ↗</Text>
           </Pressable>
         ) : null}

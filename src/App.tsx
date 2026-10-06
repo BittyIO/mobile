@@ -2,6 +2,7 @@ import React, {useEffect} from 'react';
 import {ActivityIndicator, Pressable, StatusBar, StyleSheet, Text, View} from 'react-native';
 import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {NavigationContainer, DarkTheme, DefaultTheme} from '@react-navigation/native';
+import {navigationRef} from '@/core/open-link';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {useWallet} from '@/wallet/store';
@@ -67,10 +68,23 @@ export type RootStackParamList = {
    */
   TradePair: TradeParams;
   Transactions: {tab?: 'confirming'} | undefined;
-  /** Every order the vault has placed, on every pair — the Cancelled bucket included. */
-  OrderHistory: undefined;
+  /**
+   * Every order the vault has placed — the Cancelled bucket included.
+   *
+   * `symbol` is the pair the user came from, which the page opens filtered to: arriving from a
+   * CRCL chart into a list led by last week's ETH orders is a page about somebody else's day.
+   * Omitted (opened from anywhere with no pair in mind) it starts on everything.
+   */
+  OrderHistory: {symbol?: string} | undefined;
   /** One asset in full: what it is, what the vault holds of it, and how it can be traded. */
   AssetDetail: {symbol: string};
+  /**
+   * A web page, inside the app. Reached only through {openLink}, never navigated to directly.
+   *
+   * `title` is what the caller knows the page to be ("Etherscan"); the document's own title
+   * replaces it once it loads, and the host stands in until then.
+   */
+  Browser: {url: string; title?: string};
   AddLiquidity: undefined;
   AutoYield: undefined;
   Delegation: undefined;
@@ -264,7 +278,7 @@ function Root() {
   if (status === 'locked') return <LockScreen />;
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer theme={navTheme} ref={navigationRef}>
       <Stack.Navigator
         screenOptions={{
           // Translucent header with the same tinted ground as the tab header, so a pushed page and a
@@ -320,6 +334,9 @@ function Root() {
           options={{title: t('mobile.app.trade'), fullScreenGestureEnabled: true}}
         />
         <Stack.Screen name="Transactions" getComponent={() => require('@/screens/TransactionsScreen').TransactionsScreen} options={{title: t('mobile.app.history')}} />
+        {/* No title here: the screen sets its own from the page, and a placeholder would flash
+            first. See {BrowserScreen}. */}
+        <Stack.Screen name="Browser" getComponent={() => require('@/screens/BrowserScreen').BrowserScreen} options={{title: ''}} />
         <Stack.Screen
           name="OrderHistory"
           getComponent={() => require('@/screens/OrderHistoryScreen').OrderHistoryScreen}
