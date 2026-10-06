@@ -1,7 +1,9 @@
 import React, {useCallback, useState} from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import {Alert, StyleSheet, Text, View} from 'react-native';
 import {Sheet} from '@/components/Sheet';
 import {ConfirmButton} from '@/components/Button';
+import {showToast} from '@/components/Toast';
+import {useT} from '@/i18n';
 import {TYPICAL_RELAY_GAS} from '@/vault/fee-quote';
 import {useStyles, type Colors} from '@/theme';
 
@@ -83,3 +85,57 @@ const makeStyles = (c: Colors) =>
     message: {color: c.subtext, fontSize: 15, lineHeight: 21},
     submit: {marginTop: 14},
   });
+
+
+export type LocalRequest = {
+  /** What is about to happen: "Delete list". */
+  title: string;
+  /** One line of detail underneath — what will be lost, and what will not. */
+  message?: string;
+  /** Label on the acting button; defaults to Confirm. */
+  action?: string;
+  /** Marks the button destructive — red, and on the right, as iOS does it. */
+  danger?: boolean;
+  run: () => Promise<void> | void;
+};
+
+/**
+ * A confirmation step for something the app does BY ITSELF.
+ *
+ * The hook above is for the chain: a sheet with an estimated fee and a Face ID button, because an
+ * on-chain action costs the vault money and cannot be taken back. Deleting a watch list costs
+ * nothing, signs nothing and touches no contract — putting it behind that control says the
+ * opposite of what is true, and asks for a fingerprint to tidy up a list of favourites.
+ *
+ * So this is the SYSTEM alert: the centred box iOS puts over the screen for exactly this
+ * question, with Cancel and the action side by side. Not a sheet — a sheet is the app's surface
+ * for choosing something, and it slides up from the same place the fee sheet does, which was the
+ * whole confusion. The alert is also the one piece of UI the user has already learned from every
+ * other app on the phone, and it needs no node rendered anywhere, so a screen gains a
+ * confirmation by calling one function.
+ *
+ *   const confirm = useConfirmLocal();
+ *   …<Pressable onPress={() => confirm({title, message, danger: true, run: doIt})} />
+ */
+export function useConfirmLocal(): (r: LocalRequest) => void {
+  const {t} = useT();
+  return useCallback(
+    ({title, message, action, danger, run}: LocalRequest) =>
+      Alert.alert(title, message, [
+        // Cancel first, so iOS lays it out on the left and gives it the Escape role.
+        {text: t('common.cancel'), style: 'cancel'},
+        {
+          text: action ?? t('vault.confirm'),
+          style: danger ? 'destructive' : 'default',
+          onPress: () => {
+            // Local work, so a failure is nearly impossible — but an unhandled rejection here
+            // would be a red box in dev and silence in release, and neither says what happened.
+            void Promise.resolve()
+              .then(run)
+              .catch((e) => showToast('error', title, String((e as Error)?.message ?? e)));
+          },
+        },
+      ]),
+    [t],
+  );
+}

@@ -21,6 +21,24 @@ import {publicClientFor, type Network} from '@/core/chain';
  */
 export type PendingStatus = 'pending' | 'confirmed' | 'failed' | 'dropped';
 
+/**
+ * A write that has been started and has no hash yet.
+ *
+ * Between the tap and the hash there is a signature prompt, a route or quote to fetch, a multicall
+ * to build and a relay to answer — seconds, and more than that on a market trade. The badge cannot
+ * count it, because the badge counts hashes, so the header went on showing nothing at all and the
+ * action looked like it had been dropped. This is the gap, and the header fills it with a spinner.
+ *
+ * Deliberately NOT persisted: a submission in flight dies with the process. What survives a restart
+ * is the hash, and `txs` is where that lives — a relaunch showing "broadcasting" for something no
+ * code is waiting on any more would be a lie the user could never clear.
+ */
+export type Submitting = {
+  id: number;
+  network: Network;
+  startedAt: number;
+};
+
 export type PendingTx = {
   hash: string;
   network: Network;
@@ -41,6 +59,14 @@ const LINGER_MS = 90_000;
 const POLL_MS = 12_000;
 /** After this long with no receipt and no verdict, the transaction is called dropped, not pending. */
 const GIVE_UP_MS = 30 * 60_000;
+/**
+ * How long a submission may stay "broadcasting" before the header stops saying so.
+ *
+ * The caller is meant to close it — `showTx` does, on both the success and the failure path — and
+ * this is only the net under a path that returns without reaching either. Generous enough that it
+ * never fires on a slow relay, short enough that a spinner cannot be left up for the session.
+ */
+const SUBMIT_GIVE_UP_MS = 90_000;
 /** Most rows kept, so a badge left untouched for a long time cannot grow without bound. */
 const MAX_ROWS = 50;
 
@@ -58,6 +84,12 @@ const save = (txs: PendingTx[]) => store.set(KEY, JSON.stringify(txs));
 
 type State = {
   txs: PendingTx[];
+  /** Writes started on this device that have not come back with a hash. */
+  submitting: Submitting[];
+  /** Called the moment a write starts; returns the id to close it with. */
+  beginSubmit: (network: Network) => number;
+  /** Called when it has a hash, or has failed. Idempotent — the give-up timer may have been first. */
+  endSubmit: (id: number) => void;
   add: (tx: Omit<PendingTx, 'submittedAt' | 'status'>) => void;
   settle: (hash: string, status: 'confirmed' | 'failed' | 'dropped', error?: string) => void;
   /** Drop one row from the list for good. The user's way out of a transaction that never landed. */
@@ -69,8 +101,21 @@ type State = {
   prune: () => void;
 };
 
+let nextSubmitId = 1;
+
 export const usePending = create<State>((set, get) => ({
   txs: load(),
+  submitting: [],
+  beginSubmit: (network) => {
+    const id = nextSubmitId++;
+    set({submitting: [...get().submitting, {id, network, startedAt: Date.now()}]});
+    setTimeout(() => get().endSubmit(id), SUBMIT_GIVE_UP_MS);
+    return id;
+  },
+  endSubmit: (id) => {
+    if (!get().submitting.some((s) => s.id === id)) return;
+    set({submitting: get().submitting.filter((s) => s.id !== id)});
+  },
   add: (tx) => {
     const next = [{...tx, submittedAt: Date.now(), status: 'pending' as const}, ...get().txs.filter((t) => t.hash !== tx.hash)];
     save(next);
@@ -215,4 +260,9 @@ export function trackTx(hash: string, network: Network, title: string) {
  */
 export function pendingCount(txs: PendingTx[], network: Network): number {
   return txs.filter((t) => t.network === network && (t.status === 'pending' || !t.seen)).length;
+}
+
+/** Writes still on their way to the relay, on this network. */
+export function submittingCount(rows: Submitting[], network: Network): number {
+  return rows.filter((s) => s.network === network).length;
 }

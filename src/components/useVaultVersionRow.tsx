@@ -2,7 +2,7 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {ownerVaultAddress} from '@/vault/read';
-import {ASSETS} from '@/core/assets';
+
 import {checkVaultUpgrade, upgradeVault, type VaultUpgrade} from '@/vault/manage';
 import {
   fetchVaultVersions,
@@ -15,6 +15,7 @@ import {showTx} from '@/components/Toast';
 import {usePending} from '@/vault/pending';
 import {useConfirmAction} from '@/components/ConfirmAction';
 import {relayGasFor} from '@/vault/fee-quote';
+import {useAssetCatalog} from '@/core/asset-catalog';
 
 /**
  * The Version row of Settings › Vault, as on the web's Security tab: the running release, an arrow to
@@ -44,7 +45,7 @@ export function useVaultVersionRow(): {
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
-  const stable = ASSETS[network].find((a) => a.kind === 'stable');
+  const stable = useAssetCatalog(network).find((a) => a.kind === 'stable');
   const vault = owner ? ownerVaultAddress(owner, network) : null;
 
   const [up, setUp] = useState<VaultUpgrade | null>(null);

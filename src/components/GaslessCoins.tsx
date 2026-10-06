@@ -6,7 +6,7 @@ import {useNetwork} from '@/core/network-store';
 import {ownerVaultAddress} from '@/vault/read';
 import {isActivated} from '@/vault/activate';
 import {getGaslessConfig, setGaslessCoins, GASLESS_MAX_DAILY, GASLESS_MAX_PER_OP, type GaslessConfig} from '@/vault/gasless';
-import {ASSETS} from '@/core/assets';
+
 import {TokenIcon} from '@/components/TokenIcon';
 import {PendingSwitch} from '@/components/PendingSwitch';
 import {useConfirmAction} from '@/components/ConfirmAction';
@@ -15,6 +15,7 @@ import {useT} from '@/i18n';
 import {showTx} from '@/components/Toast';
 import {useStyles, type Colors} from '@/theme';
 import {displaySymbol} from '@/core/format';
+import {useAssetCatalog} from '@/core/asset-catalog';
 
 /**
  * Gasless config as one section card — which stable coins may pay the relay fee. Empty allowlist = any
@@ -28,7 +29,7 @@ export function GaslessCoins() {
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
-  const stablecoins = ASSETS[network].filter((a) => a.kind === 'stable');
+  const stablecoins = useAssetCatalog(network).filter((a) => a.kind === 'stable');
   const vault = owner ? ownerVaultAddress(owner, network) : null;
 
   const [cfg, setCfg] = useState<GaslessConfig | null | 'loading'>('loading');

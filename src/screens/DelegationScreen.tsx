@@ -8,13 +8,14 @@ import {relayGasFor} from '@/vault/fee-quote';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {ownerVaultAddress} from '@/vault/read';
-import {ASSETS} from '@/core/assets';
+
 import {listOperators, updateOperator, operatorScanBounded} from '@/vault/delegate';
 import {useT} from '@/i18n';
 import {showTx} from '@/components/Toast';
 import {CopyAddress} from '@/components/CopyAddress';
 import {shortAddress} from '@/core/format';
 import {useColors, useStyles, type Colors} from '@/theme';
+import {useAssetCatalog} from '@/core/asset-catalog';
 
 const short = (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}`;
 
@@ -31,7 +32,7 @@ export function DelegationScreen() {
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
-  const stable = ASSETS[network].find((a) => a.kind === 'stable');
+  const stable = useAssetCatalog(network).find((a) => a.kind === 'stable');
   const vault = owner ? ownerVaultAddress(owner, network) : null;
 
   const [ops, setOps] = useState<Address[]>([]);

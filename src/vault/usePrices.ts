@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useState} from 'react';
 import type {Network} from '@/core/chain';
-import {ASSETS} from '@/core/assets';
+import {knownAssets} from '@/core/assets';
 import {fetchPrices, type PriceMap} from '@/core/prices';
 
 /**
@@ -18,7 +18,9 @@ export function usePrices(network: Network, nonce = 0, symbols?: string[]): Pric
   const [prices, setPrices] = useState<PriceMap>(new Map());
   // Sorted and joined so a re-render with the same set does not re-fetch.
   const key = useMemo(
-    () => [...new Set(['ETH', ...(symbols ?? ASSETS[network].map((a) => a.symbol))])].sort().join(','),
+    // `knownAssets`, not the bundled table: the fallback has to cover a token the catalog added
+    // after this build, or it renders with a balance and no value beside it.
+    () => [...new Set(['ETH', ...(symbols ?? knownAssets(network).map((a) => a.symbol))])].sort().join(','),
     [network, symbols],
   );
   useEffect(() => {

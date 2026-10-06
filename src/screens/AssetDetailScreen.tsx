@@ -5,13 +5,14 @@ import type {RootStackParamList} from '@/App';
 import {CopyAddress} from '@/components/CopyAddress';
 import {TokenIcon} from '@/components/TokenIcon';
 import {assetDescription} from '@/core/asset-info';
-import {ASSETS, isAmmLiquid} from '@/core/assets';
+import {isAmmLiquid} from '@/core/assets';
 import {displaySymbol} from '@/core/format';
 import {useNetwork, networkLabel} from '@/core/network-store';
 import {fmtUsd} from '@/core/prices';
 import {usePrices} from '@/vault/usePrices';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
+import {useAssetCatalog} from '@/core/asset-catalog';
 
 /**
  * One asset, in full: what it is, what the vault holds of it, and how it can be traded.
@@ -31,7 +32,8 @@ export function AssetDetailScreen() {
   const styles = useStyles(makeStyles);
   const {symbol} = useRoute<RouteProp<RootStackParamList, 'AssetDetail'>>().params;
   const network = useNetwork((s) => s.network);
-  const asset = useMemo(() => ASSETS[network].find((a) => a.symbol === symbol), [network, symbol]);
+  const catalog = useAssetCatalog(network);
+  const asset = useMemo(() => catalog.find((a) => a.symbol === symbol), [catalog, symbol]);
 
   const prices = usePrices(network);
   const price = prices.get(symbol) ?? null;
@@ -52,8 +54,8 @@ export function AssetDetailScreen() {
       <View style={styles.hero}>
         <TokenIcon symbol={asset.symbol} uri={asset.icon} size={56} />
         <Text style={styles.sym}>{sym}</Text>
-        {company(asset.symbol, asset.company) ? (
-          <Text style={styles.company}>{company(asset.symbol, asset.company)}</Text>
+        {company(asset.symbol, asset.tokenName) ? (
+          <Text style={styles.company}>{company(asset.symbol, asset.tokenName)}</Text>
         ) : null}
         <Text style={styles.price}>{price != null ? fmtUsd(price) : '—'}</Text>
       </View>

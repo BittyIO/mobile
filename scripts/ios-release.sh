@@ -37,9 +37,15 @@ if [ -z "$UDID" ]; then
   exit 1
 fi
 
+# -allowProvisioningUpdates lets xcodebuild create and renew the signing profile itself, which the
+# Run button in Xcode has always done and the command line will not do unless asked. The team here
+# is a personal one, and its profiles last SEVEN DAYS — so without this the build works for a week
+# and then stops with "No profiles for 'io.bitty.vault' were found", which looks like a project
+# misconfiguration and is really just the clock. Nothing is signed differently; Xcode is simply
+# allowed to fetch what it already would.
 echo "==> Building $SCHEME (Release) for $UDID"
 xcodebuild -workspace "ios/$SCHEME.xcworkspace" -scheme "$SCHEME" -configuration Release \
-  -destination "id=$UDID" -derivedDataPath "$DERIVED" build
+  -destination "id=$UDID" -derivedDataPath "$DERIVED" -allowProvisioningUpdates build
 
 echo "==> Installing"
 xcrun devicectl device install app --device "$UDID" "$APP"

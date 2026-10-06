@@ -17,7 +17,7 @@ import {
   wrapNative,
   type RiskConfig,
 } from '@/vault/risk';
-import {ASSETS} from '@/core/assets';
+
 import {useT} from '@/i18n';
 import {showTx} from '@/components/Toast';
 import {useConfirmAction} from '@/components/ConfirmAction';
@@ -26,6 +26,7 @@ import {useColors, useStyles, type Colors} from '@/theme';
 import {SettingsRow, SettingsGroup, makeSettingsStyles} from '@/components/SettingsRow';
 import {revealMnemonic} from '@/wallet/keyring';
 import {useRevealGuard} from '@/core/device-security';
+import {useAssetCatalog} from '@/core/asset-catalog';
 
 const HOUR = 3600;
 const now = () => Math.floor(Date.now() / 1000);
@@ -90,7 +91,7 @@ export function SecurityScreen() {
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
-  const stable = ASSETS[network].find((a) => a.kind === 'stable');
+  const stable = useAssetCatalog(network).find((a) => a.kind === 'stable');
   const vault = owner ? ownerVaultAddress(owner, network) : null;
   type Acct = Awaited<ReturnType<typeof getSigner>>;
 

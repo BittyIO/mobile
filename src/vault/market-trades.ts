@@ -111,8 +111,27 @@ export function netTrade(swapLegs: TransferRow[]): {sold: MarketTrade['sold']; b
   };
 }
 
+/**
+ * What one read of the transfer feed yields.
+ *
+ * Two things, because the feed is the only place either can be had. The market swaps are the
+ * trades that leave no order record. The fills are the opposite — swaps that DO have an order
+ * behind them, excluded from `trades` for that reason — and all that is taken from them is WHEN,
+ * keyed by the settlement transaction: CoW's order objects carry no execution time, so a filled
+ * limit order could say what it got and never when it got it.
+ */
+export type TradeFeed = {
+  trades: MarketTrade[];
+  /** Settlement transaction hash (lower-cased) → unix seconds. */
+  cowFills: Map<string, number>;
+};
+
 /** Every market swap in a transfer feed, newest first. */
 export function marketTradesFromTransfers(legs: TransferRow[]): MarketTrade[] {
+  return tradeFeedFromTransfers(legs).trades;
+}
+
+export function tradeFeedFromTransfers(legs: TransferRow[]): TradeFeed {
   const groups = new Map<string, TransferRow[]>();
   for (const l of legs) {
     const arr = groups.get(l.txHash);
@@ -120,6 +139,7 @@ export function marketTradesFromTransfers(legs: TransferRow[]): MarketTrade[] {
     else groups.set(l.txHash, [l]);
   }
   const trades: MarketTrade[] = [];
+  const cowFills = new Map<string, number>();
   for (const [txHash, group] of groups) {
     const opLegs = group.filter((l) => !(l.direction === 'out' && lc(l.counterparty) === BITTY_FEE_COLLECTOR));
     const swapLegs = splitMarketSwap(opLegs);
@@ -128,23 +148,32 @@ export function marketTradesFromTransfers(legs: TransferRow[]): MarketTrade[] {
     // it as an order. Recovering it here as well listed one filled order twice in Finished: once
     // from CoW with its price and expiry, once from the chain as an anonymous swap. This feed is
     // for the trades that leave NO order record, which is what "market" means here.
-    if (swapLegs.some((l) => lc(l.counterparty) === lc(GPV2_SETTLEMENT))) continue;
+    const at = swapLegs.find((l) => l.timestamp)?.timestamp;
+    const secs = at ? Math.floor(Date.parse(at) / 1000) : undefined;
+    if (swapLegs.some((l) => lc(l.counterparty) === lc(GPV2_SETTLEMENT))) {
+      if (secs) cowFills.set(lc(txHash), secs);
+      continue;
+    }
     const t = netTrade(swapLegs);
     if (!t) continue;
-    const ts = swapLegs.find((l) => l.timestamp)?.timestamp;
-    trades.push({txHash, blockNum: swapLegs[0].blockNum, ts: ts ? Math.floor(Date.parse(ts) / 1000) : undefined, sold: t.sold, bought: t.bought});
+    trades.push({txHash, blockNum: swapLegs[0].blockNum, ts: secs, sold: t.sold, bought: t.bought});
   }
-  return trades.sort((a, b) => b.blockNum - a.blockNum);
+  return {trades: trades.sort((a, b) => b.blockNum - a.blockNum), cowFills};
 }
 
-/** Fetch the vault's completed market swaps from the transfer feed. Best-effort — [] on failure. */
-export async function fetchMarketTrades(vault: string, network: Network): Promise<MarketTrade[]> {
+/** One read of the transfer feed, as both of the things it carries. Best-effort — empty on failure. */
+export async function fetchTradeFeed(vault: string, network: Network): Promise<TradeFeed> {
   try {
     const res = await apiFetch(apiUrl(`/api/ethereum/vaults/transfers/${vault}`, network));
-    if (!res.ok) return [];
+    if (!res.ok) return {trades: [], cowFills: new Map()};
     const json = (await res.json()) as {data?: TransferRow[]};
-    return marketTradesFromTransfers(json.data ?? []);
+    return tradeFeedFromTransfers(json.data ?? []);
   } catch {
-    return [];
+    return {trades: [], cowFills: new Map()};
   }
+}
+
+/** Just the market swaps, for a caller that has no use for the fills. */
+export async function fetchMarketTrades(vault: string, network: Network): Promise<MarketTrade[]> {
+  return (await fetchTradeFeed(vault, network)).trades;
 }

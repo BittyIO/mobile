@@ -17,12 +17,13 @@ import {
   sendToWhitelisted,
   type WhitelistedRecipient,
 } from '@/vault/payments';
-import {ASSETS, assetMeta} from '@/core/assets';
+import {assetMeta} from '@/core/assets';
 import {useT} from '@/i18n';
 import {showTx} from '@/components/Toast';
 import {CopyAddress} from '@/components/CopyAddress';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {displaySymbol} from '@/core/format';
+import {useAssetCatalog} from '@/core/asset-catalog';
 
 /**
  * Address book — whitelisted recipients. Add/remove/list, and pay one by id (needed when a vault
@@ -36,7 +37,7 @@ export function WhitelistScreen() {
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
-  const assets = ASSETS[network];
+  const assets = useAssetCatalog(network);
   const stable = assets.find((a) => a.kind === 'stable');
   const vault = owner ? ownerVaultAddress(owner, network) : null;
 

@@ -1,7 +1,7 @@
-import {useEffect, useState} from 'react';
-import {ASSETS, RECEIPT_TOKENS, assetCategory, type Asset, type AssetKind} from '@/core/assets';
+import {useEffect, useState, useSyncExternalStore} from 'react';
+import {ASSETS, RECEIPT_TOKENS, assetCategory, knownAssets, registerCatalogAssets, type Asset, type AssetKind} from '@/core/assets';
 import {isAddress} from 'viem';
-import {apiFetch} from '@/core/chain';
+import {apiFetch, API_BASE} from '@/core/chain';
 import type {Network} from '@/core/chain';
 import type {Address} from 'viem';
 
@@ -13,7 +13,10 @@ import type {Address} from 'viem';
  * Set CATALOG_API_BASE to the web app host for your environment. Empty = bundled assets only (today's
  * behavior), so shipping this before the host is configured changes nothing.
  */
-export const CATALOG_API_BASE = ''; // e.g. 'https://app.bitty.io'
+// The same host mobile already uses for every other API call. Set, so the asset catalog is fetched
+// from the DB-backed /api/ethereum/assets (with the bundled ASSETS list as the offline fallback) —
+// which is what lets a new asset added server-side appear in mobile WITHOUT an app release.
+export const CATALOG_API_BASE = API_BASE;
 
 type ApiItem = {
   symbol: string;
@@ -21,12 +24,38 @@ type ApiItem = {
   decimals: number;
   kind?: string;
   category?: string;
-  company?: string;
+  tokenName?: string;
   icon?: string;
+  /** Known to the vault, never offered to the user. See the filter in {fetchCatalog}. */
+  hidden?: boolean;
 };
 
 // In-memory cache so screens don't refetch on every mount; the catalog changes rarely.
 const cache = new Map<string, Asset[]>();
+// One request per network at a time: eight screens call the hook and they all mount at once.
+const inflight = new Map<string, Promise<Asset[] | null>>();
+
+/**
+ * Bumped when a network's rows actually change, so code that is NOT a catalog consumer can still
+ * notice that they did.
+ *
+ * The balance reader is the one that matters. It asks the chain for a balance per catalogued
+ * token, and it runs on mount — which, on a cold launch, is before the catalog has answered. Six
+ * assets were added to the DB after this build shipped (SKY, LINK, MORPHO, ARB, ENA, SNDK) and
+ * none of them could ever hold a balance here, because the read that would have found one had
+ * already gone out against the bundled list.
+ */
+let version = 0;
+const listeners = new Set<() => void>();
+const subscribe = (fn: () => void) => {
+  listeners.add(fn);
+  return () => {
+    listeners.delete(fn);
+  };
+};
+
+/** Re-renders when any network's catalog changes; pair it with `currentCatalog` in an effect. */
+export const useCatalogVersion = (): number => useSyncExternalStore(subscribe, () => version);
 
 // The API keeps icons relative (same-origin for the web); mobile has no same origin, so prepend the
 // configured base to make them absolute for remote <Image> loading.
@@ -43,7 +72,7 @@ function toAsset(it: ApiItem): Asset {
     decimals: it.decimals,
     kind: (it.kind as AssetKind) ?? 'crypto',
     category: assetCategory(it.category),
-    company: it.company,
+    tokenName: it.tokenName,
     icon: iconUrl(it.icon),
   };
 }
@@ -51,24 +80,61 @@ function toAsset(it: ApiItem): Asset {
 /** Fetch the catalog for a network; null if the host is unset or the request fails. */
 export async function fetchCatalog(network: Network): Promise<Asset[] | null> {
   if (!CATALOG_API_BASE) return null;
+  const running = inflight.get(network);
+  if (running) return running;
+  const task = loadCatalog(network).finally(() => inflight.delete(network));
+  inflight.set(network, task);
+  return task;
+}
+
+async function loadCatalog(network: Network): Promise<Asset[] | null> {
   try {
     const res = await apiFetch(
       `${CATALOG_API_BASE}/api/ethereum/assets?network=${encodeURIComponent(network)}`,
     );
     if (!res.ok) return null;
     const j = (await res.json()) as {assets?: ApiItem[]; stableCoins?: ApiItem[]};
-    const list = [...(j.assets ?? []), ...(j.stableCoins ?? [])].map(toAsset);
+    /**
+     * Two kinds of row the catalog carries and the user must never see.
+     *
+     * `hidden` is the catalog's own word for it, and the one that matters: sUSDS is served under
+     * STABLE COINS on mainnet and Base, flagged hidden, because the vault holds the Sky savings
+     * share and has to know its decimals. This client ignored the flag and put it on the Overview
+     * as a coin of its own — beside the USDC it represents, wearing USDC's icon, which reads as
+     * the balance being there twice. The web has always honoured it.
+     *
+     * The receipt-token check behind it is this app's own invariant rather than a second guess at
+     * the server's: an aToken or a savings share is never an asset here, whether or not a row
+     * somewhere remembered to say so.
+     */
+    const receipts = RECEIPT_TOKENS[network] ?? {};
+    const list = [...(j.assets ?? []), ...(j.stableCoins ?? [])]
+      .filter((it) => !it.hidden && !receipts[it.address.toLowerCase()])
+      .map(toAsset);
     if (list.length === 0) return null;
+    const before = cache.get(network);
     cache.set(network, list);
+    // So `assetMeta`/`isKnownAsset` can name a token this build does not bundle. See {knownAssets}.
+    registerCatalogAssets(network, list);
+    if (!before || before.length !== list.length || before.some((a, i) => a.address !== list[i].address)) {
+      version++;
+      for (const fn of listeners) fn();
+    }
     return list;
   } catch {
     return null;
   }
 }
 
-/** The best catalog we have right now: cached DB rows, else the bundled list. */
+/**
+ * The best catalog we have right now.
+ *
+ * `knownAssets` rather than the raw rows, so one list answers for both halves: the catalog's
+ * fields where it has them — names above all, which the bundled table has let drift — and the
+ * bundled row for anything it has not got, or for everything before it has answered.
+ */
 export function currentCatalog(network: Network): Asset[] {
-  return cache.get(network) ?? ASSETS[network];
+  return knownAssets(network);
 }
 
 /** Reactive catalog for a network — bundled/cached immediately, refreshed from the API. */
@@ -77,8 +143,9 @@ export function useAssetCatalog(network: Network): Asset[] {
   useEffect(() => {
     let live = true;
     setList(currentCatalog(network));
+    // The merged view, not the raw rows: see {currentCatalog}.
     fetchCatalog(network).then((r) => {
-      if (live && r) setList(r);
+      if (live && r) setList(currentCatalog(network));
     });
     return () => {
       live = false;

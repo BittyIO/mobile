@@ -43,10 +43,10 @@ import {relayGasFor} from '@/vault/fee-quote';
 import {intentPrepCalls, needsRelayerApproval} from '@/vault/limit';
 import {Sheet} from '@/components/Sheet';
 import {describeOrder} from '@/vault/tx-actions';
-import {useConfirmAction} from '@/components/ConfirmAction';
+import {useConfirmAction, useConfirmLocal} from '@/components/ConfirmAction';
 import {fetchProtocolApy, EMPTY_APY, type ProtocolApy} from '@/vault/apy';
 import {marketSell, buildMarketSell, poolSpotPrice} from '@/vault/trade';
-import {placeLimitOrder, prepareIntent, cancelLimitOrders, fetchRecentOrders, type CowOrder} from '@/vault/limit';
+import {placeLimitOrder, prepareIntent, cancelLimitOrders, fetchRecentOrders, fetchFillTxs, type CowOrder} from '@/vault/limit';
 import {placeTwap, fetchTwapSchedules, cancelTwap, type TwapSchedule} from '@/vault/twap';
 import {
   effectiveStatus,
@@ -59,13 +59,15 @@ import {
 } from '@/vault/order-view';
 import {relayVaultMulticall, type VaultCall} from '@/vault/relay';
 import {VAULT_DEFI_ABI} from '@/core/abi';
-import {fetchMarketTrades, type MarketTrade} from '@/vault/market-trades';
+import {fetchTradeFeed, type MarketTrade} from '@/vault/market-trades';
 import {adapterByName} from '@/core/protocols';
-import {ASSET_CATEGORIES, ASSETS, assetCategory, assetMeta, isAmmLiquid, isKnownAsset, underlyingOf, type AssetCategory} from '@/core/assets';
+import {ASSET_CATEGORIES, assetCategory, assetMeta, isAmmLiquid, isKnownAsset, underlyingOf, type AssetCategory} from '@/core/assets';
 import {fmtNum, fmtShort, displaySymbol} from '@/core/format';
 import {formatUnits, parseUnits, type Address} from 'viem';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
+import {useAssetCatalog} from '@/core/asset-catalog';
+import {useGuardAssets} from '@/core/guard-assets';
 
 const SLIPPAGE_BPS = 100; // 1%
 type Mode = 'Market' | 'Limit' | 'TWAP';
@@ -239,7 +241,10 @@ export function TradeScreen() {
     };
   }, [network]);
   const services = useMemo(() => currentServices(versions), [versions]);
-  const assets = ASSETS[network];
+  const assets = useAssetCatalog(network);
+  // Re-render when the guard's asset categories land: `pairAmmLiquid` below is read from them, and
+  // it decides whether this pair gets a Market tab at all.
+  useGuardAssets(network);
   const stables = useMemo(() => assets.filter((a) => a.kind === 'stable'), [assets]);
 
   // The tab has no params, so it starts from the pair last traded — reopening on a default while
@@ -331,7 +336,6 @@ export function TradeScreen() {
     ? t('mobile.home.all_assets')
     : t('mobile.home.watch_list_n', {n: watchListNumber(watch.lists, watch.active?.id ?? '')});
   const listName = watchListLabel(watch.active, listFallback);
-  const [confirmDelete, setConfirmDelete] = useState(false);
 
   /**
    * The list's name IS the screen's title, and deleting it is the bar button beside it.
@@ -391,7 +395,18 @@ export function TradeScreen() {
           label={listName}
           symbols={listSymbols}
           canDelete={canDelete}
-          onDelete={() => setConfirmDelete(true)}
+          onDelete={() =>
+            confirm({
+              title: t('mobile.home.delete_list'),
+              message: t('mobile.home.delete_list_msg', {name: listName}),
+              action: t('mobile.home.delete_list'),
+              danger: true,
+              run: () => {
+                if (watch.active) watch.remove(network, watch.active.id);
+                nav.goBack();
+              },
+            })
+          }
           onImport={importSymbols}
           importOnly={drafting}
         />
@@ -451,6 +466,23 @@ export function TradeScreen() {
 
   // Order form (in the bottom sheet)
   const [sheetSide, setSheetSide] = useState<Side | null>(null);
+  /**
+   * The side the sheet is SHOWING, which outlives `sheetSide`.
+   *
+   * Closing clears `sheetSide` while the card is still sliding out, and everything the form keyed
+   * on it changed halfway through the animation — the confirm button went from Buy's green to
+   * Sell's red on its way off screen, which reads as the trade having failed, and a closing BUY
+   * sheet flipped its pay leg to the base asset, found no balance of it and printed "exceeds
+   * balance" in red under the Total as it left. This keeps the sheet looking like the sheet that
+   * was just confirmed until it is actually gone.
+   *
+   * Declared here, beside the state it stands in for, because the pay leg is derived from it far
+   * above the sheet's own markup — keyed on `sheetSide`, that derivation was the one place the
+   * flip still got through.
+   */
+  const lastSide = useRef<Side>('buy');
+  if (sheetSide) lastSide.current = sheetSide;
+  const shownSide = sheetSide ?? lastSide.current;
   const [mode, setMode] = useState<Mode>('Market');
   /**
    * Which balance of the PAY asset funds the order: the vault's free balance, its Sky savings, or its
@@ -497,6 +529,8 @@ export function TradeScreen() {
   const [orders, setOrders] = useState<CowOrder[]>([]);
   // Cancelling is a relayed transaction like any other, so it asks first.
   const {ask, sheet: confirmSheet} = useConfirmAction();
+  // Nothing on chain, so the system alert rather than the fee sheet — see {useConfirmLocal}.
+  const confirm = useConfirmLocal();
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [cancellingAll, setCancellingAll] = useState(false);
   /**
@@ -517,6 +551,8 @@ export function TradeScreen() {
    * keys are an order uid and a transaction hash, which cannot collide.
    */
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set<string>());
+  /** The TWAP schedule whose "everything else" sheet is open, by appData. */
+  const [twapInfo, setTwapInfo] = useState<string | null>(null);
   const toggleExpanded = (key: string) =>
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -537,6 +573,13 @@ export function TradeScreen() {
   };
   const toggleOthers = () => setOthers(!showOthers);
   const [marketTrades, setMarketTrades] = useState<MarketTrade[]>([]);
+  /**
+   * When each filled limit/TWAP part was settled, by order uid.
+   *
+   * Two sources, because neither has both halves: CoW says which transaction filled an order and
+   * never when, the transfer feed says when a transaction happened and does not know about orders.
+   */
+  const [fillAt, setFillAt] = useState<Map<string, number>>(() => new Map());
 
   const balances = useVaultBalances(network);
   const positions = useVaultPositions(balances.vault, network);
@@ -587,7 +630,7 @@ export function TradeScreen() {
 
   // Order-form denomination: you always enter the PAY leg. A sell pays the base (e.g. ETH); a buy pays
   // the quote (e.g. USDC). So the Amount field + Max button sit on a DIFFERENT asset per side.
-  const paysBase = sheetSide !== 'buy';
+  const paysBase = shownSide !== 'buy';
   // The asset the pay leg spends. onSubmit re-derives it locally; this is the same thing, needed
   // at render time for the funding rows' APY.
   const spendAsset = paysBase ? base : quoteAsset;
@@ -859,8 +902,22 @@ export function TradeScreen() {
     if (!owner) return;
     const vault = ownerVaultAddress(owner, network);
     fetchRecentOrders(vault, network).then(setOrders).catch(() => setOrders([]));
-    // Completed market swaps leave no order record — they're recovered from the vault's transfer feed.
-    fetchMarketTrades(vault, network).then(setMarketTrades).catch(() => setMarketTrades([]));
+    // Completed market swaps leave no order record — they're recovered from the vault's transfer
+    // feed, which is also where a CoW fill's timestamp comes from.
+    Promise.all([fetchTradeFeed(vault, network), fetchFillTxs(vault, network)])
+      .then(([feed, fillTxs]) => {
+        setMarketTrades(feed.trades);
+        const at = new Map<string, number>();
+        for (const [uid, tx] of fillTxs) {
+          const ts = feed.cowFills.get(tx);
+          if (ts) at.set(uid, ts);
+        }
+        setFillAt(at);
+      })
+      .catch(() => {
+        setMarketTrades([]);
+        setFillAt(new Map());
+      });
     fetchTwapSchedules(vault, network)
       .then((rows) => setTwaps(new Map(rows.map((r) => [r.appData.toLowerCase(), r]))))
       .catch(() => setTwaps(new Map()));
@@ -931,8 +988,8 @@ export function TradeScreen() {
       <TokenIcon symbol={a.symbol} size={30} />
       <View style={styles.resultName}>
         <Highlight text={displaySymbol(a.symbol)} q={query.trim()} style={styles.resultText} />
-        {company(a.symbol, a.company) ? (
-          <Highlight text={company(a.symbol, a.company) as string} q={query.trim()} style={styles.resultCompany} numberOfLines={1} />
+        {company(a.symbol, a.tokenName) ? (
+          <Highlight text={company(a.symbol, a.tokenName) as string} q={query.trim()} style={styles.resultCompany} numberOfLines={1} />
         ) : null}
       </View>
       {/* Editing the watch list, a check takes the price's place — the same blue tick every picker
@@ -1054,7 +1111,7 @@ export function TradeScreen() {
     const byPosition = (text: (a: (typeof assets)[number]) => string) => (x: (typeof assets)[number], y: (typeof assets)[number]) =>
       text(x).toLowerCase().indexOf(q) - text(y).toLowerCase().indexOf(q);
     const symbolOf = (a: (typeof assets)[number]) => displaySymbol(a.symbol);
-    const nameOf = (a: (typeof assets)[number]) => company(a.symbol, a.company) ?? '';
+    const nameOf = (a: (typeof assets)[number]) => company(a.symbol, a.tokenName) ?? '';
 
     const bySymbol = assets.filter((a) => symbolOf(a).toLowerCase().includes(q)).sort(byPosition(symbolOf));
     const hit = new Set(bySymbol.map((a) => a.address));
@@ -1135,7 +1192,7 @@ export function TradeScreen() {
             .map((a) => ({
               key: `${a.symbol}:free`,
               label: displaySymbol(a.symbol),
-              sub: company(a.symbol, a.company),
+              sub: company(a.symbol, a.tokenName),
               icon: <TokenIcon symbol={a.symbol} size={30} />,
               total: totalOf(a.symbol),
             })),
@@ -1249,6 +1306,11 @@ export function TradeScreen() {
         ? t(side === 'buy' ? 'mobile.trade.pay_to_buy' : 'mobile.trade.pay_to_sell', {pay: payLeg, receive: recvLeg})
         : `${t('vault.pay')} ${payLeg}`,
       network,
+      // A market order is relayed and has a hash. A limit or TWAP order is SIGNED and posted to
+      // CoW's order book — nothing is broadcast, so the header must not claim to be broadcasting.
+      // (The first intent order of a pair also mines a one-off setup transaction inside
+      // `prepareIntent`, which reports no hash of its own and has never been announced either.)
+      {broadcast: mode === 'Market'},
     );
     // Closed straight away: a limit order first mines its setup transaction, and with no spinner on
     // the button an open sheet looked like a tap that did nothing. The badge and the orders list
@@ -1259,7 +1321,8 @@ export function TradeScreen() {
       const vault = ownerVaultAddress(owner, network);
       // You always sell the PAY leg for the RECEIVE leg: sell base→quote, buy quote→base. Exact-in.
       const recvAsset = (paysBase ? quoteAsset : base);
-      if (!spendAsset || !recvAsset) return;
+      // Nothing was sent, so the header's spinner has to come down with it.
+      if (!spendAsset || !recvAsset) return tx.done();
       const sellToken = spendAsset.address as Address;
       const buyToken = recvAsset.address as Address;
       // Charge gas to a stablecoin that isn't the pay leg (so a max-USDC trade pays gas from USDT).
@@ -1358,6 +1421,7 @@ export function TradeScreen() {
         // price-derived amount if they left the field to auto-fill. Bounded decimals so parseUnits round-trips.
         const recvNum = Number(receiveInput) > 0 ? Number(receiveInput) : effPrice > 0 && Number(amount) > 0 ? (paysBase ? Number(amount) * effPrice : Number(amount) / effPrice) : 0;
         if (!(recvNum > 0)) {
+          tx.done();
           setErr(t('mobile.trade.enter_receive'));
           setStatus('error');
           return;
@@ -1468,6 +1532,73 @@ export function TradeScreen() {
     },
     [namedOrders, twaps, cancelledUids],
   );
+
+  /**
+   * Everything a TWAP row and its sheet both need, worked out once.
+   *
+   * The row draws the parts and the sheet draws the terms, and both are derived from the same
+   * representative part — so this is a function rather than a block inside the list, which is
+   * where it used to live when only the list needed it.
+   */
+  const twapFacts = (g: TwapGroup) => {
+    const o = g.rep;
+    const sellM = assetMeta(network, o.sellToken as Address);
+    const buyM = assetMeta(network, o.buyToken as Address);
+    const sellStable = stables.some((st) => st.address.toLowerCase() === o.sellToken.toLowerCase());
+    const buyStable = stables.some((st) => st.address.toLowerCase() === o.buyToken.toLowerCase());
+    // The SCHEDULE's size, not the part's: one part is a tenth of what the user asked for, and a
+    // row claiming to be the order has to state the order's own amounts.
+    const partSell = Number(formatUnits(BigInt(o.sellAmount), sellM.decimals));
+    const partBuy = Number(formatUnits(BigInt(o.buyAmount), buyM.decimals));
+    /**
+     * The limit price the schedule was placed at.
+     *
+     * A TWAP has one, same as a limit order — every part carries it. Read off a PART: the ratio is
+     * the same at any size, and the parts are what exist. Quoted in the stable leg where there is
+     * one, as everywhere else in this list, and the partner fee backed out so it matches what was
+     * typed into the form.
+     */
+    const pxBase = sellStable || buyStable
+      ? (sellStable ? partSell : partBuy) / (sellStable ? partBuy : partSell)
+      : partBuy / partSell;
+    return {
+      o,
+      sellM,
+      buyM,
+      isBuy: sellStable,
+      partSell,
+      partBuy,
+      twapPx: pxBase / (o.kind === 'buy' ? 1 + PARTNER_FEE : 1 - PARTNER_FEE),
+      twapPxSym: displaySymbol(sellStable || buyStable ? (sellStable ? sellM.symbol : buyM.symbol) : buyM.symbol),
+    };
+  };
+
+  /**
+   * When a slot that has not gone out yet is due, as a distance rather than a time.
+   *
+   * The question a running TWAP is asked is "when is the next one", and a wall-clock stamp makes
+   * the reader do the arithmetic — ten of them down a column, all reading the same date, makes
+   * them do it ten times. It also has to fit where a status word fits: this sits in the same slot
+   * as Filled and Open on the posted lines, and the amount beside it is the side that shrinks.
+   *
+   * One unit, floored — ninety minutes reads "in 1h", the convention everywhere else. A slot whose
+   * time has passed and which the keeper has not posted yet says so instead of counting backwards:
+   * the schedule's clock and the keeper's are not the same clock.
+   */
+  const fmtDue = (at: number): string => {
+    const secs = at - Math.floor(Date.now() / 1000);
+    if (secs <= 30) return t('mobile.trade.posts_due');
+    const mins = Math.floor(secs / 60);
+    if (mins < 60) return t('mobile.trade.posts_in_m', {n: Math.max(1, mins)});
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return t('mobile.trade.posts_in_h', {n: hours});
+    return t('mobile.trade.posts_in_d', {n: Math.floor(hours / 24)});
+  };
+
+  // The schedule the Details sheet is showing, looked up live rather than held in state: a part
+  // posting or filling while the sheet is open should change what it says.
+  const infoGroup = twapInfo ? twapGroups.find((x) => x.appData === twapInfo) : undefined;
+  const infoFacts = infoGroup ? twapFacts(infoGroup) : null;
 
   const [cancellingTwap, setCancellingTwap] = useState<string | null>(null);
   /**
@@ -1616,17 +1747,6 @@ export function TradeScreen() {
   const {height: screenHeight} = useWindowDimensions();
   // Same motion as every other sheet: rises, follows a downward drag, slides back out.
   const orderSheet = useSheetAnim(sheetSide != null, () => setSheetSide(null));
-  /**
-   * The side the sheet is SHOWING, which outlives `sheetSide`.
-   *
-   * Closing clears `sheetSide` while the card is still sliding out, and everything the form keyed
-   * on it changed halfway through the animation — the confirm button went from Buy's green to
-   * Sell's red on its way off screen, which reads as the trade having failed. This keeps the sheet
-   * looking like the sheet that was just confirmed until it is actually gone.
-   */
-  const lastSide = useRef<Side>('buy');
-  if (sheetSide) lastSide.current = sheetSide;
-  const shownSide = sheetSide ?? lastSide.current;
   // Tapping a prefilled field puts the caret after the number, not before it.
   const amountCaret = useEndCaret(amount);
   const priceCaret = useEndCaret(price);
@@ -1832,7 +1952,7 @@ export function TradeScreen() {
           </>
         ) : null}
 
-        {isPair ? <PriceChart key={`${baseSym}-${refreshNonce}`} symbol={baseSym} /> : null}
+        {isPair ? <PriceChart symbol={baseSym} reload={refreshNonce} /> : null}
 
         {/* Orders — the pair screen's own history, not the directory's. */}
         {isPair ? (
@@ -1896,38 +2016,67 @@ export function TradeScreen() {
           {/* One row per TWAP schedule, above the plain orders: it is the oldest thing in the list,
               and its parts would otherwise be scattered through it by expiry. */}
           {shownTwaps.map((g, gi) => {
-            const o = g.rep;
-            const sellM = assetMeta(network, o.sellToken as Address);
-            const buyM = assetMeta(network, o.buyToken as Address);
-            const isBuy = stables.some((st) => st.address.toLowerCase() === o.sellToken.toLowerCase());
+            const {sellM, buyM, isBuy, partSell, partBuy, twapPx} = twapFacts(g);
             const key = `twap-${g.appData}`;
             const isExp = expanded.has(key);
             const isLast =
               gi === shownTwaps.length - 1 && shownOrders.length === 0 && !(tab === 'finished' && marketFinished.length > 0);
-            // The SCHEDULE's size, not the part's: one part is a tenth of what the user asked for,
-            // and a row claiming to be the order has to state the order's own amounts.
-            const partSell = Number(formatUnits(BigInt(o.sellAmount), sellM.decimals));
-            const partBuy = Number(formatUnits(BigInt(o.buyAmount), buyM.decimals));
             /**
-             * The limit price the schedule was placed at.
+             * The schedule's slots, oldest first — ALL of them, not just the posted ones.
              *
-             * A TWAP has one, same as a limit order — every part carries it — and the detail
-             * listed everything about the order except the number that decides whether it fills.
-             * Read off a PART: the ratio is the same at any size, and the parts are what exist.
-             *
-             * Quoted in the stable leg where there is one, as everywhere else in this list, and
-             * the partner fee backed out so it matches what was typed into the form.
+             * `g.parts` is what CoW has been given so far, newest first, and a TWAP is posted one
+             * slot at a time as its clock comes round: an hour into a ten-part order, two orders
+             * exist and eight do not. Listing only those two read as lost data, so the slots yet
+             * to go out are listed too, each with the time it is due — which is the thing a reader
+             * opening a running TWAP actually wants to know.
              */
-            const sellStable = stables.some((st) => st.address.toLowerCase() === o.sellToken.toLowerCase());
-            const buyStable = stables.some((st) => st.address.toLowerCase() === o.buyToken.toLowerCase());
-            const pxBase = sellStable || buyStable
-              ? (sellStable ? partSell : partBuy) / (sellStable ? partBuy : partSell)
-              : partBuy / partSell;
-            const twapPx = pxBase / (o.kind === 'buy' ? 1 + PARTNER_FEE : 1 - PARTNER_FEE);
-            const twapPxSym = displaySymbol(
-              sellStable || buyStable ? (sellStable ? sellM.symbol : buyM.symbol) : buyM.symbol,
-            );
+            const slots = [...g.parts].reverse();
+            const legM = isBuy ? buyM : sellM;
+            const perPart = isBuy ? partBuy : partSell;
+            /**
+             * Every part line carries a price, filled or not.
+             *
+             * A filled one carries what it GOT; the rest carry what the schedule will take — the
+             * limit the whole order was placed at, which is the same for every slot. Without it a
+             * reader comparing the column had to hold the limit in their head from the Details
+             * sheet to see whether a fill came in above or below it, and the slots still to come
+             * gave no hint of what they were waiting for.
+             */
+            const atPx = (n: number) =>
+              Number.isFinite(n) && n > 0 ? ` @${n.toLocaleString('en-US', {maximumSignificantDigits: 6})}` : '';
             const canCancel = g.bucket === 'open' && !!intent;
+            /**
+             * A finished schedule states what it DID; a running one states what it is for.
+             *
+             * While parts are still going out, the figure that means something is the order's own
+             * size — the thing the user asked for — with the fraction beside it saying how far in
+             * it is. Once it is over, that number is a plan that no longer exists: a TWAP can end
+             * cancelled or expired with two slots of ten behind it, and a row reading the full
+             * amount claimed a trade that never happened. So a finished row adds up what actually
+             * settled, on the leg it names, and drops the fraction — "3/3" next to a final total
+             * is the same thing said twice, and "2/10" next to one is an apology.
+             */
+            const finished = g.bucket === 'finished';
+            const settledAmt = g.parts.reduce(
+              (sum, pt) =>
+                sum +
+                Number(
+                  formatUnits(
+                    BigInt((isBuy ? pt.executedBuyAmount : pt.executedSellAmount) ?? '0'),
+                    legM.decimals,
+                  ),
+                ),
+              0,
+            );
+            const summary = (
+              <View style={styles.summaryWrap}>
+                <TokenIcon symbol={legM.symbol} size={18} />
+                <Text style={styles.orderSummary} numberOfLines={1}>
+                  <Amount v={fmtShort(finished ? settledAmt : perPart * g.total)} size={15} />{' '}
+                  {displaySymbol(legM.symbol)}
+                </Text>
+              </View>
+            );
             return (
               <View key={key} style={[styles.orderCard, isLast && styles.lastOrder]}>
                 <Pressable style={styles.orderHead} onPress={() => toggleExpanded(key)}>
@@ -1938,17 +2087,15 @@ export function TradeScreen() {
                       </Text>
                     </View>
                     {/* One leg, not both. See {orderSummary}. */}
-                    <View style={styles.summaryWrap}>
-                      <TokenIcon symbol={isBuy ? buyM.symbol : sellM.symbol} size={18} />
-                      <Text style={styles.orderSummary} numberOfLines={1}>
-                        <Amount v={fmtShort(isBuy ? partBuy * g.total : partSell * g.total)} size={15} />{' '}
-                        {displaySymbol(isBuy ? buyM.symbol : sellM.symbol)}
-                      </Text>
-                    </View>
+                    {finished ? null : summary}
                   </View>
-                  <Text style={styles.filledPill}>
-                    {g.filled}/{g.total} {t('mobile.trade.filled_parts')}
-                  </Text>
+                  {finished ? (
+                    summary
+                  ) : (
+                    <Text style={styles.filledPill}>
+                      {g.filled}/{g.total} {t('mobile.trade.filled_parts')}
+                    </Text>
+                  )}
                 </Pressable>
                 {/* The open detail closes it again. The head is a 56pt strip and the panel under it is
                     the bigger target by far; having to go back up to the row to put it away read as the
@@ -1956,91 +2103,96 @@ export function TradeScreen() {
                     inside is a nested pressable and still wins the tap. */}
                 {isExp ? (
                   <Pressable style={styles.orderDetail} onPress={() => toggleExpanded(key)}>
-                    <View style={styles.orderLine}>
-                      <Text style={styles.orderLabel}>{t('vault.pay')}</Text>
-                      <View style={styles.orderAmt}>
-                        <Text style={styles.orderAmtVal}><Amount v={fmtShort(partSell * g.total)} size={15} /></Text>
-                        <TokenIcon symbol={sellM.symbol} size={16} />
-                        <Text style={styles.orderAmtSym}>{displaySymbol(sellM.symbol)}</Text>
-                      </View>
-                    </View>
-                    <View style={styles.orderLine}>
-                      <Text style={styles.orderLabel}>{t('vault.receive')}</Text>
-                      <View style={styles.orderAmt}>
-                        <Text style={styles.orderAmtVal}><Amount v={fmtShort(partBuy * g.total)} size={15} /></Text>
-                        <TokenIcon symbol={buyM.symbol} size={16} />
-                        <Text style={styles.orderAmtSym}>{displaySymbol(buyM.symbol)}</Text>
-                      </View>
-                    </View>
-                    <View style={styles.orderLine}>
-                      <Text style={styles.orderLabel}>{t('vault.price')}</Text>
-                      <Text style={styles.orderVal}>
-                        {Number.isFinite(twapPx) ? twapPx.toLocaleString('en-US', {maximumSignificantDigits: 6}) : '—'} {twapPxSym}
-                      </Text>
-                    </View>
-                    {/* What one slot buys, so the fraction above has a size attached to it. */}
-                    <View style={styles.orderLine}>
-                      <Text style={styles.orderLabel}>{t('mobile.trade.per_part')}</Text>
-                      <View style={styles.orderAmt}>
-                        <Text style={styles.orderAmtVal}><Amount v={fmtShort(partSell)} size={15} /></Text>
-                        <Text style={styles.orderAmtSym}>{displaySymbol(sellM.symbol)}</Text>
-                      </View>
-                    </View>
-                    <View style={styles.orderLine}>
-                      <Text style={styles.orderLabel}>{t('vault.expires')}</Text>
-                      <Text style={styles.orderVal}>{fmtExpiry(g.schedule.windowEnd, language)}</Text>
-                    </View>
-
                     {/**
-                      * The parts themselves.
+                      * The parts, and nothing else.
                       *
-                      * Only the ones POSTED can be listed: a TWAP's slots are placed one at a time
-                      * as the schedule comes round, so a ten-part order an hour old has one or two
-                      * orders in existence and eight still to come. Nine missing lines looked like
-                      * lost data, so the count says plainly how many have gone out, and each line
-                      * below it is a part that has — with what it actually filled for, where it
-                      * filled.
+                      * A TWAP is a schedule, so what a reader opens it for is where the schedule
+                      * has got to — which slice filled at what, and when the next one goes out.
+                      * The terms it was placed on (pay, receive, limit price, window) are read
+                      * once when the order is placed and almost never again, so they have moved
+                      * behind Details below: six label-and-value lines above the parts pushed the
+                      * only live thing on the panel off the bottom of a phone.
                       */}
-                    <View style={styles.orderLine}>
-                      <Text style={styles.orderLabel}>{t('mobile.trade.parts_history')}</Text>
-                      <Text style={styles.orderVal}>
-                        {t('mobile.trade.parts_posted', {posted: g.parts.length, total: g.total})}
-                      </Text>
-                    </View>
-                    {g.parts.map((pt) => {
+                    {Array.from({length: Math.max(g.total, slots.length)}, (_, i) => {
+                      const pt = slots[i];
+                      if (!pt) {
+                        // Still to come. CoW is handed each slot as its turn arrives, one
+                        // `partDuration` after the last — so the time is arithmetic, not a lookup.
+                        const due = g.schedule.startTime + i * g.schedule.partDuration;
+                        return (
+                          <View key={`slot-${i}`} style={styles.partRow}>
+                            <Text style={[styles.partText, styles.partPending]} numberOfLines={1}>
+                              {`${fmtShort(perPart)} ${displaySymbol(legM.symbol)}${atPx(twapPx)}`}
+                            </Text>
+                            <Text style={styles.partStatus}>{fmtDue(due)}</Text>
+                          </View>
+                        );
+                      }
+                      /**
+                       * A posted part: the asset, then the price it went at.
+                       *
+                       * It used to print both legs — "284.13 USDC → 3.33 CRCL" — which is the same
+                       * shape the ROW above was changed away from, and for the same reason: the
+                       * two figures are one trade said twice, and the part of it a reader compares
+                       * between lines is the price, which was the one thing not written down. The
+                       * leg shown is the one the row names, so a column of parts adds up to the
+                       * order's own total.
+                       *
+                       * The ratio is the EXECUTED one, fee and all — Details carries the limit the
+                       * schedule was placed at, and the gap between them is what a reader is
+                       * looking for.
+                       */
                       const ps = effectiveStatus(pt, cancelledUids);
                       const done = ps.toLowerCase().includes('fulfil');
                       const sold = Number(formatUnits(BigInt(pt.executedSellAmount ?? '0'), sellM.decimals));
                       const recv = Number(formatUnits(BigInt(pt.executedBuyAmount ?? '0'), buyM.decimals));
+                      const got = isBuy ? recv : sold;
+                      const px = got > 0 ? (isBuy ? sold : recv) / got : NaN;
+                      // Posted but not filled: the part's own size, with nothing to price.
+                      const sized = Number(
+                        formatUnits(BigInt((isBuy ? pt.buyAmount : pt.sellAmount) ?? '0'), legM.decimals),
+                      );
                       return (
                         <View key={pt.uid} style={styles.partRow}>
                           <Text style={styles.partText} numberOfLines={1}>
-                            {done
-                              ? `${fmtShort(sold)} ${displaySymbol(sellM.symbol)} → ${fmtShort(recv)} ${displaySymbol(buyM.symbol)}`
-                              : `${fmtShort(Number(formatUnits(BigInt(pt.sellAmount), sellM.decimals)))} ${displaySymbol(sellM.symbol)}`}
+                            {`${fmtShort(done ? got : sized)} ${displaySymbol(legM.symbol)}`}
+                            {/* Filled: what it went at. Posted and waiting: what it is waiting for. */}
+                            {atPx(done ? px : twapPx)}
                           </Text>
                           <Text style={styles.partStatus}>{t(statusPill(ps).key)}</Text>
                         </View>
                       );
                     })}
 
-                    {canCancel ? (
-                      <Pressable
-                        style={styles.cancelRight}
-                        onPress={() =>
-                          ask({
-                            title: t('mobile.actions.cancel_intent'),
-                            gas: relayGasFor({}),
-                            run: () => onCancelTwap(g),
-                          })
-                        }
-                        disabled={cancellingTwap === g.appData}
-                        hitSlop={8}>
-                        <Text style={styles.cancelInline}>
-                          {cancellingTwap === g.appData ? t('mobile.trade.cancelling') : t('vault.cancel')}
-                        </Text>
+                    {/* Opposite ends of the same line rather than two full-width controls stacked
+                        under the parts. Cancel takes the left: every other row in this list puts
+                        its Cancel on that side, and Details is the safe one, so the destructive
+                        control should not be the one that lands under a thumb reaching for the
+                        corner the list has trained it to reach for. */}
+                    <View style={styles.detailFoot}>
+                      {canCancel ? (
+                        <Pressable
+                          onPress={() =>
+                            ask({
+                              title: t('mobile.actions.cancel_intent'),
+                              gas: relayGasFor({}),
+                              run: () => onCancelTwap(g),
+                            })
+                          }
+                          disabled={cancellingTwap === g.appData}
+                          hitSlop={8}>
+                          <Text style={styles.cancelInline}>
+                            {cancellingTwap === g.appData ? t('mobile.trade.cancelling') : t('vault.cancel')}
+                          </Text>
+                        </Pressable>
+                      ) : (
+                        // Keeps Details pinned right when there is nothing to cancel.
+                        <View />
+                      )}
+                      <Pressable onPress={() => setTwapInfo(g.appData)} hitSlop={8}>
+                        <Text style={styles.detailLink}>{t('mobile.trade.details')}</Text>
                       </Pressable>
-                    ) : null}
+                    </View>
                   </Pressable>
                 ) : null}
               </View>
@@ -2094,6 +2246,28 @@ export function TradeScreen() {
               // All rows collapse by default; tap to expand (open rows reveal their Cancel button).
               const isExp = expanded.has(o.uid);
               const canCancel = es === 'open' && !!intent;
+              const filled = es.toLowerCase().includes('fulfil');
+              const filledAt = fillAt.get(o.uid.toLowerCase());
+              /**
+               * What the row says, and where it says it.
+               *
+               * The leg is the same object either way; only its side of the head changes. A row
+               * with something to put on the right — a Cancel, an Expired pill — keeps it beside
+               * the badge on the left. A FINISHED row has an empty right-hand end, and leaving the
+               * amount pressed against the badge wasted the whole width of the card; moved across,
+               * it lands in the column every other number on this screen is read in.
+               */
+              const summary = (
+                <View style={styles.summaryWrap}>
+                  <TokenIcon symbol={isBuy ? buySym : sellSym} size={18} />
+                  <Text style={styles.orderSummary} numberOfLines={1}>
+                    <Amount v={fmtShort(isBuy ? buyNum : sellNum)} size={15} /> {displaySymbol(isBuy ? buySym : sellSym)}
+                    {/* Only a sell can come out of a position, and only the leg on screen can
+                        say so — on a buy the paying leg is not shown at all. */}
+                    {!isBuy && fromPosition ? ` (${t('vault.yielding')})` : ''}
+                  </Text>
+                </View>
+              );
               return (
                 <View key={o.uid} style={[styles.orderCard, isLast && styles.lastOrder]}>
                   <Pressable
@@ -2113,19 +2287,11 @@ export function TradeScreen() {
                             : words(t('vault.limit'), sideWord(isBuy))}
                         </Text>
                       </View>
-                      <View style={styles.summaryWrap}>
-                        <TokenIcon symbol={isBuy ? buySym : sellSym} size={18} />
-                        <Text style={styles.orderSummary} numberOfLines={1}>
-                          <Amount v={fmtShort(isBuy ? buyNum : sellNum)} size={15} /> {displaySymbol(isBuy ? buySym : sellSym)}
-                          {/* Only a sell can come out of a position, and only the leg on screen can
-                              say so — on a buy the paying leg is not shown at all. */}
-                          {!isBuy && fromPosition ? ` (${t('vault.yielding')})` : ''}
-                        </Text>
-                      </View>
+                      {canCancel || sp.tone === 'amber' ? summary : null}
                     </View>
                     {/* Open and Filled are what the tab already says, so an open order shows its Cancel
                         here instead; Expired stays as a pill (the Cancelled tab holds both cancelled and
-                        expired orders). */}
+                        expired orders). With neither, the amount takes the corner. */}
                     {canCancel ? (
                       <Pressable
                         style={styles.orderHeadRight}
@@ -2146,7 +2312,9 @@ export function TradeScreen() {
                       <View style={styles.orderHeadRight}>
                         <Pill label={t(sp.key)} tone={sp.tone} />
                       </View>
-                    ) : null}
+                    ) : (
+                      summary
+                    )}
                   </Pressable>
                   {/* The open detail closes it again. The head is a 56pt strip and the panel under it is
                       the bigger target by far; having to go back up to the row to put it away read as the
@@ -2154,30 +2322,57 @@ export function TradeScreen() {
                       inside is a nested pressable and still wins the tap. */}
                   {isExp ? (
                     <Pressable style={styles.orderDetail} onPress={() => toggleExpanded(o.uid)}>
-                      <View style={styles.orderLine}>
-                        <Text style={styles.orderLabel}>{t('vault.pay')}</Text>
-                        <View style={styles.orderAmt}>
-                          <Text style={styles.orderAmtVal}><Amount v={fmtAmt(o.sellAmount, sellM.decimals)} size={15} /></Text>
-                          <TokenIcon symbol={sellM.symbol} size={16} />
-                          <Text style={styles.orderAmtSym}>{displaySymbol(sellM.symbol)}</Text>
+                      {/**
+                        * The OTHER leg, only.
+                        *
+                        * The head already states the one the order is for — what a buy buys, what
+                        * a sell sells — so printing both here made the first line of the panel a
+                        * copy of the line above it. A trade has two ends and the row shows one, so
+                        * the panel shows the one the row does not.
+                        */}
+                      {isBuy ? (
+                        <View style={styles.orderLine}>
+                          <Text style={styles.orderLabel}>{t('vault.pay')}</Text>
+                          <View style={styles.orderAmt}>
+                            <Text style={styles.orderAmtVal}><Amount v={fmtAmt(o.sellAmount, sellM.decimals)} size={15} /></Text>
+                            <TokenIcon symbol={sellM.symbol} size={16} />
+                            <Text style={styles.orderAmtSym}>{displaySymbol(sellM.symbol)}</Text>
+                          </View>
                         </View>
-                      </View>
-                      <View style={styles.orderLine}>
-                        <Text style={styles.orderLabel}>{t('vault.receive')}</Text>
-                        <View style={styles.orderAmt}>
-                          <Text style={styles.orderAmtVal}><Amount v={fmtAmt(o.buyAmount, buyM.decimals)} size={15} /></Text>
-                          <TokenIcon symbol={buyM.symbol} size={16} />
-                          <Text style={styles.orderAmtSym}>{displaySymbol(buyM.symbol)}</Text>
+                      ) : (
+                        <View style={styles.orderLine}>
+                          <Text style={styles.orderLabel}>{t('vault.receive')}</Text>
+                          <View style={styles.orderAmt}>
+                            <Text style={styles.orderAmtVal}><Amount v={fmtAmt(o.buyAmount, buyM.decimals)} size={15} /></Text>
+                            <TokenIcon symbol={buyM.symbol} size={16} />
+                            <Text style={styles.orderAmtSym}>{displaySymbol(buyM.symbol)}</Text>
+                          </View>
                         </View>
-                      </View>
+                      )}
                       <View style={styles.orderLine}>
                         <Text style={styles.orderLabel}>{t('vault.price')}</Text>
                         <Text style={styles.orderVal}>{px.toLocaleString('en-US', {maximumSignificantDigits: 6})} {pxSym}</Text>
                       </View>
-                      <View style={styles.orderLine}>
-                        <Text style={styles.orderLabel}>{t('vault.expires')}</Text>
-                        <Text style={styles.orderVal}>{fmtExpiry(o.validTo, language)}</Text>
-                      </View>
+                      {/**
+                        * When it filled, or when it runs out — never both, because only one of
+                        * them is still a fact. An expiry on an order that already traded is the
+                        * deadline it beat, which is of no interest; a completed market swap has
+                        * said "Fulfilled" all along and a filled limit order now reads the same.
+                        * The time itself is not in CoW's order object — see {fetchFillTxs}.
+                        */}
+                      {filled ? (
+                        filledAt ? (
+                          <View style={styles.orderLine}>
+                            <Text style={styles.orderLabel}>{t('mobile.trade.settled')}</Text>
+                            <Text style={styles.orderVal}>{fmtExpiry(filledAt, language)}</Text>
+                          </View>
+                        ) : null
+                      ) : (
+                        <View style={styles.orderLine}>
+                          <Text style={styles.orderLabel}>{t('vault.expires')}</Text>
+                          <Text style={styles.orderVal}>{fmtExpiry(o.validTo, language)}</Text>
+                        </View>
+                      )}
                     </Pressable>
                   ) : null}
                 </View>
@@ -2203,13 +2398,16 @@ export function TradeScreen() {
                             {words(t('vault.market'), sideWord(isBuy))}
                           </Text>
                         </View>
-                        <View style={styles.summaryWrap}>
-                          <TokenIcon symbol={isBuy ? m.bought.symbol : m.sold.symbol} size={18} />
-                          <Text style={styles.orderSummary} numberOfLines={1}>
-                            <Amount v={fmtShort(isBuy ? m.bought.amount : m.sold.amount)} />{' '}
-                            {displaySymbol(isBuy ? m.bought.symbol : m.sold.symbol)}
-                          </Text>
-                        </View>
+                      </View>
+                      {/* The corner is free on a market row — nothing is cancellable about a swap
+                          that has already happened — so the amount reads there, in the column the
+                          rest of the screen puts numbers in. */}
+                      <View style={styles.summaryWrap}>
+                        <TokenIcon symbol={isBuy ? m.bought.symbol : m.sold.symbol} size={18} />
+                        <Text style={styles.orderSummary} numberOfLines={1}>
+                          <Amount v={fmtShort(isBuy ? m.bought.amount : m.sold.amount)} size={15} />{' '}
+                          {displaySymbol(isBuy ? m.bought.symbol : m.sold.symbol)}
+                        </Text>
                       </View>
                     </Pressable>
                     {/* The open detail closes it again. The head is a 56pt strip and the panel under it is
@@ -2218,29 +2416,33 @@ export function TradeScreen() {
                         inside is a nested pressable and still wins the tap. */}
                     {isExp ? (
                       <Pressable style={styles.orderDetail} onPress={() => toggleExpanded(m.txHash)}>
-                        <View style={styles.orderLine}>
-                          <Text style={styles.orderLabel}>{t('mobile.trade.paid')}</Text>
-                          <View style={styles.orderAmt}>
-                            <Text style={styles.orderAmtVal}><Amount v={fmtShort(m.sold.amount)} size={15} /></Text>
-                            <TokenIcon symbol={m.sold.symbol} size={16} />
-                            <Text style={styles.orderAmtSym}>{displaySymbol(m.sold.symbol)}</Text>
+                        {/* The OTHER leg, only: the head states the one the swap was for. */}
+                        {isBuy ? (
+                          <View style={styles.orderLine}>
+                            <Text style={styles.orderLabel}>{t('mobile.trade.paid')}</Text>
+                            <View style={styles.orderAmt}>
+                              <Text style={styles.orderAmtVal}><Amount v={fmtShort(m.sold.amount)} size={15} /></Text>
+                              <TokenIcon symbol={m.sold.symbol} size={16} />
+                              <Text style={styles.orderAmtSym}>{displaySymbol(m.sold.symbol)}</Text>
+                            </View>
                           </View>
-                        </View>
-                        <View style={styles.orderLine}>
-                          <Text style={styles.orderLabel}>{t('vault.received')}</Text>
-                          <View style={styles.orderAmt}>
-                            <Text style={styles.orderAmtVal}><Amount v={fmtShort(m.bought.amount)} size={15} /></Text>
-                            <TokenIcon symbol={m.bought.symbol} size={16} />
-                            <Text style={styles.orderAmtSym}>{displaySymbol(m.bought.symbol)}</Text>
+                        ) : (
+                          <View style={styles.orderLine}>
+                            <Text style={styles.orderLabel}>{t('vault.received')}</Text>
+                            <View style={styles.orderAmt}>
+                              <Text style={styles.orderAmtVal}><Amount v={fmtShort(m.bought.amount)} size={15} /></Text>
+                              <TokenIcon symbol={m.bought.symbol} size={16} />
+                              <Text style={styles.orderAmtSym}>{displaySymbol(m.bought.symbol)}</Text>
+                            </View>
                           </View>
-                        </View>
+                        )}
                         <View style={styles.orderLine}>
                           <Text style={styles.orderLabel}>{t('vault.price')}</Text>
                           <Text style={styles.orderVal}>{px.toLocaleString('en-US', {maximumSignificantDigits: 6})} {pxSym}</Text>
                         </View>
                         {m.ts ? (
                           <View style={styles.orderLine}>
-                            <Text style={styles.orderLabel}>{t('vault.fulfilled')}</Text>
+                            <Text style={styles.orderLabel}>{t('mobile.trade.settled')}</Text>
                             <Text style={styles.orderVal}>{fmtExpiry(m.ts, language)}</Text>
                           </View>
                         ) : null}
@@ -2466,24 +2668,65 @@ export function TradeScreen() {
         </Pressable>
 
       </Modal>
-      {/* Deleting a list is local and instant — no chain, no fee, no signature — so it gets its own
-          sheet rather than the Face ID one every on-chain action shares. What it still needs is a
-          moment to think: the bin sits in the bar, a thumb's width from the back button. */}
+      {/* A TWAP's terms: what it was placed on, as against the parts panel's what has happened.
+          Read once and then rarely, which is why they are a tap away rather than six lines above
+          the only part of the order that is still moving. */}
       <Sheet
-        visible={confirmDelete}
-        title={t('mobile.home.delete_list')}
-        onClose={() => setConfirmDelete(false)}
-        height={300}>
-        <Text style={styles.deleteMsg}>{t('mobile.home.delete_list_msg', {name: listName})}</Text>
-        <Pressable
-          style={styles.deleteBtn}
-          onPress={() => {
-            setConfirmDelete(false);
-            if (watch.active) watch.remove(network, watch.active.id);
-            nav.goBack();
-          }}>
-          <Text style={styles.deleteBtnText}>{t('mobile.home.delete_list')}</Text>
-        </Pressable>
+        visible={!!infoGroup && !!infoFacts}
+        title={t('mobile.trade.details')}
+        onClose={() => setTwapInfo(null)}
+        height={420}>
+        {infoGroup && infoFacts ? (
+          <View style={styles.orderDetail}>
+            <View style={styles.orderLine}>
+              <Text style={styles.orderLabel}>{t('vault.pay')}</Text>
+              <View style={styles.orderAmt}>
+                <Text style={styles.orderAmtVal}>
+                  <Amount v={fmtShort(infoFacts.partSell * infoGroup.total)} size={15} />
+                </Text>
+                <TokenIcon symbol={infoFacts.sellM.symbol} size={16} />
+                <Text style={styles.orderAmtSym}>{displaySymbol(infoFacts.sellM.symbol)}</Text>
+              </View>
+            </View>
+            <View style={styles.orderLine}>
+              <Text style={styles.orderLabel}>{t('vault.receive')}</Text>
+              <View style={styles.orderAmt}>
+                <Text style={styles.orderAmtVal}>
+                  <Amount v={fmtShort(infoFacts.partBuy * infoGroup.total)} size={15} />
+                </Text>
+                <TokenIcon symbol={infoFacts.buyM.symbol} size={16} />
+                <Text style={styles.orderAmtSym}>{displaySymbol(infoFacts.buyM.symbol)}</Text>
+              </View>
+            </View>
+            <View style={styles.orderLine}>
+              <Text style={styles.orderLabel}>{t('vault.price')}</Text>
+              <Text style={styles.orderVal}>
+                {Number.isFinite(infoFacts.twapPx)
+                  ? infoFacts.twapPx.toLocaleString('en-US', {maximumSignificantDigits: 6})
+                  : '—'}{' '}
+                {infoFacts.twapPxSym}
+              </Text>
+            </View>
+            {/* What one slot buys, so the fraction on the row has a size attached to it. */}
+            <View style={styles.orderLine}>
+              <Text style={styles.orderLabel}>{t('mobile.trade.per_part')}</Text>
+              <View style={styles.orderAmt}>
+                <Text style={styles.orderAmtVal}><Amount v={fmtShort(infoFacts.partSell)} size={15} /></Text>
+                <Text style={styles.orderAmtSym}>{displaySymbol(infoFacts.sellM.symbol)}</Text>
+              </View>
+            </View>
+            <View style={styles.orderLine}>
+              <Text style={styles.orderLabel}>{t('mobile.trade.parts_history')}</Text>
+              <Text style={styles.orderVal}>
+                {t('mobile.trade.parts_posted', {posted: infoGroup.parts.length, total: infoGroup.total})}
+              </Text>
+            </View>
+            <View style={styles.orderLine}>
+              <Text style={styles.orderLabel}>{t('vault.expires')}</Text>
+              <Text style={styles.orderVal}>{fmtExpiry(infoGroup.schedule.windowEnd, language)}</Text>
+            </View>
+          </View>
+        ) : null}
       </Sheet>
 
       <PickerSheet
@@ -2524,9 +2767,6 @@ const makeStyles = (c: Colors) => StyleSheet.create({
    */
   // The nav bar's own title metrics, so the field reads as a title and not as a form control.
   navTitle: {color: c.text, fontSize: 17, fontWeight: '700'},
-  deleteMsg: {color: c.subtext, fontSize: 15, lineHeight: 21},
-  deleteBtn: {backgroundColor: c.danger, borderRadius: 26, height: 52, alignItems: 'center', justifyContent: 'center', marginTop: 16},
-  deleteBtnText: {color: '#FFFFFF', fontSize: 16, fontWeight: '600'},
   navTitleInput: {color: c.text, fontSize: 17, fontWeight: '700', minWidth: 170, padding: 0},
   headerRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingHorizontal: 20},
   /**
@@ -2598,7 +2838,13 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   // A part is a smaller thing than an order line, so it reads one step down from the rows above it.
   partRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10},
   partText: {color: c.text, fontSize: 13, fontVariant: ['tabular-nums'], flexShrink: 1},
+  // A slot that has not gone out yet is a plan, not a fact, and reads one step back from the ones
+  // that have — the column still lines up, so the boundary between done and due is the only edge.
+  partPending: {color: c.subtext},
   partStatus: {color: c.subtext, fontSize: 12, fontWeight: '600'},
+  // The panel's own last line: a way further in at one end, the way out at the other.
+  detailFoot: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2},
+  detailLink: {color: c.accent, fontSize: 15, fontWeight: '600'},
   /**
    * The last row gives its trailing space back, so the card's own padding frames the list.
    *

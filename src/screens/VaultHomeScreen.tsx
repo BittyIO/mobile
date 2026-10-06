@@ -770,7 +770,16 @@ export function VaultHomeScreen() {
   };
   const pagerX = React.useRef(new Animated.Value(0)).current;
   const [pageW, setPageW] = useState(0);
+  /**
+   * Each page's measured height.
+   *
+   * Keyed by NETWORK and list, not by list alone. "Assets" is the one list id every network
+   * shares (`DEFAULT_LIST_ID`), so a single key handed Ethereum's measurement to Robinhood the
+   * instant the chain was switched — and the pager sizes itself from these numbers, so the new
+   * network's pages were laid out against the old one's.
+   */
   const [pageH, setPageH] = useState<Record<string, number>>({});
+  const hkey = (id: string) => `${network}:${id}`;
   const pages = watch.lists;
   const activeIdx = Math.max(0, pages.findIndex((l) => l.id === watch.activeId));
   const pickList = (id: string) => {
@@ -786,12 +795,25 @@ export function VaultHomeScreen() {
     if (l.id !== watch.activeId) watch.select(network, l.id);
     revealTab(l.id);
   };
-  // A list added or removed while the pager is mounted leaves it parked on a page that has moved.
+  /**
+   * Put the pager back on the active page.
+   *
+   * A list added or removed while it is mounted leaves it parked on a page that has moved — and so
+   * does a change of network, which brings its own lists and its own selection. `pages.length` does
+   * not notice that one: both networks can have two lists, and the pager stayed where it was.
+   *
+   * `pagerX` is set by hand alongside the scroll because the page HEIGHT is interpolated from that
+   * value rather than read from the layout, and a programmatic scroll is not guaranteed to emit an
+   * onScroll. When it did not, the pager kept the height belonging to whichever page it had been
+   * showing — which is how a long watch list ended up clipped to the Assets page's height.
+   */
   React.useEffect(() => {
-    if (pageW > 0) pagerRef.current?.scrollTo({x: activeIdx * pageW, animated: false});
+    if (pageW <= 0) return;
+    pagerRef.current?.scrollTo({x: activeIdx * pageW, animated: false});
+    pagerX.setValue(activeIdx * pageW);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pages.length, pageW]);
-  const knownH = pages.map((l) => pageH[l.id]);
+  }, [network, pages.length, pageW]);
+  const knownH = pages.map((l) => pageH[hkey(l.id)]);
   const allKnown = pages.length > 1 && pageW > 0 && knownH.every((h) => h != null);
   const maxH = allKnown ? Math.max(...(knownH as number[])) : 0;
   const pagerStyle = allKnown
@@ -935,7 +957,8 @@ export function VaultHomeScreen() {
                   onLayout={(e) => {
                     // Read the height now: the event is recycled before a state updater runs.
                     const h = e.nativeEvent.layout.height;
-                    setPageH((prev) => (prev[l.id] === h ? prev : {...prev, [l.id]: h}));
+                    const k = hkey(l.id);
+                    setPageH((prev) => (prev[k] === h ? prev : {...prev, [k]: h}));
                   }}>
                   <AssetList
                     rows={rowsForList(l.id)}

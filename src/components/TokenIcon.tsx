@@ -1,7 +1,10 @@
-import React from 'react';
+import React, {useState} from 'react';
 import {Image, StyleSheet, Text, View} from 'react-native';
 import {useStyles} from '@/theme';
 import {displaySymbol} from '@/core/format';
+import {catalogIcon} from '@/core/assets';
+import {useCatalogVersion} from '@/core/asset-catalog';
+import {useNetwork} from '@/core/network-store';
 
 /**
  * The bundled icons: ONE file per token, no per-theme variants.
@@ -62,18 +65,47 @@ const ICONS: Record<string, number> = {
   BMNR: require('@/assets/tokens/stocks/bmnr.png'),
   COST: require('@/assets/tokens/stocks/cost.png'),
 };
-/** Round token icon by symbol, with a lettered fallback for anything unmapped. */
+/**
+ * Round token icon by symbol, with a lettered fallback for anything unmapped.
+ *
+ * Order of preference, and the reasons for it:
+ *
+ *  1. The BUNDLED icon, where this build has one. The catalog's URL used to win, and that handed
+ *     every shipped asset back to the web's own file: WETH's row serves /assets/weth.png, so ETH
+ *     wore the WETH mark again, and the stock logos came back as a pale tint disc with the brand
+ *     inset — the exact files the bundled set exists to replace. A symbol in ICONS is one whose
+ *     mark has been prepared for both themes here; the server cannot improve on it and should not
+ *     be allowed to undo it.
+ *  2. The catalog's URL, which is what an asset added server-side AFTER this build has. That is
+ *     the whole point of the catalog, and it still works — for everything this build does not
+ *     already ship, which is exactly the set it was meant to cover. Looked up BY SYMBOL when the
+ *     caller passes no `uri`: four screens pass one and some thirty call sites do not, because
+ *     all they have is a symbol — an order leg, a history row, a picker — and SKY, LINK, MORPHO,
+ *     ARB and ENA drew lettered badges everywhere but the Overview for exactly that reason.
+ *  3. A lettered badge.
+ *
+ * SVG is skipped outright at step 2: React Native's <Image> renders PNG and JPEG, and several
+ * catalog rows point at .svg (CRCL, SPY, GLD, HIMS), which drew nothing at all — an empty hole
+ * where a logo goes, rather than the badge that is meant to stand in for a missing one.
+ */
 export function TokenIcon({symbol, size = 28, uri}: {symbol: string; size?: number; uri?: string}) {
   const styles = useStyles(makeStyles);
+  const network = useNetwork((s) => s.network);
+  // Redraw when the rows land: the lookup below is a snapshot, and on a cold launch the first
+  // paint happens before the catalog has answered.
+  useCatalogVersion();
+  const [remoteFailed, setRemoteFailed] = useState(false);
   const dim = {width: size, height: size, borderRadius: size / 2};
-  // DB-managed icon URL wins when present (see the asset catalog); bundled by-symbol icons are the
-  // offline fallback, then a lettered badge for anything unmapped.
-  if (uri) return <Image source={{uri}} style={dim} resizeMode="contain" />;
   // WETH shows as ETH (see displaySymbol): same icon.
   const src = ICONS[symbol] ?? (symbol.toUpperCase() === 'ETH' || symbol.toUpperCase() === 'WETH' ? ICONS.ETH : undefined);
   if (src) return <Image source={src} style={dim} resizeMode="contain" />;
-  // No logo asset: draw a colored badge with the ticker, so tokens without an icon (e.g. the Robinhood
-  // stocks SPY / GLD / HIMS) read clearly instead of fading into the card.
+  const remote = uri ?? catalogIcon(network, symbol);
+  // A 404, a host that is down, or a format the decoder refuses: fall through to the badge rather
+  // than leave a gap, the same way the protocol marks do.
+  if (remote && !remoteFailed && !/\.svgx?(?:[?#]|$)/i.test(remote))
+    return <Image source={{uri: remote}} style={dim} resizeMode="contain" onError={() => setRemoteFailed(true)} />;
+  // No logo asset: draw a colored badge with the ticker, so tokens without an icon read clearly
+  // instead of fading into the card.
   const label = displaySymbol(symbol).slice(0, 4);
   return (
     <View style={[styles.fallback, dim, {backgroundColor: badgeColor(symbol)}]}>

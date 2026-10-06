@@ -17,12 +17,13 @@ import {useVaultBalances} from '@/vault/useVaultBalances';
 import {earnedRaw} from '@/vault/flows';
 import {balanceOfSymbol} from '@/vault/read';
 import {fetchProtocolApy, EMPTY_APY, type ProtocolApy} from '@/vault/apy';
-import {ASSETS, type Asset} from '@/core/assets';
+import {type Asset} from '@/core/assets';
 import {fmtNum, displaySymbol} from '@/core/format';
 import {adapterByName} from '@/core/protocols';
 import type {Position} from '@/vault/positions';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
+import {useAssetCatalog} from '@/core/asset-catalog';
 
 const fmt = (v: number | string): string => fmtNum(Number(v));
 
@@ -135,7 +136,7 @@ export function EarnScreen() {
   const styles = useStyles(makeStyles);
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const network = useNetwork((s) => s.network);
-  const assets = ASSETS[network];
+  const assets = useAssetCatalog(network);
   const bal = useVaultBalances(network);
   const pos = useVaultPositions(bal.vault, network);
   const lp = useVaultLp(bal.vault, network);

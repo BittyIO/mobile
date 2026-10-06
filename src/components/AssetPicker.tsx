@@ -7,7 +7,7 @@ import {displaySymbol} from '@/core/format';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 
-export type PickerAsset = {symbol: string; name?: string; company?: string};
+export type PickerAsset = {symbol: string; name?: string; tokenName?: string};
 export type PickerItem = {
   key: string;
   label: string;
@@ -41,7 +41,7 @@ export function AssetPicker({
     <PickerSheet
       visible={visible}
       title={title}
-      items={assets.map((a) => ({key: a.symbol, label: displaySymbol(a.symbol), sub: a.name ?? company(a.symbol, a.company), icon: <TokenIcon symbol={a.symbol} size={30} />}))}
+      items={assets.map((a) => ({key: a.symbol, label: displaySymbol(a.symbol), sub: a.name ?? company(a.symbol, a.tokenName), icon: <TokenIcon symbol={a.symbol} size={30} />}))}
       selected={selected}
       onSelect={onSelect}
       onClose={onClose}

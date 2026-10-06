@@ -287,6 +287,29 @@ export {GPV2_SETTLEMENT};
 export type SettlementMeta = {orderUid: string; twap: boolean};
 
 /**
+ * Order uid → the settlement transaction that filled it, lower-cased.
+ *
+ * One request, and the narrow half of what {fetchSettlements} works out — no order fetch, because
+ * nothing here needs to know whether the order was part of a TWAP. Paired with the transfer feed's
+ * timestamp for that transaction, it is how a filled order can say WHEN: CoW's order objects carry
+ * a creation date and no execution date, so the fill time exists only on chain.
+ */
+export async function fetchFillTxs(vault: Address, network: Network): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!cowSupported(network)) return out;
+  try {
+    const res = await apiFetch(`${cowApiBase(network)}/trades?owner=${vault}`);
+    if (!res.ok) return out;
+    const trades = (await res.json()) as {orderUid: string; txHash?: string}[];
+    if (!Array.isArray(trades)) return out;
+    for (const tr of trades) if (tr.txHash) out.set(tr.orderUid.toLowerCase(), tr.txHash.toLowerCase());
+  } catch {
+    // Best effort: without it a filled order simply shows no time.
+  }
+  return out;
+}
+
+/**
  * The vault's fills, keyed by the settlement transaction (lower-cased hash). A limit order is signed
  * off-chain and executed by a CoW solver in its own transaction, so the fill has a hash of its own,
  * separate from the relayed approval that preceded it; this is what links a history row or a

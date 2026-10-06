@@ -36,7 +36,16 @@ export const orderBucket = (s: string): OrderBucket => {
 /** The translation key for the pill label, and its tone; the caller resolves the key with `t`. */
 export function statusPill(s: string): {key: string; tone: 'sky' | 'green' | 'gray' | 'amber'} {
   const x = s.toLowerCase();
-  if (x.includes('fulfil') || x.includes('filled')) return {key: 'vault.fulfilled', tone: 'green'};
+  /**
+   * "Settled", not "Filled".
+   *
+   * A CoW order ends when a solver settles it on chain, and that is the word for the fact;
+   * "filled" is a quantity on an order that can fill in parts. `settled_status` and not `settled`
+   * because the latter labels a TIMESTAMP ("Settled · Oct 6") and reads as "settlement time" in
+   * the languages that distinguish them. The web's own `vault.fulfilled` still says Filled and is
+   * left alone — those JSON files are byte copies of the web's.
+   */
+  if (x.includes('fulfil') || x.includes('filled')) return {key: 'mobile.trade.settled_status', tone: 'green'};
   if (x.includes('cancel')) return {key: 'vault.cancelled', tone: 'gray'};
   if (x.includes('expire')) return {key: 'vault.expired', tone: 'amber'};
   return {key: 'vault.open', tone: 'sky'};

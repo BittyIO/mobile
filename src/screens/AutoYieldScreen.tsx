@@ -6,7 +6,7 @@ import {useNetwork} from '@/core/network-store';
 import {ownerVaultAddress} from '@/vault/read';
 import {getAutoYields, setAutoYield} from '@/vault/autoyield';
 import {triggerAutoYield} from '@/vault/risk';
-import {ASSETS, assetMeta} from '@/core/assets';
+import {assetMeta} from '@/core/assets';
 import {TokenIcon} from '@/components/TokenIcon';
 import {yieldAdapters} from '@/core/protocols';
 import {useT} from '@/i18n';
@@ -15,6 +15,7 @@ import {useConfirmAction} from '@/components/ConfirmAction';
 import {relayGasFor} from '@/vault/fee-quote';
 import {useStyles, type Colors} from '@/theme';
 import {displaySymbol} from '@/core/format';
+import {useAssetCatalog} from '@/core/asset-catalog';
 
 /**
  * Auto-yield — pick a default yield protocol per asset. Idle balances of that asset are swept into the
@@ -26,7 +27,7 @@ export function AutoYieldScreen() {
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
-  const assets = ASSETS[network];
+  const assets = useAssetCatalog(network);
   const yields = yieldAdapters(network);
   const stable = assets.find((a) => a.kind === 'stable');
   const vault = owner ? ownerVaultAddress(owner, network) : null;

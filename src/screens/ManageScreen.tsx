@@ -171,9 +171,9 @@ export function ManageScreen() {
               <TokenIcon symbol={a.symbol} uri={a.icon} size={22} />
               <View style={styles.symText}>
                 <Text style={styles.sym}>{displaySymbol(a.symbol)}</Text>
-                {company(a.symbol, a.company) ? (
+                {company(a.symbol, a.tokenName) ? (
                   <Text style={styles.company} numberOfLines={1}>
-                    {company(a.symbol, a.company)}
+                    {company(a.symbol, a.tokenName)}
                   </Text>
                 ) : null}
               </View>

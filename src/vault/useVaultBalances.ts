@@ -2,6 +2,7 @@ import {useCallback, useEffect, useState} from 'react';
 import type {Address} from 'viem';
 import type {Network} from '@/core/chain';
 import {useWallet} from '@/wallet/store';
+import {fetchCatalog, useCatalogVersion} from '@/core/asset-catalog';
 import {ownerVaultAddress, readVaultBalances, type VaultBalances} from './read';
 
 type State = {
@@ -25,6 +26,14 @@ export function useVaultBalances(network: Network): State {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
+  /**
+   * The catalog decides WHICH tokens are asked about, so a change of it is a change of this read.
+   *
+   * On a cold launch the rows have not arrived when the first read goes out, and without this the
+   * balances would stay the bundled list's answer for the life of the screen — an asset added to
+   * the DB after the build shipped could hold anything and show nothing.
+   */
+  const catalogVersion = useCatalogVersion();
 
   const refresh = useCallback(() => setNonce((n) => n + 1), []);
 
@@ -46,6 +55,8 @@ export function useVaultBalances(network: Network): State {
     let live = true;
     setLoading(true);
     setError(null);
+    // Warm the catalog if nothing has yet; the bump brings us back here with the full list.
+    void fetchCatalog(network);
     readVaultBalances(vault, network)
       .then((b) => live && setBalances(b))
       .catch((e) => live && setError(String((e as Error)?.message ?? e)))
@@ -53,7 +64,7 @@ export function useVaultBalances(network: Network): State {
     return () => {
       live = false;
     };
-  }, [vault, network, nonce]);
+  }, [vault, network, nonce, catalogVersion]);
 
   return {vault, balances, loading, error, refresh};
 }

@@ -5,7 +5,7 @@ import {isPayableAddress} from '@/core/asset-catalog';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {ownerVaultAddress} from '@/vault/read';
-import {ASSETS} from '@/core/assets';
+
 import {getAssetManager, setAssetManager, revokeAssetManager, type AssetManagerSettings} from '@/vault/delegate';
 import {shortAddress} from '@/core/format';
 import {useT} from '@/i18n';
@@ -15,6 +15,7 @@ import {Sheet} from '@/components/Sheet';
 import {Button, ConfirmButton} from '@/components/Button';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {relayGasFor} from '@/vault/fee-quote';
+import {useAssetCatalog} from '@/core/asset-catalog';
 
 const isSet = (a?: string) => !!a && !/^0x0+$/.test(a);
 
@@ -47,7 +48,7 @@ export function useAssetManagerRow(): {
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
-  const stable = ASSETS[network].find((a) => a.kind === 'stable');
+  const stable = useAssetCatalog(network).find((a) => a.kind === 'stable');
   const vault = owner ? ownerVaultAddress(owner, network) : null;
 
   const [am, setAm] = useState<AssetManagerSettings | null>(null);

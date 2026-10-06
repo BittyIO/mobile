@@ -58,8 +58,8 @@ const UNNAMED: Record<string, string> = {
   CBBTC: 'Wrapped Bitcoin by Coinbase',
   WETH: 'Ether',
   XAUT: 'Gold by Tether',
-  UNI: 'Token for Uniswap',
-  AAVE: 'Token for Aave',
+  UNI: 'Token of Uniswap',
+  AAVE: 'Token of Aave',
 };
 
 /**

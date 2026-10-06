@@ -5,7 +5,7 @@ import Svg, {Path} from 'react-native-svg';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {create} from 'zustand';
 import {EXPLORER_TX, type Network} from '@/core/chain';
-import {trackTx} from '@/vault/pending';
+import {trackTx, usePending} from '@/vault/pending';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 
@@ -54,14 +54,49 @@ export const useToasts = create<State>((set) => ({
  *   const tx = showTx('Deposit 100 USDC', network);
  *   try { tx.success(await deposit(...)); } catch (e) { tx.error(String(e)); }
  */
-export function showTx(title: string, network: Network) {
+export function showTx(
+  title: string,
+  network: Network,
+  opts?: {
+    /**
+     * Is anything actually going to the chain?
+     *
+     * False for an action that only SIGNS — a CoW limit or TWAP order is an off-chain signature
+     * posted to the order book, so there is no broadcast to announce and no hash to wait for. The
+     * header would otherwise have said "Broadcasting…" over a signature, and gone on saying it,
+     * since a path with no hash never reaches `success`.
+     */
+    broadcast?: boolean;
+  },
+) {
+  /**
+   * Opening this is what puts the spinner in the header.
+   *
+   * It belongs here and not at each call site because every write in the app already starts with
+   * this line — so the one place that knows a write has begun is the one place that announces it,
+   * and a new action gets the indicator without being asked to.
+   */
+  const submitId = opts?.broadcast === false ? null : usePending.getState().beginSubmit(network);
+  const close = () => {
+    if (submitId != null) usePending.getState().endSubmit(submitId);
+  };
   return {
     success: (hash?: string) => {
+      // The hash is recorded BEFORE the spinner is closed, so the badge is already counting when it
+      // goes: the two swap over on one frame instead of leaving an empty corner between them.
       if (hash) trackTx(hash, network, title);
+      close();
     },
     error: (detail?: string) => {
+      close();
       useToasts.getState().show({kind: 'error', title, detail, network});
     },
+    /**
+     * Nothing was submitted after all — a precondition the handler only discovers once it is under
+     * way. No toast, no row; just take the spinner down, which is the one thing a bare `return`
+     * from such a path would otherwise leave standing.
+     */
+    done: close,
   };
 }
 

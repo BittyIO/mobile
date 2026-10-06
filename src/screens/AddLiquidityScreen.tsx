@@ -9,10 +9,11 @@ import {useNetwork} from '@/core/network-store';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {ownerVaultAddress, balanceOfSymbol} from '@/vault/read';
 import {addLiquidityFullRange} from '@/vault/lp-actions';
-import {ASSETS} from '@/core/assets';
+
 import {useStyles, type Colors} from '@/theme';
 import {displaySymbol, fmtNum} from '@/core/format';
 import {useT} from '@/i18n';
+import {useAssetCatalog} from '@/core/asset-catalog';
 
 const FEE_TIERS = [500, 3000, 10000] as const;
 
@@ -27,7 +28,7 @@ export function AddLiquidityScreen() {
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
-  const assets = ASSETS[network];
+  const assets = useAssetCatalog(network);
 
   const [aSym, setASym] = useState('WETH');
   const [bSym, setBSym] = useState('USDC');

@@ -20,11 +20,13 @@ import {balanceOfSymbol} from '@/vault/read';
 import {getAutoYields, setAutoYield} from '@/vault/autoyield';
 import {fetchProtocolApy, EMPTY_APY, type ProtocolApy} from '@/vault/apy';
 import {relayGasFor} from '@/vault/fee-quote';
-import {ASSETS} from '@/core/assets';
+
+import {protocolDisplayName} from '@/core/protocols';
 import {formatUnits} from 'viem';
 import {displaySymbol, fmtNum} from '@/core/format';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
+import {useAssetCatalog} from '@/core/asset-catalog';
 
 /**
  * One Earn position, in full.
@@ -50,7 +52,8 @@ export function EarnDetailScreen() {
   const flows = useFlows(bal.vault, network);
   const {ask, sheet} = useConfirmAction();
 
-  const meta = ASSETS[network].find((a) => a.address.toLowerCase() === asset.toLowerCase());
+  const catalog = useAssetCatalog(network);
+  const meta = catalog.find((a) => a.address.toLowerCase() === asset.toLowerCase());
   const symbol = meta?.symbol ?? params.symbol;
   const sym = displaySymbol(symbol);
 
@@ -97,7 +100,7 @@ export function EarnDetailScreen() {
   // ── auto-yield ────────────────────────────────────────────────────────
   const [autoOn, setAutoOn] = useState(false);
   const [autoBusy, setAutoBusy] = useState(false);
-  const stable = ASSETS[network].find((a) => a.kind === 'stable');
+  const stable = catalog.find((a) => a.kind === 'stable');
   const loadAuto = () => {
     if (bal.vault) {
       getAutoYields(bal.vault, network, [asset as Address]).then((m) =>
@@ -154,7 +157,11 @@ export function EarnDetailScreen() {
         <TokenIcon symbol={symbol} size={40} />
         <View style={styles.headText}>
           <Text style={styles.sym}>{sym}</Text>
-          <Text style={styles.sub}>{name}</Text>
+          {/* The versioned name, as the Earn list's chip and the services list already show it.
+              `name` itself stays the adapter's registry name — the rate lookup below compares
+              against it — and Aave's happens to carry its version while Sky's and Lido's do not,
+              which is what left this page naming the brand next to two that named the release. */}
+          <Text style={styles.sub}>{protocolDisplayName(name)}</Text>
         </View>
         {rate != null ? (
           <View style={styles.apyPill}>
@@ -180,7 +187,7 @@ export function EarnDetailScreen() {
             onValueChange={() =>
               ask({
                 title: autoLabel,
-                message: name,
+                message: protocolDisplayName(name),
                 gas: relayGasFor({}),
                 run: toggleAuto,
               })

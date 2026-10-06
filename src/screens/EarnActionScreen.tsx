@@ -10,13 +10,14 @@ import {useNetwork} from '@/core/network-store';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {ownerVaultAddress, balanceOfSymbol} from '@/vault/read';
 import {depositToProtocol, withdrawFromProtocol} from '@/vault/actions';
-import {ASSETS} from '@/core/assets';
+
 import {TokenIcon} from '@/components/TokenIcon';
 import {adapterByName} from '@/core/protocols';
 import type {RootStackParamList} from '@/App';
 import {useStyles, type Colors} from '@/theme';
 import {displaySymbol, fmtNum} from '@/core/format';
 import {useT} from '@/i18n';
+import {useAssetCatalog} from '@/core/asset-catalog';
 
 /**
  * Deposit / Withdraw. `route.params.mode` picks the action. When protocol+asset are passed (a
@@ -35,7 +36,7 @@ export function EarnActionScreen() {
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
 
-  const stablecoins = ASSETS[network].filter((a) => a.kind === 'stable');
+  const stablecoins = useAssetCatalog(network).filter((a) => a.kind === 'stable');
   const [coin, setCoin] = useState(stablecoins[0]?.symbol ?? 'USDC');
   const [amount, setAmount] = useState('');
   const [status, setStatus] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');

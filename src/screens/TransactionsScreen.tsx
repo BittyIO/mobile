@@ -26,10 +26,12 @@ import {GasIcon} from '@/components/GasIcon';
 import {categoryForActions, defiMoveFromActions, describeActions} from '@/vault/tx-actions';
 import {GPV2_SETTLEMENT, fetchRecentOrders, type CowOrder} from '@/vault/limit';
 import {usePending, type PendingTx} from '@/vault/pending';
+import {useConfirmLocal} from '@/components/ConfirmAction';
 import type {RouteProp} from '@react-navigation/native';
 import {useRoute} from '@react-navigation/native';
 import type {RootStackParamList} from '@/App';
-import {ASSETS} from '@/core/assets';
+
+import {currentCatalog} from '@/core/asset-catalog';
 
 const fmtAmt = (v: string | null): string => fmtNum(Number(v ?? '0'));
 const fmtN = fmtNum;
@@ -103,7 +105,7 @@ function classify(
     // legs: the non-stable leg is the base; receiving it is a buy.
     const viaCow = swapLegs.some((l) => lc(l.counterparty) === GPV2_SETTLEMENT.toLowerCase());
     if (viaCow) {
-      const stable = new Set(ASSETS[network].filter((a) => a.kind === 'stable').map((a) => a.address.toLowerCase()));
+      const stable = new Set(currentCatalog(network).filter((a) => a.kind === 'stable').map((a) => a.address.toLowerCase()));
       const soldStable = stable.has(swap.sold.address.toLowerCase());
       const boughtStable = stable.has(swap.bought.address.toLowerCase());
       const isBuy = soldStable && !boughtStable ? true : boughtStable && !soldStable ? false : false;
@@ -350,6 +352,9 @@ export function TransactionsScreen() {
   const clearSettled = usePending((s) => s.clearSettled);
   // Anything that has stopped moving can be swept in one go, rather than a row at a time.
   const settledCount = pendingTxs.filter((x) => x.status !== 'pending').length;
+  // Local and free — nothing is sent, nothing is signed — but it empties a list in one tap, so it
+  // gets the system's own question rather than the Face ID sheet the on-chain actions share.
+  const confirm = useConfirmLocal();
   const route = useRoute<RouteProp<RootStackParamList, 'Transactions'>>();
   const [tab, setTab] = React.useState<Category | 'confirming' | 'all'>(route.params?.tab === 'confirming' ? 'confirming' : 'all');
 
@@ -403,7 +408,18 @@ export function TransactionsScreen() {
       {tab === 'confirming' ? (
         <>
           {settledCount > 1 ? (
-            <Pressable style={styles.clearAll} hitSlop={8} onPress={() => clearSettled(network)}>
+            <Pressable
+              style={styles.clearAll}
+              hitSlop={8}
+              onPress={() =>
+                confirm({
+                  title: t('mobile.home.clear_all'),
+                  message: t('mobile.home.clear_all_msg', {count: settledCount}),
+                  action: t('mobile.home.clear_all'),
+                  danger: true,
+                  run: () => clearSettled(network),
+                })
+              }>
               <Text style={styles.clear}>{t('mobile.home.clear_all')}</Text>
             </Pressable>
           ) : null}

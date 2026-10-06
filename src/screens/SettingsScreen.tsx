@@ -10,7 +10,7 @@ import {useNetwork} from '@/core/network-store';
 import {ownerVaultAddress} from '@/vault/read';
 import {getGaslessConfig, type GaslessConfig} from '@/vault/gasless';
 import {isActivated} from '@/vault/activate';
-import {ASSETS} from '@/core/assets';
+
 import {TokenIcon} from '@/components/TokenIcon';
 import {useLanguage, LANGUAGES, languageLabel} from '@/core/language-store';
 import Svg, {Circle, Path, Rect} from 'react-native-svg';
@@ -23,6 +23,7 @@ import {PickerSheet} from '@/components/AssetPicker';
 import {Sheet} from '@/components/Sheet';
 import {GaslessCoins} from '@/components/GaslessCoins';
 import {useT} from '@/i18n';
+import {useAssetCatalog} from '@/core/asset-catalog';
 
 /**
  * Sun, moon, phone — one per appearance option, so the sheet is readable at a glance instead of
@@ -75,7 +76,8 @@ function FeeCoinMarks({nonce}: {nonce: number}) {
   const network = useNetwork((s) => s.network);
   const owner = useWallet((s) => s.address);
   const vault = owner ? ownerVaultAddress(owner, network) : null;
-  const stablecoins = useMemo(() => ASSETS[network].filter((a) => a.kind === 'stable'), [network]);
+  const catalog = useAssetCatalog(network);
+  const stablecoins = useMemo(() => catalog.filter((a) => a.kind === 'stable'), [catalog]);
   const [cfg, setCfg] = useState<GaslessConfig | null>(null);
   const [deployed, setDeployed] = useState<boolean | null>(null);
 

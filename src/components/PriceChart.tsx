@@ -29,8 +29,17 @@ const RANGES: {label: string; days: number}[] = [
 
 const H = 150;
 
-/** Price chart for a base asset — CoinGecko USD history, line + area, green up / red down. Mirrors web PriceChart. */
-export function PriceChart({symbol}: {symbol: string}) {
+/**
+ * Price chart for a base asset — CoinGecko USD history, line + area, green up / red down. Mirrors
+ * web PriceChart.
+ *
+ * `reload` is a counter the screen bumps on pull-to-refresh. It is a PROP and not a remount — the
+ * Trade tab used to put it in the chart's `key`, which threw the component away and built a new
+ * one, and a new one starts on 1W: a pull after choosing 24H silently moved the chart back to a
+ * week. The selected range belongs to the user, so it survives both a refresh and a change of
+ * asset, and only the series is re-read.
+ */
+export function PriceChart({symbol, reload = 0}: {symbol: string; reload?: number}) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
@@ -54,10 +63,16 @@ export function PriceChart({symbol}: {symbol: string}) {
     return [...arr.slice(0, -1), [lastTs, latestRef.current.price]];
   };
 
+  // A pull must reach the network even inside the TTL — the whole point of it is "I want the
+  // current figure" — so a run the pull caused ignores the cache, while a range switch still gets
+  // the cheap answer.
+  const lastReload = useRef(reload);
   useEffect(() => {
+    const forced = reload !== lastReload.current;
+    lastReload.current = reload;
     const days = RANGES[rangeIdx].days;
     const key = `${network}:${symbol}:${days}`;
-    const hit = cache.get(key);
+    const hit = forced ? undefined : cache.get(key);
     if (hit && Date.now() - hit.at < (TTL_MS[days] ?? 60 * 60_000)) {
       setPts(pinLatest(hit.pts));
       setError(hit.pts == null);
@@ -91,7 +106,8 @@ export function PriceChart({symbol}: {symbol: string}) {
     return () => {
       live = false;
     };
-  }, [network, symbol, rangeIdx]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [network, symbol, rangeIdx, reload]);
 
   const g = useMemo(() => {
     if (!pts) return null;

@@ -21,12 +21,13 @@ import {useVaultPositions} from '@/vault/useVaultPositions';
 import {ownerVaultAddress, balanceOfSymbol} from '@/vault/read';
 import {sendWithWhitelist, fetchWhitelist, type WhitelistedRecipient} from '@/vault/payments';
 import type {Position} from '@/vault/positions';
-import {ASSETS} from '@/core/assets';
+
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {displaySymbol, fmtNum} from '@/core/format';
 import {relayGasFor} from '@/vault/fee-quote';
 import {FEE_RESERVE} from '@/vault/gasless';
+import {useAssetCatalog} from '@/core/asset-catalog';
 
 /** Where a line's tokens come from: the vault's free balance, its Sky position, or its Aave supply. */
 type Source = 'free' | 'yield' | 'lend';
@@ -127,7 +128,7 @@ export function SendScreen() {
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
-  const assets = ASSETS[network];
+  const assets = useAssetCatalog(network);
   const stable = assets.find((a) => a.kind === 'stable');
   const first = assets[0]?.symbol ?? 'USDC';
   const vault = owner ? ownerVaultAddress(owner, network) : null;

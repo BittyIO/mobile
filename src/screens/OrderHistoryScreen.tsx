@@ -6,7 +6,7 @@ import {TokenIcon} from '@/components/TokenIcon';
 import {Pill} from '@/components/ui';
 import {PickerSheet} from '@/components/AssetPicker';
 import Svg, {Path} from 'react-native-svg';
-import {assetMeta, isKnownAsset, ASSETS} from '@/core/assets';
+import {assetMeta, isKnownAsset} from '@/core/assets';
 import {displaySymbol, fmtShort} from '@/core/format';
 import {useNetwork} from '@/core/network-store';
 import {fetchMarketTrades, type MarketTrade} from '@/vault/market-trades';
@@ -25,6 +25,7 @@ import {fetchTwapSchedules, type TwapSchedule} from '@/vault/twap';
 import {useWallet} from '@/wallet/store';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
+import {useAssetCatalog} from '@/core/asset-catalog';
 
 /**
  * Every order the vault has placed, on every pair.
@@ -57,7 +58,8 @@ export function OrderHistoryScreen() {
   const network = useNetwork((s) => s.network);
   const owner = useWallet((s) => s.address);
   const vault = owner ? ownerVaultAddress(owner, network) : null;
-  const stables = useMemo(() => ASSETS[network].filter((a) => a.kind === 'stable'), [network]);
+  const catalog = useAssetCatalog(network);
+  const stables = useMemo(() => catalog.filter((a) => a.kind === 'stable'), [catalog]);
 
   const [orders, setOrders] = useState<CowOrder[]>([]);
   const [trades, setTrades] = useState<MarketTrade[]>([]);
@@ -176,7 +178,7 @@ export function OrderHistoryScreen() {
               ? `${fmtShort(e.trade.bought.amount)} ${displaySymbol(e.trade.bought.symbol)}`
               : `${fmtShort(e.trade.sold.amount)} ${displaySymbol(e.trade.sold.symbol)}`
           }
-          right={<Pill label={t('vault.fulfilled')} tone="green" />}
+          right={<Pill label={t('mobile.trade.settled_status')} tone="green" />}
           lines={[
             [t('mobile.trade.paid'), `${fmtShort(e.trade.sold.amount)} ${displaySymbol(e.trade.sold.symbol)}`],
             [t('vault.receive'), `${fmtShort(e.trade.bought.amount)} ${displaySymbol(e.trade.bought.symbol)}`],
