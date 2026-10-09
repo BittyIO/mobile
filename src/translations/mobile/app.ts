@@ -15,7 +15,7 @@ export const app: MobileTable = {
     add_liquidity: 'Add Liquidity',
     auto_yield: 'Auto-Yield',
     security: 'Security',
-    broadcasting: 'Broadcasting…',
+    submitting: 'Submitting…',
   },
   zh: {
     ethereum: '以太坊',
@@ -30,7 +30,7 @@ export const app: MobileTable = {
     add_liquidity: '添加流动性',
     auto_yield: '自动收益',
     security: '安全',
-    broadcasting: '正在广播…',
+    submitting: '正在提交…',
   },
   'zh-TW': {
     ethereum: '以太坊',
@@ -45,7 +45,7 @@ export const app: MobileTable = {
     add_liquidity: '新增流動性',
     auto_yield: '自動收益',
     security: '安全',
-    broadcasting: '正在廣播…',
+    submitting: '正在提交…',
   },
   ja: {
     ethereum: 'イーサリアム',
@@ -60,7 +60,7 @@ export const app: MobileTable = {
     add_liquidity: '流動性を追加',
     auto_yield: '自動運用',
     security: 'セキュリティ',
-    broadcasting: '送信中…',
+    submitting: '送信準備中…',
   },
   ko: {
     ethereum: '이더리움',
@@ -75,7 +75,7 @@ export const app: MobileTable = {
     add_liquidity: '유동성 추가',
     auto_yield: '자동 수익',
     security: '보안',
-    broadcasting: '전송 중…',
+    submitting: '제출 중…',
   },
   fr: {
     ethereum: 'Ethereum',
@@ -90,7 +90,7 @@ export const app: MobileTable = {
     add_liquidity: 'Ajouter de la liquidité',
     auto_yield: 'Rendement auto',
     security: 'Sécurité',
-    broadcasting: 'Envoi…',
+    submitting: 'Envoi…',
   },
   es: {
     ethereum: 'Ethereum',
@@ -105,7 +105,7 @@ export const app: MobileTable = {
     add_liquidity: 'Añadir liquidez',
     auto_yield: 'Rendimiento auto',
     security: 'Seguridad',
-    broadcasting: 'Enviando…',
+    submitting: 'Enviando…',
   },
   de: {
     ethereum: 'Ethereum',
@@ -120,7 +120,7 @@ export const app: MobileTable = {
     add_liquidity: 'Liquidität hinzufügen',
     auto_yield: 'Auto-Ertrag',
     security: 'Sicherheit',
-    broadcasting: 'Senden…',
+    submitting: 'Senden…',
   },
   'pt-BR': {
     ethereum: 'Ethereum',
@@ -135,7 +135,7 @@ export const app: MobileTable = {
     add_liquidity: 'Adicionar liquidez',
     auto_yield: 'Auto-Rendimento',
     security: 'Segurança',
-    broadcasting: 'Enviando…',
+    submitting: 'Enviando…',
   },
   hi: {
     ethereum: 'Ethereum',
@@ -150,7 +150,7 @@ export const app: MobileTable = {
     add_liquidity: 'लिक्विडिटी जोड़ें',
     auto_yield: 'ऑटो-यील्ड',
     security: 'सुरक्षा',
-    broadcasting: 'भेज रहे हैं…',
+    submitting: 'भेज रहे हैं…',
   },
   tr: {
     ethereum: 'Ethereum',
@@ -165,7 +165,7 @@ export const app: MobileTable = {
     add_liquidity: 'Likidite ekle',
     auto_yield: 'Otomatik Getiri',
     security: 'Güvenlik',
-    broadcasting: 'Gönderiliyor…',
+    submitting: 'Gönderiliyor…',
   },
   ru: {
     ethereum: 'Ethereum',
@@ -180,7 +180,7 @@ export const app: MobileTable = {
     add_liquidity: 'Добавить ликвидность',
     auto_yield: 'Автодоход',
     security: 'Безопасность',
-    broadcasting: 'Отправка…',
+    submitting: 'Отправка…',
   },
   id: {
     ethereum: 'Ethereum',
@@ -195,7 +195,7 @@ export const app: MobileTable = {
     add_liquidity: 'Tambah likuiditas',
     auto_yield: 'Imbal Hasil Otomatis',
     security: 'Keamanan',
-    broadcasting: 'Mengirim…',
+    submitting: 'Mengirim…',
   },
   vi: {
     ethereum: 'Ethereum',
@@ -210,7 +210,7 @@ export const app: MobileTable = {
     add_liquidity: 'Thêm thanh khoản',
     auto_yield: 'Tự động sinh lời',
     security: 'Bảo mật',
-    broadcasting: 'Đang gửi…',
+    submitting: 'Đang gửi…',
   },
   th: {
     ethereum: 'Ethereum',
@@ -225,6 +225,6 @@ export const app: MobileTable = {
     add_liquidity: 'เพิ่มสภาพคล่อง',
     auto_yield: 'ผลตอบแทนอัตโนมัติ',
     security: 'ความปลอดภัย',
-    broadcasting: 'กำลังส่ง…',
+    submitting: 'กำลังส่ง…',
   },
 };

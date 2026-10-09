@@ -30,6 +30,12 @@ const store = new MMKV({id: 'bitty.favorites'});
 const listsKey = (n: Network) => `lists:${n}`;
 const activeKey = (n: Network) => `active:${n}`;
 const orderKey = (n: Network, id: string) => `order:${n}:${id}`;
+/**
+ * Whether a list shows a market-cap column. Per LIST, because the question is about that list:
+ * a set of tokenized stocks is read by company size, a handful of coins someone is watching for
+ * an entry is read by price alone, and the column that helps one is dead width on the other.
+ */
+const capKey = (n: Network, id: string) => `cap:${n}:${id}`;
 // Pre-multi-list storage, read once so an existing install keeps its stars and its arrangement.
 const legacyKey = (n: Network) => `fav:${n}`;
 const legacyOrderKey = (n: Network) => `order:${n}`;
@@ -97,6 +103,9 @@ type State = {
   toggle: (network: Network, symbol: string) => void;
   setOrder: (network: Network, symbols: string[]) => void;
   select: (network: Network, id: string) => void;
+  /** Market-cap column per list, keyed as {okey}. Absent means the default, which is ON. */
+  caps: Record<string, boolean>;
+  setCap: (network: Network, id: string, on: boolean) => void;
   /** Append an empty list and put it in front. Returns its id. */
   add: (network: Network, name: string) => string;
   rename: (network: Network, id: string, name: string) => void;
@@ -116,7 +125,13 @@ export const useFavorites = create<State>((set, get) => {
     }),
   );
   const order: Record<string, string[]> = {};
-  for (const n of NETWORKS) for (const l of lists[n] as WatchList[]) order[okey(n, l.id)] = loadOrder(n, l.id);
+  const caps: Record<string, boolean> = {};
+  for (const n of NETWORKS)
+    for (const l of lists[n] as WatchList[]) {
+      order[okey(n, l.id)] = loadOrder(n, l.id);
+      const saved = store.getBoolean(capKey(n, l.id));
+      if (saved !== undefined) caps[okey(n, l.id)] = saved;
+    }
 
   const activeList = (network: Network): WatchList => {
     const all = get().lists[network] ?? [];
@@ -127,6 +142,11 @@ export const useFavorites = create<State>((set, get) => {
     lists,
     active,
     order,
+    caps,
+    setCap: (network, id, on) => {
+      store.set(capKey(network, id), on);
+      set({caps: {...get().caps, [okey(network, id)]: on}});
+    },
 
     toggle: (network, symbol) => {
       const cur = activeList(network);
@@ -211,6 +231,7 @@ export function useWatchLists(network: Network) {
     add: useFavorites((s) => s.add),
     rename: useFavorites((s) => s.rename),
     remove: useFavorites((s) => s.remove),
+    setCap: useFavorites((s) => s.setCap),
   };
 }
 
@@ -269,3 +290,12 @@ export function useIsFavorite(network: Network, symbol: string | undefined): boo
     return (cur?.symbols ?? []).includes(symbol);
   });
 }
+
+/**
+ * Does this list show market caps? On unless the owner turned it off.
+ *
+ * A plain read of the store's snapshot rather than a hook, so a screen that already subscribes to
+ * `caps` can ask about several lists in one render — the pager draws every list at once.
+ */
+export const showsCap = (caps: Record<string, boolean>, network: Network, id: string | undefined): boolean =>
+  id === undefined ? true : caps[okey(network, id)] ?? true;

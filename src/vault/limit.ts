@@ -28,6 +28,14 @@ export type CowOrder = {
   buyAmount: string;
   validTo: number;
   status: string;
+  /**
+   * When CoW accepted the order, ISO-8601. Present on every order the account endpoint returns.
+   *
+   * The only time an order object carries: there is no execution date on it, which is why a fill's
+   * time has to come off the settlement transaction. It is what a history is ORDERED by — see
+   * {placedAt}.
+   */
+  creationDate?: string;
   appData?: string;
   executedSellAmount?: string;
   executedBuyAmount?: string;

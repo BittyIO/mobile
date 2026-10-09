@@ -14,7 +14,7 @@ export function Card({children, style}: {children: React.ReactNode; style?: View
   return <View style={[ui.card, style]}>{children}</View>;
 }
 
-type PillTone = 'green' | 'blue' | 'sky' | 'amber' | 'rose' | 'gray';
+export type PillTone = 'green' | 'blue' | 'sky' | 'amber' | 'rose' | 'gray';
 const toneFor = (c: Colors): Record<PillTone, {bg: string; fg: string}> => ({
   green: {bg: c.successSoft, fg: c.success},
   blue: {bg: c.accentSoft, fg: c.accent},

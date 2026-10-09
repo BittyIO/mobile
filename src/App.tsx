@@ -1,5 +1,5 @@
 import React, {useEffect} from 'react';
-import {ActivityIndicator, Pressable, StatusBar, StyleSheet, Text, View} from 'react-native';
+import {ActivityIndicator, StatusBar, StyleSheet, Text, View} from 'react-native';
 import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-context';
 import {NavigationContainer, DarkTheme, DefaultTheme} from '@react-navigation/native';
 import {navigationRef} from '@/core/open-link';
@@ -12,7 +12,6 @@ import {useGuardProtocols} from '@/core/guard-catalog';
 import {useGuardAssets} from '@/core/guard-assets';
 import {useNetwork} from '@/core/network-store';
 import {ToastHost} from '@/components/Toast';
-import {ConfirmingBadge} from '@/components/ConfirmingBadge';
 import {resumePending} from '@/vault/pending';
 import {OnboardingScreen} from '@/screens/OnboardingScreen';
 import {LockScreen} from '@/screens/LockScreen';
@@ -85,10 +84,26 @@ export type RootStackParamList = {
    * replaces it once it loads, and the host stands in until then.
    */
   Browser: {url: string; title?: string};
+  /** What relay fees are billed in, and the float the app will not spend below. */
+  NetworkFee: undefined;
   AddLiquidity: undefined;
   AutoYield: undefined;
   Delegation: undefined;
-  VaultAssets: undefined;
+  /**
+   * The allow list. Without a section it is the two summary rows; with one it is that list.
+   *
+   * The same screen either way, because the lists and the summary read the same vault state — the
+   * allowlist mode, what is registered, which write is in flight — and a second screen would have
+   * to fetch and track all of it again to show a subset of it.
+   */
+  VaultAssets: {section?: 'assets' | 'services'} | undefined;
+  /**
+   * Which asset to trade. A page rather than a sheet — see {SelectAssetScreen}.
+   *
+   * `slot` says which leg asked, `selected` marks the current one, and `exclude` keeps the other
+   * leg off the list so a pair cannot be set to the same asset on both sides.
+   */
+  SelectAsset: {slot: 'base' | 'quote'; selected?: string; exclude?: string};
   VaultSecurity: undefined;
   VaultTeam: undefined;
 };
@@ -124,7 +139,6 @@ const TAB_BAR_PADDING_TOP = 12;
 function MainTabs() {
   const {t} = useT();
   const colors = useColors();
-  const dark = useIsDark();
   const styles = useStyles(makeStyles);
   // Setting an explicit height opts out of the navigator's own safe-area handling, so the home
   // indicator's space has to be added back by hand or the bar sits under it.
@@ -172,12 +186,17 @@ function MainTabs() {
          */
         headerTitleAlign: 'center',
         headerTitle: ({children}) => <Text style={styles.headerTitle}>{children}</Text>,
-        headerLeft: () => (
-          <View style={styles.headerBadge}>
-            <ConfirmingBadge />
-          </View>
-        ),
+        /**
+         * The chain in the right-hand corner, where it started.
+         *
+         * It was tried beside the title, as one tappable phrase, on the grounds that a mark with
+         * nothing next to it does not say what it is for. In use the trade was the wrong way round:
+         * the title is the one thing on a bar that should not move, and hanging a control off it
+         * made the page's name shift with the chain's name. The corner is also where a thumb
+         * already goes for it.
+         */
         headerRight: () => <NetworkSwitcher />,
+        headerLeft: undefined,
         /**
          * The same surface as the header, at the other end of the screen.
          *
@@ -217,10 +236,12 @@ function MainTabs() {
             nearest navigator that has it, and a tab called Trade once swallowed every push to the
             pair screen. The title is what the user reads; the name is what routing matches. */}
         <Tab.Screen name="Market" options={{title: t('mobile.app.trade')}} getComponent={() => require('@/screens/TradeScreen').TradeScreen} />
-      {/* Labelled "Me"; the ROUTE keeps the name Settings, as `navigate` and the tab icon key off
-          it. The tab holds the vault, the key on this device and the app's own preferences — "Me"
-          is what all three have in common, where "Settings" named only the last of them. */}
-      <Tab.Screen name="Settings" options={{title: t('mobile.app.me')}} getComponent={() => require('@/screens/SettingsScreen').SettingsScreen} />
+      {/* Settings, label and route the same — which is also what `navigate` and the tab icon key
+          off. It was labelled "Me" for a while, on the grounds that the tab holds the vault, the
+          key on this device and the app's own preferences, and "Settings" named only the last of
+          those. Back to Settings: it is the word every other app puts on this tab, and a label
+          nobody has to learn beats one that is a shade more accurate. */}
+      <Tab.Screen name="Settings" options={{title: t('vault.settings')}} getComponent={() => require('@/screens/SettingsScreen').SettingsScreen} />
     </Tab.Navigator>
   );
 }
@@ -314,11 +335,39 @@ function Root() {
         {/* Presented like the order sheet on the pair screen: a page sheet that comes up to just
             under the status bar. A short detent squeezed the amount form against its own confirm
             button; this is one number and a button, but it is still a form. */}
+        {/**
+          * The order sheet's own shape, not a native `formSheet`.
+          *
+          * A form sheet looked right and behaved wrong: it brings a navigation bar this form has no
+          * use for, it centres short content instead of starting it at the top, and a TextInput
+          * inside one would not raise the keyboard at all. The trade order sheet has none of those
+          * problems because it is a transparent modal that draws its own card — so this is that,
+          * and the screen itself draws the card. See {EarnActionScreen}.
+          *
+          * `animation: 'none'`, deliberately: the CARD animates, not the screen. The screen is a
+          * transparent layer with a backdrop on it, and sliding that produces a second motion over
+          * the sheet's own — and a backdrop that slides in from below instead of fading. The sheet
+          * rises, follows a drag and slides out under {useSheetAnim}, as the order sheet's does.
+          */}
         <Stack.Screen
           name="EarnAction"
           getComponent={() => require('@/screens/EarnActionScreen').EarnActionScreen}
-          options={{title: t('mobile.app.earn'), presentation: 'modal'}}
+          options={{
+            headerShown: false,
+            presentation: 'transparentModal',
+            animation: 'none',
+            /**
+             * Transparent means transparent, which it is not by default.
+             *
+             * A native-stack screen paints the theme's own background, so the route came up as an
+             * opaque sheet of #000 in dark mode with the sheet's backdrop on top of it: the page
+             * behind was not dimmed, it was covered. The backdrop is the only thing that should be
+             * darkening anything here — see {FormSheet}.
+             */
+            contentStyle: {backgroundColor: 'transparent'},
+          }}
         />
+
         {/* The tab's own screen, pushed. The pair is named at the top of the page itself, so the
             header does not repeat it. */}
         <Stack.Screen
@@ -347,10 +396,34 @@ function Root() {
           getComponent={() => require('@/screens/AssetDetailScreen').AssetDetailScreen}
           options={{title: t('mobile.trade.asset_details'), fullScreenGestureEnabled: true}}
         />
+        <Stack.Screen
+          name="NetworkFee"
+          getComponent={() => require('@/screens/NetworkFeeScreen').NetworkFeeScreen}
+          options={{title: t('mobile.settings.network_fee')}}
+        />
         <Stack.Screen name="AddLiquidity" getComponent={() => require('@/screens/AddLiquidityScreen').AddLiquidityScreen} options={{title: t('mobile.app.add_liquidity'), presentation: 'modal'}} />
         <Stack.Screen name="AutoYield" getComponent={() => require('@/screens/AutoYieldScreen').AutoYieldScreen} options={{title: t('mobile.app.auto_yield'), presentation: 'modal'}} />
         <Stack.Screen name="Delegation" getComponent={() => require('@/screens/DelegationScreen').DelegationScreen} options={{title: t('vault.payout_operators')}} />
-        <Stack.Screen name="VaultAssets" getComponent={() => require('@/screens/ManageScreen').ManageScreen} options={{title: t('mobile.settings.allow_list')}} />
+        <Stack.Screen
+          name="VaultAssets"
+          getComponent={() => require('@/screens/ManageScreen').ManageScreen}
+          options={({route}) => ({
+            title:
+              route.params?.section === 'assets'
+                ? t('mobile.vault.allowlist_assets')
+                : route.params?.section === 'services'
+                  ? t('mobile.vault.allowlist_protocols')
+                  : t('mobile.settings.allow_list'),
+          })}
+        />
+        <Stack.Screen
+          name="SelectAsset"
+          getComponent={() => require('@/screens/SelectAssetScreen').SelectAssetScreen}
+          options={({route}) => ({
+            title:
+              route.params?.slot === 'quote' ? t('mobile.trade.select_stablecoin') : t('vault.select_asset'),
+          })}
+        />
         <Stack.Screen name="VaultSecurity" getComponent={() => require('@/screens/SecurityScreen').SecurityScreen} options={{title: t('mobile.app.security')}} />
         <Stack.Screen name="VaultTeam" getComponent={() => require('@/screens/TeamScreen').TeamScreen} options={{title: t('mobile.settings.team')}} />
       </Stack.Navigator>
@@ -361,8 +434,5 @@ function Root() {
 const makeStyles = (colors: Colors) =>
   StyleSheet.create({
     splash: {flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center'},
-    // The header's left container has no inset of its own (only the back button it usually holds
-    // brings one), so this supplies the 16 that matches the switcher's margin on the right.
-    headerBadge: {marginLeft: 16},
     headerTitle: {color: colors.text, fontSize: 17, fontWeight: '700'},
   });

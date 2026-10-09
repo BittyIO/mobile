@@ -1,5 +1,6 @@
 import type {Address} from 'viem';
 import type {Network} from '@/core/chain';
+import {shortAddress} from '@/core/format';
 
 export type AssetKind = 'native' | 'crypto' | 'stable';
 
@@ -204,7 +205,9 @@ export function isAmmLiquid(network: Network, symbolOrAddress: string): boolean 
   return AMM_LIQUID[network].includes(addr);
 }
 
-const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+// The app's one address formatter — see {shortAddress}. This used to be a shorter copy of it, so
+// an unknown token's fallback name was cut differently from every other address on screen.
+const short = shortAddress;
 
 /** Resolve an asset's symbol/decimals by address. Unknown tokens fall back to 18 decimals. */
 /**

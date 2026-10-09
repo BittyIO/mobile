@@ -80,5 +80,6 @@ export function NetworkSwitcher() {
 }
 
 const styles = StyleSheet.create({
+  // The bar's own inset, on the side the control sits.
   pill: {marginRight: 16},
 });

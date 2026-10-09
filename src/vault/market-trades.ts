@@ -5,9 +5,11 @@
  * counterparty, with different tokens each way, is what identifies the swap. This is how completed market
  * trades show up in the Trade screen's Finished tab.
  */
+import type {Address} from 'viem';
 import {apiFetch, apiUrl, type Network} from '@/core/chain';
 import {GPV2_SETTLEMENT} from '@/core/cow';
-import type {TransferRow} from './transactions';
+import {fetchFillTxs} from './limit';
+import type {TransferRow, VaultAction} from './transactions';
 
 // The vault implementation's immutable fee sink — a relayed op pays its gas here, never a user transfer.
 export const BITTY_FEE_COLLECTOR = '0x76dc42c2e0ef4fb02600430cb0d3a68d015c30aa';
@@ -124,7 +126,38 @@ export type TradeFeed = {
   trades: MarketTrade[];
   /** Settlement transaction hash (lower-cased) → unix seconds. */
   cowFills: Map<string, number>;
+  /** Order uid (lower-cased) → when the transaction that cancelled it landed. */
+  cancels: Map<string, number>;
 };
+
+/**
+ * When each order was cancelled, read off the calldata of the transaction that did it.
+ *
+ * A cancellation moves no tokens, so there is nothing in the transfer legs to recognise it by —
+ * but it is a relayed operation and therefore pays its gas, which puts the transaction in the
+ * feed, and the server decodes what every transaction CALLED. `cancelIntentOrders` names the
+ * uids it invalidated, so the order and the clock meet in one place.
+ *
+ * This is the only way a cancellation time survives a reinstall or arrives from another device:
+ * CoW's order object records no cancellation date, and the app's own log (see {cancel-log}) only
+ * knows about cancels it performed itself.
+ */
+function cancelTimes(legs: TransferRow[], actions: Record<string, VaultAction[]>): Map<string, number> {
+  const at = new Map<string, number>();
+  for (const l of legs) {
+    if (!l.timestamp) continue;
+    const acts = actions[lc(l.txHash)] ?? actions[l.txHash];
+    if (!acts) continue;
+    const secs = Math.floor(Date.parse(l.timestamp) / 1000);
+    if (!Number.isFinite(secs)) continue;
+    for (const a of acts) {
+      if (!a.name.startsWith('cancelIntentOrder')) continue;
+      const uids = a.args.uids ?? a.args.uid ?? [];
+      for (const uid of Array.isArray(uids) ? uids : [uids]) at.set(lc(uid), secs);
+    }
+  }
+  return at;
+}
 
 /** Every market swap in a transfer feed, newest first. */
 export function marketTradesFromTransfers(legs: TransferRow[]): MarketTrade[] {
@@ -158,22 +191,48 @@ export function tradeFeedFromTransfers(legs: TransferRow[]): TradeFeed {
     if (!t) continue;
     trades.push({txHash, blockNum: swapLegs[0].blockNum, ts: secs, sold: t.sold, bought: t.bought});
   }
-  return {trades: trades.sort((a, b) => b.blockNum - a.blockNum), cowFills};
+  return {trades: trades.sort((a, b) => b.blockNum - a.blockNum), cowFills, cancels: new Map()};
 }
 
 /** One read of the transfer feed, as both of the things it carries. Best-effort — empty on failure. */
 export async function fetchTradeFeed(vault: string, network: Network): Promise<TradeFeed> {
   try {
     const res = await apiFetch(apiUrl(`/api/ethereum/vaults/transfers/${vault}`, network));
-    if (!res.ok) return {trades: [], cowFills: new Map()};
-    const json = (await res.json()) as {data?: TransferRow[]};
-    return tradeFeedFromTransfers(json.data ?? []);
+    if (!res.ok) return {trades: [], cowFills: new Map(), cancels: new Map()};
+    const json = (await res.json()) as {data?: TransferRow[]; actions?: Record<string, VaultAction[]>};
+    const rows = json.data ?? [];
+    return {...tradeFeedFromTransfers(rows), cancels: cancelTimes(rows, json.actions ?? {})};
   } catch {
-    return {trades: [], cowFills: new Map()};
+    return {trades: [], cowFills: new Map(), cancels: new Map()};
   }
 }
 
 /** Just the market swaps, for a caller that has no use for the fills. */
 export async function fetchMarketTrades(vault: string, network: Network): Promise<MarketTrade[]> {
   return (await fetchTradeFeed(vault, network)).trades;
+}
+
+/**
+ * The market swaps, and WHEN each CoW order filled — the pair every order list needs.
+ *
+ * A fill's time is in neither place on its own: CoW's order object carries a creation date and no
+ * execution date, and the transfer feed knows when a transaction happened but not which order it
+ * settled. Joining the two is the whole job, and both screens that list orders were doing it
+ * themselves — one of them simply not bothering, which is why a filled order said when it filled
+ * on the Trade tab and said nothing in Order history.
+ */
+export async function fetchTrades(
+  vault: string,
+  network: Network,
+): Promise<{trades: MarketTrade[]; fillAt: Map<string, number>; cancelAt: Map<string, number>}> {
+  const [feed, fillTxs] = await Promise.all([
+    fetchTradeFeed(vault, network),
+    fetchFillTxs(vault as Address, network),
+  ]);
+  const fillAt = new Map<string, number>();
+  for (const [uid, tx] of fillTxs) {
+    const ts = feed.cowFills.get(tx);
+    if (ts) fillAt.set(uid, ts);
+  }
+  return {trades: feed.trades, fillAt, cancelAt: feed.cancels};
 }

@@ -38,6 +38,30 @@ export function fmtShort(n: number): string {
   return (Math.trunc(n * 100) / 100).toFixed(2);
 }
 
+/**
+ * The amount in FULL, with nothing dropped off the end.
+ *
+ * {@link fmtNum} truncates at two decimals above 1, which is right for a balance being read and
+ * wrong for one about to be acted on: "Available 1.23 ETH" over a Max that fills 1.2345678 named a
+ * different number from the one the field was going to hold.
+ *
+ * The decimal count comes from the number's OWN shortest text rather than from a fixed ceiling.
+ * Asking `toLocaleString` for eighteen places prints the double's full binary expansion — 1.23
+ * comes back as "1.229999999999999982" — so the cap is exactly the digits the value really has,
+ * which is what `String(n)` gives.
+ */
+export function fmtFull(n: number): string {
+  if (!Number.isFinite(n) || n === 0) return '0';
+  const abs = Math.abs(n);
+  // The subscript form stays: for these it is both shorter AND exact, which a run of zeros is not.
+  if (abs < 1 && Number(abs.toPrecision(3)) < 0.0001) return (n < 0 ? '-' : '') + fmtTiny(abs);
+  const text = String(abs);
+  // Exponential text ("1.2e-7") has no decimals to count; nothing above 0.0001 reaches it anyway.
+  const dot = text.indexOf('.');
+  const places = text.includes('e') ? 20 : dot < 0 ? 0 : text.length - dot - 1;
+  return n.toLocaleString(undefined, {maximumFractionDigits: Math.min(20, places)});
+}
+
 const SUBSCRIPT = '₀₁₂₃₄₅₆₇₈₉';
 const sub = (k: number) => String(k).split('').map((d) => SUBSCRIPT[Number(d)]).join('');
 
@@ -73,7 +97,14 @@ export function displaySymbol(symbol: string | null | undefined): string {
   return s.toUpperCase() === 'WETH' ? 'ETH' : s;
 }
 
-/** `0x123456…123456`: the first 8 and last 6 characters of an address, for tight spaces. */
+/**
+ * `0x123456…123456`: the first 8 and last 6 characters of an address, for tight spaces.
+ *
+ * The app's ONE address formatter, and it has to stay that way. Six screens had grown their own —
+ * three of them cutting at `0x1234…1234` — so the same address read differently depending on which
+ * list you found it in, and four hex digits is not enough to recognise one by: a vault, its asset
+ * manager and a payout recipient can easily share them.
+ */
 export function shortAddress(address: string): string {
   return `${address.slice(0, 8)}…${address.slice(-6)}`;
 }

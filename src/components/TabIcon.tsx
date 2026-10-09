@@ -3,6 +3,10 @@ import Svg, {Circle, Line, Path, Rect} from 'react-native-svg';
 
 export type TabName = 'Overview' | 'Earn' | 'Market' | 'Settings';
 
+/** The cog body. Only its centre fills when selected, so the gear keeps its teeth readable. */
+const COG =
+  'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z';
+
 /**
  * Minimal icons for the bottom tab bar. Monochrome and driven by `color`, so React Navigation's
  * active/inactive tint flows straight through. Drawn on a 24×24 grid.
@@ -75,20 +79,15 @@ export function TabIcon({name, color, size = 24, focused}: {name: TabName; color
         </>
       ) : (
         /**
-         * A framed avatar — the tab is "Me" now, and a cog named only the preferences in it, not
-         * the vault or the key on the device.
+         * The classic cog (lucide "Settings"), which is what this tab had before it was "Me".
          *
-         * The ring is the frame a face is shown in everywhere else on a phone, so it stays an
-         * OUTLINE in both states: filling it would make a solid disc and lose the person inside.
-         * The head and shoulders are what fill when the tab is selected — the shoulder path is
-         * open, but its ends sit on one baseline, so closing it fills to a dome rather than the
-         * blob an arbitrary open path would give. The dome tops out just inside the head, so the
-         * two merge into a single silhouette instead of a circle floating over an arc.
+         * Selected, only the CENTRE fills. A solid gear is nearly all ink and swamped the other
+         * three marks, which stay mostly negative space even filled; and filling the body closes
+         * the hole the teeth are read against. The dot in the middle is enough to say "on".
          */
         <>
-          <Circle cx={12} cy={12} r={10} {...common} />
-          <Path d="M18 19.5a6.5 6.5 0 0 0-12 0" {...solid} />
-          <Circle cx={12} cy={10} r={3.6} {...solid} />
+          <Path d={COG} {...common} />
+          <Circle cx={12} cy={12} r={3} {...solid} />
         </>
       )}
     </Svg>

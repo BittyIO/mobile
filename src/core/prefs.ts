@@ -1,3 +1,4 @@
+import {create} from 'zustand';
 import {MMKV} from 'react-native-mmkv';
 
 /**
@@ -42,3 +43,152 @@ export function getPref(key: string): string | undefined {
 export function setPref(key: string, value: string): void {
   store.set(key, value);
 }
+
+/**
+ * The stablecoin float the vault is asked to keep for relay fees — on/off, and how much.
+ *
+ * Keyed by NETWORK AND VAULT, because that is what it is about: a mainnet vault paying the better
+ * part of a dollar a relay wants a different float from one on Base paying cents, and two vaults
+ * on the same chain are two different pots of money. One global figure meant setting 1000 on
+ * mainnet and finding 1000 waiting on every other chain, where the picker does not even offer it.
+ *
+ * Here rather than in a store of its own: two keys in the preferences file that is already open
+ * at launch need no module, no subscription and nothing initialised on a render path.
+ *
+ * LOCAL, and not on chain: a guard rail this client draws for its owner, not a rule the vault
+ * enforces — nothing stops the same vault being emptied from the web, and nothing should.
+ */
+const RESERVE_AMOUNT = 'fees.reserveAmount';
+const RESERVE_COIN = 'fees.reserveCoin';
+
+/** What the reserve is unless the owner says otherwise, in whole dollars. */
+export const DEFAULT_GAS_RESERVE = 10;
+/** Chosen explicitly: hold nothing back. Distinct from unset, which means "decide for me". */
+export const RESERVE_NONE = 'none';
+
+const scoped = (base: string, network: string, vault: string | null | undefined) =>
+  `${base}:${network}:${(vault ?? 'none').toLowerCase()}`;
+
+/**
+ * WHICH stablecoin the reserve is held in: a symbol, {RESERVE_NONE}, or null for "not chosen".
+ *
+ * It was a switch, which left the app to decide where the float lived: it held back the LAST
+ * funded stablecoin, whichever that happened to be, so the coin being protected changed as
+ * balances moved and the user could never be told which one it was. Naming it makes the setting
+ * answerable — "ten dollars of USDC" — and lets the trade form say so.
+ *
+ * Null is not the same as none. Unset means the owner has never said, and {resolveFeeReserve}
+ * picks one from what the vault actually holds; `none` is an answer and is obeyed. Resolving the
+ * default needs balances, which this module has no business reading, so it stops at the stored
+ * value.
+ */
+export const gasReserveCoin = (network: string, vault: string | null | undefined): string | null =>
+  getPref(scoped(RESERVE_COIN, network, vault)) ?? null;
+
+export const setGasReserveCoin = (network: string, vault: string | null | undefined, sym: string): void =>
+  setPref(scoped(RESERVE_COIN, network, vault), sym);
+
+export const gasReserveAmount = (network: string, vault: string | null | undefined): string =>
+  getPref(scoped(RESERVE_AMOUNT, network, vault)) ?? String(DEFAULT_GAS_RESERVE);
+
+export const setGasReserveAmount = (network: string, vault: string | null | undefined, v: string): void =>
+  setPref(scoped(RESERVE_AMOUNT, network, vault), v);
+
+/** The configured size of the reserve, whichever coin ends up holding it. */
+export function gasReserveSize(network: string, vault: string | null | undefined): number {
+  const n = Number(gasReserveAmount(network, vault));
+  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_GAS_RESERVE;
+}
+
+/**
+ * How far a market swap may fill from its quote before the router refuses it, in basis points.
+ *
+ * A trading preference rather than a vault setting: it is about how patient the owner is with a
+ * price, which does not change because they switched chains or vaults, so unlike the fee reserve
+ * this is one value. Local, like everything else here.
+ */
+const SLIPPAGE = 'trade.slippageBps';
+
+/**
+ * Two percent.
+ *
+ * One was the old fixed figure and it refuses too much: the tokenized stocks this vault trades
+ * sit in thin pools where a fill a point and a half away is ordinary, and a market order that
+ * reverts teaches nothing except that the app is unreliable. Two still leaves a sandwich too
+ * little to pay for itself on the pairs that matter, and anyone trading something thinner can
+ * raise it a step.
+ */
+export const DEFAULT_SLIPPAGE_BPS = 200;
+
+/**
+ * Five percent, and not a basis point more.
+ *
+ * The tolerance IS the budget a sandwich gets to work with: a mainnet market swap is a public
+ * transaction, and a searcher who sees a floor twenty percent below the quote can buy ahead, let
+ * the trade fill at that floor and sell into it, keeping the difference. Below five percent the
+ * attack is rarely worth its own gas; above it, the loss is bounded only by what was authorised.
+ *
+ * Enforced here rather than only in the picker, so a value stored by an older build — this app
+ * briefly offered ten and twenty — is refused on read and falls back to the default.
+ */
+const MAX_SLIPPAGE_BPS = 500;
+
+export function slippageBps(): number {
+  const raw = getPref(SLIPPAGE);
+  if (raw === undefined) return DEFAULT_SLIPPAGE_BPS;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 && n <= MAX_SLIPPAGE_BPS ? n : DEFAULT_SLIPPAGE_BPS;
+}
+
+export const setSlippageBps = (bps: number): void => setPref(SLIPPAGE, String(bps));
+
+/**
+ * How far back the Trade panel's Finished list reaches.
+ *
+ * Finished only ever grows: every order the pair has ever filled, cancelled or let expire is in it,
+ * and the rows a trader is actually looking for are the recent ones. A window is the cheap answer —
+ * cheaper than paging, and it keeps the list short enough that the tab is readable at a glance.
+ *
+ * A STORE and not just a preference, because it is set in one place (the ⋯ sheet) and read in
+ * another (the panel), and the panel has to redraw when it changes. The same arrangement the
+ * market-cap toggle uses for the same reason.
+ */
+export type FinishedWindow = '24h' | '1w' | '1m';
+
+/** In the order the sheet lists them: shortest first, so the default sits in the middle. */
+export const FINISHED_WINDOWS: FinishedWindow[] = ['24h', '1w', '1m'];
+
+const FINISHED_SECONDS: Record<FinishedWindow, number> = {
+  '24h': 24 * 60 * 60,
+  '1w': 7 * 24 * 60 * 60,
+  // A month as thirty days. Nothing here is a calendar — it is "about this far back".
+  '1m': 30 * 24 * 60 * 60,
+};
+
+/** The cutoff in unix seconds: rows older than this are out. */
+export const finishedSince = (w: FinishedWindow): number =>
+  Math.floor(Date.now() / 1000) - FINISHED_SECONDS[w];
+
+const FINISHED_KEY = 'trade.finishedWindow';
+
+/**
+ * A week.
+ *
+ * A day is too short for a limit order, which is the whole point of placing one — several days is
+ * an ordinary life for it, and a window that hid last Tuesday's fill would hide the thing someone
+ * opened the tab to check. A month is the long answer for when that is not enough.
+ */
+const DEFAULT_FINISHED: FinishedWindow = '1w';
+
+export const useFinishedWindow = create<{window: FinishedWindow; setWindow: (w: FinishedWindow) => void}>((set) => {
+  const saved = getPref(FINISHED_KEY) as FinishedWindow | undefined;
+  return {
+    // Validated against the list, not trusted: a value from a build that offered different windows
+    // would otherwise index the seconds table with nothing and cut the list to nothing.
+    window: saved && FINISHED_WINDOWS.includes(saved) ? saved : DEFAULT_FINISHED,
+    setWindow: (w) => {
+      setPref(FINISHED_KEY, w);
+      set({window: w});
+    },
+  };
+});

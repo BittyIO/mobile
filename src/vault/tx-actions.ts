@@ -160,6 +160,16 @@ export function describeActions(
       case 'upgradeProtocol':
         out.push(k('upgrade_protocol', {name: proto(String(g.protocol))}));
         break;
+      /**
+       * The vault's own implementation.
+       *
+       * It moves no token, so the history has nothing else to go on: before this it decoded to a
+       * name with no line, and the row came out as the relayer's fee and nothing more — which
+       * reads as a network fee, the one thing it is not.
+       */
+      case 'upgrade':
+        out.push(k('upgrade_vault'));
+        break;
       case 'setAssetManager':
         out.push(k('asset_manager_set'));
         break;

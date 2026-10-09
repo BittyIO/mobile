@@ -33,27 +33,35 @@ export type ConfirmRequest = {
  */
 export function useConfirmAction(): {ask: (r: ConfirmRequest) => void; sheet: React.ReactNode} {
   const [req, setReq] = useState<ConfirmRequest | null>(null);
-  const [busy, setBusy] = useState(false);
   const styles = useStyles(makeStyles);
 
-  const ask = useCallback((r: ConfirmRequest) => {
-    setReq(r);
-    setBusy(false);
-  }, []);
+  const ask = useCallback((r: ConfirmRequest) => setReq(r), []);
+  const close = useCallback(() => setReq(null), []);
 
-  const close = useCallback(() => {
-    if (!busy) setReq(null);
-  }, [busy]);
-
-  const confirm = useCallback(async () => {
+  /**
+   * Confirmed, so the sheet goes — it does not wait for the operation.
+   *
+   * It used to hold a spinner on its own button until the relay came back, which meant a sheet
+   * sitting over the page for as long as a signature, a relay and a receipt take, with nothing on
+   * it but a turning button. The toast reports all three now, with the hash and a link, so the
+   * sheet has nothing left to say the moment the user says yes.
+   *
+   * Not awaited, and not caught either: every caller already wraps its work in `showTx`, which is
+   * what turns a failure into a toast. The `catch` here only stops an unhandled rejection from a
+   * caller that forgets — it deliberately shows nothing, because a second report of the same
+   * failure is worse than none.
+   */
+  const confirm = useCallback(() => {
     if (!req) return;
-    setBusy(true);
-    try {
-      await req.run();
-    } finally {
-      setBusy(false);
-      setReq(null);
-    }
+    const {run} = req;
+    setReq(null);
+    void (async () => {
+      try {
+        await run();
+      } catch {
+        /* reported by the caller's own showTx */
+      }
+    })();
   }, [req]);
 
   const sheet = (
@@ -71,7 +79,7 @@ export function useConfirmAction(): {ask: (r: ConfirmRequest) => void; sheet: Re
           empty instead. */}
       <View style={styles.body}>
         {req?.message ? <Text style={styles.message}>{req.message}</Text> : null}
-        <ConfirmButton onPress={confirm} loading={busy} gas={req?.gas ?? TYPICAL_RELAY_GAS} style={styles.submit} />
+        <ConfirmButton onPress={confirm} gas={req?.gas ?? TYPICAL_RELAY_GAS} style={styles.submit} />
       </View>
     </Sheet>
   );

@@ -1,5 +1,6 @@
 import type {Address} from 'viem';
 import type {Network} from '@/core/chain';
+import {shortAddress} from '@/core/format';
 import {currentGuardProtocols} from '@/core/guard-catalog';
 
 /**
@@ -110,7 +111,8 @@ const DISPLAY_NAME: Record<string, string> = {
 };
 export const protocolDisplayName = (name: string) => DISPLAY_NAME[name] ?? name;
 
-const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+// See {shortAddress}: one formatter for every address the app prints.
+const short = shortAddress;
 
 /**
  * Every adapter the guard is running, newest first — or the vendored table when it has not

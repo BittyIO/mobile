@@ -2,6 +2,10 @@ import React, {useState} from 'react';
 import {Keyboard, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View} from 'react-native';
 import Svg, {Circle, Path} from 'react-native-svg';
 import {Sheet} from '@/components/Sheet';
+import {MarketRow} from '@/components/MarketRow';
+import {useMarketStats} from '@/vault/useMarketStats';
+import {usePrices} from '@/vault/usePrices';
+import {usdValue} from '@/core/prices';
 import {displaySymbol} from '@/core/format';
 import {useNetwork, NETWORKS, NETWORK_LABEL, networkLabel} from '@/core/network-store';
 import {LANGUAGES} from '@/core/language-store';
@@ -53,6 +57,16 @@ function ImportIcon({color}: {color: string}) {
   );
 }
 
+/** A bar chart — the column the row turns on. */
+function CapIcon({color}: {color: string}) {
+  const c = glyph(color);
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24">
+      <Path d="M6 20V10M12 20V4M18 20v-6" {...c} strokeWidth={2.2} />
+    </Svg>
+  );
+}
+
 /** lucide Trash2. */
 function TrashIcon({color}: {color: string}) {
   const c = glyph(color);
@@ -63,6 +77,46 @@ function TrashIcon({color}: {color: string}) {
       <Path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" {...c} />
       <Path d="M10 11v6M14 11v6" {...c} />
     </Svg>
+  );
+}
+
+/**
+ * What the market-cap switch does, shown rather than described.
+ *
+ * The column it turns on is not on this screen — a watch list's rows are drawn on the Overview,
+ * and the ⋯ that holds the switch is on the list's own page. So the switch used to be a word with
+ * no visible consequence: you toggled it, went back, and found out. A row of the real thing,
+ * redrawing as the switch moves, answers the question where it is asked.
+ *
+ * Ether because every chain the app runs on prices it and publishes a cap for it, which is what
+ * the row has to have to demonstrate anything; the figures are LIVE, for the same reason — a
+ * preview with invented numbers beside a real one teaches the layout and misteaches the data.
+ *
+ * Mounted only while the sheet is open, so neither read happens for a menu nobody opened.
+ */
+const PREVIEW_SYMBOL = 'ETH';
+
+function CapPreview({on, toggle}: {on: boolean; toggle: () => void}) {
+  const network = useNetwork((s) => s.network);
+  const styles = useStyles(makeStyles);
+  const symbol = PREVIEW_SYMBOL;
+  const prices = usePrices(network, 0, [symbol]);
+  const stat = useMarketStats(network, [symbol]).get(symbol);
+  return (
+    <View style={styles.preview}>
+      <MarketRow
+        symbol={symbol}
+        price={usdValue(1, symbol, prices) || null}
+        change24h={stat?.change24h}
+        marketCap={stat?.marketCap}
+        showCap={on}
+        first
+        /* The picture is also the switch. Having shown someone what the setting does, the next
+           thing their finger is already on is the thing it did it to — and a row that visibly
+           responds to a tap but ignores it reads as broken rather than as an illustration. */
+        onPress={toggle}
+      />
+    </View>
   );
 }
 
@@ -146,19 +200,39 @@ export function WatchlistMenu({
   label,
   symbols,
   canDelete,
+  canShare,
   onDelete,
   onImport,
+  cap,
   importOnly,
 }: {
-  /** What the list is called on screen, for nothing but the share text's fallback. */
+  /** What the list is called on screen: the sheet's title, and the share text's fallback. */
   label: string;
   symbols: string[];
   /** False for "Assets" and for the last remaining list — neither can be removed. */
   canDelete: boolean;
+  /**
+   * False for "Assets", which is not a list anyone made.
+   *
+   * What Share puts on the clipboard is a list of tickers for someone else to star — a thing you
+   * chose. "Assets" is what the vault happens to hold, so sharing it is either sending a stranger
+   * your position or sending them a list you did not write; neither is what the button is for.
+   */
+  canShare: boolean;
   /** Opens the confirmation; the menu never deletes on its own. */
   onDelete: () => void;
   /** Star these tickers onto the current list. Returns how many it recognised. */
   onImport: (symbols: string[]) => number;
+  /**
+   * The market-cap column, when the list is one that can have one.
+   *
+   * It lives in here rather than beside the categories because it is a property OF THE LIST, in
+   * the one menu that holds the things that are — share it, import into it, delete it. Out in
+   * the strip it was a checkbox competing with four filters for the width of a phone, and it
+   * said nothing about which list it belonged to. Undefined on "Assets", which shows holdings
+   * and has no market columns to turn off.
+   */
+  cap?: {on: boolean; toggle: () => void};
   /**
    * Skip the menu and be the import button.
    *
@@ -234,7 +308,24 @@ export function WatchlistMenu({
   };
 
   const rows = [
-    ...(symbols.length > 0
+    /**
+     * First, because it is the only row that CHANGES the list rather than doing something with
+     * it, and the only one the user comes back to twice. It also does not close the sheet — a
+     * toggle that dismissed what it is part of would hide the check it just set.
+     */
+    ...(cap
+      ? [
+          {
+            key: 'cap',
+            label: t('mobile.home.show_market_cap'),
+            icon: <CapIcon color={c.subtext} />,
+            onPress: cap.toggle,
+            danger: false,
+            on: cap.on,
+          },
+        ]
+      : []),
+    ...(canShare && symbols.length > 0
       ? [{key: 'share', label: t('mobile.home.share_address'), icon: <ShareIcon color={c.subtext} />, onPress: share, danger: false}]
       : []),
     {
@@ -270,7 +361,10 @@ export function WatchlistMenu({
 
       <Sheet
         visible={open}
-        title={mode === 'import' ? t('mobile.home.import_list') : t('mobile.home.watch_list')}
+        /* The list's own name, not the word "watch list": the sheet that opens over "Assets" is
+           about Assets, and calling it something the screen behind it is not called left the
+           built-in list looking like somebody else's. */
+        title={mode === 'import' ? t('mobile.home.import_list') : label}
         onClose={close}>
         <ScrollView showsVerticalScrollIndicator={false} style={styles.scroll} bounces={false} keyboardShouldPersistTaps="handled">
           {mode === 'import' ? (
@@ -300,13 +394,25 @@ export function WatchlistMenu({
           ) : (
             <View style={styles.card}>
               {rows.map((r, i) => (
+                <React.Fragment key={r.key}>
                 <Pressable
-                  key={r.key}
                   style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === rows.length - 1 && styles.rowLast, pressed && styles.pressed]}
                   onPress={r.onPress}>
                   {r.icon}
                   <Text style={[styles.label, r.danger && styles.labelDanger]}>{r.label}</Text>
+                  {/* The same accent tick the network and asset pickers use for "this one is
+                      on" — a row that can be in two states says so the way every other row in
+                      a sheet does. */}
+                  {'on' in r && r.on ? (
+                    <Svg width={18} height={18} viewBox="0 0 24 24">
+                      <Path d="M20 6 9 17l-5-5" stroke={c.accent} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                    </Svg>
+                  ) : null}
                 </Pressable>
+                {/* Directly under the row it belongs to, inside the same card: it is that row's
+                    answer, not a section of its own. */}
+                {r.key === 'cap' && cap ? <CapPreview on={cap.on} toggle={cap.toggle} /> : null}
+                </React.Fragment>
               ))}
             </View>
           )}
@@ -340,6 +446,9 @@ const makeStyles = (c: Colors) =>
       borderTopColor: c.border,
     },
     rowFirst: {borderTopWidth: 0, paddingTop: 16},
+    // Inset and on the page's own ground, so it reads as a sample of a list rather than another
+    // row of this one — the rows above it are things to tap, and this is a picture.
+    preview: {backgroundColor: c.bg, borderRadius: 14, paddingHorizontal: 12, marginBottom: 16},
     rowLast: {paddingBottom: 16},
     pressed: {opacity: 0.6},
     label: {color: c.text, fontSize: 16, fontWeight: '600', flex: 1},

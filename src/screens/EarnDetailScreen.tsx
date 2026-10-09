@@ -1,6 +1,6 @@
 import {useHeaderHeight} from '@react-navigation/elements';
-import React, {useEffect, useMemo, useState} from 'react';
-import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import {Pressable, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {Address} from 'viem';
@@ -47,9 +47,35 @@ export function EarnDetailScreen() {
 
   const network = useNetwork((s) => s.network);
   const getSigner = useWallet((s) => s.signer);
+  const c = useColors();
   const bal = useVaultBalances(network);
   const pos = useVaultPositions(bal.vault, network);
   const flows = useFlows(bal.vault, network);
+
+  /**
+   * Pull to re-read what the vault holds here.
+   *
+   * This page is opened straight after a deposit or a withdrawal, and those settle on chain some
+   * seconds after the form that sent them has gone — so the figure it shows is routinely one
+   * operation out of date, with no way to ask again short of leaving and coming back. All three
+   * reads go: the balance funds the next deposit, the position is the deposited amount itself, and
+   * the flows are what it has earned.
+   *
+   * The spinner is tied to a load actually being in flight rather than to the gesture, so a pull
+   * that finds nothing to fetch does not leave it turning. `pulled` clears whenever the reads go
+   * quiet, which also covers a refresh that was already running when the gesture arrived.
+   */
+  const [pulled, setPulled] = useState(false);
+  const busy = pos.loading || bal.loading;
+  useEffect(() => {
+    if (!busy) setPulled(false);
+  }, [busy]);
+  const onRefresh = useCallback(() => {
+    setPulled(true);
+    bal.refresh();
+    pos.refresh();
+    flows.refresh();
+  }, [bal.refresh, pos.refresh, flows.refresh]);
   const {ask, sheet} = useConfirmAction();
 
   const catalog = useAssetCatalog(network);
@@ -151,7 +177,18 @@ export function EarnDetailScreen() {
     <ScrollView
       style={styles.container}
       contentContainerStyle={[styles.body, {paddingTop: headerHeight + 8}]}
-      showsVerticalScrollIndicator={false}>
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={pulled && busy}
+          onRefresh={onRefresh}
+          // The header is transparent and the content scrolls under it, so the spinner has to
+          // start below the bar or it turns behind it.
+          progressViewOffset={headerHeight}
+          tintColor={c.text}
+          colors={[c.accent]}
+        />
+      }>
       {/* Who and what, with the rate it pays. */}
       <View style={styles.head}>
         <TokenIcon symbol={symbol} size={40} />

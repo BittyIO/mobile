@@ -22,11 +22,13 @@ import {ownerVaultAddress, balanceOfSymbol} from '@/vault/read';
 import {sendWithWhitelist, fetchWhitelist, type WhitelistedRecipient} from '@/vault/payments';
 import type {Position} from '@/vault/positions';
 
+import {shortAddress} from '@/core/format';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
-import {displaySymbol, fmtNum} from '@/core/format';
+import {displaySymbol, fmtNum, fmtShort} from '@/core/format';
 import {relayGasFor} from '@/vault/fee-quote';
-import {FEE_RESERVE} from '@/vault/gasless';
+import {resolveFeeReserve} from '@/vault/gasless';
+
 import {useAssetCatalog} from '@/core/asset-catalog';
 
 /** Where a line's tokens come from: the vault's free balance, its Sky position, or its Aave supply. */
@@ -43,7 +45,8 @@ type Recipient = {
   allowedAsset?: Address;
 };
 
-const short = (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}`;
+// See {shortAddress}: one formatter, so no screen can drift to its own idea of short.
+const short = shortAddress;
 const lineKey = (l: {sym: string; source: Source}) => `${l.sym}:${l.source}`;
 /**
  * A new line starts at 0, not blank.
@@ -295,14 +298,26 @@ export function SendScreen() {
    * failed on-chain for want of funds. Counted in base units, not floats, so Max on an 18-decimal
    * token is exact rather than a rounded value that overshoots by a wei.
    *
-   * The free balance of the fee coin also holds {FEE_RESERVE} back. The relayer charges the fee
+   * The free balance of the fee coin also holds the owner's gas reserve back — see
+   * {reserveAgainst}, and the switch on the Network fee page. The relayer charges the fee
    * AFTER the transfers, so a batch that sends every last unit of the coin it is billed in reverts
    * at the charge with `fee-leg-failed` — the same trap the market order avoids the same way.
    */
   const remaining = (sym: string, source: Source, ri: number): bigint => {
     const d = meta(sym)?.decimals ?? 18;
     const key = `${sym}:${source}`;
-    const reserve = source === 'free' && sym === stable?.symbol ? parse(String(FEE_RESERVE[network]), d) : 0n;
+    const keep =
+      source === 'free'
+        ? resolveFeeReserve({
+            network,
+            vault: bal.vault,
+            heldStables: assets
+              .filter((a) => a.kind === 'stable')
+              .map((a) => ({symbol: a.symbol, amount: Number(balanceOfSymbol(bal.balances, a.symbol))})),
+            spendSymbol: sym,
+          }).keep
+        : 0;
+    const reserve = keep > 0 ? parse(String(keep), d) : 0n;
     let left = parse(sourceOf(sym, source).balance, d) - reserve;
     // Every OTHER recipient's claim on the same source. A recipient never holds two lines of one
     // source, so skipping its own row is enough to leave its own amount editable.
@@ -323,7 +338,9 @@ export function SendScreen() {
     setErr(null);
     const tx = showTx(
       rows.length === 1
-        ? `${t('vault.send')} ${fmtNum(Number(rows[0].amount))} ${displaySymbol(assets.find((a) => a.address === rows[0].asset)?.symbol ?? '')}`
+        ? // `fmtShort`, as the lists use: `fmtNum` keeps up to seven decimals under 1, which is right
+          // for a balance and too long for a line reporting what was just sent.
+          `${t('vault.send')} ${fmtShort(Number(rows[0].amount))} ${displaySymbol(assets.find((a) => a.address === rows[0].asset)?.symbol ?? '')}`
         : t('mobile.payments.send_n_payments', {count: rows.length}),
       network,
     );

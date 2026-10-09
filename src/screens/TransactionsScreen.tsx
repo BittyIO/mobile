@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   ActivityIndicator,
-  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -17,22 +16,16 @@ import type {Operation, TransferRow} from '@/vault/transactions';
 import {TokenIcon} from '@/components/TokenIcon';
 import {Amount} from '@/components/Amount';
 import {splitMarketSwap, netTrade, isReceiptToken, STAKE_TOKENS, SUPPLY_TOKENS, STAKE_COUNTERPARTY, SUPPLY_COUNTERPARTY, BITTY_FEE_COLLECTOR} from '@/vault/market-trades';
-import {fmtNum, displaySymbol} from '@/core/format';
+import {fmtNum, fmtShort, displaySymbol, shortAddress} from '@/core/format';
 import {EXPLORER_TX, type Network} from '@/core/chain';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
-import {CopyAddress} from '@/components/CopyAddress';
-import {GasIcon} from '@/components/GasIcon';
 import {categoryForActions, defiMoveFromActions, describeActions} from '@/vault/tx-actions';
 import {GPV2_SETTLEMENT, fetchRecentOrders, type CowOrder} from '@/vault/limit';
-import {usePending, type PendingTx} from '@/vault/pending';
-import {useConfirmLocal} from '@/components/ConfirmAction';
-import type {RouteProp} from '@react-navigation/native';
-import {useRoute} from '@react-navigation/native';
-import type {RootStackParamList} from '@/App';
 
 import {currentCatalog} from '@/core/asset-catalog';
 import {openLink} from '@/core/open-link';
+import {attemptTrade, isFailure, useVaultAttempts, wasSent, type Attempt} from '@/vault/attempts';
 
 const fmtAmt = (v: string | null): string => fmtNum(Number(v ?? '0'));
 const fmtN = fmtNum;
@@ -53,7 +46,6 @@ function fmtDate(ts: string | null, locale: string): string {
 }
 
 const lc = (s?: string | null) => (s ?? '').toLowerCase();
-const shortAddress = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 // One transaction can be a multicall of several vault functions (withdraw from Sky, then market-sell
 // the proceeds). Each shows in full, as its own titled part, rather than one title with stray legs.
@@ -179,9 +171,28 @@ function classify(
               ? 'receive'
               : 'gas'));
   if (parts.length === 0) {
-    // Nothing moved but the fee: the transaction IS its configuration change, so it heads the row.
-    parts.push({title: details[0] ?? t('mobile.home.transaction'), swap: null, legs: []});
-    return {parts, fee, details: details.slice(1), category};
+    /**
+     * Nothing visible moved but the fee. What the row is called then comes from the CALL.
+     *
+     * A swap is the case that needed naming. {describeActions} says nothing for marketSell and
+     * marketBuy — "the legs already say it", which is true of every row that has legs — so a swap
+     * whose legs the feed cannot see fell all the way through to the generic "Transaction", leaving
+     * a row whose only content was the relayer's fee. It read as a network fee, which is the one
+     * thing it is not.
+     *
+     * The feed can miss a swap's legs for an ordinary reason: it is built from `Transfer` logs for a
+     * FIXED list of tokens, so a pair involving something the deployed catalog does not carry yet
+     * moves real money and emits logs nobody is listening for. The transaction succeeded; only its
+     * itemisation is missing. So this names it a market trade and does not call it failed — a
+     * failure reverts, pays no fee, and leaves no row here at all.
+     */
+    const swapped = (op.actions ?? []).some((a) => a.name === 'marketSell' || a.name === 'marketBuy');
+    parts.push({
+      title: swapped ? t('vault.market_trade') : (details[0] ?? t('mobile.home.transaction')),
+      swap: null,
+      legs: [],
+    });
+    return {parts, fee, details: swapped ? details : details.slice(1), category};
   }
   return {parts, fee, details, category};
 }
@@ -197,15 +208,16 @@ function Leg({r, counterparty}: {r: TransferRow; counterparty?: Part['counterpar
         {out ? '−' : '+'}
         <Amount v={fmtAmt(r.amount)} /> {displaySymbol(r.assetSymbol) || '?'}
       </Text>
+      {/* Who the other side was, as plain text.
+          It was a copy control, which put a second tappable thing inside a row that is itself a
+          link to the explorer — and the explorer is where anyone who wants the address is going
+          anyway, with the full one and everywhere it has been. A counterparty here is read, to
+          recognise who was paid; it is not something to pick up and carry. */}
       {counterparty ? (
         <View style={styles.counterparty}>
-          <CopyAddress
-            address={counterparty.address}
-            label={t(counterparty.direction === 'to' ? 'mobile.home.to_address' : 'mobile.home.from_address', {address: shortAddress(counterparty.address)})}
-            textStyle={styles.counterpartyText}
-            iconSize={12}
-            numberOfLines={1}
-          />
+          <Text style={styles.counterpartyText} numberOfLines={1}>
+            {t(counterparty.direction === 'to' ? 'mobile.home.to_address' : 'mobile.home.from_address', {address: shortAddress(counterparty.address)})}
+          </Text>
         </View>
       ) : null}
     </View>
@@ -259,15 +271,9 @@ function Op({op, explorer, network, orders}: {op: Operation; explorer: string; n
 
       <View style={styles.footer}>
         <View style={styles.meta}>
+          {/* The gasless relay fee is still split out of the transfer legs (so it never inflates a
+              send), but it is not shown: the fee a relayed op pays is not something the owner did. */}
           <Text style={styles.date}>{fmtDate(op.timestamp, language)}</Text>
-          {v.fee ? (
-            <>
-              <GasIcon color={c.subtext} size={12} />
-              <Text style={styles.fee}>
-                −<Amount v={fmtAmt(v.fee.amount)} /> {displaySymbol(v.fee.assetSymbol)}
-              </Text>
-            </>
-          ) : null}
         </View>
         <Text style={styles.link}>{t('mobile.home.view')} ↗</Text>
       </View>
@@ -275,41 +281,100 @@ function Op({op, explorer, network, orders}: {op: Operation; explorer: string; n
   );
 }
 
-/** One submitted transaction that is still in flight, or has just landed. */
-function PendingRow({tx, explorer}: {tx: PendingTx; explorer: string}) {
-  const {t} = useT();
-  const c = useColors();
+
+/**
+ * An operation that was asked for and did not succeed.
+ *
+ * Its own row rather than an {Op}, because there is nothing for an Op to render: the history feed is
+ * built from ERC-20 Transfer logs, and a reverted transaction emits none while a refused one has no
+ * transaction at all. So it moved no money, carries no legs and has no category. It comes from the
+ * relayer's own record — see {useVaultAttempts} — which is the only account of the attempt, and the
+ * reason an operation attempted on the web shows up here too.
+ *
+ * Says what the operation WAS, decoded from the calldata the relayer was handed, and why it did not
+ * happen. A submitted-then-reverted one links to its receipt; a refusal has nothing to link to and
+ * keeps the relayer's reason instead, which is then the only place that reason exists.
+ */
+function FailedOp({tx, explorer, network}: {tx: Attempt; explorer: string; network: Network}) {
+  const {t, language} = useT();
   const styles = useStyles(makeStyles);
-  const remove = usePending((s) => s.remove);
-  const failed = tx.status === 'failed';
-  // Never included, so there is nothing to look up and nothing to wait for — only to clear.
-  const dropped = tx.status === 'dropped';
-  const label = dropped
-    ? 'mobile.home.not_included'
-    : failed
-      ? 'vault.failed'
-      : tx.status === 'confirmed'
-        ? 'vault.confirmed'
-        : 'mobile.home.confirming';
+  const onChain = wasSent(tx);
+  /**
+   * What was attempted, in the words the rest of the page uses.
+   *
+   * {describeActions} is the same decoder the ordinary rows are labelled by, so a failed deposit
+   * reads as "Deposit" here exactly as a successful one does above it — the row differs in what
+   * became of it, not in what it is called.
+   *
+   * A SWAP is the exception, and it is the reason this is not one line. `describeActions` says
+   * nothing at all for marketSell and marketBuy, on the stated grounds that "the legs already say
+   * it" — which holds for every row that moved something and is precisely false here: a trade that
+   * failed moved nothing, so there were no legs and the row fell through to the generic
+   * "Transaction". Worse, an attempt that carried its allowlist setup alongside the swap titled
+   * itself with the setup, naming the least interesting call in the batch.
+   *
+   * So a swap is named from the legs it ASKED for, which the server recorded off the calldata —
+   * the same figures the order lists draw their row from. See {attemptTrade}.
+   */
+  const trade = attemptTrade(tx, network);
+  const lines = describeActions(tx.actions, network, t, undefined);
+  /**
+   * The same title a SUCCESSFUL market trade carries, not a sentence of its own.
+   *
+   * The row was titled "Pay 500 USDC to buy 67 UNI" and said nothing else, where the row above it
+   * for a trade that worked says "Market trade" and draws the two legs. Two shapes for one kind of
+   * event, and the failed one the odd one out — on a page read by scanning down the left edge, that
+   * is the thing that makes it look wrong rather than merely different.
+   */
+  const title = trade ? t('vault.market_trade') : (lines[0] ?? t('mobile.home.transaction'));
   return (
-    <Pressable style={styles.op} onPress={() => !dropped && openLink(explorer + tx.hash, 'Etherscan')}>
+    <Pressable
+      style={styles.op}
+      disabled={!onChain}
+      onPress={onChain ? () => openLink(explorer + tx.txHash, 'Etherscan') : undefined}>
       <View style={styles.opHeader}>
-        <View style={styles.titleRow}>
-          <Text style={styles.title}>{tx.title}</Text>
-        </View>
-        {tx.status === 'pending' ? <ActivityIndicator size="small" color={c.subtext} /> : null}
+        <Text style={styles.title}>{title}</Text>
       </View>
-      <Text style={[styles.detail, (failed || dropped) && {color: c.danger}]}>{t(label)}</Text>
+      {/* The legs, drawn exactly as a completed swap's are — same icons, same arrow, same
+          metrics — because it is the same kind of event and the only difference is how it ended.
+          The received side is NOT green here: that colour means money arrived, and none did. The
+          figures are what the order asked for, which is all a trade that never ran can report. */}
+      {trade ? (
+        <View style={styles.swapRow}>
+          <View style={styles.swapSide}>
+            <TokenIcon symbol={trade.sold.symbol} size={20} />
+            <Text style={styles.swapText}>
+              <Amount v={fmtN(trade.sold.amount)} size={15} /> {displaySymbol(trade.sold.symbol)}
+            </Text>
+          </View>
+          <Text style={styles.swapArrow}>→</Text>
+          <View style={styles.swapSide}>
+            <TokenIcon symbol={trade.bought.symbol} size={20} />
+            <Text style={styles.swapText}>
+              <Amount v={fmtN(trade.bought.amount)} size={15} /> {displaySymbol(trade.bought.symbol)}
+            </Text>
+          </View>
+        </View>
+      ) : null}
+      {/* Two outcomes, two words. A revert means the chain ran it and rejected it; a refusal means
+          the relayer turned it down before signing, so nothing happened at all and it can simply be
+          tried again once whatever it objected to is fixed. */}
+      <Text style={styles.failed}>
+        {tx.status === 'refused' ? t('vault.tx_not_included') : t('vault.tx_failed')}
+      </Text>
+      {tx.reason ? (
+        <Text style={styles.detail} numberOfLines={3}>
+          {tx.reason}
+        </Text>
+      ) : null}
       <View style={styles.footer}>
-        {/* A row that has stopped moving is the user's to dismiss; one still in flight is not. */}
-        {tx.status === 'pending' ? (
-          <View />
-        ) : (
-          <Pressable hitSlop={8} onPress={() => remove(tx.hash)}>
-            <Text style={styles.clear}>{t('mobile.home.clear')}</Text>
-          </Pressable>
-        )}
-        {dropped ? <View /> : <Text style={styles.link}>{t('mobile.home.view')} ↗</Text>}
+        <View style={styles.meta}>
+          {/* Through {fmtDate}, like every other row: a bare toLocaleString prints
+              "10/8/2026, 10:25:35 PM" against the "8 Oct, 22:25" above it, which reads as a
+              different kind of row rather than the same row with a worse outcome. */}
+          <Text style={styles.date}>{fmtDate(new Date(tx.at * 1000).toISOString(), language)}</Text>
+        </View>
+        {onChain ? <Text style={styles.link}>{t('mobile.home.view')} ↗</Text> : null}
       </View>
     </Pressable>
   );
@@ -347,25 +412,36 @@ export function TransactionsScreen() {
   }, [loading]);
   const explorer = EXPLORER_TX[network];
 
-  // Submitted here and not yet indexed: kept locally (see vault/pending) and shown on their own tab.
-  const pendingTxs = usePending((s) => s.txs).filter((x) => x.network === network);
-  const acknowledge = usePending((s) => s.acknowledge);
-  const clearSettled = usePending((s) => s.clearSettled);
-  // Anything that has stopped moving can be swept in one go, rather than a row at a time.
-  const settledCount = pendingTxs.filter((x) => x.status !== 'pending').length;
-  // Local and free — nothing is sent, nothing is signed — but it empties a list in one tap, so it
-  // gets the system's own question rather than the Face ID sheet the on-chain actions share.
-  const confirm = useConfirmLocal();
-  const route = useRoute<RouteProp<RootStackParamList, 'Transactions'>>();
-  const [tab, setTab] = React.useState<Category | 'confirming' | 'all'>(route.params?.tab === 'confirming' ? 'confirming' : 'all');
+  /**
+   * Operations that did not succeed — from the relayer's own record, not this device's.
+   *
+   * The transfer feed cannot carry them: a reverted transaction emits no logs and a refused one has
+   * no transaction. They used to be kept locally, which meant an attempt made on the web never
+   * appeared here. Now the server writes every attempt down and both clients read it.
+   *
+   * Not filtered by the tabs: a failure moved nothing, so {classify} has no category to put it in,
+   * and a row that answers no question must not be hidden by one.
+   */
+  const {attempts} = useVaultAttempts(vault, network, loading ? 0 : 1);
+  const failures = React.useMemo(() => attempts.filter(isFailure), [attempts]);
 
-  // One tab per category that has entries, as on the web, with Confirming leading when it does.
+  /**
+   * No "Confirming" tab.
+   *
+   * It listed the writes this device had sent and was waiting on, which is now the toast's job —
+   * and the toast says it where the user is, with the hash and a link, instead of on a page they
+   * have to go and find. Keeping both meant a transaction announced itself twice and lingered in
+   * the second place long after it had settled. The pending store still exists: it is what the
+   * toast watches for settlement, and what tells the balances to re-read. See {showTx}.
+   */
+  const [tab, setTab] = React.useState<Category | 'all'>('all');
+
+  // One tab per category that has entries, as on the web.
   const views = React.useMemo(
     () => new Map(ops.map((op) => [op.txHash, classify(op, network, t, orders, words)])),
     [ops, network, t, orders, words],
   );
-  const tabs: {key: Category | 'confirming' | 'all'; label: string}[] = [
-    ...(pendingTxs.length > 0 ? [{key: 'confirming' as const, label: t('mobile.home.confirming')}] : []),
+  const tabs: {key: Category | 'all'; label: string}[] = [
     {key: 'all', label: t('vault.all')},
     ...CATEGORY_ORDER.filter((cat) => ops.some((op) => views.get(op.txHash)?.category === cat)).map((cat) => ({
       key: cat,
@@ -374,12 +450,32 @@ export function TransactionsScreen() {
       ),
     })),
   ];
-  // A tab that has emptied out (the last pending one confirmed) hands back to All.
+  // A category that has emptied out hands back to All.
   React.useEffect(() => {
     if (!tabs.some((x) => x.key === tab)) setTab('all');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabs.length]);
-  const shown = tab === 'all' ? ops : tab === 'confirming' ? [] : ops.filter((op) => views.get(op.txHash)?.category === tab);
+  const shown = tab === 'all' ? ops : ops.filter((op) => views.get(op.txHash)?.category === tab);
+
+  /**
+   * The feed and the failures, as ONE list in time order.
+   *
+   * The failures were a block above everything, which put a refusal from last week over a deposit
+   * from a minute ago. They are not a separate kind of news — they are things that happened to this
+   * vault, in the same sequence as everything else — so they sort in with the rest and the newest is
+   * at the top wherever it came from.
+   *
+   * Still unfiltered by the tabs: a failure moved nothing, so {classify} cannot put it in a
+   * category, and a row that answers no question must not be hidden by one.
+   */
+  const feed = React.useMemo(() => {
+    const at = (op: Operation) => (op.timestamp ? Date.parse(op.timestamp) : op.blockNum);
+    const rows: {key: string; at: number; op?: Operation; tx?: Attempt}[] = [
+      ...shown.map((op) => ({key: op.txHash, at: at(op), op})),
+      ...failures.map((tx) => ({key: `relay-${tx.id}`, at: tx.at * 1000, tx})),
+    ];
+    return rows.sort((a, b) => b.at - a.at);
+  }, [shown, failures]);
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic"
@@ -395,10 +491,7 @@ export function TransactionsScreen() {
               <Pressable
               key={x.key}
               style={styles.tab}
-              onPress={() => {
-                if (x.key === 'confirming') acknowledge();
-                setTab(x.key);
-              }}>
+              onPress={() => setTab(x.key)}>
                 <Text style={[styles.tabText, tab === x.key && styles.tabTextOn]}>{x.label}</Text>
               </Pressable>
             ))}
@@ -406,34 +499,18 @@ export function TransactionsScreen() {
         </View>
       ) : null}
 
-      {tab === 'confirming' ? (
-        <>
-          {settledCount > 1 ? (
-            <Pressable
-              style={styles.clearAll}
-              hitSlop={8}
-              onPress={() =>
-                confirm({
-                  title: t('mobile.home.clear_all'),
-                  message: t('mobile.home.clear_all_msg', {count: settledCount}),
-                  action: t('mobile.home.clear_all'),
-                  danger: true,
-                  run: () => clearSettled(network),
-                })
-              }>
-              <Text style={styles.clear}>{t('mobile.home.clear_all')}</Text>
-            </Pressable>
-          ) : null}
-          {pendingTxs.map((x) => (
-            <PendingRow key={x.hash} tx={x} explorer={explorer} />
-          ))}
-        </>
-      ) : error ? (
+      {error ? (
         <Text style={styles.err}>{error}</Text>
-      ) : shown.length === 0 ? (
+      ) : feed.length === 0 ? (
         <Text style={styles.note}>{loading ? '' : t('vault.no_operations')}</Text>
       ) : (
-        shown.map((op) => <Op key={op.txHash} op={op} explorer={explorer} network={network} orders={orders} />)
+        feed.map((row) =>
+          row.op ? (
+            <Op key={row.key} op={row.op} explorer={explorer} network={network} orders={orders} />
+          ) : (
+            <FailedOp key={row.key} tx={row.tx!} explorer={explorer} network={network} />
+          ),
+        )
       )}
       {loading && ops.length === 0 ? <ActivityIndicator color={c.accent} /> : null}
     </ScrollView>
@@ -449,9 +526,11 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   tabTextOn: {color: c.text, fontWeight: '700'},
   content: {flexGrow: 1, padding: 16, gap: 16, paddingBottom: 32},
   op: {backgroundColor: c.card, borderRadius: 20, padding: 18, gap: 12},
-  clear: {color: c.accent, fontSize: 14, fontWeight: '600'},
-  clearAll: {alignSelf: 'flex-end', marginBottom: -8},
   opHeader: {marginBottom: 10},
+  // A failed row's header carries the ✕, so the title and the control sit on one line.
+  failedHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10},
+  dismiss: {color: c.subtext, fontSize: 15},
+  failed: {color: c.danger, fontSize: 13, fontWeight: '600', marginBottom: 10},
   partGap: {marginTop: 14, gap: 8},
   titleRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
   title: {color: c.text, fontSize: 15, fontWeight: '400'},
@@ -468,9 +547,8 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   inC: {color: c.success},
   legText: {color: c.text, fontSize: 15, fontVariant: ['tabular-nums']},
   footer: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, paddingTop: 10},
-  // Timestamp and fee together on the left; the fee is a pump and a number, no label.
+  // Just the timestamp on the left now — the gasless relay fee is no longer shown.
   meta: {flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1},
-  fee: {color: c.subtext, fontSize: 12, fontVariant: ['tabular-nums']},
   link: {color: c.accent, fontSize: 12, fontWeight: '600'},
   note: {color: c.subtext, fontSize: 14},
   err: {color: c.danger, fontSize: 13},

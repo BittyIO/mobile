@@ -5,13 +5,17 @@
  * one has nowhere to appear. This store is that missing piece: every relayed write records itself
  * here, a poller watches each for a receipt, and the header's badge counts what is still in flight.
  *
- * It is persisted, because a relayed transaction outlives the screen that sent it — and the app —
- * and it keeps a mined entry for a short while so a row never vanishes from Confirming before the
- * indexer has it in the ordinary history.
+ * It is persisted, because a relayed transaction outlives the screen that sent it — and the app.
+ *
+ * It is also the only record of a FAILED one. The history feed is built from ERC-20 Transfer logs,
+ * and a reverted transaction emits none, so a trade that failed can never appear there; the history
+ * screen reads the failures from here instead. See {FAILED_LINGER_MS}.
  */
 import {create} from 'zustand';
 import {MMKV} from 'react-native-mmkv';
 import {publicClientFor, type Network} from '@/core/chain';
+import {ownerVaultAddress} from '@/vault/read';
+import {useWallet} from '@/wallet/store';
 
 /**
  * `dropped` is a transaction the chain will never include: the relayer's nonce was consumed by a
@@ -21,23 +25,7 @@ import {publicClientFor, type Network} from '@/core/chain';
  */
 export type PendingStatus = 'pending' | 'confirmed' | 'failed' | 'dropped';
 
-/**
- * A write that has been started and has no hash yet.
- *
- * Between the tap and the hash there is a signature prompt, a route or quote to fetch, a multicall
- * to build and a relay to answer — seconds, and more than that on a market trade. The badge cannot
- * count it, because the badge counts hashes, so the header went on showing nothing at all and the
- * action looked like it had been dropped. This is the gap, and the header fills it with a spinner.
- *
- * Deliberately NOT persisted: a submission in flight dies with the process. What survives a restart
- * is the hash, and `txs` is where that lives — a relaunch showing "broadcasting" for something no
- * code is waiting on any more would be a lie the user could never clear.
- */
-export type Submitting = {
-  id: number;
-  network: Network;
-  startedAt: number;
-};
+
 
 export type PendingTx = {
   hash: string;
@@ -48,26 +36,59 @@ export type PendingTx = {
   status: PendingStatus;
   /** When it stopped being pending; the row lingers briefly after that. */
   settledAt?: number;
-  /** The user has opened the Confirming tab since this was submitted. */
-  seen?: boolean;
   error?: string;
+  /**
+   * WHICH vault this was for, lowercased.
+   *
+   * One device can hold several vaults, and the lists that read these records are all per-vault —
+   * so without this a failure on vault 1 appeared in vault 2's order history and its transaction
+   * feed, with its amounts and its asset, as if that vault had tried it. The network alone was
+   * never enough to say whose a record was.
+   *
+   * Absent on a record written before this field, which is shown everywhere rather than hidden
+   * from the vault it belongs to.
+   */
+  vault?: string;
+  /**
+   * What sort of write this was, for a list that only wants one sort.
+   *
+   * Separate from {trade} on purpose. The order history needs to know "was this an order" even
+   * when it cannot draw one, and requiring the legs is what left a failure sitting in the
+   * transaction history with no matching row on the order page.
+   *
+   * Every write sets it, including the ones that are NOT trades — that is the point. Absent means
+   * a record written before this field existed, which is the one case nothing can classify, and
+   * the order history chooses to show those rather than lose them. Were `other` left unset, every
+   * failed deposit would be an unknown for ever and would turn up there too.
+   */
+  kind?: 'trade' | 'other';
 };
 
-/** How long a row the user has already seen stays on the Confirming tab, covering the indexer's lag. */
+/**
+ * How long a CONFIRMED row is kept.
+ *
+ * Only long enough to be watched: it is what resolves a toast to Confirmed and what tells the
+ * balances to re-read. A minute and a half past settlement covers the indexer's lag and a relaunch
+ * mid-flight, and once the operation is in the ordinary history nothing needs it here.
+ */
 const LINGER_MS = 90_000;
+/**
+ * How long a FAILED or DROPPED row is kept. A week.
+ *
+ * Far longer than a confirmed one, because a failure is the one outcome the history CANNOT show. The
+ * feed behind it is built from ERC-20 Transfer logs, and a reverted transaction moves nothing and
+ * emits no logs — so a market trade that failed left no trace at all: the toast said so and then
+ * went away, and the history it sent the user to had never heard of it.
+ *
+ * So this store is where a failure lives, and the history screen reads it. A week is long enough to
+ * come back and find out why; the row can also be cleared by hand before then. See {clear}.
+ */
+const FAILED_LINGER_MS = 7 * 24 * 60 * 60_000;
 /** Gap between receipt checks while a transaction is in flight. */
 const POLL_MS = 12_000;
 /** After this long with no receipt and no verdict, the transaction is called dropped, not pending. */
 const GIVE_UP_MS = 30 * 60_000;
-/**
- * How long a submission may stay "broadcasting" before the header stops saying so.
- *
- * The caller is meant to close it — `showTx` does, on both the success and the failure path — and
- * this is only the net under a path that returns without reaching either. Generous enough that it
- * never fires on a slow relay, short enough that a spinner cannot be left up for the session.
- */
-const SUBMIT_GIVE_UP_MS = 90_000;
-/** Most rows kept, so a badge left untouched for a long time cannot grow without bound. */
+/** A ceiling regardless, so a long session cannot grow the list without bound. */
 const MAX_ROWS = 50;
 
 const store = new MMKV({id: 'bitty.pending'});
@@ -82,42 +103,34 @@ const load = (): PendingTx[] => {
 };
 const save = (txs: PendingTx[]) => store.set(KEY, JSON.stringify(txs));
 
+
+
 type State = {
   txs: PendingTx[];
-  /** Writes started on this device that have not come back with a hash. */
-  submitting: Submitting[];
-  /** Called the moment a write starts; returns the id to close it with. */
-  beginSubmit: (network: Network) => number;
-  /** Called when it has a hash, or has failed. Idempotent — the give-up timer may have been first. */
-  endSubmit: (id: number) => void;
   add: (tx: Omit<PendingTx, 'submittedAt' | 'status'>) => void;
   settle: (hash: string, status: 'confirmed' | 'failed' | 'dropped', error?: string) => void;
-  /** Drop one row from the list for good. The user's way out of a transaction that never landed. */
-  remove: (hash: string) => void;
-  /** Drop every row that is no longer in flight, on this network. */
-  clearSettled: (network: Network) => void;
-  /** Called when the Confirming tab is opened: the badge clears, the rows start ageing out. */
-  acknowledge: () => void;
+  /** Dismiss one row for good — the ✕ on a failed row in the history. */
+  clear: (hash: string) => void;
   prune: () => void;
 };
 
-let nextSubmitId = 1;
-
 export const usePending = create<State>((set, get) => ({
   txs: load(),
-  submitting: [],
-  beginSubmit: (network) => {
-    const id = nextSubmitId++;
-    set({submitting: [...get().submitting, {id, network, startedAt: Date.now()}]});
-    setTimeout(() => get().endSubmit(id), SUBMIT_GIVE_UP_MS);
-    return id;
-  },
-  endSubmit: (id) => {
-    if (!get().submitting.some((s) => s.id === id)) return;
-    set({submitting: get().submitting.filter((s) => s.id !== id)});
-  },
   add: (tx) => {
-    const next = [{...tx, submittedAt: Date.now(), status: 'pending' as const}, ...get().txs.filter((t) => t.hash !== tx.hash)];
+    /**
+     * Stamped with the vault in front, here rather than at each of the twenty-odd call sites.
+     *
+     * Every one of them is a write to the vault the user is looking at — that is what makes it
+     * derivable, and what makes asking each caller to pass it both tedious and a thing one of them
+     * would eventually get wrong. Read at RECORD time, so switching vaults afterwards cannot
+     * change whose a record is.
+     */
+    const owner = useWallet.getState().address;
+    const vault = owner ? ownerVaultAddress(owner, tx.network).toLowerCase() : undefined;
+    const next = [
+      {...tx, vault: tx.vault ?? vault, submittedAt: Date.now(), status: 'pending' as const},
+      ...get().txs.filter((t) => t.hash !== tx.hash),
+    ];
     save(next);
     set({txs: next});
     void watch(tx.hash as `0x${string}`, tx.network);
@@ -127,30 +140,21 @@ export const usePending = create<State>((set, get) => ({
     save(next);
     set({txs: next});
   },
-  remove: (hash) => {
+  clear: (hash) => {
     const next = get().txs.filter((t) => t.hash !== hash);
-    save(next);
-    set({txs: next});
-  },
-  clearSettled: (network) => {
-    const next = get().txs.filter((t) => t.network !== network || t.status === 'pending');
-    save(next);
-    set({txs: next});
-  },
-  acknowledge: () => {
-    // Only what has actually settled is dismissed. A transaction still in flight keeps counting,
-    // whether or not the user has looked at the tab: the badge is the app's one answer to "is
-    // anything still going on", and it has to stay true while something is.
-    const next = get().txs.map((t) => (t.status === 'pending' ? t : {...t, seen: true}));
     save(next);
     set({txs: next});
   },
   prune: () => {
     const now = Date.now();
-    // A row the user has not looked at stays, however it ended: the badge is a notice, and it is
-    // theirs to dismiss by opening the tab. Only seen rows age out.
+    // In flight, or settled recently enough to still matter. A failure matters for far longer than
+    // a success: the success turns up in the ordinary history and the failure never does.
     const next = get().txs
-      .filter((t) => !t.seen || t.status === 'pending' || now - (t.settledAt ?? t.submittedAt) < LINGER_MS)
+      .filter((t) => {
+        if (t.status === 'pending') return true;
+        const age = now - (t.settledAt ?? t.submittedAt);
+        return age < (t.status === 'confirmed' ? LINGER_MS : FAILED_LINGER_MS);
+      })
       .slice(0, MAX_ROWS);
     if (next.length !== get().txs.length) {
       save(next);
@@ -158,6 +162,7 @@ export const usePending = create<State>((set, get) => ({
     }
   },
 }));
+
 
 /**
  * Follow one transaction to a verdict.
@@ -245,24 +250,15 @@ async function watch(hash: `0x${string}`, network: Network) {
 /** Resume watching anything left pending from a previous run. Called once at startup. */
 export function resumePending() {
   usePending.getState().prune();
-  for (const t of usePending.getState().txs) if (t.status === 'pending') void watch(t.hash as `0x${string}`, t.network);
+  for (const t of usePending.getState().txs)
+    if (t.status === 'pending') void watch(t.hash as `0x${string}`, t.network);
 }
 
-/** Record a submitted transaction. */
+
+/** Record a submitted transaction, so the toast can follow it to a verdict. */
 export function trackTx(hash: string, network: Network, title: string) {
   usePending.getState().add({hash, network, title});
 }
 
-/**
- * The badge's number: everything on this network still in flight, plus anything that has settled
- * since the user last opened the Confirming tab. A settled one is dismissed by looking at it; one
- * that is still confirming stays counted until the chain says otherwise.
- */
-export function pendingCount(txs: PendingTx[], network: Network): number {
-  return txs.filter((t) => t.network === network && (t.status === 'pending' || !t.seen)).length;
-}
 
-/** Writes still on their way to the relay, on this network. */
-export function submittingCount(rows: Submitting[], network: Network): number {
-  return rows.filter((s) => s.network === network).length;
-}
+

@@ -22,6 +22,18 @@ export function useSheetAnim(visible: boolean, onClose: () => void) {
   const [mounted, setMounted] = useState(visible);
   const closing = useRef(false);
 
+  /**
+   * Who is told when the exit finishes.
+   *
+   * An exit the SHEET started (a ✕, a swipe) has to tell its owner, because the owner does not yet
+   * know. An exit that `visible` turning false started must not: the owner is the one who turned it
+   * false, and calling back into them would be reporting their own instruction to them — which for
+   * an owner whose `onClose` is `goBack` would pop a second screen.
+   */
+  const notify = useRef(false);
+  const close = useRef(onClose);
+  close.current = onClose;
+
   const slideOut = useCallback(
     (velocity = 0) => {
       closing.current = true;
@@ -35,6 +47,23 @@ export function useSheetAnim(visible: boolean, onClose: () => void) {
         if (!finished) return;
         closing.current = false;
         setMounted(false);
+        /**
+         * AFTER the animation, not when it starts.
+         *
+         * `onClose` used to run on the same tick as the exit began, which is survivable for an
+         * owner that only flips a state flag — the sheet stays mounted on its own `mounted` and
+         * finishes leaving. It is not survivable for an owner that POPS A ROUTE: the screen was
+         * torn down mid-flight, and the card froze halfway down and vanished. (The Earn sheet did
+         * exactly that; the order sheet, whose `onClose` is `setSheetSide(null)`, did not.)
+         *
+         * Running it at the end is also what the order sheet wants. Clearing `sheetSide` while the
+         * card is still on screen changes what the card SAYS mid-exit — which is the whole reason
+         * it carries a `lastSide` to fall back to.
+         */
+        if (notify.current) {
+          notify.current = false;
+          close.current();
+        }
       });
     },
     [travel, y],
@@ -52,13 +81,11 @@ export function useSheetAnim(visible: boolean, onClose: () => void) {
         useNativeDriver: true,
       }).start();
     } else if (mounted && !closing.current) {
+      notify.current = false;
       slideOut();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
-
-  const close = useRef(onClose);
-  close.current = onClose;
 
   const responder = useRef(
     PanResponder.create({
@@ -70,8 +97,8 @@ export function useSheetAnim(visible: boolean, onClose: () => void) {
         // Far enough, or thrown hard enough, to mean it. Either way the sheet carries on from
         // where the finger left it rather than jumping.
         if (g.dy > 110 || g.vy > 0.7) {
+          notify.current = true;
           slideOut(g.vy);
-          close.current();
           return;
         }
         Animated.spring(y, {toValue: 0, useNativeDriver: true, bounciness: 2, speed: 14}).start();
@@ -94,8 +121,8 @@ export function useSheetAnim(visible: boolean, onClose: () => void) {
     panHandlers: responder.panHandlers,
     /** Dismiss from a control rather than a gesture — same exit, same timing. */
     requestClose: useCallback(() => {
+      notify.current = true;
       slideOut();
-      close.current();
     }, [slideOut]),
   };
 }

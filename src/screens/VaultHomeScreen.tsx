@@ -1,12 +1,13 @@
 import {useHeaderHeight} from '@react-navigation/elements';
 import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
 import React, {useCallback, useMemo, useRef, useState} from 'react';
-import {ActivityIndicator, Animated, PanResponder, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {ActivityIndicator, Animated, PanResponder, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, type GestureResponderEvent} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import Svg, {Circle, Line, Path} from 'react-native-svg';
 import type {RootStackParamList} from '@/App';
-import {TokenIcon} from '@/components/TokenIcon';
+import {MarketRow} from '@/components/MarketRow';
+import {HoldingRow, MASK} from '@/components/HoldingRow';
 import {Amount} from '@/components/Amount';
 import {ReceiveDialog} from '@/components/ReceiveDialog';
 import {useNetwork, networkLabel} from '@/core/network-store';
@@ -16,13 +17,14 @@ import {useVaultLp} from '@/vault/useVaultLp';
 import {useFlows} from '@/vault/useFlows';
 import {earnedRaw} from '@/vault/flows';
 import {usePrices} from '@/vault/usePrices';
-import {useMarketStats, fmtCap, fmtChange, type MarketStat, type MarketStatMap} from '@/vault/useMarketStats';
+import {useMarketStats, type MarketStat, type MarketStatMap} from '@/vault/useMarketStats';
+
 import {usdValue, fmtUsd} from '@/core/prices';
 import {fmtNum, displaySymbol} from '@/core/format';
 
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {assetCategory, type AssetCategory} from '@/core/assets';
-import {isAssetsList, useFavorites, useWatchLists, watchListLabel, watchListNumber} from '@/core/favorites-store';
+import {isAssetsList, showsCap, useFavorites, useWatchLists, watchListLabel, watchListNumber} from '@/core/favorites-store';
 import {getFlag, setFlag, HIDE_BALANCES} from '@/core/prefs';
 import {useWatchDraft} from '@/core/watch-draft';
 import {balanceOfSymbol} from '@/vault/read';
@@ -80,18 +82,6 @@ function ActionIcon({name, color, size = 22}: {name: 'send' | 'receive' | 'histo
 
 const fmt = fmtNum;
 
-/**
- * The rows "Assets" always shows, funded or not.
- *
- * Every stablecoin, because that is what a vault is funded in and what every fee is paid from,
- * plus bitcoin and ether — the two a balance is most often moved into. A row that is already
- * there is a row someone can act on; an asset that only appears once it has a balance cannot be
- * the thing you tap to get one.
- *
- * Deliberately short. Everything else earns its place by having a balance.
- */
-const CORE_SYMBOLS = new Set(['ETH', 'WETH', 'WBTC', 'cbBTC']);
-const isCoreAsset = (symbol: string, stable: boolean) => stable || CORE_SYMBOLS.has(symbol);
 
 /**
  * What the eye leaves behind.
@@ -100,7 +90,6 @@ const isCoreAsset = (symbol: string, stable: boolean) => stable || CORE_SYMBOLS.
  * that the vault is denominated in dollars and roughly how many digits it holds. A fixed-width run
  * of dots says nothing about either.
  */
-const MASK = '••••';
 const MASK_TOTAL = '••••••';
 
 type Row = {
@@ -130,6 +119,7 @@ function AssetList({
   onReorder,
   onDragging,
   market,
+  showCap,
 }: {
   rows: Row[];
   loading: boolean;
@@ -141,6 +131,8 @@ function AssetList({
    * is drawn as a market list rather than a holdings one. Null on "Assets".
    */
   market: MarketStatMap | null;
+  /** Does this list show the market-cap column? Off moves price and change to the right edge. */
+  showCap: boolean;
   onTrade: (row: Row) => (() => void) | null;
   /** The new order, by symbol, once a drag settles. */
   onReorder: (symbols: string[]) => void;
@@ -245,14 +237,38 @@ function AssetList({
    * Pressable's own onLongPress cancels the moment the finger drifts, which on a scrolling list is
    * most holds. A timer started by the raw touch survives that, and the press handlers underneath
    * are left alone so a tap still does what it did.
+   *
+   * It survives drift, so it has to be told what drift means. The window was a fifth of a second
+   * and ignored the finger entirely, and the first fifth of a second of a pull-to-refresh is a
+   * finger resting on a row: the row came up, {onDragging} froze the scroll, and pulling the list
+   * down to refresh reordered it instead. So the window is now the platform's own long press, and
+   * travel inside it says the gesture was a scroll all along. The slop is wide enough for a hand
+   * that is not quite still and far short of a scroll.
    */
+  const HOLD_MS = 500;
+  const HOLD_SLOP = 12;
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const armHold = (i: number) => {
-    holdTimer.current = setTimeout(() => begin(i), 220);
+  const holdFrom = useRef<{x: number; y: number} | null>(null);
+  const armHold = (i: number, e: GestureResponderEvent) => {
+    holdFrom.current = {x: e.nativeEvent.pageX, y: e.nativeEvent.pageY};
+    holdTimer.current = setTimeout(() => begin(i), HOLD_MS);
+  };
+  /**
+   * The finger moved before the hold matured, so it was scrolling. Abandons the hold.
+   *
+   * Once a row IS in hand this is the drag itself and must be left alone — the PanResponder owns
+   * the gesture from that point and the finger is meant to travel.
+   */
+  const holdDrift = (e: GestureResponderEvent) => {
+    const at = holdFrom.current;
+    if (!at || live.current.from != null) return;
+    const {pageX, pageY} = e.nativeEvent;
+    if (Math.abs(pageX - at.x) > HOLD_SLOP || Math.abs(pageY - at.y) > HOLD_SLOP) cancelHold();
   };
   const cancelHold = () => {
     if (holdTimer.current) clearTimeout(holdTimer.current);
     holdTimer.current = null;
+    holdFrom.current = null;
   };
   /**
    * The finger left. Cancels a hold that never matured, and puts down a row that was lifted but
@@ -298,7 +314,8 @@ function AssetList({
               <Animated.View
                 key={r.address}
                 onLayout={(e) => measure(i, e.nativeEvent.layout.height)}
-                onTouchStart={() => armHold(i)}
+                onTouchStart={(e) => armHold(i, e)}
+                onTouchMove={holdDrift}
                 onTouchEnd={endTouch}
                 onTouchCancel={endTouch}
                 style={[
@@ -314,8 +331,13 @@ function AssetList({
                   first={i === 0}
                   hidden={hidden}
                   onTrade={onTrade(r)}
-                  onHold={() => begin(i)}
+                  // Gated by the same drift check as the timer above. Pressable keeps its long
+                  // press alive while the finger stays inside a generously padded press rect, so
+                  // on its own it would fire part-way through a slow pull and pick the row up
+                  // after `holdDrift` had already decided the gesture was a scroll.
+                  onHold={() => holdFrom.current && begin(i)}
                   markets={market != null}
+                  showCap={showCap}
                   stat={market?.get(r.symbol)}
                 />
               </Animated.View>
@@ -343,8 +365,11 @@ function AssetRow({
   onTrade,
   onHold,
   markets,
+  showCap,
   stat,
 }: {
+  /** Does this list show the market-cap column? See {AssetList}. */
+  showCap: boolean;
   row: Row;
   first: boolean;
   /** Mask the balance and its value. The unit price under the ticker is market data and stays. */
@@ -365,79 +390,41 @@ function AssetRow({
   /** This asset's figures, absent while they load and for anything the catalog has no id for. */
   stat: MarketStat | undefined;
 }) {
-  const {t, language} = useT();
+  const {t} = useT();
   const styles = useStyles(makeStyles);
-  const c = useColors();
   const [open, setOpen] = useState(false);
   const splittable = row.legs.length > 0 && row.total > 0;
 
-  if (markets) {
-    const change = fmtChange(stat?.change24h);
+  if (markets)
     return (
-      <View style={!first && styles.rowSeparator}>
-        {/* No breakdown to open and no amounts to mask: every figure here is market data, so the
-            whole row is one target and the eye leaves it alone. */}
-        <Pressable style={styles.rowInner} onPress={() => onTrade?.()} onLongPress={onHold} delayLongPress={220}>
-          <View style={styles.assetCell}>
-            <TokenIcon symbol={row.symbol} uri={row.icon} size={30} />
-            <View style={styles.assetText}>
-              <Text style={styles.sym}>{displaySymbol(row.symbol)}</Text>
-            </View>
-          </View>
-          <View style={styles.priceCol}>
-            <Text style={styles.amt}>{row.price != null ? fmtUsd(row.price) : '—'}</Text>
-            {change ? (
-              <Text style={[styles.change, {color: (stat?.change24h ?? 0) >= 0 ? c.success : c.danger}]}>{change}</Text>
-            ) : null}
-          </View>
-          <View style={styles.capCol}>
-            <Text style={styles.cap}>{fmtCap(stat?.marketCap, language)}</Text>
-          </View>
-        </Pressable>
-      </View>
+      <MarketRow
+        symbol={row.symbol}
+        icon={row.icon}
+        price={row.price}
+        change24h={stat?.change24h}
+        marketCap={stat?.marketCap}
+        showCap={showCap}
+        first={first}
+        onPress={() => onTrade?.()}
+        onLongPress={onHold}
+      />
     );
-  }
 
   return (
-    <View style={!first && styles.rowSeparator}>
-      {/* The row goes to Trade. The amounts on the right are their own target and open the
-          breakdown instead — a nested pressable wins over the one around it, so the two do not
-          fight, and the split matches what each half is about: the asset, and what you hold of it. */}
-      {/* onLongPress is here for its side effect as much as its handler: once Pressability has
-          fired a long press it suppresses the tap, so releasing after a hold does not also open
-          the trade page. The drag itself is armed by a timer on the wrapper, which survives the
-          small finger drift that cancels a Pressable's press. */}
-      <Pressable style={styles.rowInner} onPress={() => onTrade?.()} onLongPress={onHold} delayLongPress={220}>
-        <View style={styles.assetCell}>
-          <TokenIcon symbol={row.symbol} uri={row.icon} size={30} />
-          <View style={styles.assetText}>
-            {/* The ticker alone. What the company is belongs on the Trade directory, where you are
-                choosing between assets; here you already know what you hold. */}
-            <Text style={styles.sym}>{displaySymbol(row.symbol)}</Text>
-            {row.price != null ? <Text style={styles.sub}>{fmtUsd(row.price)}</Text> : null}
-          </View>
-        </View>
-        <Pressable
-          style={styles.amtCol}
-          hitSlop={8}
-          disabled={!splittable}
-          onPress={() => setOpen((o) => !o)}>
-          <Text style={styles.amt}>
-            {hidden ? (
-              MASK
-            ) : row.earned > 0 ? (
-              <>
-                <Amount v={fmt(row.total - row.earned)} size={15} weight="600" />{' '}
-                <Text style={styles.amtEarned}>+ <Amount v={fmt(row.earned)} size={13} color={c.success} weight="600" /></Text>
-              </>
-            ) : (
-              <Amount v={fmt(row.total)} size={15} weight="600" />
-            )}
-          </Text>
-          {hidden ? <Text style={styles.sub}>{MASK}</Text> : row.usd != null ? <Text style={styles.sub}>{fmtUsd(row.usd)}</Text> : null}
-        </Pressable>
-      </Pressable>
-
+    <>
+      <HoldingRow
+        symbol={row.symbol}
+        icon={row.icon}
+        price={row.price}
+        total={row.total}
+        earned={row.earned}
+        usd={row.usd}
+        hidden={hidden}
+        first={first}
+        onPress={() => onTrade?.()}
+        onLongPress={onHold}
+        onAmountPress={splittable ? () => setOpen((o) => !o) : undefined}
+      />
       {open ? (
         <View style={styles.legs}>
           {/* Balance first: it is the part that can be spent without unwinding anything. Which
@@ -456,7 +443,7 @@ function AssetRow({
           ))}
         </View>
       ) : null}
-    </View>
+    </>
   );
 }
 
@@ -522,6 +509,8 @@ export function VaultHomeScreen() {
   const [receiveOpen, setReceiveOpen] = useState(false);
 
   const catalog = useAssetCatalog(network);
+  // Subscribed, not read once: toggling the column on the list's own page must redraw this pager.
+  const caps = useFavorites((s) => s.caps);
   // Priced from the catalog the rows actually render, so an asset that exists only in the live
   // catalog — every Ondo stock on mainnet — is no longer left without a price.
   const catalogSymbols = useMemo(() => catalog.map((a) => a.symbol), [catalog]);
@@ -656,18 +645,21 @@ export function VaultHomeScreen() {
    * A user's own list is EXACTLY what was starred onto it and nothing else — that is what makes it
    * worth creating.
    *
-   * "Assets" is not a list at all, it is a view of the vault, and nothing can be added to or
-   * removed from it: it shows the core set — the stablecoins, bitcoin and ether — always, plus
-   * every other asset with a balance. Always-on means the rows someone funds first are already
-   * there to be funded; a balance in anything else can never go missing, whatever the user has
-   * starred elsewhere. Starring deliberately has no effect here, which is why the watch-list
-   * symbols are not consulted.
+   * "Assets" is editable like any other list, with one rule of its own: ANYTHING FUNDED IS
+   * ALWAYS SHOWN. A balance cannot go missing because of how someone arranged their rows, so
+   * un-starring an asset the vault holds hides it from every other list and not from this one.
+   *
+   * What starring decides here is the empty rows — which assets are on screen ready to be funded.
+   * It starts as the core set (every stablecoin, plus bitcoin and ether, seeded in {loadLists}),
+   * because those are what a vault is funded in and what fees are paid from, and a row that is
+   * already there is a row someone can act on. From there it is theirs to change.
    */
   const rowsForList = (listId: string): Row[] => {
     const held = isAssetsList(listId);
+    const starred = new Set(watch.lists.find((l) => l.id === listId)?.symbols ?? []);
     const visible = held
-      ? rows.filter((r) => isCoreAsset(r.symbol, r.stable) || r.total > 0)
-      : rows.filter((r) => new Set(watch.lists.find((l) => l.id === listId)?.symbols ?? []).has(r.symbol));
+      ? rows.filter((r) => starred.has(r.symbol) || r.total > 0)
+      : rows.filter((r) => starred.has(r.symbol));
     const ordered = sortFor(listId)(visible);
     // Funded first on "Assets" only. A list of the user's own no longer shows a balance at all —
     // it shows price, the day and the market cap — so splitting it by one would be sorting on a
@@ -894,17 +886,10 @@ export function VaultHomeScreen() {
                   const {x, width} = e.nativeEvent.layout;
                   tabBox.current[l.id] = {x, w: width};
                 }}
-                /**
-                 * A tap selects the list; a tap on the one already in front opens it for editing.
-                 *
-                 * Except "Assets", which has nothing to edit — it is a view of the vault, a fixed
-                 * core set plus whatever has a balance, and starring cannot add to or remove from
-                 * it. Opening the editor there offered a page whose every control was inert, so
-                 * the second tap does nothing instead.
-                 */
+                /** A tap selects the list; a tap on the one already in front opens it for editing. */
                 onPress={() => {
                   if (!on) return pickList(l.id);
-                  if (!isAssetsList(l.id)) nav.navigate('Watchlist');
+                  nav.navigate('Watchlist');
                 }}>
                 <Text style={[styles.listTitle, on && styles.listTitleOn]}>
                   {watchListLabel(
@@ -966,6 +951,7 @@ export function VaultHomeScreen() {
                     error={bal.error}
                     hidden={hidden}
                     market={isAssetsList(l.id) ? null : marketStats}
+                    showCap={showsCap(caps, network, l.id)}
                     onTrade={tradeFor}
                     onReorder={(symbols) => saveOrder(network, symbols)}
                     onDragging={setDragging}
@@ -1051,32 +1037,15 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   listAdd: {color: c.subtext, fontSize: 15, fontWeight: '600'},
   listCard: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 4},
   list: {gap: 0},
-  // The separator sits on TOP of every row: one between the header and the first asset, one
-  // between each pair of rows, and none trailing the last.
-  rowSeparator: {borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border},
-  rowInner: {flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10},
   // Indented to the asset NAME, not its icon: a 28pt icon and the cell's 10pt gap above it.
   legs: {paddingLeft: 38, paddingBottom: 12, gap: 8},
   legRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
   legLabel: {flex: 1, color: c.subtext, fontSize: 13},
   legAmt: {color: c.text, fontSize: 13, fontVariant: ['tabular-nums']},
   legEarned: {color: c.success, fontSize: 12},
-  assetCell: {flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1},
   // Sized to the icon and the name, never to the cell: the gap to its right is the row's.
   badge: {width: 28, height: 28, borderRadius: 14, backgroundColor: c.bg, alignItems: 'center', justifyContent: 'center'},
   badgeText: {color: c.subtext, fontSize: 10, fontWeight: '700'},
-  assetText: {flexShrink: 1, minWidth: 0},
-  sym: {color: c.text, fontSize: 15, fontWeight: '600'},
-  amtCol: {alignItems: 'flex-end'},
-  // A market row is three columns rather than two, and the price is the middle one — centred on
-  // the row, not pushed against the ticker, so a column of prices reads down the page.
-  priceCol: {flex: 1, alignItems: 'center'},
-  capCol: {flex: 1, alignItems: 'flex-end'},
-  change: {fontSize: 12, fontWeight: '600', marginTop: 2, fontVariant: ['tabular-nums']},
-  cap: {color: c.subtext, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums']},
-  amt: {color: c.text, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums']},
-  sub: {color: c.subtext, fontSize: 12, marginTop: 2},
-  amtEarned: {color: c.success, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums']},
   chev: {color: c.subtext, fontSize: 18, width: 16, textAlign: 'right'},
   // The card's padding frames the list: the last row (or its open details) adds no bottom padding,
   // so the space below the last asset equals the space above the header.

@@ -172,6 +172,9 @@ const makeStyles = (c: Colors) =>
       justifyContent: 'space-between',
       alignItems: 'center',
       paddingVertical: 12,
+      // A switch fills its box exactly, where a chevron's glyph sits a few points inside one, so
+      // without this it reads as nearer the edge than every other row in the app.
+      paddingRight: 10,
       gap: 12,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: c.border,

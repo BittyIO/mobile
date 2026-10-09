@@ -137,7 +137,7 @@ export function WhitelistScreen() {
               const anyAsset = /^0x0+$/.test(r.allowedAsset);
               return (
                 <View key={r.id} style={styles.item}>
-                  <CopyAddress address={r.recipientAddress} label={`${r.recipientAddress.slice(0, 8)}…${r.recipientAddress.slice(-6)}`} textStyle={styles.itemText} />
+                  <CopyAddress address={r.recipientAddress} label={shortAddress(r.recipientAddress)} textStyle={styles.itemText} />
                   <Text style={styles.itemSub}>
                     {anyAsset ? t('vault.any_asset') : displaySymbol(assetMeta(network, r.allowedAsset as Address).symbol)}
                   </Text>

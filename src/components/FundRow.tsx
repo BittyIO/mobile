@@ -31,6 +31,7 @@ export function FundRow({
   onToggle,
   onAmount,
   onCommit,
+  inert,
 }: {
   label: string;
   sub: string;
@@ -42,6 +43,14 @@ export function FundRow({
   onAmount: (v: string) => void;
   /** Called when the field is done being edited, so an amount left at zero can clear the tick. */
   onCommit: () => void;
+  /**
+   * A row that is there to be READ, not ticked — the float held back for network fees.
+   *
+   * It belongs in the sheet because this is where the coin is accounted for: leave it out and the
+   * sources add up to more than the form will accept, with a Max that comes up short as the only
+   * hint. It can never be a source, so it takes no tap and dims to say so.
+   */
+  inert?: boolean;
 }) {
   const {t} = useT();
   const c = useColors();
@@ -52,10 +61,12 @@ export function FundRow({
   const empty = cap <= 0;
   return (
     <View style={styles.fsRow}>
-      <Pressable style={styles.fsHead} onPress={onToggle} disabled={empty}>
-        <TokenIcon symbol={symbol} size={30} />
+      <Pressable style={styles.fsHead} onPress={onToggle} disabled={empty || inert}>
+        <View style={inert ? styles.fsInert : undefined}>
+          <TokenIcon symbol={symbol} size={30} />
+        </View>
         <View style={styles.fsLabelCol}>
-          <Text style={styles.fsLabel} numberOfLines={1}>
+          <Text style={[styles.fsLabel, inert && styles.fsInertText]} numberOfLines={1}>
             {label}
           </Text>
           <Text style={styles.fsHeld} numberOfLines={1}>
@@ -114,6 +125,10 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   fsLabelCol: {flex: 1},
   fsLabel: {color: c.text, fontSize: 15, fontWeight: '600'},
   fsHeld: {color: c.subtext, fontSize: 12, marginTop: 1},
+  // The inert row, dimmed exactly as a disabled picker row is: it is the one row in the sheet
+  // that is not an answer.
+  fsInert: {opacity: 0.45},
+  fsInertText: {color: c.subtext},
   fsSteps: {flexDirection: 'row', gap: 6, flex: 1},
   fsStep: {paddingVertical: 5, paddingHorizontal: 9, borderRadius: 9, borderWidth: 1, borderColor: c.border},
   // Always the app accent, never buy-green or sell-red: the same strip picks how much a payment

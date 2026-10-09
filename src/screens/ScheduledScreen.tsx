@@ -218,7 +218,7 @@ export function ScheduledScreen() {
                     <Text style={styles.itemText}>
                       {amt.toLocaleString(language, {maximumFractionDigits: 6})} {displaySymbol(m.symbol)} →{' '}
                     </Text>
-                    <CopyAddress address={p.scheduledPaymentAddress} label={`${p.scheduledPaymentAddress.slice(0, 6)}…${p.scheduledPaymentAddress.slice(-4)}`} textStyle={styles.itemText} />
+                    <CopyAddress address={p.scheduledPaymentAddress} label={shortAddress(p.scheduledPaymentAddress)} textStyle={styles.itemText} />
                   </View>
                   <Text style={styles.itemSub}>
                     {intervalText(p.paymentInterval)} · {t('mobile.payments.starts_on', {date: new Date(Number(p.startTimestamp) * 1000).toLocaleDateString(language)})}

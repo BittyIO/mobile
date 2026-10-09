@@ -15,6 +15,14 @@ export type PickerItem = {
   icon?: React.ReactNode;
   /** A figure for the right-hand end of the row — what the vault holds of it, where that is known. */
   value?: string;
+  /**
+   * A row that is there to be READ, not chosen.
+   *
+   * Some lists have to account for a balance the user cannot spend here — the float held back for
+   * network fees, say. Leaving it out made the amounts in the sheet disagree with the one the form
+   * would accept; making it selectable offered a source that funds nothing.
+   */
+  disabled?: boolean;
 };
 
 /**
@@ -65,39 +73,68 @@ export function PickerSheet({
   onSelect: (key: string) => void;
   onClose: () => void;
 }) {
-  const c = useColors();
   const styles = useStyles(makeStyles);
   return (
     <Sheet visible={visible} title={title} onClose={onClose}>
       <ScrollView showsVerticalScrollIndicator={false} style={styles.listWrap} bounces={false}>
-        <View style={styles.list}>
-          {items.map((it, i) => {
-            const on = it.key === selected;
-            return (
-              <Pressable
-                key={it.key}
-                onPress={() => {
-                  onSelect(it.key);
-                  onClose();
-                }}
-                style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === items.length - 1 && styles.rowLast, pressed && styles.rowPressed]}>
-                {it.icon ?? null}
-                <View style={styles.rowText}>
-                  <Text style={styles.sym}>{it.label}</Text>
-                  {it.sub ? <Text style={styles.name}>{it.sub}</Text> : null}
-                </View>
-                {it.value ? <Text style={styles.val}>{it.value}</Text> : null}
-                {on ? (
-                  <Svg width={18} height={18} viewBox="0 0 24 24">
-                    <Path d="M20 6 9 17l-5-5" stroke={c.accent} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                  </Svg>
-                ) : null}
-              </Pressable>
-            );
-          })}
-        </View>
+        <PickerList
+          items={items}
+          selected={selected}
+          onSelect={(key) => {
+            onSelect(key);
+            onClose();
+          }}
+        />
       </ScrollView>
     </Sheet>
+  );
+}
+
+/**
+ * The rows on their own, without a sheet around them.
+ *
+ * A sheet that asks ONE question is a PickerSheet and closes on the answer. A sheet that asks two
+ * — a filter, say — is two of these stacked under their own headings, staying open until the user
+ * says they are done. Both draw the same card, the same 56pt rows and the same accent tick,
+ * because the second kind was otherwise going to be a second copy of them.
+ */
+export function PickerList({
+  items,
+  selected,
+  onSelect,
+}: {
+  items: PickerItem[];
+  selected?: string;
+  onSelect: (key: string) => void;
+}) {
+  const c = useColors();
+  const styles = useStyles(makeStyles);
+  return (
+    <View style={styles.list}>
+      {items.map((it, i) => {
+        const on = it.key === selected && !it.disabled;
+        return (
+          <Pressable
+            key={it.key}
+            disabled={it.disabled}
+            onPress={() => onSelect(it.key)}
+            style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === items.length - 1 && styles.rowLast, pressed && styles.rowPressed]}>
+            {/* Dimmed as a whole, icon included: it is the one row here that is not an answer. */}
+            <View style={it.disabled ? styles.inert : undefined}>{it.icon ?? null}</View>
+            <View style={styles.rowText}>
+              <Text style={[styles.sym, it.disabled && styles.inertText]}>{it.label}</Text>
+              {it.sub ? <Text style={styles.name}>{it.sub}</Text> : null}
+            </View>
+            {it.value ? <Text style={[styles.val, it.disabled && styles.inertText]}>{it.value}</Text> : null}
+            {on ? (
+              <Svg width={18} height={18} viewBox="0 0 24 24">
+                <Path d="M20 6 9 17l-5-5" stroke={c.accent} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+              </Svg>
+            ) : null}
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -110,6 +147,8 @@ const makeStyles = (c: Colors) =>
     rowFirst: {borderTopWidth: 0, paddingTop: 16},
     rowLast: {paddingBottom: 16},
     rowPressed: {opacity: 0.6},
+    inert: {opacity: 0.45},
+    inertText: {color: c.subtext},
     rowText: {flex: 1},
     sym: {color: c.text, fontSize: 16, fontWeight: '600'},
     name: {color: c.subtext, fontSize: 12, marginTop: 1},

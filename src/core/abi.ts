@@ -14,6 +14,18 @@ export const FORWARDER_ABI = parseAbi([
 ]);
 
 /**
+ * The forwarder's own entry points, for READING a relayed transaction back.
+ *
+ * The app never calls these — the relayer does — but a transaction the relayer sent has one of them
+ * as its input, and the signed request inside carries the vault call. That is how a FAILED operation
+ * can still be described: reverting destroys the effects, not the calldata. See {decodeFailedTrade}.
+ */
+export const FORWARDER_EXEC_ABI = parseAbi([
+  'function executeWithFee((address from,address to,uint256 value,uint256 gas,uint48 deadline,bytes data,bytes signature) request, address stableCoinAddress, uint256 fee)',
+  'function executeBatchWithFee((address from,address to,uint256 value,uint256 gas,uint48 deadline,bytes data,bytes signature)[] requests, address vault, address stableCoinAddress, uint256 fee)',
+]);
+
+/**
  * Asset / protocol allowlist management + upgrades (v1.0.x). `updateAssets`/`updateProtocols` add/remove
  * from the vault's allowlist; enable/disableAllowlist toggles restricted mode; `upgrade` UUPS-upgrades
  * the vault; `upgradeProtocol` upgrades an adapter clone in place (same lineage, strictly newer).

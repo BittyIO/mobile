@@ -47,17 +47,6 @@ function InfoIcon({color}: {color: string}) {
   );
 }
 
-/** What it has DONE — the clock the orders row and the Overview both wear. */
-function ClockIcon({color}: {color: string}) {
-  const c = glyph(color);
-  return (
-    <Svg width={22} height={22} viewBox="0 0 24 24">
-      <Circle cx={12} cy={12} r={9} {...c} strokeWidth={2} />
-      <Path d="M12 7.5V12l3 2" {...c} strokeWidth={2} />
-    </Svg>
-  );
-}
-
 /** Where it all happens — the linked nodes the Settings network row uses. */
 function NodesIcon({color}: {color: string}) {
   const c = glyph(color);
@@ -137,13 +126,14 @@ export function TradeMenu({symbol, stack}: {symbol: string | null; stack?: boole
           },
         ]
       : []),
-    {
-      key: 'history',
-      label: t('mobile.trade.order_history'),
-      icon: <ClockIcon color={c.subtext} />,
-      // Null on the market directory, where no one pair is in view — the page then opens on all.
-      onPress: () => go(() => nav.navigate('OrderHistory', {symbol: symbol ?? undefined})),
-    },
+    /**
+     * The chains, and nothing else beside them.
+     *
+     * Two rows have left this sheet. Order history went because the panel's own Finished tab is the
+     * same record for the pair in front. The window that replaced it went too, and for the better
+     * reason: it belongs ON the tab it governs — a setting two taps away in a menu, for a list in
+     * plain view, is a setting nobody finds. Tapping Finished again opens it. See {windowPicker}.
+     */
     {key: 'network', label: t('mobile.settings.choose_network'), icon: <NodesIcon color={c.subtext} />},
   ];
 
@@ -161,33 +151,39 @@ export function TradeMenu({symbol, stack}: {symbol: string | null; stack?: boole
       <Sheet visible={open} title={t('mobile.app.trade')} onClose={close}>
         <ScrollView showsVerticalScrollIndicator={false} style={styles.scroll} bounces={false}>
           <View style={styles.card}>
-            {rows.map((r, i) =>
-              r.onPress ? (
-                <Pressable
-                  key={r.key}
-                  style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, pressed && styles.pressed]}
-                  onPress={r.onPress}>
-                  {r.icon}
-                  <Text style={styles.label}>{r.label}</Text>
-                </Pressable>
-              ) : (
-                // Not pressable: the chains below ARE this row. Same icon, same label, same
-                // metrics as the two above it, so the three still read as one set.
-                <View key={r.key} style={[styles.row, i === 0 && styles.rowFirst]}>
-                  {r.icon}
-                  <Text style={styles.label}>{r.label}</Text>
-                </View>
-              ),
-            )}
-            {NETWORKS.map((n, j) => (
-              <Pressable
-                key={n}
-                style={({pressed}) => [styles.row, styles.chainRow, j === NETWORKS.length - 1 && styles.rowLast, pressed && styles.pressed]}
-                onPress={() => go(() => setNetwork(n as Network))}>
-                <NetworkIcon network={n} size={24} />
-                <Text style={styles.label}>{networkLabel(n, t)}</Text>
-                {n === network ? <Tick color={c.accent} /> : null}
-              </Pressable>
+            {rows.map((r, i) => (
+              <React.Fragment key={r.key}>
+                {r.onPress ? (
+                  <Pressable
+                    style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, pressed && styles.pressed]}
+                    onPress={r.onPress}>
+                    {r.icon}
+                    <Text style={styles.label}>{r.label}</Text>
+                  </Pressable>
+                ) : (
+                  // Not pressable: the choices under it ARE this row. Same icon, same label, same
+                  // metrics as an action row, so the set still reads as one list.
+                  <View style={[styles.row, i === 0 && styles.rowFirst]}>
+                    {r.icon}
+                    <Text style={styles.label}>{r.label}</Text>
+                  </View>
+                )}
+
+                {/* A header's own choices, indented under it. Inside the same map so a row and the
+                    things it governs cannot drift apart in the order they are listed. */}
+                {r.key === 'network'
+                  ? NETWORKS.map((n, j) => (
+                      <Pressable
+                        key={n}
+                        style={({pressed}) => [styles.row, styles.chainRow, j === NETWORKS.length - 1 && styles.rowLast, pressed && styles.pressed]}
+                        onPress={() => go(() => setNetwork(n as Network))}>
+                        <NetworkIcon network={n} size={24} />
+                        <Text style={styles.label}>{networkLabel(n, t)}</Text>
+                        {n === network ? <Tick color={c.accent} /> : null}
+                      </Pressable>
+                    ))
+                  : null}
+              </React.Fragment>
             ))}
           </View>
         </ScrollView>

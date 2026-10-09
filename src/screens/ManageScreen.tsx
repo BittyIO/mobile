@@ -1,16 +1,20 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {ScrollView, StyleSheet, Text, View} from 'react-native';
+import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {ownerVaultAddress} from '@/vault/read';
 import {isAllowlistEnabled, allowedSet, updateAsset, updateProtocol, setAllowlistEnabled, vaultImplVersion} from '@/vault/manage';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {TokenIcon} from '@/components/TokenIcon';
+import {AssetCategoryList} from '@/components/AssetCategoryList';
 import {PendingSwitch} from '@/components/PendingSwitch';
 import {showTx} from '@/components/Toast';
 import {useConfirmAction} from '@/components/ConfirmAction';
 import {relayGasFor} from '@/vault/fee-quote';
 import {ProtocolIcon} from '@/components/ProtocolIcon';
+import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import type {RootStackParamList} from '@/App';
 import {type ProtocolCategory} from '@/core/protocols';
 import {
   fetchVaultVersions,
@@ -60,6 +64,8 @@ const serviceRank = (c: ProtocolCategory) => {
 export function ManageScreen() {
   const {t, company} = useT();
   const styles = useStyles(makeStyles);
+  const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const {params} = useRoute<RouteProp<RootStackParamList, 'VaultAssets'>>();
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
@@ -139,6 +145,83 @@ export function ManageScreen() {
   const run = (key: string, title: string, fn: Parameters<typeof runNow>[2]) =>
     ask({title, gas: relayGasFor({}), run: () => runNow(key, title, fn).then(() => undefined)});
 
+  /**
+   * Which face of this page is showing.
+   *
+   * Undefined is the summary: the allow-list switch and two rows that say how much is in each
+   * list. The lists themselves are the same screen with a section named, rather than screens of
+   * their own, because they read the same vault state the summary does — the mode, what is
+   * registered, which write is in flight — and a second screen would have to fetch and follow all
+   * of it again to show a subset of it.
+   */
+  const section = params?.section;
+
+  const assetList = (
+    <AssetCategoryList
+      swipe
+      pageStyle={styles.group}
+      assets={assets}
+      renderItem={(a, i) => (
+        <View style={[styles.row, styles.rowFirst, i > 0 && styles.rowDivided]}>
+          <View style={styles.symRow}>
+            <TokenIcon symbol={a.symbol} uri={a.icon} size={22} />
+            <View style={styles.symText}>
+              <Text style={styles.sym}>{displaySymbol(a.symbol)}</Text>
+              {company(a.symbol, a.tokenName) ? (
+                <Text style={styles.company} numberOfLines={1}>
+                  {company(a.symbol, a.tokenName)}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+          <PendingSwitch
+            value={bitty || assetSet.has(a.address.toLowerCase())}
+            pending={busy === `a-${a.address}`}
+            disabled={busy !== null || bitty}
+            onValueChange={(v) =>
+              run(`a-${a.address}`, t(v ? 'mobile.actions.asset_added' : 'mobile.actions.asset_removed', {name: displaySymbol(a.symbol)}), (acct) =>
+                updateAsset({account: acct, vault: vault!, network, asset: a.address, add: v, stableCoin: stable!.address}),
+              )
+            }
+          />
+        </View>
+      )}
+    />
+  );
+
+  /** Services, as the web names them; the protocol behind each sits at the right of its row. */
+  const serviceList = (
+    <View style={styles.group}>
+      {protocols.map((p, i) => (
+        <View key={p.address} style={[styles.row, i === 0 && styles.rowFirst, i === protocols.length - 1 && styles.rowLast]}>
+          <Text style={styles.sym}>{t(SERVICE_KEY[p.category] ?? SERVICE_KEY.unknown)}</Text>
+          <View style={styles.protoRight}>
+            <ProtocolIcon name={p.name} size={20} uri={p.icon} />
+            <Text style={styles.protoName}>{p.name}</Text>
+          </View>
+          <PendingSwitch
+            value={bitty || protoSet.has(p.address.toLowerCase())}
+            pending={busy === `p-${p.address}`}
+            disabled={busy !== null || bitty}
+            onValueChange={(v) =>
+              run(`p-${p.address}`, t(v ? 'mobile.actions.enable_service' : 'mobile.actions.disable_service', {name: p.name}), (acct) =>
+                updateProtocol({account: acct, vault: vault!, network, protocol: p.address, add: v, stableCoin: stable!.address}),
+              )
+            }
+          />
+        </View>
+      ))}
+    </View>
+  );
+
+  if (section)
+    return (
+      <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
+        {section === 'assets' ? assetList : serviceList}
+        {sheet}
+      </ScrollView>
+    );
+
   return (
     <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
       <View style={styles.section}>
@@ -162,62 +245,30 @@ export function ManageScreen() {
       <Text style={styles.foot}>{t('mobile.vault.bitty_allowlist_foot')}</Text>
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.groupLabel}>{t('vault.assets')}</Text>
-        <View style={styles.group}>
-        {assets.map((a, i) => (
-          <View key={a.address} style={[styles.row, i === 0 && styles.rowFirst, i === assets.length - 1 && styles.rowLast]}>
-            <View style={styles.symRow}>
-              <TokenIcon symbol={a.symbol} uri={a.icon} size={22} />
-              <View style={styles.symText}>
-                <Text style={styles.sym}>{displaySymbol(a.symbol)}</Text>
-                {company(a.symbol, a.tokenName) ? (
-                  <Text style={styles.company} numberOfLines={1}>
-                    {company(a.symbol, a.tokenName)}
-                  </Text>
-                ) : null}
-              </View>
+      {/* What each list holds, and a way in. The two lists used to be here in full, one under the
+          other, which made the page a hundred rows of switches to scroll past — and the thing
+          someone comes here to change is one row in one of them. Two rows and a count say which
+          list to open; the lists are the same screen with a section named. */}
+      <View style={styles.group}>
+        {(
+          [
+            ['assets', t('mobile.vault.allowlist_assets'), assets.length],
+            ['services', t('mobile.vault.allowlist_protocols'), protocols.length],
+          ] as const
+        ).map(([key, label, count], i) => (
+          <Pressable
+            key={key}
+            style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === 1 && styles.rowLast, pressed && styles.pressed]}
+            onPress={() => nav.push('VaultAssets', {section: key})}>
+            <Text style={styles.rowTitle}>{label}</Text>
+            <View style={styles.countRow}>
+              <Text style={styles.count}>{count}</Text>
+              <Text style={styles.chev}>›</Text>
             </View>
-            <PendingSwitch
-                value={bitty || assetSet.has(a.address.toLowerCase())}
-                pending={busy === `a-${a.address}`}
-                disabled={busy !== null || bitty}
-                onValueChange={(v) =>
-                  run(`a-${a.address}`, t(v ? 'mobile.actions.asset_added' : 'mobile.actions.asset_removed', {name: displaySymbol(a.symbol)}), (acct) =>
-                    updateAsset({account: acct, vault: vault!, network, asset: a.address, add: v, stableCoin: stable!.address}),
-                  )
-                }
-              />
-          </View>
+          </Pressable>
         ))}
-        </View>
       </View>
 
-      {/* Services, as the web names them; the protocol behind each sits at the right of its row. */}
-      <View style={styles.section}>
-        <Text style={styles.groupLabel}>{t('vault.services')}</Text>
-        <View style={styles.group}>
-        {protocols.map((p, i) => (
-          <View key={p.address} style={[styles.row, i === 0 && styles.rowFirst, i === protocols.length - 1 && styles.rowLast]}>
-            <Text style={styles.sym}>{t(SERVICE_KEY[p.category] ?? SERVICE_KEY.unknown)}</Text>
-            <View style={styles.protoRight}>
-              <ProtocolIcon name={p.name} size={20} uri={p.icon} />
-              <Text style={styles.protoName}>{p.name}</Text>
-            </View>
-            <PendingSwitch
-                value={bitty || protoSet.has(p.address.toLowerCase())}
-                pending={busy === `p-${p.address}`}
-                disabled={busy !== null || bitty}
-                onValueChange={(v) =>
-                  run(`p-${p.address}`, t(v ? 'mobile.actions.enable_service' : 'mobile.actions.disable_service', {name: p.name}), (acct) =>
-                    updateProtocol({account: acct, vault: vault!, network, protocol: p.address, add: v, stableCoin: stable!.address}),
-                  )
-                }
-              />
-          </View>
-        ))}
-        </View>
-      </View>
       {sheet}
     </ScrollView>
   );
@@ -230,7 +281,6 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   // draw a hairline on their top edge, and the first/last rows drop their outer padding so the card
   // frames the list evenly.
   section: {gap: 0},
-  groupLabel: {color: c.subtext, fontSize: 15, fontWeight: '600', paddingHorizontal: 16, marginTop: 8, marginBottom: 6},
   group: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 16},
   row: {
     flexDirection: 'row',
@@ -243,6 +293,21 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   },
   rowFirst: {borderTopWidth: 0, paddingTop: 16},
   rowLast: {paddingBottom: 16},
+  /**
+   * The asset list's own divider, because its rows come from {AssetCategoryList} rather than from a
+   * map this file controls.
+   *
+   * `row` draws a top divider by default and `rowFirst` takes it off — which works for a list whose
+   * first row is index 0 of the group. These rows are paged, so each page has its own first row and
+   * the default would rule the top of every card. `rowFirst` suppresses it and this puts it back on
+   * everything after the first.
+   */
+  rowDivided: {borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border},
+  pressed: {opacity: 0.6},
+  // The summary rows' right-hand end: how many are in the list, then the way in.
+  countRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
+  count: {color: c.subtext, fontSize: 15, fontVariant: ['tabular-nums']},
+  chev: {color: c.subtext, fontSize: 20, marginTop: -2},
   rowText: {flex: 1, gap: 2},
   rowTitle: {color: c.text, fontSize: 15, fontWeight: '600'},
   symRow: {flexDirection: 'row', alignItems: 'center', gap: 8},

@@ -17,7 +17,8 @@ import {shortAddress} from '@/core/format';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useAssetCatalog} from '@/core/asset-catalog';
 
-const short = (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}`;
+// See {shortAddress}: one formatter, so no screen can drift to its own idea of short.
+const short = shortAddress;
 
 /**
  * Payout operators (Settings › Team) — addresses that can propose payments (and tidy up sends) for the

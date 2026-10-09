@@ -38,8 +38,17 @@ const ICONS: Record<string, number> = {
   //
   // Every one of these is edge to edge. As vendored they were a pale tint disc with the brand mark
   // inset at 0.83 of the frame, which read as a small logo in a halo beside the coins on the same
-  // row; the tint has been recoloured to the mark's own colour, and CRCL, which came as a white
-  // square, cropped to its disc. Anything added here wants the same treatment.
+  // row; the tint has been recoloured to the mark's own colour.
+  //
+  // And every one is cropped to its disc, with the corners TRANSPARENT. Several arrived as opaque
+  // squares (SPY, GLD and HIMS white; CRCL a pale lilac): the round clip below hides that on a
+  // light card and very nearly hides it on a dark one — but the clip antialiases, so a pixel or
+  // two of corner survives at the rim, pale against #1C1C1E. It was invisible in the light theme
+  // and read as two specks beside the logo in the dark one.
+  //
+  // Anything added here wants the same treatment, and the test is not "is the corner white" —
+  // CRCL's was not, which is how it outlived the first round of this. The test is whether the
+  // corner is opaque AT ALL: outside the disc there should be nothing to clip.
   AAPL: require('@/assets/tokens/aapl.png'),
   NVDA: require('@/assets/tokens/nvda.png'),
   GOOGL: require('@/assets/tokens/googl.png'),
