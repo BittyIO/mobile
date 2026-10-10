@@ -327,10 +327,17 @@ function Root() {
           getComponent={() => require('@/screens/TradeScreen').TradeScreen}
           options={{title: t('mobile.home.watch_list'), fullScreenGestureEnabled: true}}
         />
+        {/* Titled by WHICH KIND of Earn it is, from the route's own `lend` flag — the two sections
+            on the tab are Flexible Yield and Flexible Lend, and a page pushed from either said
+            only "Earn", so the back stack read as three identical titles and the page itself never
+            said which of the two markets it was for. */}
         <Stack.Screen
           name="EarnDetail"
           getComponent={() => require('@/screens/EarnDetailScreen').EarnDetailScreen}
-          options={{title: t('mobile.app.earn'), fullScreenGestureEnabled: true}}
+          options={({route}) => ({
+            title: t((route.params as {lend?: boolean} | undefined)?.lend ? 'vault.flexible_lend' : 'vault.flexible_yield'),
+            fullScreenGestureEnabled: true,
+          })}
         />
         {/* Presented like the order sheet on the pair screen: a page sheet that comes up to just
             under the status bar. A short detent squeezed the amount form against its own confirm

@@ -26,6 +26,12 @@ import type {VaultAction} from '@/vault/tx-actions';
  *
  * `refused` is the one with no transaction behind it: the relayer simulates before it signs and
  * turns down what would revert, so nothing was broadcast and there is no hash to open.
+ *
+ * Which is why the feed no longer carries them: the service serves only attempts that reached a
+ * chain (see {listAttempts}). A refusal moved nothing, cost nothing and left nothing to open, and
+ * a row with no amounts and no name could only be drawn as a network fee — for a transaction that
+ * never existed. The status stays in the type because the record still has it, and because a
+ * `submitted` row can still settle to anything.
  */
 export type AttemptStatus = 'submitted' | 'confirmed' | 'failed' | 'refused';
 

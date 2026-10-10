@@ -289,8 +289,18 @@ export function OrderRow({
         {head}
       </Head>
       {/* The verdict, on its own line, on a row that is shut. An open row gets it at the foot of
-          its panel instead, where it has the controls beside it. */}
-      {!expanded && shut ? <View style={styles.shutFoot}>{shut}</View> : null}
+          its panel instead, where it has the controls beside it.
+
+          Pressable like the head, and for the same reason the open panel is: it is the row's
+          second line, not a caption under it. Outside the tap target it made the bottom half of
+          every shut row dead to the touch — and on a two-line row that half is most of what the
+          thumb lands on, so the row read as not expandable at all. A shut foot never holds a
+          control (see {foot}), so nothing here competes for the tap. */}
+      {!expanded && shut ? (
+        <Head style={styles.shutFoot} onPress={onPress}>
+          {shut}
+        </Head>
+      ) : null}
       {expanded ? (
         <Panel style={styles.detail} onPress={onPress}>
           {detail}

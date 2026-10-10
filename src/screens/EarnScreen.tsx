@@ -9,7 +9,7 @@ import {TokenIcon} from '@/components/TokenIcon';
 import {Amount} from '@/components/Amount';
 import {ProtocolChip} from '@/components/ProtocolIcon';
 import {useNetwork} from '@/core/network-store';
-import {formatUnits, type Address} from 'viem';
+import {formatUnits} from 'viem';
 import {useVaultPositions} from '@/vault/useVaultPositions';
 import {useVaultLp} from '@/vault/useVaultLp';
 import {useFlows} from '@/vault/useFlows';
@@ -17,9 +17,8 @@ import {useVaultBalances} from '@/vault/useVaultBalances';
 import {earnedRaw} from '@/vault/flows';
 import {balanceOfSymbol} from '@/vault/read';
 import {fetchProtocolApy, EMPTY_APY, type ProtocolApy} from '@/vault/apy';
-import {type Asset} from '@/core/assets';
+import {stakeRoutes as buildStakeRoutes, lendRoutes as buildLendRoutes, type EarnRoute} from '@/vault/earn-routes';
 import {fmtNum, displaySymbol} from '@/core/format';
-import {adapterByName} from '@/core/protocols';
 import type {Position} from '@/vault/positions';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
@@ -27,11 +26,8 @@ import {useAssetCatalog} from '@/core/asset-catalog';
 
 const fmt = (v: number | string): string => fmtNum(Number(v));
 
-// A deposit/withdraw route: a yield/lend adapter paired with an asset it accepts. The rows below are
-// synthesized from these so every supported asset shows by default — the first deposit opts the vault in.
-// `kind` picks the ledger the flow is written to: staking routes go to stake-flows, lending
-// routes to supply-flows, and the two endpoints name their directions differently.
-type Route = {protocol: Address; name: string; asset: Asset; kind: 'staking' | 'lending'};
+// A deposit/withdraw route — see {EarnRoute}, which this page and the deposit form share.
+type Route = EarnRoute;
 type Row = {route: Route; pos: Position | null};
 
 /** A catalog row: asset + protocol, its position amount, and inline Deposit/Withdraw. */
@@ -144,25 +140,10 @@ export function EarnScreen() {
   // Auto-Yield routes: lowercased asset address → configured protocol (zero = off).
   const [apy, setApy] = useState<ProtocolApy>(EMPTY_APY);
 
-  // Route catalog: which adapters accept which assets. Lido stakes ETH (WETH); Sky is USDC savings;
-  // Aave supplies the blue-chip reserves. Rows render from these so the whole menu shows by default.
-  const stakeRoutes = useMemo<Route[]>(() => {
-    const out: Route[] = [];
-    const lido = adapterByName(network, 'Lido');
-    if (lido) assets.filter((a) => a.symbol === 'WETH').forEach((asset) => out.push({protocol: lido, name: 'Lido', asset, kind: 'staking'}));
-    const sky = adapterByName(network, 'Sky');
-    // The Sky adapter takes USDC only (it swaps through the PSM into sUSDS); every other
-    // stablecoin reverts with InvalidAsset, so it gets no row.
-    if (sky) assets.filter((a) => a.symbol === 'USDC').forEach((asset) => out.push({protocol: sky, name: 'Sky', asset, kind: 'staking'}));
-    return out;
-  }, [network, assets]);
-
-  const lendRoutes = useMemo<Route[]>(() => {
-    const aave = adapterByName(network, 'Aave V3');
-    if (!aave) return [];
-    const supported = ['WETH', 'WBTC', 'cbBTC', 'USDC', 'USDT'];
-    return assets.filter((a) => supported.includes(a.symbol)).map((asset) => ({protocol: aave, name: 'Aave V3', asset, kind: 'lending' as const}));
-  }, [network, assets]);
+  // Route catalog: which adapters accept which assets — see {earn-routes}, which the deposit form
+  // reads too. Rows render from these so the whole menu shows by default.
+  const stakeRoutes = useMemo<Route[]>(() => buildStakeRoutes(network, assets), [network, assets]);
+  const lendRoutes = useMemo<Route[]>(() => buildLendRoutes(network, assets), [network, assets]);
 
   // The protocols behind each section, shown at the right of its header.
   const lendNames = useMemo(() => Array.from(new Set(lendRoutes.map((r) => r.name))), [lendRoutes]);

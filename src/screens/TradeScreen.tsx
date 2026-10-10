@@ -12,7 +12,7 @@ import {WatchlistMenu} from '@/components/WatchlistMenu';
 import {ProtocolChip} from '@/components/ProtocolIcon';
 import {ammAdapters, intentAdapters, venueNames, isNamedProtocol} from '@/core/protocols';
 import {fetchVaultVersions, currentServices, type VaultVersionsCatalog} from '@/vault/versions';
-import {isAssetsList, showsCap, useFavorites, useWatchLists, watchListLabel, watchListNumber} from '@/core/favorites-store';
+import {isAssetsList, useFavorites, useWatchLists, watchListLabel, watchListNumber} from '@/core/favorites-store';
 import {useWatchDraft} from '@/core/watch-draft';
 import {Amount} from '@/components/Amount';
 import {ConfirmButton} from '@/components/Button';
@@ -37,7 +37,7 @@ import {usePrices} from '@/vault/usePrices';
 import {getFlag, setFlag, getPref, setPref, SHOW_OTHER_ORDERS, LAST_PAIR} from '@/core/prefs';
 import {usdValue, fmtUsd} from '@/core/prices';
 import {ownerVaultAddress, balanceOfSymbol} from '@/vault/read';
-import {resolveFeeReserve} from '@/vault/gasless';
+import {resolveFeeReserve, reserveHeld} from '@/vault/gasless';
 import {FINISHED_WINDOWS, finishedSince, setSlippageBps, slippageBps, useFinishedWindow, type FinishedWindow} from '@/core/prefs';
 import {relayGasFor} from '@/vault/fee-quote';
 import {intentPrepCalls, needsRelayerApproval} from '@/vault/limit';
@@ -75,7 +75,7 @@ import {fetchTrades, type MarketTrade} from '@/vault/market-trades';
 import {attemptTrade, reportFailedAttempt, useVaultAttempts} from '@/vault/attempts';
 import {adapterByName} from '@/core/protocols';
 import {ASSET_CATEGORIES, assetCategory, assetMeta, isAmmLiquid, isKnownAsset, underlyingOf, type AssetCategory} from '@/core/assets';
-import {fmtNum, fmtShort, displaySymbol} from '@/core/format';
+import {fmtNum, fmtShort, displaySymbol, floor6, round6} from '@/core/format';
 import {formatUnits, parseUnits, type Address} from 'viem';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
@@ -97,6 +97,9 @@ type Mode = 'Market' | 'Limit' | 'TWAP';
 type FundKey = 'vault' | 'sky' | 'aave';
 const FUND_KEYS: FundKey[] = ['vault', 'sky', 'aave'];
 type Side = 'buy' | 'sell';
+// The asset-directory categories, plus a synthetic "selected" tab that lists what is already on
+// the watch list (so it can be unticked without finding each row down the real categories).
+type DirCategory = AssetCategory | 'selected';
 /**
  * The two tabs this screen shows. Cancelled orders are not among them — an order that never
  * happened is a thing you look up, not something that belongs beside the orders you are managing,
@@ -132,28 +135,8 @@ const PARTNER_FEE = 0.002;
 
 const fmtN = fmtNum;
 /** Trim to token-sized precision, so a split never carries float noise into a withdrawal. */
-const round6 = (v: number) => Math.round(v * 1e6) / 1e6;
 /** The Buy / Sell bar's own height: 14 of top padding, a 50pt button, 18 of bottom padding. */
 const BAR_HEIGHT = 82;
-/**
- * The same six decimals, taken DOWN.
- *
- * Used on every balance that feeds a ceiling. Six is what the pay field keeps (see {toField}), and
- * a balance read off chain carries as many decimals as its token has — eighteen for ETH — so
- * rounding one to six could name a ceiling a shade above what the vault actually holds. Flooring
- * cannot, and once the inputs land on six places exactly, {round6} at the end is lossless and
- * only there to clear the noise of subtracting them.
- *
- * Through the decimal TEXT, not by multiplying. `Math.floor(v * 1e6) / 1e6` is wrong for exactly
- * the figures it would be reached for: 8.21 * 1e6 is 8209999.999999999 in binary, so it floors to
- * 8.209999 and takes a cent off a balance that was never short. toFixed hands back the decimal
- * expansion and cutting it four digits in truncates at six with no binary detour.
- */
-const floor6 = (v: number) => {
-  if (!(v > 0)) return 0;
-  const text = v.toFixed(10);
-  return Number(text.slice(0, text.indexOf('.') + 7));
-};
 const fmtAmt = (raw: string, decimals: number): string => fmtShort(Number(formatUnits(BigInt(raw), decimals)));
 
 /**
@@ -387,8 +370,6 @@ export function TradeScreen() {
   const endDraft = useWatchDraft((st) => st.end);
   // A draft is empty by definition — the previously active list's ticks are not this list's.
   const onList = new Set(drafting ? [] : watch.active?.symbols ?? []);
-  const caps = useFavorites((s) => s.caps);
-  const capOn = showsCap(caps, network, watch.active?.id);
   /**
    * The first tick is what creates the list.
    *
@@ -468,8 +449,13 @@ export function TradeScreen() {
        * That list cannot be renamed, shared or deleted — it is the vault's own holdings, not a
        * list anyone made — which left the menu holding one row, Import, behind a tap. A menu with
        * one item in it is a worse version of the item. The curated lists keep theirs.
+       *
+       * A DRAFT always gets the button, whatever list was in front when it started. `builtIn`
+       * reads the still-active list, which is "Assets" for anyone who hit New list from there —
+       * so the one page that most wants an importer, a list with nothing on it yet, was the one
+       * page with no way to reach one.
        */
-      headerRight: builtIn
+      headerRight: builtIn && !drafting
         ? undefined
         : () => (
         <WatchlistMenu
@@ -490,14 +476,13 @@ export function TradeScreen() {
             })
           }
           onImport={importSymbols}
-          cap={builtIn ? undefined : {on: capOn, toggle: () => watch.active && watch.setCap(network, watch.active.id, !capOn)}}
           importOnly={drafting}
         />
       ),
     });
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isWatchlist, canDelete, builtIn, drafting, listName, listSymbols.join(','), capOn, network]);
+  }, [isWatchlist, canDelete, builtIn, drafting, listName, listSymbols.join(','), network]);
 
   /**
    * An abandoned draft is just forgotten.
@@ -533,7 +518,12 @@ export function TradeScreen() {
   const wantBase = params?.base;
   const wantQuote = params?.quote;
   useEffect(() => {
-    if (wantBase && assets.some((a) => a.symbol === wantBase)) setBaseSym(wantBase);
+    if (wantBase && assets.some((a) => a.symbol === wantBase)) {
+      setBaseSym(wantBase);
+      // Arriving on a specific asset (tapped on the Overview) scopes the orders card to this pair,
+      // not every pair — so turn "Others" off, as choosing a pair leg does.
+      setOthers(false);
+    }
     if (wantQuote && stables.some((a) => a.symbol === wantQuote)) {
       quoteChosen.current = true;
       setQuoteSym(wantQuote);
@@ -796,7 +786,8 @@ export function TradeScreen() {
     feeReserve > 0
       ? {
           label: `${displaySymbol(spendSym)} ${t('mobile.trade.fee_reserved')}`,
-          sub: `${fmtNum(feeReserve)} ${displaySymbol(spendSym)}`,
+          // What is held back, not what was asked for — see {reserveHeld}.
+          sub: `${fmtNum(reserveHeld(feeReserve, freeNum))} ${displaySymbol(spendSym)}`,
         }
       : null;
 
@@ -1120,14 +1111,33 @@ export function TradeScreen() {
    * never held belongs on the tab where you go to buy one.
    */
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [category, setCategory] = useState<AssetCategory>('crypto_native');
+  // "selected" is a synthetic first category — the assets already on this list — so the user can
+  // reach them in one tab and untick any without hunting down the real categories. Only on the
+  // watch list, and only while the list has something on it.
+  const [category, setCategory] = useState<DirCategory>('crypto_native');
   const categories = useMemo(
     () => ASSET_CATEGORIES.filter((k) => assets.some((a) => assetCategory(a.category) === k)),
     [assets],
   );
+  /**
+   * What the Selected tab remembers, so unticking an asset there leaves it on the tab (unchecked,
+   * ready to re-tick) instead of removing it. It gathers whatever is on the list each time the tab
+   * is entered and never shrinks on a untick — only a fresh screen (a new mount) starts it empty.
+   */
+  const [selSnapshot, setSelSnapshot] = useState<Set<string>>(new Set());
+  const rememberSelected = () =>
+    setSelSnapshot((prev) => {
+      const next = new Set(prev);
+      onList.forEach((s) => next.add(s));
+      return next;
+    });
+  // The tab exists while anything is on the list OR has been shown on it this session (so the row
+  // you just unticked keeps its place).
+  const showSelected = isWatchlist && (onList.size > 0 || selSnapshot.size > 0);
   useEffect(() => {
-    if (categories.length && !categories.includes(category)) setCategory(categories[0]);
-  }, [categories, category]);
+    const valid: DirCategory[] = showSelected ? ['selected', ...categories] : categories;
+    if (valid.length && !valid.includes(category)) setCategory(valid[0]);
+  }, [categories, category, showSelected]);
 
 
   /** One directory row: icon, name, localised company, and what one of it costs. */
@@ -1221,7 +1231,9 @@ export function TradeScreen() {
   const pagerX = React.useRef(new Animated.Value(0)).current;
   const [pageW, setPageW] = useState(0);
   const [pageH, setPageH] = useState<Record<string, number>>({});
-  const pages = categories.length > 0 ? categories : (['crypto_native'] as AssetCategory[]);
+  const realPages = categories.length > 0 ? categories : (['crypto_native'] as AssetCategory[]);
+  // "Selected" leads, before Crypto, when there is anything to show there.
+  const pages: DirCategory[] = showSelected ? ['selected', ...realPages] : realPages;
   /**
    * Changing category takes the page back to the top.
    *
@@ -1233,7 +1245,8 @@ export function TradeScreen() {
    */
   const pageRef = React.useRef<ScrollView>(null);
   const toTop = () => pageRef.current?.scrollTo({y: -headerHeight, animated: true});
-  const pickCategory = (k: AssetCategory) => {
+  const pickCategory = (k: DirCategory) => {
+    if (k === 'selected') rememberSelected();
     setCategory(k);
     const i = pages.indexOf(k);
     if (i >= 0 && pageW > 0) pagerRef.current?.scrollTo({x: i * pageW, animated: true});
@@ -1243,6 +1256,7 @@ export function TradeScreen() {
     if (pageW <= 0) return;
     const k = pages[Math.max(0, Math.min(pages.length - 1, Math.round(x / pageW)))];
     if (k && k !== category) {
+      if (k === 'selected') rememberSelected();
       setCategory(k);
       toTop();
     }
@@ -1265,6 +1279,20 @@ export function TradeScreen() {
     setPageH({});
     pagerRef.current?.scrollTo({x: 0, animated: false});
   }, [network]);
+  // Open on the "Selected" tab when the list has assets on it — that is what the watch-list editor
+  // is for. Once, on first layout (by when the stored list is loaded), then the user navigates
+  // freely. Falls through to the first real category when nothing is selected.
+  const landedRef = React.useRef(false);
+  useEffect(() => {
+    if (landedRef.current || !isWatchlist || pageW <= 0) return;
+    landedRef.current = true;
+    const target: DirCategory = showSelected ? 'selected' : pages[0];
+    if (target === 'selected') rememberSelected();
+    setCategory(target);
+    const i = pages.indexOf(target);
+    if (i >= 0) pagerRef.current?.scrollTo({x: i * pageW, animated: false});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageW, isWatchlist, showSelected]);
 
   /** Every asset in one category, dollars first. */
   /**
@@ -1293,10 +1321,12 @@ export function TradeScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, assets, company]);
 
-  const inCategory = (k: AssetCategory) =>
-    assets
-      .filter((a) => assetCategory(a.category) === k)
-      .sort((x, y) => Number(y.kind === 'stable') - Number(x.kind === 'stable'));
+  const inCategory = (k: DirCategory) =>
+    k === 'selected'
+      ? assets.filter((a) => selSnapshot.has(a.symbol) || onList.has(a.symbol))
+      : assets
+          .filter((a) => assetCategory(a.category) === k)
+          .sort((x, y) => Number(y.kind === 'stable') - Number(x.kind === 'stable'));
 
   /** The pair to open for a directory row, quoted in a stable coin the vault actually holds. */
   const openPair = (symbol: string) => {
@@ -1780,8 +1810,10 @@ export function TradeScreen() {
   /** How a schedule ended, in the words both lists use — see {twapVerdict}. */
   const twapStatus = (g: TwapGroup) => twapVerdict(g, t) ?? undefined;
 
-  const openOrderRow = (key: string, sellToken: string, buyToken: string) => {
-    showPairFor(sellToken, buyToken);
+  const openOrderRow = (key: string, sellToken: string, buyToken: string, isExpanded: boolean) => {
+    // Only line the pair up when OPENING a row. Collapsing one should leave the chart on whatever
+    // pair the user is looking at, not jump it to the order being closed.
+    if (!isExpanded) showPairFor(sellToken, buyToken);
     toggleExpanded(key);
   };
 
@@ -1913,8 +1945,11 @@ export function TradeScreen() {
 
   const visibleOrders = showOthers ? plainOrders : pairSettled ? plainOrders.filter(inPair) : [];
   const visibleTwaps = showOthers ? twapGroups : pairSettled ? twapGroups.filter((g) => inPair(g.rep)) : [];
-  // Open is the live list; Recently is everything, outcome included — see {Tab}.
-  const shownTwaps = tab === 'open' ? visibleTwaps.filter((g) => g.bucket === 'open') : visibleTwaps;
+  // Open is the live list; Recently is everything, outcome included — see {Tab}. Both tabs are
+  // built on every render now (they are the pager's two pages), so these take the tab rather than
+  // reading the current one.
+  const twapsFor = (which: Tab) =>
+    which === 'open' ? visibleTwaps.filter((g) => g.bucket === 'open') : visibleTwaps;
   // Market swaps are always complete → they belong under Finished.
   const marketFinished = showOthers ? marketTrades : pairSettled ? marketTrades.filter(marketInPair) : [];
   /**
@@ -1987,20 +2022,8 @@ export function TradeScreen() {
     return c;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleOrders, visibleTwaps, marketFinished, failedSwaps, finishedWindow]);
-  /**
-   * Rows appended to the current tab that are not orders.
-   *
-   * The three "is this the last row" / "is this list empty" tests all have to count whatever
-   * follows them, and what follows differs by tab: Recently gets the completed swaps and every
-   * settled attempt, Open gets the attempts still in flight.
-   */
-  const tabExtras =
-    tab === 'recent'
-      ? marketFinished.filter((m) => inRecentWindow(tradeAt(m))).length +
-        failedSwaps.filter(({a}) => inRecentWindow(a.at)).length
-      : failedSwaps.filter(({a}) => a.status === 'submitted').length;
-  const shownOrders =
-    tab === 'open'
+  const ordersFor = (which: Tab) =>
+    which === 'open'
       ? visibleOrders.filter((o) => orderBucket(effectiveStatus(o, cancelledUids)) === 'open')
       : visibleOrders;
   const openUids = visibleOrders.filter((o) => effectiveStatus(o, cancelledUids) === 'open').map((o) => o.uid);
@@ -2008,6 +2031,46 @@ export function TradeScreen() {
     {key: 'open', label: t('vault.orders_open_short')},
     {key: 'recent', label: t('mobile.trade.recent')},
   ];
+
+  /**
+   * The tabs, as a pager: the label row and the swipe are two ways of moving the same selection.
+   *
+   * `tabPageH` is kept per tab so the pager can stand at the taller of the two and hand the
+   * difference back — the asset directory's pager above does the same, and the note there explains
+   * why the height cannot simply follow the page in view.
+   */
+  const tabPagerRef = React.useRef<ScrollView>(null);
+  const tabX = React.useRef(new Animated.Value(0)).current;
+  const [tabPageW, setTabPageW] = useState(0);
+  const [tabPageH, setTabPageH] = useState<Record<string, number>>({});
+  const tabIndex = (k: Tab) => TABS.findIndex((x) => x.key === k);
+  /** Tapping the tab that is already showing asks how far back Recently reaches. */
+  const pickTab = (k: Tab) => {
+    if (k === tab) {
+      if (k === 'recent') setWindowOpen(true);
+      return;
+    }
+    setTab(k);
+    if (tabPageW > 0) tabPagerRef.current?.scrollTo({x: tabIndex(k) * tabPageW, animated: true});
+  };
+  const onTabSettle = (x: number) => {
+    if (tabPageW <= 0) return;
+    const k = TABS[Math.max(0, Math.min(TABS.length - 1, Math.round(x / tabPageW)))]?.key;
+    if (k && k !== tab) setTab(k);
+  };
+  const tabH = TABS.map((x) => tabPageH[x.key]);
+  const tabSized = tabPageW > 0 && tabH.every((h) => h != null);
+  const tallestTab = tabSized ? Math.max(...(tabH as number[])) : 0;
+  const tabPagerStyle = tabSized
+    ? {
+        height: tallestTab,
+        marginBottom: tabX.interpolate({
+          inputRange: TABS.map((_, i) => i * tabPageW),
+          outputRange: (tabH as number[]).map((h) => h - tallestTab),
+          extrapolate: 'clamp' as const,
+        }),
+      }
+    : undefined;
   // Market needs a pool on BOTH legs: the tokenized stocks are registered without the AMM-liquid bit
   // (no Uniswap market prices them) and the savings share has no pool either, so those pairs offer
   // the intent modes only.
@@ -2166,8 +2229,11 @@ export function TradeScreen() {
      * same position, which is what they are: the list did not move, the frame did.
      */
     const y = Math.min(contentOffset.y, end);
-    // Nothing to read past: a page that does not scroll must never hide its only controls.
-    if (contentSize.height <= layoutMeasurement.height + BAR_ZONE) {
+    // Nothing worth revealing: keep the bar if the page cannot scroll by even its own height. Keyed
+    // to the bar, not a fixed 140 — the pushed pair screen has no tab bar, so its viewport is taller
+    // and its scrollable distance correspondingly shorter, and a 140 floor there suppressed the hide
+    // on lists that dismiss fine on the (tab-bar-shortened) in-tab screen.
+    if (end <= BAR_HEIGHT) {
       showBar(false);
       barLast.current = y;
       return;
@@ -2374,6 +2440,420 @@ export function TradeScreen() {
   const payPct = Number(spendBal) > 0 ? (Number(amount) / Number(spendBal)) * 100 : 0;
   const setPayPct = (p: number) => applyPay(p >= 100 ? spendBal : toField((Number(spendBal) * p) / 100));
 
+  /**
+   * Every row of ONE tab, newest first — see the list's own note at the panel below.
+   *
+   * A function of the tab rather than of `tab`, because both tabs are built at once now: they are
+   * the two pages of a pager, so the one not being looked at has to exist to be swiped to.
+   */
+  const orderList = (which: Tab) => {
+    const rows: {at: number; node: React.ReactElement<{last?: boolean}>}[] = [];
+    for (const g of twapsFor(which)) {
+      const {sellM, buyM, isBuy, partSell, partBuy, twapPx} = twapFacts(g);
+      const key = `twap-${g.appData}`;
+      const isExp = expanded.has(key);
+      /**
+       * The schedule's slots, oldest first — ALL of them, not just the posted ones.
+       *
+       * `g.parts` is what CoW has been given so far, newest first, and a TWAP is posted one
+       * slot at a time as its clock comes round: an hour into a ten-part order, two orders
+       * exist and eight do not. Listing only those two read as lost data, so the slots yet
+       * to go out are listed too, each with the time it is due — which is the thing a reader
+       * opening a running TWAP actually wants to know.
+       */
+      const slots = [...g.parts].reverse();
+      const legM = isBuy ? buyM : sellM;
+      const perPart = isBuy ? partBuy : partSell;
+      /**
+       * Every part line carries a price, filled or not.
+       *
+       * A filled one carries what it GOT; the rest carry what the schedule will take — the
+       * limit the whole order was placed at, which is the same for every slot. Without it a
+       * reader comparing the column had to hold the limit in their head from the Details
+       * sheet to see whether a fill came in above or below it, and the slots still to come
+       * gave no hint of what they were waiting for.
+       */
+      const canCancel = g.bucket === 'open' && !!intent;
+      /**
+       * A finished schedule states what it DID; a running one states what it is for.
+       *
+       * While parts are still going out, the figure that means something is the order's own
+       * size — the thing the user asked for — with the fraction beside it saying how far in
+       * it is. Once it is over, that number is a plan that no longer exists: a TWAP can end
+       * cancelled or expired with two slots of ten behind it, and a row reading the full
+       * amount claimed a trade that never happened. So a finished row adds up what actually
+       * settled, on the leg it names, and drops the fraction — "3/3" next to a final total
+       * is the same thing said twice, and "2/10" next to one is an apology.
+       */
+      const finished = g.bucket === 'finished';
+      /** The quote leg actually paid or received, for the average below. */
+      const settledQuote = g.parts.reduce(
+        (sum, pt) =>
+          sum +
+          Number(
+            formatUnits(
+              BigInt((isBuy ? pt.executedSellAmount : pt.executedBuyAmount) ?? '0'),
+              (isBuy ? sellM : buyM).decimals,
+            ),
+          ),
+        0,
+      );
+      const settledAmt = g.parts.reduce(
+        (sum, pt) =>
+          sum +
+          Number(
+            formatUnits(
+              BigInt((isBuy ? pt.executedBuyAmount : pt.executedSellAmount) ?? '0'),
+              legM.decimals,
+            ),
+          ),
+        0,
+      );
+      rows.push({at: twapPlacedAt(g), node: (
+        <OrderRow
+          key={key}
+          badge={words(t('vault.twap'), sideWord(isBuy))}
+          /* A schedule has no status of its own: it ended badly if it was called off, or if
+             its window closed on slots it never got through. See {twapTimeLine}. */
+          outcome={twapStatus(g)}
+          /**
+           * And WHEN — which the row never said at all.
+           *
+           * Every other finished row on this panel carries its time at the foot-right, and
+           * a schedule's is the one most worth having: a TWAP runs for days, so "it
+           * filled" without "when" leaves the reader to open the row and read the slots.
+           * Filled says when the last slot landed, expired says when the window closed,
+           * cancelled says when it was called off. See {twapTimeLine}.
+           */
+          outcomeAt={(() => {
+            const line = twapTimeLine(g, {
+              cancelled:
+                g.parts.reduce<number | undefined>((at, pt) => at ?? cancelAt.get(pt.uid.toLowerCase()), undefined) ??
+                cancelledAtAny(g.parts.map((pt) => pt.uid)),
+              filled: twapFilledAt(g, (uid) => fillAt.get(uid)),
+            });
+            return line ? whenText(line, t, language) : undefined;
+          })()}
+          leg={{amount: fmtShort(finished ? settledAmt : perPart * g.total), symbol: legM.symbol}}
+          /* The average of the slots that filled, which is the whole point of a TWAP and the
+             one figure its row never carried. */
+          price={fmtPrice(finished && settledAmt > 0 ? settledQuote / settledAmt : twapPx)}
+          /**
+           * The parts, and nothing else.
+           *
+           * A TWAP is a schedule, so what a reader opens it for is where the schedule has
+           * got to — which slice filled at what, and when the next one goes out. The terms
+           * it was placed on (pay, receive, limit price, window) are read once when the
+           * order is placed and almost never again, so they are behind Details: six
+           * label-and-value lines above the parts pushed the only live thing on the panel
+           * off the bottom of a phone.
+           */
+          parts={Array.from({length: Math.max(g.total, slots.length)}, (_, i): OrderPart => {
+            const pt = slots[i];
+            if (!pt) {
+              // Still to come. CoW is handed each slot as its turn arrives, one
+              // `partDuration` after the last — so the time is arithmetic, not a lookup.
+              const due = g.schedule.startTime + i * g.schedule.partDuration;
+              return {
+                label: `${fmtShort(perPart)} ${displaySymbol(legM.symbol)}${atPrice(twapPx)}`,
+                state: fmtDue(due),
+                pending: true,
+              };
+            }
+            /**
+             * A posted part: the asset, then the price it went at.
+             *
+             * It used to print both legs — "284.13 USDC → 3.33 CRCL" — which is the same
+             * shape the ROW above was changed away from, and for the same reason: the two
+             * figures are one trade said twice, and the part of it a reader compares
+             * between lines is the price, which was the one thing not written down. The leg
+             * shown is the one the row names, so a column of parts adds up to the order's
+             * own total.
+             *
+             * The ratio is the EXECUTED one, fee and all — Details carries the limit the
+             * schedule was placed at, and the gap between them is what a reader is looking
+             * for.
+             */
+            const ps = effectiveStatus(pt, cancelledUids);
+            const done = ps.toLowerCase().includes('fulfil');
+            const sold = Number(formatUnits(BigInt(pt.executedSellAmount ?? '0'), sellM.decimals));
+            const recv = Number(formatUnits(BigInt(pt.executedBuyAmount ?? '0'), buyM.decimals));
+            const got = isBuy ? recv : sold;
+            const px = got > 0 ? (isBuy ? sold : recv) / got : NaN;
+            // Posted but not filled: the part's own size, with nothing to price.
+            const sized = Number(
+              formatUnits(BigInt((isBuy ? pt.buyAmount : pt.sellAmount) ?? '0'), legM.decimals),
+            );
+            return {
+              // Filled: what it went at. Posted and waiting: what it is waiting for.
+              label: `${fmtShort(done ? got : sized)} ${displaySymbol(legM.symbol)}${atPrice(done ? px : twapPx)}`,
+              state: t(statusPill(ps).key),
+            };
+          })}
+          onDetails={() => setTwapInfo(g.appData)}
+          cancel={
+            canCancel ? (
+              <Pressable
+                onPress={() =>
+                  ask({
+                    title: t('mobile.actions.cancel_intent'),
+                    gas: relayGasFor({}),
+                    run: () => onCancelTwap(g),
+                  })
+                }
+                disabled={cancellingTwap === g.appData}
+                hitSlop={8}>
+                <Text style={styles.cancelInline}>
+                  {cancellingTwap === g.appData ? t('mobile.trade.cancelling') : t('vault.cancel')}
+                </Text>
+              </Pressable>
+            ) : undefined
+          }
+          expanded={isExp}
+          onPress={() => openOrderRow(key, g.rep.sellToken, g.rep.buyToken, isExp)}
+        />
+      )});
+    }
+    for (const o of ordersFor(which).slice(0, 30)) {
+      const es = effectiveStatus(o, cancelledUids);
+      const sp = statusPill(es);
+      const sellM = assetMeta(network, o.sellToken as Address);
+      const buyM = assetMeta(network, o.buyToken as Address);
+      // A leg held as a receipt token reads, and prices, as its underlying: what the user
+      // typed and what the order is worth. sUSDS converts at the savings rate; an aToken is
+      // one-for-one.
+      const legRate = (addr: string) => (assetMeta(network, addr).symbol === 'sUSDS' ? shareRate : 1);
+      const legSym = (addr: string, fallback: string) => underlyingOf(network, addr) ?? fallback;
+      const sellNum = Number(formatUnits(BigInt(o.sellAmount), sellM.decimals)) * legRate(o.sellToken);
+      const buyNum = Number(formatUnits(BigInt(o.buyAmount), buyM.decimals)) * legRate(o.buyToken);
+      const sellSym = legSym(o.sellToken, sellM.symbol);
+      const buySym = legSym(o.buyToken, buyM.symbol);
+      const fromPosition = !!underlyingOf(network, o.sellToken);
+      const isTwap = !!o.appData && o.appData.toLowerCase() !== limitAppData;
+      // Price quoted in the stable leg when there is one, else base-per-quote by side.
+      // A savings share or an aToken counts as its underlying here: an order selling sUSDS
+      // for CRCL is a USDC-priced buy, and pricing it per share would be meaningless.
+      const stableLike = (addr: string) => {
+        const under = underlyingOf(network, addr);
+        return stables.some((s) => (under ? s.symbol === under : s.address.toLowerCase() === addr.toLowerCase()));
+      };
+      const sellIsStable = stableLike(o.sellToken);
+      const buyIsStable = stableLike(o.buyToken);
+      const px0 =
+        sellIsStable || buyIsStable
+          ? (sellIsStable ? sellNum : buyNum) / (sellIsStable ? buyNum : sellNum)
+          : o.kind === 'buy'
+            ? sellNum / buyNum
+            : buyNum / sellNum;
+      const px = px0 / (o.kind === 'buy' ? 1 + PARTNER_FEE : 1 - PARTNER_FEE);
+      // Buy or sell the ASSET: paying a stablecoin to receive something else is a buy,
+      // whichever way round CoW encodes it (every order is posted as a sell of the pay leg,
+      // so o.kind would call a CRCL purchase a sell of USDC).
+      const isBuy = sellIsStable && !buyIsStable;
+      /**
+       * An OPEN row starts expanded; everything else starts shut.
+       *
+       * An open order is the one the owner still has a decision to make about — its terms,
+       * its deadline and its Cancel are the reason the row is on screen — so making them
+       * all a tap away was asking for a tap that nobody would skip. A finished row is a
+       * record and opens only when asked.
+       *
+       * The set therefore holds rows TOGGLED FROM their default rather than opened ones,
+       * which is what lets both defaults live in one piece of state.
+       */
+      const isExp = es === 'open' ? !expanded.has(o.uid) : expanded.has(o.uid);
+      const canCancel = es === 'open' && !!intent;
+      const filled = es.toLowerCase().includes('fulfil');
+      const filledAt = fillAt.get(o.uid.toLowerCase());
+      const when = orderTimeLine(o, es, {
+        filled: filledAt,
+        cancelled: cancelAt.get(o.uid.toLowerCase()) ?? cancelledAt(o.uid),
+      });
+      // What it GOT, not what it asked for: a limit order can fill better than its limit.
+      const execSell = Number(formatUnits(BigInt(o.executedSellAmount ?? '0'), sellM.decimals)) * legRate(o.sellToken);
+      const execBuy = Number(formatUnits(BigInt(o.executedBuyAmount ?? '0'), buyM.decimals)) * legRate(o.buyToken);
+      /**
+       * What it GOT if it filled, what it ASKED if it has not — the Order history rows
+       * read the same way. A row with no price at all was the common case here, since
+       * most of what sits in Open and Cancelled never executed.
+       */
+      const avgPx =
+        filled && execSell > 0 && execBuy > 0 ? (isBuy ? execSell / execBuy : execBuy / execSell) : px;
+      rows.push({at: placedAt(o), node: (
+        <OrderRow
+          key={o.uid}
+          /* The side, and the type where the list holds more than one kind. Open and
+             Cancelled are limit orders unless they say TWAP, so naming the type there
+             spends a word on what the list already is. FINISHED is the exception:
+             completed market swaps sit in it too, and against a row reading "Market Buy"
+             a bare "Buy" looked like a different, nameless thing rather than the limit
+             order it is. */
+          badge={words(t(isTwap ? 'vault.twap' : 'vault.limit'), sideWord(isBuy))}
+          leg={{amount: fmtShort(isBuy ? buyNum : sellNum), symbol: isBuy ? buySym : sellSym}}
+          price={fmtPrice(avgPx)}
+          /* Only a sell can come out of a position, and only the leg on screen can say
+             so — on a buy the paying leg is not shown at all. */
+          note={!isBuy && fromPosition ? `(${t('vault.yielding')})` : undefined}
+          /* Every order says what became of it, at the foot — the one place a row with
+             no parts has room to. An order still working says what it is waiting for
+             instead of a verdict: "Expires · 2d 5h". See {OrderRow}'s `outcome`. */
+          outcome={
+            sp.key === 'vault.open'
+              ? when
+                ? {label: t(when[0])}
+                : undefined
+              : {label: t(sp.key), tone: sp.tone}
+          }
+          outcomeAt={when ? whenText(when, t, language) : undefined}
+          /**
+           * Cancel sits at the foot, on the left — where the TWAP rows have always put it,
+           * and where every list in this app puts a destructive control.
+           *
+           * It was in the head's right-hand corner, which is the column the amount reads
+           * in on every other row: a tappable word there made the one figure the row is
+           * about share its place with a control. At the foot it has the corner to itself
+           * and the deadline keeps the opposite end.
+           */
+          cancel={
+            canCancel ? (
+              <Pressable
+                onPress={(ev) => {
+                  ev.stopPropagation();
+                  ask({
+                    title: t('mobile.actions.cancel_intent'),
+                    message: describeOrder(o, network),
+                    gas: relayGasFor({}),
+                    run: () => onCancel(o),
+                  });
+                }}
+                disabled={cancelling === o.uid}
+                hitSlop={8}>
+                <Text style={styles.cancelInline}>{cancelling === o.uid ? t('mobile.trade.cancelling') : t('common.cancel')}</Text>
+              </Pressable>
+            ) : null
+          }
+          /**
+           * The OTHER leg, and a time.
+           *
+           * The head already states the one the order is for — what a buy buys, what a
+           * sell sells — so printing both here made the first line of the panel a copy of
+           * the line above it. A trade has two ends and the row shows one, so the panel
+           * shows the one the row does not.
+           *
+           * The date that goes with it is at the foot, beside the word it belongs to —
+           * see {orderTimeLine} for which one is still a fact.
+           */
+          lines={[
+            isBuy
+              ? [t('vault.pay'), {amount: fmtAmt(o.sellAmount, sellM.decimals), symbol: sellM.symbol}]
+              : [t('vault.receive'), {amount: fmtAmt(o.buyAmount, buyM.decimals), symbol: buyM.symbol}],
+
+          ]}
+          expanded={isExp}
+          onPress={() => openOrderRow(o.uid, o.sellToken, o.buyToken, isExp)}
+        />
+      )});
+    }
+    if (which === 'recent')
+      for (const m of marketFinished.slice(0, 30)) {
+      const soldIsStable = stables.some((s) => s.address.toLowerCase() === m.sold.address.toLowerCase());
+      const isBuy = soldIsStable; // spent a stablecoin to acquire the crypto leg
+      const px = soldIsStable ? m.sold.amount / m.bought.amount : m.bought.amount / m.sold.amount;
+      const isExp = expanded.has(m.txHash);
+      rows.push({at: tradeAt(m), node: (
+        <OrderRow
+          key={m.txHash}
+          badge={words(t('vault.market'), sideWord(isBuy))}
+          leg={{
+            amount: fmtShort(isBuy ? m.bought.amount : m.sold.amount),
+            symbol: isBuy ? m.bought.symbol : m.sold.symbol,
+          }}
+          price={fmtPrice(px)}
+          /* The corner is free on a market row — nothing is cancellable about a swap
+             that has already happened — so the amount reads there, in the column the
+             rest of the screen puts numbers in. */
+          right={null}
+          /* The OTHER leg, only: the head states the one the swap was for. */
+          lines={[
+            isBuy
+              ? [t('mobile.trade.paid'), {amount: fmtShort(m.sold.amount), symbol: m.sold.symbol}]
+              : [t('vault.received'), {amount: fmtShort(m.bought.amount), symbol: m.bought.symbol}],
+          ]}
+          /* A swap has one ending and it already happened. */
+          outcome={{label: t('vault.fulfilled'), tone: 'green'}}
+          outcomeAt={m.ts ? fmtExpiry(m.ts, language) : undefined}
+          expanded={isExp}
+          onPress={() => openOrderRow(m.txHash, m.sold.address, m.bought.address, isExp)}
+        />
+      )});
+      }
+    for (const x of failedSwaps.filter(({a}) =>
+      which === 'open' ? a.status === 'submitted' : true,
+    )) {
+      const {a, trade: tr} = x;
+      const leg = tr!.buy ? tr!.bought : tr!.sold;
+      const key = `relay-${a.id}`;
+      rows.push({at: a.at, node: (
+        <OrderRow
+          key={key}
+          badge={words(t('vault.market'), sideWord(tr!.buy))}
+          leg={{amount: fmtShort(leg.amount), symbol: leg.symbol}}
+          /* The price it was ASKED at — it never got one of its own. */
+          price={
+            tr!.sold.amount > 0 && tr!.bought.amount > 0
+              ? fmtPrice(tr!.buy ? tr!.sold.amount / tr!.bought.amount : tr!.bought.amount / tr!.sold.amount)
+              : undefined
+          }
+          right={null}
+          /** Pay / Receive, and why it did not happen. */
+          lines={[
+            tr!.buy
+              ? [t('vault.pay'), {amount: fmtShort(tr!.sold.amount), symbol: tr!.sold.symbol}]
+              : [t('vault.receive'), {amount: fmtShort(tr!.bought.amount), symbol: tr!.bought.symbol}],
+            /* Why, where the relayer said why — the only account of a refusal, since
+               nothing was sent and there is no receipt to read. */
+            ...(a.reason ? [[t('vault.status'), a.reason] as [string, string]] : []),
+          ]}
+          /* In flight has no verdict to report. Past that: refused by the chain, or
+             never included at all — the owner's next move is not the same, so the two
+             do not share a word. */
+          outcome={
+            a.status === 'submitted'
+              ? {label: t('mobile.app.submitting'), tone: 'sky'}
+              : {
+                  label: t(a.status === 'refused' ? 'vault.tx_not_included' : 'vault.failed'),
+                  tone: 'rose',
+                }
+          }
+          outcomeAt={fmtExpiry(a.at, language)}
+          /**
+           * Shut until asked, and a tap opens it — as every other row on this panel is.
+           *
+           * {OrderRow} defaults `expanded` to TRUE, because the order history opens
+           * everything and never folds. Passing neither this nor `onPress` therefore left
+           * the one row on this panel that was always open and could not be closed.
+           *
+           * No pair switch on the way in, unlike a completed swap: a failed attempt is
+           * already on the pair it was for, and with the legs decoded from a batch there
+           * is no address to point the chart at.
+           */
+          expanded={expanded.has(key)}
+          onPress={() => toggleExpanded(key)}
+        />
+      )});
+    }
+    // The window, on Recently only — the same predicate the tab's count uses, so the two
+    // cannot disagree. See {inRecentWindow}.
+    if (which === 'recent')
+      for (let i = rows.length - 1; i >= 0; i--)
+        if (!inRecentWindow(rows[i].at)) rows.splice(i, 1);
+    rows.sort((a, b) => b.at - a.at);
+    if (rows.length === 0)
+      return <Text style={styles.empty}>{t(`mobile.trade.no_${which}_orders`)}</Text>;
+    // The card's own padding frames the list: the last row adds no bottom padding.
+    return rows.map((r, i) => React.cloneElement(r.node, {last: i === rows.length - 1}));
+  };
+
   return (
     <>
       <ScrollView showsVerticalScrollIndicator={false}
@@ -2383,7 +2863,11 @@ export function TradeScreen() {
         // a page short enough that the bar never hides. See {styles.bar}.
         contentContainerStyle={[
           styles.body,
-          {paddingTop: 8, paddingBottom: tabBarHeight + 16 + (isPair ? BAR_HEIGHT : 0)},
+          // Reserve against where the bar ACTUALLY sits (barBottom), not the tab-bar height — on the
+          // pushed pair screen there is no tab bar (tabBarHeight 0) but the bar still floats above the
+          // home indicator, so keying the padding to tabBarHeight left the last rows under the bar and
+          // the scroll-hide misjudging the content height.
+          {paddingTop: 8, paddingBottom: barBottom + 16 + (isPair ? BAR_HEIGHT : 0)},
         ]}
         contentInset={{top: headerHeight}}
         contentOffset={{x: 0, y: -headerHeight}}
@@ -2439,9 +2923,14 @@ export function TradeScreen() {
                       // unlabelled card. An empty `tabs` renders nothing and just holds the space.
                       <View style={styles.catFlex}>
                         <CategoryTabs
-                          tabs={categories.map((k) => ({
+                          tabs={pages.map((k) => ({
                             key: k,
-                            label: k === 'crypto_native' ? t('mobile.home.category_crypto') : t(`vault.category_${k}`),
+                            label:
+                              k === 'selected'
+                                ? t('vault.selected')
+                                : k === 'crypto_native'
+                                  ? t('mobile.home.category_crypto')
+                                  : t(`vault.category_${k}`),
                           }))}
                           value={category}
                           onChange={pickCategory}
@@ -2488,7 +2977,7 @@ export function TradeScreen() {
                         <View key={k} style={{width: pageW}}>
                           <View
                             onLayout={(e) => {
-                              // Read the height now: the event is recycled before a state updater runs.
+                              // The layout event is recycled before a state updater runs.
                               const h = e.nativeEvent.layout.height;
                               setPageH((prev) => (prev[k] === h ? prev : {...prev, [k]: h}));
                             }}>
@@ -2525,9 +3014,7 @@ export function TradeScreen() {
                  */
                 <Pressable
                   key={x.key}
-                  onPress={() =>
-                    tab === x.key && x.key === 'recent' ? setWindowOpen(true) : setTab(x.key)
-                  }
+                  onPress={() => pickTab(x.key)}
                   hitSlop={6}>
                   <Text style={[styles.orderTabText, tab === x.key && styles.orderTabOn]}>
                     {x.label}
@@ -2549,7 +3036,9 @@ export function TradeScreen() {
                   which sees no clock. The ⋯ menu carries it too, for the pages that have no
                   orders card at all. */}
               <Pressable
-                onPress={() => nav.navigate('OrderHistory', {symbol: baseSym})}
+                // Always opens on ALL assets — the history button is the route to the whole record
+                // (and to other pairs / cancelled orders), so it is never pre-filtered to this pair.
+                onPress={() => nav.navigate('OrderHistory')}
                 hitSlop={10}
                 accessibilityRole="button"
                 accessibilityLabel={t('mobile.trade.order_history')}>
@@ -2599,413 +3088,51 @@ export function TradeScreen() {
             * `last` is applied after the sort rather than inside each block, since which row is
             * last is no longer something a block can know about itself.
             */}
-          {(() => {
-            const rows: {at: number; node: React.ReactElement<{last?: boolean}>}[] = [];
-            for (const g of shownTwaps) {
-              const {sellM, buyM, isBuy, partSell, partBuy, twapPx} = twapFacts(g);
-              const key = `twap-${g.appData}`;
-              const isExp = expanded.has(key);
-              /**
-               * The schedule's slots, oldest first — ALL of them, not just the posted ones.
-               *
-               * `g.parts` is what CoW has been given so far, newest first, and a TWAP is posted one
-               * slot at a time as its clock comes round: an hour into a ten-part order, two orders
-               * exist and eight do not. Listing only those two read as lost data, so the slots yet
-               * to go out are listed too, each with the time it is due — which is the thing a reader
-               * opening a running TWAP actually wants to know.
-               */
-              const slots = [...g.parts].reverse();
-              const legM = isBuy ? buyM : sellM;
-              const perPart = isBuy ? partBuy : partSell;
-              /**
-               * Every part line carries a price, filled or not.
-               *
-               * A filled one carries what it GOT; the rest carry what the schedule will take — the
-               * limit the whole order was placed at, which is the same for every slot. Without it a
-               * reader comparing the column had to hold the limit in their head from the Details
-               * sheet to see whether a fill came in above or below it, and the slots still to come
-               * gave no hint of what they were waiting for.
-               */
-              const canCancel = g.bucket === 'open' && !!intent;
-              /**
-               * A finished schedule states what it DID; a running one states what it is for.
-               *
-               * While parts are still going out, the figure that means something is the order's own
-               * size — the thing the user asked for — with the fraction beside it saying how far in
-               * it is. Once it is over, that number is a plan that no longer exists: a TWAP can end
-               * cancelled or expired with two slots of ten behind it, and a row reading the full
-               * amount claimed a trade that never happened. So a finished row adds up what actually
-               * settled, on the leg it names, and drops the fraction — "3/3" next to a final total
-               * is the same thing said twice, and "2/10" next to one is an apology.
-               */
-              const finished = g.bucket === 'finished';
-              /** The quote leg actually paid or received, for the average below. */
-              const settledQuote = g.parts.reduce(
-                (sum, pt) =>
-                  sum +
-                  Number(
-                    formatUnits(
-                      BigInt((isBuy ? pt.executedSellAmount : pt.executedBuyAmount) ?? '0'),
-                      (isBuy ? sellM : buyM).decimals,
-                    ),
-                  ),
-                0,
-              );
-              const settledAmt = g.parts.reduce(
-                (sum, pt) =>
-                  sum +
-                  Number(
-                    formatUnits(
-                      BigInt((isBuy ? pt.executedBuyAmount : pt.executedSellAmount) ?? '0'),
-                      legM.decimals,
-                    ),
-                  ),
-                0,
-              );
-              rows.push({at: twapPlacedAt(g), node: (
-                <OrderRow
-                  key={key}
-                  badge={words(t('vault.twap'), sideWord(isBuy))}
-                  /* A schedule has no status of its own: it ended badly if it was called off, or if
-                     its window closed on slots it never got through. See {twapTimeLine}. */
-                  outcome={twapStatus(g)}
-                  /**
-                   * And WHEN — which the row never said at all.
-                   *
-                   * Every other finished row on this panel carries its time at the foot-right, and
-                   * a schedule's is the one most worth having: a TWAP runs for days, so "it
-                   * filled" without "when" leaves the reader to open the row and read the slots.
-                   * Filled says when the last slot landed, expired says when the window closed,
-                   * cancelled says when it was called off. See {twapTimeLine}.
-                   */
-                  outcomeAt={(() => {
-                    const line = twapTimeLine(g, {
-                      cancelled:
-                        g.parts.reduce<number | undefined>((at, pt) => at ?? cancelAt.get(pt.uid.toLowerCase()), undefined) ??
-                        cancelledAtAny(g.parts.map((pt) => pt.uid)),
-                      filled: twapFilledAt(g, (uid) => fillAt.get(uid)),
-                    });
-                    return line ? whenText(line, t, language) : undefined;
-                  })()}
-                  leg={{amount: fmtShort(finished ? settledAmt : perPart * g.total), symbol: legM.symbol}}
-                  /* The average of the slots that filled, which is the whole point of a TWAP and the
-                     one figure its row never carried. */
-                  price={fmtPrice(finished && settledAmt > 0 ? settledQuote / settledAmt : twapPx)}
-                  /**
-                   * The parts, and nothing else.
-                   *
-                   * A TWAP is a schedule, so what a reader opens it for is where the schedule has
-                   * got to — which slice filled at what, and when the next one goes out. The terms
-                   * it was placed on (pay, receive, limit price, window) are read once when the
-                   * order is placed and almost never again, so they are behind Details: six
-                   * label-and-value lines above the parts pushed the only live thing on the panel
-                   * off the bottom of a phone.
-                   */
-                  parts={Array.from({length: Math.max(g.total, slots.length)}, (_, i): OrderPart => {
-                    const pt = slots[i];
-                    if (!pt) {
-                      // Still to come. CoW is handed each slot as its turn arrives, one
-                      // `partDuration` after the last — so the time is arithmetic, not a lookup.
-                      const due = g.schedule.startTime + i * g.schedule.partDuration;
-                      return {
-                        label: `${fmtShort(perPart)} ${displaySymbol(legM.symbol)}${atPrice(twapPx)}`,
-                        state: fmtDue(due),
-                        pending: true,
-                      };
-                    }
-                    /**
-                     * A posted part: the asset, then the price it went at.
-                     *
-                     * It used to print both legs — "284.13 USDC → 3.33 CRCL" — which is the same
-                     * shape the ROW above was changed away from, and for the same reason: the two
-                     * figures are one trade said twice, and the part of it a reader compares
-                     * between lines is the price, which was the one thing not written down. The leg
-                     * shown is the one the row names, so a column of parts adds up to the order's
-                     * own total.
-                     *
-                     * The ratio is the EXECUTED one, fee and all — Details carries the limit the
-                     * schedule was placed at, and the gap between them is what a reader is looking
-                     * for.
-                     */
-                    const ps = effectiveStatus(pt, cancelledUids);
-                    const done = ps.toLowerCase().includes('fulfil');
-                    const sold = Number(formatUnits(BigInt(pt.executedSellAmount ?? '0'), sellM.decimals));
-                    const recv = Number(formatUnits(BigInt(pt.executedBuyAmount ?? '0'), buyM.decimals));
-                    const got = isBuy ? recv : sold;
-                    const px = got > 0 ? (isBuy ? sold : recv) / got : NaN;
-                    // Posted but not filled: the part's own size, with nothing to price.
-                    const sized = Number(
-                      formatUnits(BigInt((isBuy ? pt.buyAmount : pt.sellAmount) ?? '0'), legM.decimals),
-                    );
-                    return {
-                      // Filled: what it went at. Posted and waiting: what it is waiting for.
-                      label: `${fmtShort(done ? got : sized)} ${displaySymbol(legM.symbol)}${atPrice(done ? px : twapPx)}`,
-                      state: t(statusPill(ps).key),
-                    };
-                  })}
-                  onDetails={() => setTwapInfo(g.appData)}
-                  cancel={
-                    canCancel ? (
-                      <Pressable
-                        onPress={() =>
-                          ask({
-                            title: t('mobile.actions.cancel_intent'),
-                            gas: relayGasFor({}),
-                            run: () => onCancelTwap(g),
-                          })
-                        }
-                        disabled={cancellingTwap === g.appData}
-                        hitSlop={8}>
-                        <Text style={styles.cancelInline}>
-                          {cancellingTwap === g.appData ? t('mobile.trade.cancelling') : t('vault.cancel')}
-                        </Text>
-                      </Pressable>
-                    ) : undefined
-                  }
-                  expanded={isExp}
-                  onPress={() => openOrderRow(key, g.rep.sellToken, g.rep.buyToken)}
-                />
-              )});
-            }
-            for (const o of shownOrders.slice(0, 30)) {
-              const es = effectiveStatus(o, cancelledUids);
-              const sp = statusPill(es);
-              const sellM = assetMeta(network, o.sellToken as Address);
-              const buyM = assetMeta(network, o.buyToken as Address);
-              // A leg held as a receipt token reads, and prices, as its underlying: what the user
-              // typed and what the order is worth. sUSDS converts at the savings rate; an aToken is
-              // one-for-one.
-              const legRate = (addr: string) => (assetMeta(network, addr).symbol === 'sUSDS' ? shareRate : 1);
-              const legSym = (addr: string, fallback: string) => underlyingOf(network, addr) ?? fallback;
-              const sellNum = Number(formatUnits(BigInt(o.sellAmount), sellM.decimals)) * legRate(o.sellToken);
-              const buyNum = Number(formatUnits(BigInt(o.buyAmount), buyM.decimals)) * legRate(o.buyToken);
-              const sellSym = legSym(o.sellToken, sellM.symbol);
-              const buySym = legSym(o.buyToken, buyM.symbol);
-              const fromPosition = !!underlyingOf(network, o.sellToken);
-              const isTwap = !!o.appData && o.appData.toLowerCase() !== limitAppData;
-              // Price quoted in the stable leg when there is one, else base-per-quote by side.
-              // A savings share or an aToken counts as its underlying here: an order selling sUSDS
-              // for CRCL is a USDC-priced buy, and pricing it per share would be meaningless.
-              const stableLike = (addr: string) => {
-                const under = underlyingOf(network, addr);
-                return stables.some((s) => (under ? s.symbol === under : s.address.toLowerCase() === addr.toLowerCase()));
-              };
-              const sellIsStable = stableLike(o.sellToken);
-              const buyIsStable = stableLike(o.buyToken);
-              const px0 =
-                sellIsStable || buyIsStable
-                  ? (sellIsStable ? sellNum : buyNum) / (sellIsStable ? buyNum : sellNum)
-                  : o.kind === 'buy'
-                    ? sellNum / buyNum
-                    : buyNum / sellNum;
-              const px = px0 / (o.kind === 'buy' ? 1 + PARTNER_FEE : 1 - PARTNER_FEE);
-              // Buy or sell the ASSET: paying a stablecoin to receive something else is a buy,
-              // whichever way round CoW encodes it (every order is posted as a sell of the pay leg,
-              // so o.kind would call a CRCL purchase a sell of USDC).
-              const isBuy = sellIsStable && !buyIsStable;
-              /**
-               * An OPEN row starts expanded; everything else starts shut.
-               *
-               * An open order is the one the owner still has a decision to make about — its terms,
-               * its deadline and its Cancel are the reason the row is on screen — so making them
-               * all a tap away was asking for a tap that nobody would skip. A finished row is a
-               * record and opens only when asked.
-               *
-               * The set therefore holds rows TOGGLED FROM their default rather than opened ones,
-               * which is what lets both defaults live in one piece of state.
-               */
-              const isExp = es === 'open' ? !expanded.has(o.uid) : expanded.has(o.uid);
-              const canCancel = es === 'open' && !!intent;
-              const filled = es.toLowerCase().includes('fulfil');
-              const filledAt = fillAt.get(o.uid.toLowerCase());
-              const when = orderTimeLine(o, es, {
-                filled: filledAt,
-                cancelled: cancelAt.get(o.uid.toLowerCase()) ?? cancelledAt(o.uid),
-              });
-              // What it GOT, not what it asked for: a limit order can fill better than its limit.
-              const execSell = Number(formatUnits(BigInt(o.executedSellAmount ?? '0'), sellM.decimals)) * legRate(o.sellToken);
-              const execBuy = Number(formatUnits(BigInt(o.executedBuyAmount ?? '0'), buyM.decimals)) * legRate(o.buyToken);
-              /**
-               * What it GOT if it filled, what it ASKED if it has not — the Order history rows
-               * read the same way. A row with no price at all was the common case here, since
-               * most of what sits in Open and Cancelled never executed.
-               */
-              const avgPx =
-                filled && execSell > 0 && execBuy > 0 ? (isBuy ? execSell / execBuy : execBuy / execSell) : px;
-              rows.push({at: placedAt(o), node: (
-                <OrderRow
-                  key={o.uid}
-                  /* The side, and the type where the list holds more than one kind. Open and
-                     Cancelled are limit orders unless they say TWAP, so naming the type there
-                     spends a word on what the list already is. FINISHED is the exception:
-                     completed market swaps sit in it too, and against a row reading "Market Buy"
-                     a bare "Buy" looked like a different, nameless thing rather than the limit
-                     order it is. */
-                  badge={words(t(isTwap ? 'vault.twap' : 'vault.limit'), sideWord(isBuy))}
-                  leg={{amount: fmtShort(isBuy ? buyNum : sellNum), symbol: isBuy ? buySym : sellSym}}
-                  price={fmtPrice(avgPx)}
-                  /* Only a sell can come out of a position, and only the leg on screen can say
-                     so — on a buy the paying leg is not shown at all. */
-                  note={!isBuy && fromPosition ? `(${t('vault.yielding')})` : undefined}
-                  /* Every order says what became of it, at the foot — the one place a row with
-                     no parts has room to. An order still working says what it is waiting for
-                     instead of a verdict: "Expires · 2d 5h". See {OrderRow}'s `outcome`. */
-                  outcome={
-                    sp.key === 'vault.open'
-                      ? when
-                        ? {label: t(when[0])}
-                        : undefined
-                      : {label: t(sp.key), tone: sp.tone}
-                  }
-                  outcomeAt={when ? whenText(when, t, language) : undefined}
-                  /**
-                   * Cancel sits at the foot, on the left — where the TWAP rows have always put it,
-                   * and where every list in this app puts a destructive control.
-                   *
-                   * It was in the head's right-hand corner, which is the column the amount reads
-                   * in on every other row: a tappable word there made the one figure the row is
-                   * about share its place with a control. At the foot it has the corner to itself
-                   * and the deadline keeps the opposite end.
-                   */
-                  cancel={
-                    canCancel ? (
-                      <Pressable
-                        onPress={(ev) => {
-                          ev.stopPropagation();
-                          ask({
-                            title: t('mobile.actions.cancel_intent'),
-                            message: describeOrder(o, network),
-                            gas: relayGasFor({}),
-                            run: () => onCancel(o),
-                          });
-                        }}
-                        disabled={cancelling === o.uid}
-                        hitSlop={8}>
-                        <Text style={styles.cancelInline}>{cancelling === o.uid ? t('mobile.trade.cancelling') : t('common.cancel')}</Text>
-                      </Pressable>
-                    ) : null
-                  }
-                  /**
-                   * The OTHER leg, and a time.
-                   *
-                   * The head already states the one the order is for — what a buy buys, what a
-                   * sell sells — so printing both here made the first line of the panel a copy of
-                   * the line above it. A trade has two ends and the row shows one, so the panel
-                   * shows the one the row does not.
-                   *
-                   * The date that goes with it is at the foot, beside the word it belongs to —
-                   * see {orderTimeLine} for which one is still a fact.
-                   */
-                  lines={[
-                    isBuy
-                      ? [t('vault.pay'), {amount: fmtAmt(o.sellAmount, sellM.decimals), symbol: sellM.symbol}]
-                      : [t('vault.receive'), {amount: fmtAmt(o.buyAmount, buyM.decimals), symbol: buyM.symbol}],
-
-                  ]}
-                  expanded={isExp}
-                  onPress={() => openOrderRow(o.uid, o.sellToken, o.buyToken)}
-                />
-              )});
-            }
-            if (tab === 'recent')
-              for (const m of marketFinished.slice(0, 30)) {
-              const soldIsStable = stables.some((s) => s.address.toLowerCase() === m.sold.address.toLowerCase());
-              const isBuy = soldIsStable; // spent a stablecoin to acquire the crypto leg
-              const px = soldIsStable ? m.sold.amount / m.bought.amount : m.bought.amount / m.sold.amount;
-              const isExp = expanded.has(m.txHash);
-              rows.push({at: tradeAt(m), node: (
-                <OrderRow
-                  key={m.txHash}
-                  badge={words(t('vault.market'), sideWord(isBuy))}
-                  leg={{
-                    amount: fmtShort(isBuy ? m.bought.amount : m.sold.amount),
-                    symbol: isBuy ? m.bought.symbol : m.sold.symbol,
-                  }}
-                  price={fmtPrice(px)}
-                  /* The corner is free on a market row — nothing is cancellable about a swap
-                     that has already happened — so the amount reads there, in the column the
-                     rest of the screen puts numbers in. */
-                  right={null}
-                  /* The OTHER leg, only: the head states the one the swap was for. */
-                  lines={[
-                    isBuy
-                      ? [t('mobile.trade.paid'), {amount: fmtShort(m.sold.amount), symbol: m.sold.symbol}]
-                      : [t('vault.received'), {amount: fmtShort(m.bought.amount), symbol: m.bought.symbol}],
-                  ]}
-                  /* A swap has one ending and it already happened. */
-                  outcome={{label: t('vault.fulfilled'), tone: 'green'}}
-                  outcomeAt={m.ts ? fmtExpiry(m.ts, language) : undefined}
-                  expanded={isExp}
-                  onPress={() => openOrderRow(m.txHash, m.sold.address, m.bought.address)}
-                />
-              )});
-              }
-            for (const x of failedSwaps.filter(({a}) =>
-              tab === 'open' ? a.status === 'submitted' : true,
-            )) {
-              const {a, trade: tr} = x;
-              const leg = tr!.buy ? tr!.bought : tr!.sold;
-              const key = `relay-${a.id}`;
-              rows.push({at: a.at, node: (
-                <OrderRow
-                  key={key}
-                  badge={words(t('vault.market'), sideWord(tr!.buy))}
-                  leg={{amount: fmtShort(leg.amount), symbol: leg.symbol}}
-                  /* The price it was ASKED at — it never got one of its own. */
-                  price={
-                    tr!.sold.amount > 0 && tr!.bought.amount > 0
-                      ? fmtPrice(tr!.buy ? tr!.sold.amount / tr!.bought.amount : tr!.bought.amount / tr!.sold.amount)
-                      : undefined
-                  }
-                  right={null}
-                  /** Pay / Receive, and why it did not happen. */
-                  lines={[
-                    tr!.buy
-                      ? [t('vault.pay'), {amount: fmtShort(tr!.sold.amount), symbol: tr!.sold.symbol}]
-                      : [t('vault.receive'), {amount: fmtShort(tr!.bought.amount), symbol: tr!.bought.symbol}],
-                    /* Why, where the relayer said why — the only account of a refusal, since
-                       nothing was sent and there is no receipt to read. */
-                    ...(a.reason ? [[t('vault.status'), a.reason] as [string, string]] : []),
-                  ]}
-                  /* In flight has no verdict to report. Past that: refused by the chain, or
-                     never included at all — the owner's next move is not the same, so the two
-                     do not share a word. */
-                  outcome={
-                    a.status === 'submitted'
-                      ? {label: t('mobile.app.submitting'), tone: 'sky'}
-                      : {
-                          label: t(a.status === 'refused' ? 'vault.tx_not_included' : 'vault.failed'),
-                          tone: 'rose',
-                        }
-                  }
-                  outcomeAt={fmtExpiry(a.at, language)}
-                  /**
-                   * Shut until asked, and a tap opens it — as every other row on this panel is.
-                   *
-                   * {OrderRow} defaults `expanded` to TRUE, because the order history opens
-                   * everything and never folds. Passing neither this nor `onPress` therefore left
-                   * the one row on this panel that was always open and could not be closed.
-                   *
-                   * No pair switch on the way in, unlike a completed swap: a failed attempt is
-                   * already on the pair it was for, and with the legs decoded from a batch there
-                   * is no address to point the chart at.
-                   */
-                  expanded={expanded.has(key)}
-                  onPress={() => toggleExpanded(key)}
-                />
-              )});
-            }
-            // The window, on Recently only — the same predicate the tab's count uses, so the two
-            // cannot disagree. See {inRecentWindow}.
-            if (tab === 'recent')
-              for (let i = rows.length - 1; i >= 0; i--)
-                if (!inRecentWindow(rows[i].at)) rows.splice(i, 1);
-            rows.sort((a, b) => b.at - a.at);
-            if (rows.length === 0)
-              return <Text style={styles.empty}>{t(`mobile.trade.no_${tab}_orders`)}</Text>;
-            // The card's own padding frames the list: the last row adds no bottom padding.
-            return rows.map((r, i) => React.cloneElement(r.node, {last: i === rows.length - 1}));
-          })()}
+          {/**
+            * The two tabs are PAGES: the list under them swipes between them.
+            *
+            * The tab row stayed a pair of buttons for a while, which is the wrong gesture for a
+            * pair of lists sitting side by side — every other row of tabs in this app (the asset
+            * categories, the allow list) is swiped, and reaching for the label to change a list
+            * that is already under your thumb reads as a form control rather than as two views of
+            * the same thing.
+            *
+            * The pager escapes the card's padding and each page puts it back, so a row can still
+            * bleed its divider to the card's edges without bleeding into the page beside it.
+            *
+            * Its height follows the page in view — the two lists are rarely the same length — by
+            * standing at the taller and giving the difference back as negative bottom margin, the
+            * same way the asset directory's pager does.
+            */}
+          <View style={styles.tabPager} onLayout={(e) => setTabPageW(e.nativeEvent.layout.width)}>
+            {tabPageW > 0 ? (
+              <Animated.ScrollView
+                ref={tabPagerRef}
+                horizontal
+                pagingEnabled
+                bounces={false}
+                showsHorizontalScrollIndicator={false}
+                nestedScrollEnabled
+                style={tabPagerStyle}
+                contentContainerStyle={styles.pagerContent}
+                onScroll={Animated.event([{nativeEvent: {contentOffset: {x: tabX}}}], {useNativeDriver: false})}
+                scrollEventThrottle={16}
+                onMomentumScrollEnd={(e) => onTabSettle(e.nativeEvent.contentOffset.x)}>
+                {TABS.map((x) => (
+                  <View key={x.key} style={[styles.tabPage, {width: tabPageW}]}>
+                    <View
+                      onLayout={(e) => {
+                        // The layout event is recycled before a state updater runs.
+                        const h = e.nativeEvent.layout.height;
+                        setTabPageH((prev) => (prev[x.key] === h ? prev : {...prev, [x.key]: h}));
+                      }}>
+                      {orderList(x.key)}
+                    </View>
+                  </View>
+                ))}
+              </Animated.ScrollView>
+            ) : null}
+          </View>
         </View>
         ) : null}
       </ScrollView>
@@ -3030,7 +3157,12 @@ export function TradeScreen() {
           hence the safe-area inset as the floor. */}
       {isPair ? (
       <Animated.View
-        style={[styles.bar, {bottom: barBottom, transform: [{translateY: barY}]}]}>
+        // Anchored to the screen edge with the floor as bottom PADDING (not as a `bottom` offset),
+        // so the bar's background fills the home-indicator / tab-bar strip instead of leaving it
+        // transparent. The buttons still sit `barBottom + 18` up, so nothing moves visually, and
+        // BAR_HEIGHT / BAR_SLIDE / the content padding stay consistent (the bar grows down by
+        // exactly the gap it used to float above). When hidden it slides its full height clear.
+        style={[styles.bar, {bottom: 0, paddingBottom: 18 + barBottom, transform: [{translateY: barY}]}]}>
         <Pressable style={[styles.barBtn, {backgroundColor: c.buy}]} onPress={() => openSheet('buy')}>
           <Text style={styles.barText}>{t('vault.buy')}</Text>
         </Pressable>
@@ -3292,6 +3424,10 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   cancelAllRow: {alignItems: 'flex-end', paddingVertical: 6},
   cancelAllText: {color: c.subtext, fontSize: 12, fontWeight: '600', textDecorationLine: 'underline'},
   empty: {color: c.subtext, fontSize: 13, textAlign: 'center', paddingTop: 10},
+  // The orders pager steps OUT of the card's 16 and each page puts it back, so a row's divider can
+  // reach the card's edges without reaching into the page beside it. See the pager's own note.
+  tabPager: {marginHorizontal: -16},
+  tabPage: {paddingHorizontal: 16},
   // Its own style, not the orders list's: that one hangs under a header row and is padded at
   // the top only, which left this sitting against the card's top edge instead of in it.
   emptySearch: {color: c.subtext, fontSize: 13, textAlign: 'center', paddingVertical: 36},

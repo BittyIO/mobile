@@ -108,3 +108,28 @@ export function displaySymbol(symbol: string | null | undefined): string {
 export function shortAddress(address: string): string {
   return `${address.slice(0, 8)}…${address.slice(-6)}`;
 }
+
+/**
+ * Six decimals, taken DOWN; and the matching rounding for what comes out of the arithmetic.
+ *
+ * Used on every balance that feeds a ceiling. Six is what the amount fields keep, and a balance
+ * read off chain carries as many decimals as its token has — eighteen for ETH — so rounding one to
+ * six could name a ceiling a shade above what the vault actually holds. Flooring cannot, and once
+ * the inputs land on six places exactly, {round6} at the end is lossless and only there to clear
+ * the noise of subtracting them.
+ *
+ * Through the decimal TEXT, not by multiplying. `Math.floor(v * 1e6) / 1e6` is wrong for exactly
+ * the figures it would be reached for: 8.21 * 1e6 is 8209999.999999999 in binary, so it floors to
+ * 8.209999 and takes a cent off a balance that was never short. toFixed hands back the decimal
+ * expansion and cutting it four digits in truncates at six with no binary detour.
+ *
+ * Here rather than in one screen because two forms now hold an amount back from a balance — the
+ * order sheet and the Earn deposit — and a ceiling worked out two ways is two ceilings.
+ */
+export const floor6 = (v: number): number => {
+  if (!(v > 0)) return 0;
+  const text = v.toFixed(10);
+  return Number(text.slice(0, text.indexOf('.') + 7));
+};
+
+export const round6 = (v: number): number => Math.round(v * 1e6) / 1e6;

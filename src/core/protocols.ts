@@ -31,7 +31,7 @@ const PROTOCOLS: Record<Network, Record<string, ProtocolInfo>> = {
     // disc of a shortened address, and then to nothing once unnamed venues were dropped. The
     // server's service catalog carries names too and wins when it has answered; this is what
     // makes the mark correct on the first frame and offline.
-    '0x73d16efa39e2195cfac4b0f18bda3aa35056663a': {name: 'Uniswap', category: 'amm'},
+    '0x73d16efa39e2195cfac4b0f18bda3aa35056663a': {name: 'Uniswap Universal', category: 'amm'},
     '0xad5a7fd77457195ddf9221270dbcc0245ecdd698': {name: 'Uniswap V3', category: 'marketMaker'},
     '0x9296f7ffe86da8b652988f07920b42f8779ce64b': {name: 'Aave V3', category: 'lending'},
     '0x35252547c41661103865d700d8fcace07afce1bd': {name: 'Lido', category: 'staking'},
@@ -53,7 +53,7 @@ const PROTOCOLS: Record<Network, Record<string, ProtocolInfo>> = {
     // disc of a shortened address, and then to nothing once unnamed venues were dropped. The
     // server's service catalog carries names too and wins when it has answered; this is what
     // makes the mark correct on the first frame and offline.
-    '0x4753f9a82659edcffc940fe8e330741d14bad82b': {name: 'Uniswap', category: 'amm'},
+    '0x4753f9a82659edcffc940fe8e330741d14bad82b': {name: 'Uniswap Universal', category: 'amm'},
     '0xb445619c0a2936591c7712739c82204c8901b56a': {name: 'Uniswap V3', category: 'marketMaker'},
     '0x4b38baa01e6fd30163f4de7e678dc868045eb27f': {name: 'Aave V3', category: 'lending'},
     '0x8e14e91f29066ccdd9e9e2db6bafe6fef7c14ac6': {name: 'Sky', category: 'staking'},
@@ -70,9 +70,12 @@ const PROTOCOLS: Record<Network, Record<string, ProtocolInfo>> = {
     // disc of a shortened address, and then to nothing once unnamed venues were dropped. The
     // server's service catalog carries names too and wins when it has answered; this is what
     // makes the mark correct on the first frame and offline.
-    '0x7ae75624f265a700d011df819bed6ef10615ac38': {name: 'Uniswap', category: 'amm'},
+    '0x7ae75624f265a700d011df819bed6ef10615ac38': {name: 'Uniswap Universal', category: 'amm'},
     '0x5daa6aef7de9c13624a8fdfde47c10d35fd79b0a': {name: 'Uniswap V3', category: 'marketMaker'},
-    '0x2b2ecfad219fe9fd358ba196962d1536665b2041': {name: 'Uniswap V3', category: 'amm'},
+    // The pre-split COMBINED adapter (1.0.2) — and on this chain it is a Universal Router build,
+    // so it is named for that like the split one above it. The combined adapters on mainnet and
+    // Base keep "Uniswap V3", because there the one contract really was v3 only.
+    '0x2b2ecfad219fe9fd358ba196962d1536665b2041': {name: 'Uniswap Universal', category: 'amm'},
   },
   // Sepolia took the AMM split on 2026-10-02 and is the only chain that has. The two adapters that
   // used to sit here (0x88b9f031…, 0xc701e8d6…) were the combined Uniswap V3 adapter of the
@@ -80,14 +83,14 @@ const PROTOCOLS: Record<Network, Record<string, ProtocolInfo>> = {
   // keeping them would hand `ammAdapters` a superseded address to trade through.
   //
   // The names differ because the adapters differ. The trade side routes v2/v3/v4 through the
-  // Universal Router, so it is "Uniswap" flat, matching what Robinhood Chain's Universal adapter
-  // is called; the maker side is concentrated liquidity and v3 only, so it keeps "Uniswap V3".
+  // Universal Router, so it is "Uniswap Universal", matching what Robinhood Chain's Universal
+  // adapter is called; the maker side is concentrated liquidity and v3 only, so it keeps "Uniswap V3".
   // Distinct names also keep them as two rows in the protocol allowlist, which is what they are —
   // a vault has to register each one.
   sepolia: {
     '0x9c01f9b6ed7bbd86f7a309a3414595608ab9d80d': {name: 'Aave V3', category: 'lending'},
     '0x9f6d7b2defcf45cb837560209099083ddf59840a': {name: 'Lido', category: 'staking'},
-    '0x67bd4c240d513e7eb35bf8d871cbed314856b125': {name: 'Uniswap', category: 'amm'},
+    '0x67bd4c240d513e7eb35bf8d871cbed314856b125': {name: 'Uniswap Universal', category: 'amm'},
     '0x001522fb856c3c6f815dfdd5d023eae5b9000058': {name: 'Uniswap V3', category: 'marketMaker'},
     '0x5a365990111b5a460526a25a8d4493df103759df': {name: 'CoW Swap', category: 'intent'},
   },

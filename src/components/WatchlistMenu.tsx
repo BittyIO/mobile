@@ -1,13 +1,11 @@
-import React, {useState} from 'react';
+import React, {useMemo, useState} from 'react';
 import {Keyboard, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View} from 'react-native';
 import Svg, {Circle, Path} from 'react-native-svg';
 import {Sheet} from '@/components/Sheet';
-import {MarketRow} from '@/components/MarketRow';
-import {useMarketStats} from '@/vault/useMarketStats';
-import {usePrices} from '@/vault/usePrices';
-import {usdValue} from '@/core/prices';
 import {displaySymbol} from '@/core/format';
 import {useNetwork, NETWORKS, NETWORK_LABEL, networkLabel} from '@/core/network-store';
+import {isAssetsList, storedLists, watchListLabel, watchListNumber} from '@/core/favorites-store';
+import {useVaults, vaultLabel} from '@/core/vault-store';
 import {LANGUAGES} from '@/core/language-store';
 import {translate} from '@/i18n';
 import type {Network} from '@/core/chain';
@@ -57,12 +55,13 @@ function ImportIcon({color}: {color: string}) {
   );
 }
 
-/** A bar chart — the column the row turns on. */
-function CapIcon({color}: {color: string}) {
+/** lucide List — the watch lists this device already holds. */
+function ListIcon({color}: {color: string}) {
   const c = glyph(color);
   return (
     <Svg width={22} height={22} viewBox="0 0 24 24">
-      <Path d="M6 20V10M12 20V4M18 20v-6" {...c} strokeWidth={2.2} />
+      <Path d="M8 6h13M8 12h13M8 18h13" {...c} strokeWidth={2.1} />
+      <Path d="M3 6h.01M3 12h.01M3 18h.01" {...c} strokeWidth={2.4} />
     </Svg>
   );
 }
@@ -77,46 +76,6 @@ function TrashIcon({color}: {color: string}) {
       <Path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" {...c} />
       <Path d="M10 11v6M14 11v6" {...c} />
     </Svg>
-  );
-}
-
-/**
- * What the market-cap switch does, shown rather than described.
- *
- * The column it turns on is not on this screen — a watch list's rows are drawn on the Overview,
- * and the ⋯ that holds the switch is on the list's own page. So the switch used to be a word with
- * no visible consequence: you toggled it, went back, and found out. A row of the real thing,
- * redrawing as the switch moves, answers the question where it is asked.
- *
- * Ether because every chain the app runs on prices it and publishes a cap for it, which is what
- * the row has to have to demonstrate anything; the figures are LIVE, for the same reason — a
- * preview with invented numbers beside a real one teaches the layout and misteaches the data.
- *
- * Mounted only while the sheet is open, so neither read happens for a menu nobody opened.
- */
-const PREVIEW_SYMBOL = 'ETH';
-
-function CapPreview({on, toggle}: {on: boolean; toggle: () => void}) {
-  const network = useNetwork((s) => s.network);
-  const styles = useStyles(makeStyles);
-  const symbol = PREVIEW_SYMBOL;
-  const prices = usePrices(network, 0, [symbol]);
-  const stat = useMarketStats(network, [symbol]).get(symbol);
-  return (
-    <View style={styles.preview}>
-      <MarketRow
-        symbol={symbol}
-        price={usdValue(1, symbol, prices) || null}
-        change24h={stat?.change24h}
-        marketCap={stat?.marketCap}
-        showCap={on}
-        first
-        /* The picture is also the switch. Having shown someone what the setting does, the next
-           thing their finger is already on is the thing it did it to — and a row that visibly
-           responds to a tap but ignores it reads as broken rather than as an illustration. */
-        onPress={toggle}
-      />
-    </View>
   );
 }
 
@@ -203,7 +162,6 @@ export function WatchlistMenu({
   canShare,
   onDelete,
   onImport,
-  cap,
   importOnly,
 }: {
   /** What the list is called on screen: the sheet's title, and the share text's fallback. */
@@ -224,16 +182,6 @@ export function WatchlistMenu({
   /** Star these tickers onto the current list. Returns how many it recognised. */
   onImport: (symbols: string[]) => number;
   /**
-   * The market-cap column, when the list is one that can have one.
-   *
-   * It lives in here rather than beside the categories because it is a property OF THE LIST, in
-   * the one menu that holds the things that are — share it, import into it, delete it. Out in
-   * the strip it was a checkbox competing with four filters for the width of a phone, and it
-   * said nothing about which list it belonged to. Undefined on "Assets", which shows holdings
-   * and has no market columns to turn off.
-   */
-  cap?: {on: boolean; toggle: () => void};
-  /**
    * Skip the menu and be the import button.
    *
    * A list being made has nothing to share and nothing to delete, so a ⋯ holding one row is a
@@ -247,24 +195,91 @@ export function WatchlistMenu({
   const styles = useStyles(makeStyles);
   const network = useNetwork((s) => s.network);
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<'menu' | 'import'>(importOnly ? 'import' : 'menu');
+  /**
+   * Which face of the sheet is showing.
+   *
+   * `source` is the fork: a list can be imported from a message someone sent, or from a list
+   * already on this device under another vault. The two were one screen for a while — the paste
+   * field with the local lists stacked above it — and that made the quick answer compete with the
+   * keyboard. Asking first costs one tap and leaves each half the whole sheet.
+   */
+  const [mode, setMode] = useState<'menu' | 'source' | 'shared' | 'local'>(importOnly ? 'source' : 'menu');
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * The same list, already made on another vault.
+   *
+   * Lists are per vault (see {favorites-store}), which is right — a vault is its own portfolio —
+   * but it means someone running a second vault has to rebuild by hand the list they already
+   * curated on the first. Every other vault's lists are read straight from storage, so the one
+   * being copied from does not have to be switched to and back.
+   *
+   * Only lists with something ON them, and only ones this device has actually written down: a
+   * vault nobody has opened has no lists to offer, and offering it the defaults would be offering
+   * the user their own app's guess as if they had made it.
+   */
+  const vaults = useVaults((st) => st.vaults);
+  const activeVault = useVaults((st) => st.activeIndex);
+  const fromVaults = useMemo(() => {
+    if (!open) return [];
+    const name = (n: number) => t('mobile.app.vault_n', {n});
+    return vaults
+      .filter((v) => v.index !== activeVault)
+      .flatMap((v) => {
+        const lists = storedLists(network, v.index);
+        return lists
+          .filter((l) => l.symbols.length > 0)
+          .map((l) => ({
+            key: `${v.index}:${l.id}`,
+            // "<list> # <vault>": the list is what is being chosen, the vault is which one it is.
+            label: `${
+              isAssetsList(l.id)
+                ? t('mobile.home.all_assets')
+                : watchListLabel(l, t('mobile.home.watch_list_n', {n: watchListNumber(lists, l.id)}))
+            } # ${vaultLabel(v, name)}`,
+            symbols: l.symbols,
+          }));
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, network, vaults, activeVault]);
+
+  /** Move between the sheet's faces, leaving no message from the last one behind. */
+  const go = (next: 'source' | 'shared' | 'local') => {
+    setError(null);
+    setMode(next);
+  };
+
+  /** The face the sheet opens on, and nothing left over from the last time it was used. */
+  const reset = () => {
+    setMode(importOnly ? 'source' : 'menu');
+    setDraft('');
+    setError(null);
+  };
+
+  /**
+   * Put the keyboard away FIRST, then the sheet.
+   *
+   * {Sheet} follows the keyboard: it lifts by its height and takes that height out of its own, so
+   * while one is up the card is shorter and raised. Closing the sheet unmounts the field, which
+   * dismisses the keyboard a moment LATER — and a sheet reopened inside that moment was built
+   * against a keyboard height that was about to become zero, so it came up short and floating
+   * above where it belongs. Dismissing here means `keyboardWillHide` runs during the slide-out,
+   * with the sheet already on its way off screen.
+   */
   const close = () => {
+    Keyboard.dismiss();
     setOpen(false);
-    setTimeout(() => {
-      setMode(importOnly ? 'import' : 'menu');
-      setDraft('');
-      setError(null);
-    }, DISMISS_MS);
+    // Deferred so the face does not change while the card is still sliding away, which reads as
+    // the sheet flicking to another screen as it goes.
+    setTimeout(reset, DISMISS_MS);
   };
 
   /** Close, then do it — never both at once. See the note on the component. */
   const after = (run: () => void) => {
     setOpen(false);
     setTimeout(() => {
-      setMode(importOnly ? 'import' : 'menu');
+      setMode(importOnly ? 'source' : 'menu');
       run();
     }, DISMISS_MS);
   };
@@ -308,23 +323,6 @@ export function WatchlistMenu({
   };
 
   const rows = [
-    /**
-     * First, because it is the only row that CHANGES the list rather than doing something with
-     * it, and the only one the user comes back to twice. It also does not close the sheet — a
-     * toggle that dismissed what it is part of would hide the check it just set.
-     */
-    ...(cap
-      ? [
-          {
-            key: 'cap',
-            label: t('mobile.home.show_market_cap'),
-            icon: <CapIcon color={c.subtext} />,
-            onPress: cap.toggle,
-            danger: false,
-            on: cap.on,
-          },
-        ]
-      : []),
     ...(canShare && symbols.length > 0
       ? [{key: 'share', label: t('mobile.home.share_address'), icon: <ShareIcon color={c.subtext} />, onPress: share, danger: false}]
       : []),
@@ -332,7 +330,7 @@ export function WatchlistMenu({
       key: 'import',
       label: t('mobile.home.import_list'),
       icon: <ImportIcon color={c.subtext} />,
-      onPress: () => setMode('import'),
+      onPress: () => go('source'),
       danger: false,
     },
     ...(canDelete
@@ -351,12 +349,43 @@ export function WatchlistMenu({
   return (
     <>
       <Pressable
-        onPress={() => setOpen(true)}
+        /**
+         * Reset on the way IN as well as on the way out.
+         *
+         * The deferred reset above is a tidy-up, not a guarantee: tapping this again inside the
+         * 320ms it waits reopened the sheet on whatever was last showing — usually the paste
+         * field, keyboard and all, when what was asked for was the source picker. Setting the
+         * face here makes reopening deterministic however fast the second tap comes.
+         */
+        onPress={() => {
+          reset();
+          setOpen(true);
+        }}
         style={styles.btn}
         hitSlop={12}
         accessibilityRole="button"
         accessibilityLabel={importOnly ? t('mobile.home.import_list') : t('mobile.trade.more')}>
-        {importOnly ? <ImportIcon color={c.text} /> : <MoreIcon color={c.text} />}
+        {importOnly ? (
+          /**
+           * A point up, and only in the bar.
+           *
+           * Nothing is off-centre here: the 44pt box puts both marks 3pt above its own centre
+           * (see {styles.btn}) and the import glyph's bounding box is, if anything, half a point
+           * HIGHER than the ⋯. What makes it read low is the ink — a 16-wide tray along the
+           * bottom against a 1.9 stroke at the top puts its visual mass 2.5pt below the middle of
+           * its own box, where the three dots sit exactly on the midline.
+           *
+           * So the correction is optical, and deliberately smaller than the measurement: the
+           * bounding box counts for something too, and taking the whole 2.5 makes it read high.
+           * In a sheet row the mark keeps its own alignment — there it is beside text, with other
+           * icons under it to line up with.
+           */
+          <View style={styles.barIcon}>
+            <ImportIcon color={c.text} />
+          </View>
+        ) : (
+          <MoreIcon color={c.text} />
+        )}
       </Pressable>
 
       <Sheet
@@ -364,10 +393,74 @@ export function WatchlistMenu({
         /* The list's own name, not the word "watch list": the sheet that opens over "Assets" is
            about Assets, and calling it something the screen behind it is not called left the
            built-in list looking like somebody else's. */
-        title={mode === 'import' ? t('mobile.home.import_list') : label}
+        title={mode === 'menu' ? label : t('mobile.home.import_list')}
         onClose={close}>
         <ScrollView showsVerticalScrollIndicator={false} style={styles.scroll} bounces={false} keyboardShouldPersistTaps="handled">
-          {mode === 'import' ? (
+          {mode === 'source' ? (
+            /**
+             * Where the list is coming from, before anything is asked for.
+             *
+             * Two sources, and they want different screens: one is a paste field that takes the
+             * keyboard, the other a list of taps. Local is second because a shared list is the
+             * reason most people open this at all — someone sent them one — while the local
+             * source is the shortcut for the person who already keeps lists here.
+             */
+            <View style={styles.card}>
+              <Pressable
+                style={({pressed}) => [styles.row, styles.rowFirst, pressed && styles.pressed]}
+                onPress={() => go('shared')}>
+                <ImportIcon color={c.subtext} />
+                <Text style={styles.label}>{t('mobile.home.import_shared')}</Text>
+              </Pressable>
+              <Pressable
+                style={({pressed}) => [styles.row, styles.rowLast, pressed && styles.pressed]}
+                onPress={() => go('local')}>
+                <ListIcon color={c.subtext} />
+                <Text style={styles.label}>{t('mobile.home.import_local')}</Text>
+              </Pressable>
+            </View>
+          ) : mode === 'local' ? (
+            /**
+             * The lists this device already holds, under the vaults they belong to.
+             *
+             * Named "<list> # <vault>", list first: the question being answered is which LIST to
+             * copy, and the vault is which of them it is. Nothing is offered from the vault in
+             * front — copying a list onto itself is a no-op — and an empty list has nothing to
+             * bring across, so it is left out too.
+             */
+            fromVaults.length === 0 ? (
+              <View style={styles.card}>
+                <Text style={styles.empty}>{t('mobile.home.import_local_none')}</Text>
+              </View>
+            ) : (
+              <View style={styles.card}>
+                {fromVaults.map((r, i) => (
+                  <Pressable
+                    key={r.key}
+                    style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === fromVaults.length - 1 && styles.rowLast, pressed && styles.pressed]}
+                    onPress={() => {
+                      if (onImport(r.symbols) === 0) {
+                        setError(t('mobile.home.import_none'));
+                        return;
+                      }
+                      close();
+                    }}>
+                    <ListIcon color={c.subtext} />
+                    <Text style={styles.label} numberOfLines={1}>
+                      {r.label}
+                    </Text>
+                    <Text style={styles.count}>{r.symbols.length}</Text>
+                  </Pressable>
+                ))}
+                {/* Under the rows rather than inside one: nothing here can tell WHICH row failed
+                    apart from the one just tapped, and a message indented into a row pushed the
+                    others down. In practice it cannot happen — a list from another vault on this
+                    network is made of this network's own tickers — so it is a backstop, not a
+                    part of the layout. */}
+                {error ? <Text style={styles.error}>{error}</Text> : null}
+              </View>
+            )
+          ) : mode === 'shared' ? (
             <View style={styles.card}>
               <TextInput
                 style={styles.input}
@@ -393,26 +486,17 @@ export function WatchlistMenu({
             </View>
           ) : (
             <View style={styles.card}>
+              {/* Every row here DOES something and closes: none of them is a switch any more, so
+                  no row carries a state tick. The one that did — the market-cap column — is gone
+                  with the column, which the watch list now always draws under the ticker. */}
               {rows.map((r, i) => (
-                <React.Fragment key={r.key}>
                 <Pressable
+                  key={r.key}
                   style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === rows.length - 1 && styles.rowLast, pressed && styles.pressed]}
                   onPress={r.onPress}>
                   {r.icon}
                   <Text style={[styles.label, r.danger && styles.labelDanger]}>{r.label}</Text>
-                  {/* The same accent tick the network and asset pickers use for "this one is
-                      on" — a row that can be in two states says so the way every other row in
-                      a sheet does. */}
-                  {'on' in r && r.on ? (
-                    <Svg width={18} height={18} viewBox="0 0 24 24">
-                      <Path d="M20 6 9 17l-5-5" stroke={c.accent} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                    </Svg>
-                  ) : null}
                 </Pressable>
-                {/* Directly under the row it belongs to, inside the same card: it is that row's
-                    answer, not a section of its own. */}
-                {r.key === 'cap' && cap ? <CapPreview on={cap.on} toggle={cap.toggle} /> : null}
-                </React.Fragment>
               ))}
             </View>
           )}
@@ -432,6 +516,8 @@ const makeStyles = (c: Colors) =>
      * in a 44pt bar. The 6pt is this screen's measured correction, carried over from the bin.
      */
     btn: {width: 44, height: 44, paddingBottom: 6, alignItems: 'center', justifyContent: 'center'},
+    // The optical nudge, not a layout fix — see the note at the button.
+    barIcon: {transform: [{translateY: -1}]},
 
     scroll: {flexGrow: 0},
     // The same card and row metrics the asset picker uses, so a sheet is a sheet.
@@ -448,10 +534,13 @@ const makeStyles = (c: Colors) =>
     rowFirst: {borderTopWidth: 0, paddingTop: 16},
     // Inset and on the page's own ground, so it reads as a sample of a list rather than another
     // row of this one — the rows above it are things to tap, and this is a picture.
-    preview: {backgroundColor: c.bg, borderRadius: 14, paddingHorizontal: 12, marginBottom: 16},
     rowLast: {paddingBottom: 16},
     pressed: {opacity: 0.6},
     label: {color: c.text, fontSize: 16, fontWeight: '600', flex: 1},
+    // Nothing to copy from. A sentence in the card, where the rows would have been.
+    empty: {color: c.subtext, fontSize: 14, lineHeight: 20, paddingVertical: 18},
+    // How many tickers would come across. Quiet: it is the size of the thing, not the thing.
+    count: {color: c.subtext, fontSize: 15, fontVariant: ['tabular-nums']},
     labelDanger: {color: c.danger},
 
     input: {

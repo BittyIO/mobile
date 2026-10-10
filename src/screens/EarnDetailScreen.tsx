@@ -88,6 +88,19 @@ export function EarnDetailScreen() {
   );
   const free = bal.balances ? balanceOfSymbol(bal.balances, symbol) : null;
   const held = Number(position?.formatted ?? '0');
+  /**
+   * Anything at all in the vault opens the deposit form — the relayer's float is NOT subtracted
+   * here.
+   *
+   * It was, and the button went dead on a vault holding four dollars against a ten dollar float:
+   * a page showing a balance, with the one thing to do about it greyed out and no word on why.
+   * The money is real and the owner should feel it; the float is a constraint on the AMOUNT, so
+   * it belongs where the amount is set — the form's Max stops short of it, and its source sheet
+   * names it as the row that cannot be chosen.
+   *
+   * Which is also why Available below is the plain balance: this page says what is held, the form
+   * says what can be moved.
+   */
   const canDeposit = free != null && Number(free) > 0;
   /**
    * What the position has made: its balance now, less the principal the flow ledger says went in.
@@ -212,7 +225,11 @@ export function EarnDetailScreen() {
         {earned != null && earned > 0 ? (
           <Row label={t('mobile.earn.detail_earned')} value={`+${fmtNum(earned)} ${sym}`} tone="good" />
         ) : null}
-        <Row label={t('vault.available')} value={free != null ? `${fmtNum(Number(free))} ${sym}` : '—'} />
+        {/* BALANCE, not "available". What the vault holds of this coin is a fact; whether any of it
+            can be deposited is a question the form answers, and on a balance under the relayer's
+            float the answer is none of it — so calling the figure available was the one thing it
+            could not be called. */}
+        <Row label={t('vault.balance')} value={free != null ? `${fmtNum(Number(free))} ${sym}` : '—'} />
       </View>
 
       <View style={styles.card}>

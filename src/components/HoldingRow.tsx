@@ -4,6 +4,7 @@ import {Amount} from '@/components/Amount';
 import {TokenIcon} from '@/components/TokenIcon';
 import {displaySymbol, fmtNum} from '@/core/format';
 import {fmtUsd} from '@/core/prices';
+import {fmtChange} from '@/vault/useMarketStats';
 import {useColors, useStyles, type Colors} from '@/theme';
 
 /** The eye above the total is off, so every figure that is the user's own reads as this. */
@@ -24,6 +25,7 @@ export function HoldingRow({
   symbol,
   icon,
   price,
+  change24h,
   total,
   earned = 0,
   usd,
@@ -37,6 +39,18 @@ export function HoldingRow({
   icon?: string;
   /** Unit price, under the ticker. */
   price: number | null | undefined;
+  /**
+   * The day's move, in brackets after that price — "$3,412.10 (+0.34%)".
+   *
+   * The same figure the watch list prints, on the row for an asset you actually hold, which is
+   * where the question "is this up or down today" gets asked about a position rather than about a
+   * market. It rides with the price because it is the price's context: how far the number beside
+   * it has moved since yesterday, not a fact about the holding.
+   *
+   * Absent while the stats load and for anything the catalog has no market id for, and then the
+   * brackets are not drawn at all — a price followed by "(—%)" reads as a broken figure.
+   */
+  change24h?: number | null;
   total: number;
   /** The part of the total that is yield, split out of it rather than added to it. */
   earned?: number;
@@ -50,6 +64,7 @@ export function HoldingRow({
 }) {
   const c = useColors();
   const styles = useStyles(makeStyles);
+  const change = fmtChange(change24h);
   return (
     <View style={!first && styles.rowSeparator}>
       {/* The row goes to Trade. The amounts on the right are their own target and open the
@@ -66,7 +81,14 @@ export function HoldingRow({
             {/* The ticker alone. What the company is belongs on the Trade directory, where you are
                 choosing between assets; here you already know what you hold. */}
             <Text style={styles.sym}>{displaySymbol(symbol)}</Text>
-            {price != null ? <Text style={styles.sub}>{fmtUsd(price)}</Text> : null}
+            {price != null ? (
+              <Text style={styles.sub}>
+                {fmtUsd(price)}
+                {change ? (
+                  <Text style={{color: (change24h ?? 0) >= 0 ? c.success : c.danger}}> ({change})</Text>
+                ) : null}
+              </Text>
+            ) : null}
           </View>
         </View>
         <Pressable style={styles.amtCol} hitSlop={8} disabled={!onAmountPress} onPress={onAmountPress}>

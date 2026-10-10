@@ -154,3 +154,15 @@ export function resolveFeeReserve(opts: {
   const keep = opts.spendSymbol && opts.spendSymbol.toUpperCase() === coin.toUpperCase() ? size : 0;
   return {coin, size, keep};
 }
+
+/**
+ * What the reserve actually holds back of a balance — never more than the balance itself.
+ *
+ * {resolveFeeReserve} reports the SIZE the owner asked for, which is the right figure for the
+ * arithmetic: a balance below it leaves nothing to spend either way, and `max(0, balance - size)`
+ * says so. It is the wrong figure to PRINT. A vault holding 4 USDC against a 10 USDC float had a
+ * row reading "10 USDC reserved", which is a claim about 6 USDC that does not exist, under an
+ * Available of nothing — so the two numbers on screen did not add up to the balance above them.
+ */
+export const reserveHeld = (keep: number, balance: number): number =>
+  Math.max(0, Math.min(keep, balance));

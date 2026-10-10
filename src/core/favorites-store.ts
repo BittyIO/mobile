@@ -1,6 +1,7 @@
 import {create} from 'zustand';
 import {MMKV} from 'react-native-mmkv';
 import {ASSETS} from '@/core/assets';
+import {useVaults} from '@/core/vault-store';
 import type {Network} from '@/core/chain';
 
 /**
@@ -13,6 +14,12 @@ import type {Network} from '@/core/chain';
  * There can be SEVERAL lists per network — "Stables", "Majors", whatever the user needs — with one
  * of them in front at a time. A star always acts on the list in front, so every hook here reads
  * through the active list and the screens that call them did not have to learn about the rest.
+ *
+ * Per network and PER VAULT. A vault is a separate portfolio with its own holdings and its own
+ * reason to exist — a trading one and a savings one hold different things — so the rows someone
+ * arranged for one said nothing about the other, and starring an asset on either edited both.
+ * The scope is the vault's BIP-44 index, which is local, stable and needs no address derived to
+ * read, and switching vault re-reads every list from disk ({State.reload}).
  *
  * Defaults are the assets any vault is expected to hold: the dollars it is funded in and the two
  * crypto majors. They are a DEFAULT and not a floor — a list the user has emptied stays empty.
@@ -27,15 +34,19 @@ export type WatchList = {
 };
 
 const store = new MMKV({id: 'bitty.favorites'});
-const listsKey = (n: Network) => `lists:${n}`;
-const activeKey = (n: Network) => `active:${n}`;
-const orderKey = (n: Network, id: string) => `order:${n}:${id}`;
+const listsKey = (n: Network, v: number) => `lists:${n}:v${v}`;
+const activeKey = (n: Network, v: number) => `active:${n}:v${v}`;
+const orderKey = (n: Network, v: number, id: string) => `order:${n}:${id}:v${v}`;
 /**
- * Whether a list shows a market-cap column. Per LIST, because the question is about that list:
- * a set of tokenized stocks is read by company size, a handful of coins someone is watching for
- * an entry is read by price alone, and the column that helps one is dead width on the other.
+ * Storage from before the lists were per vault, read by VAULT 0 only.
+ *
+ * Index 0 is the vault that existed before there was more than one, so its lists are the ones
+ * already on the device: inheriting them there keeps an upgrading install exactly as it was,
+ * while a second vault starts from the defaults rather than from someone else's arrangement.
  */
-const capKey = (n: Network, id: string) => `cap:${n}:${id}`;
+const sharedListsKey = (n: Network) => `lists:${n}`;
+const sharedActiveKey = (n: Network) => `active:${n}`;
+const sharedOrderKey = (n: Network, id: string) => `order:${n}:${id}`;
 // Pre-multi-list storage, read once so an existing install keeps its stars and its arrangement.
 const legacyKey = (n: Network) => `fav:${n}`;
 const legacyOrderKey = (n: Network) => `order:${n}`;
@@ -60,25 +71,41 @@ const parseArray = (raw: string | undefined): string[] | null => {
   }
 };
 
-/** The stored lists, migrating a single pre-existing list, then falling back to the defaults. */
-function loadLists(network: Network): WatchList[] {
-  const raw = store.getString(listsKey(network));
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw) as unknown;
-      if (Array.isArray(parsed) && parsed.length) return parsed as WatchList[];
-    } catch {
-      /* corrupt entry: fall through */
-    }
+/**
+ * What this device has WRITTEN DOWN for a vault, with no defaults filled in.
+ *
+ * The distinction matters for one caller: importing a list from another vault. Through
+ * {loadLists} a vault nobody has ever opened answers with the default list, which would offer
+ * "Vault 2 · Assets" for a vault that has no lists at all — six tickers this device invented,
+ * presented as something the user put there.
+ */
+export function storedLists(network: Network, vault: number): WatchList[] {
+  const raw =
+    store.getString(listsKey(network, vault)) ?? (vault === 0 ? store.getString(sharedListsKey(network)) : undefined);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) && parsed.length ? (parsed as WatchList[]) : [];
+  } catch {
+    return [];
   }
+}
+
+/** The stored lists, migrating a single pre-existing list, then falling back to the defaults. */
+function loadLists(network: Network, vault: number): WatchList[] {
+  const stored = storedLists(network, vault);
+  if (stored.length) return stored;
   const have = new Set(ASSETS[network].map((a) => a.symbol));
-  const legacy = parseArray(store.getString(legacyKey(network)));
+  const legacy = vault === 0 ? parseArray(store.getString(legacyKey(network))) : null;
   return [{id: DEFAULT_LIST_ID, name: '', symbols: legacy ?? DEFAULTS.filter((s) => have.has(s))}];
 }
 
-function loadOrder(network: Network, id: string): string[] {
-  const own = parseArray(store.getString(orderKey(network, id)));
+function loadOrder(network: Network, vault: number, id: string): string[] {
+  const own = parseArray(store.getString(orderKey(network, vault, id)));
   if (own) return own;
+  if (vault !== 0) return [];
+  const shared = parseArray(store.getString(sharedOrderKey(network, id)));
+  if (shared) return shared;
   // The arrangement from before there were lists belongs to the one that inherited its symbols.
   return id === DEFAULT_LIST_ID ? parseArray(store.getString(legacyOrderKey(network))) ?? [] : [];
 }
@@ -103,35 +130,51 @@ type State = {
   toggle: (network: Network, symbol: string) => void;
   setOrder: (network: Network, symbols: string[]) => void;
   select: (network: Network, id: string) => void;
-  /** Market-cap column per list, keyed as {okey}. Absent means the default, which is ON. */
-  caps: Record<string, boolean>;
-  setCap: (network: Network, id: string, on: boolean) => void;
   /** Append an empty list and put it in front. Returns its id. */
   add: (network: Network, name: string) => string;
   rename: (network: Network, id: string, name: string) => void;
   /** Delete a list. The last one is never removed — there has to be something to star onto. */
   remove: (network: Network, id: string) => void;
+  /**
+   * Re-read every list from disk, for the vault that is now in front.
+   *
+   * Called when the active vault changes — see the subscription below the store. The maps stay
+   * keyed by NETWORK rather than by (network, vault): only one vault is ever on screen, so a
+   * screen asking "the lists for mainnet" means the vault it is showing, and keying by both would
+   * have put the vault into every signature in this file and every call site of them.
+   */
+  reload: (vault: number) => void;
 };
 
-const persist = (network: Network, lists: WatchList[]) => store.set(listsKey(network), JSON.stringify(lists));
+/** Which vault's lists are loaded and written. Read at call time, never captured. */
+const vaultIndex = () => useVaults.getState().activeIndex;
 
-export const useFavorites = create<State>((set, get) => {
-  const lists = Object.fromEntries(NETWORKS.map((n) => [n, loadLists(n)]));
+const persist = (network: Network, lists: WatchList[]) =>
+  store.set(listsKey(network, vaultIndex()), JSON.stringify(lists));
+
+/** Every network's lists for ONE vault, as the store holds them. */
+function loadAll(vault: number): {
+  lists: Record<string, WatchList[]>;
+  active: Record<string, string>;
+  order: Record<string, string[]>;
+} {
+  const lists = Object.fromEntries(NETWORKS.map((n) => [n, loadLists(n, vault)]));
   const active = Object.fromEntries(
     NETWORKS.map((n) => {
-      const saved = store.getString(activeKey(n));
+      const saved =
+        store.getString(activeKey(n, vault)) ?? (vault === 0 ? store.getString(sharedActiveKey(n)) : undefined);
       const has = (lists[n] as WatchList[]).some((l) => l.id === saved);
       return [n, has && saved ? saved : (lists[n] as WatchList[])[0].id];
     }),
   );
   const order: Record<string, string[]> = {};
-  const caps: Record<string, boolean> = {};
   for (const n of NETWORKS)
-    for (const l of lists[n] as WatchList[]) {
-      order[okey(n, l.id)] = loadOrder(n, l.id);
-      const saved = store.getBoolean(capKey(n, l.id));
-      if (saved !== undefined) caps[okey(n, l.id)] = saved;
-    }
+    for (const l of lists[n] as WatchList[]) order[okey(n, l.id)] = loadOrder(n, vault, l.id);
+  return {lists, active, order};
+}
+
+export const useFavorites = create<State>((set, get) => {
+  const {lists, active, order} = loadAll(vaultIndex());
 
   const activeList = (network: Network): WatchList => {
     const all = get().lists[network] ?? [];
@@ -142,11 +185,6 @@ export const useFavorites = create<State>((set, get) => {
     lists,
     active,
     order,
-    caps,
-    setCap: (network, id, on) => {
-      store.set(capKey(network, id), on);
-      set({caps: {...get().caps, [okey(network, id)]: on}});
-    },
 
     toggle: (network, symbol) => {
       const cur = activeList(network);
@@ -162,12 +200,12 @@ export const useFavorites = create<State>((set, get) => {
     setOrder: (network, symbols) => {
       const cur = activeList(network);
       if (!cur) return;
-      store.set(orderKey(network, cur.id), JSON.stringify(symbols));
+      store.set(orderKey(network, vaultIndex(), cur.id), JSON.stringify(symbols));
       set({order: {...get().order, [okey(network, cur.id)]: symbols}});
     },
 
     select: (network, id) => {
-      store.set(activeKey(network), id);
+      store.set(activeKey(network, vaultIndex()), id);
       set({active: {...get().active, [network]: id}});
     },
 
@@ -175,7 +213,7 @@ export const useFavorites = create<State>((set, get) => {
       const id = `l${Date.now().toString(36)}`;
       const next = [...(get().lists[network] ?? []), {id, name: name.trim(), symbols: []}];
       persist(network, next);
-      store.set(activeKey(network), id);
+      store.set(activeKey(network, vaultIndex()), id);
       set({
         lists: {...get().lists, [network]: next},
         active: {...get().active, [network]: id},
@@ -198,12 +236,25 @@ export const useFavorites = create<State>((set, get) => {
       if (all.length <= 1 || isAssetsList(id)) return;
       const next = all.filter((l) => l.id !== id);
       persist(network, next);
-      store.delete(orderKey(network, id));
+      store.delete(orderKey(network, vaultIndex(), id));
       const nextActive = get().active[network] === id ? next[0].id : get().active[network];
-      store.set(activeKey(network), nextActive);
+      store.set(activeKey(network, vaultIndex()), nextActive);
       set({lists: {...get().lists, [network]: next}, active: {...get().active, [network]: nextActive}});
     },
+
+    reload: (vault) => set(loadAll(vault)),
   };
+});
+
+/**
+ * A vault switch is a different set of lists, so the store re-reads them.
+ *
+ * Here rather than in a screen, because the lists are read by three of them and the Overview is
+ * not always the one on top when the vault changes. Synchronous, so the first render after the
+ * switch already has the new vault's rows — nothing briefly shows the old vault's arrangement.
+ */
+useVaults.subscribe((s, prev) => {
+  if (s.activeIndex !== prev.activeIndex) useFavorites.getState().reload(s.activeIndex);
 });
 
 /** The label to show: what the user named it, or the generic one. */
@@ -231,7 +282,6 @@ export function useWatchLists(network: Network) {
     add: useFavorites((s) => s.add),
     rename: useFavorites((s) => s.rename),
     remove: useFavorites((s) => s.remove),
-    setCap: useFavorites((s) => s.setCap),
   };
 }
 
@@ -290,12 +340,3 @@ export function useIsFavorite(network: Network, symbol: string | undefined): boo
     return (cur?.symbols ?? []).includes(symbol);
   });
 }
-
-/**
- * Does this list show market caps? On unless the owner turned it off.
- *
- * A plain read of the store's snapshot rather than a hook, so a screen that already subscribes to
- * `caps` can ask about several lists in one render — the pager draws every list at once.
- */
-export const showsCap = (caps: Record<string, boolean>, network: Network, id: string | undefined): boolean =>
-  id === undefined ? true : caps[okey(network, id)] ?? true;

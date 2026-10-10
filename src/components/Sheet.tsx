@@ -71,18 +71,45 @@ export function Sheet({
    */
   const lift = useRef(new Animated.Value(0)).current;
   const [keyboard, setKeyboard] = useState(0);
+  /**
+   * The offset belongs to a sheet that is ON SCREEN, and to no other.
+   *
+   * It used to be tracked for the life of the component, which outlives every appearance: a sheet
+   * is rendered with `visible={false}` and sits there listening. So a keyboard that had nothing to
+   * do with it — the list name being typed in the nav bar, a field in the sheet before this one —
+   * moved its lift and shrank its height, and the next time it opened it came up short with a
+   * keyboard-sized band of nothing under it. The source picker has no field at all and was showing
+   * the gap left by the paste field it replaced.
+   *
+   * So the listeners live and die with the card, and going off screen puts the offset back to zero
+   * rather than waiting for a `keyboardWillHide` that may never arrive — a keyboard dismissed by
+   * the modal going away is dismissed by UIKit, not by anything this sheet can hear.
+   *
+   * Seeded from the keyboard that is already up, because a sheet opened from a focused field has
+   * missed the `willShow` that would have told it.
+   */
   useEffect(() => {
+    if (!mounted) {
+      setKeyboard(0);
+      lift.setValue(0);
+      return;
+    }
     const move = (to: number, duration: number) => {
       setKeyboard(to);
       Animated.timing(lift, {toValue: to, duration: duration || 250, useNativeDriver: false}).start();
     };
+    const open = Keyboard.metrics?.()?.height ?? 0;
+    if (open > 0) {
+      setKeyboard(open);
+      lift.setValue(open);
+    }
     const show = Keyboard.addListener('keyboardWillShow', (e) => move(e.endCoordinates.height, e.duration));
     const hide = Keyboard.addListener('keyboardWillHide', (e) => move(0, e.duration));
     return () => {
       show.remove();
       hide.remove();
     };
-  }, [lift]);
+  }, [mounted, lift]);
 
   // 72 leaves a strip of backdrop above the card, so it never reads as a full-screen page.
   const wanted = height ?? Math.round(screenHeight * SHEET_HEIGHT_RATIO);

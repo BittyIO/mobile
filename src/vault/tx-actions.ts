@@ -69,7 +69,6 @@ const ACTION_CATEGORY: Record<string, ActionCategory> = {
   proposeSend: 'send',
   approveSend: 'send',
   cancelSends: 'send',
-  fundSubVault: 'send',
 };
 
 /**
@@ -239,12 +238,6 @@ export function describeActions(
         break;
       case 'removeWhitelistedRecipients':
         out.push(k('recipient_removed'));
-        break;
-      case 'createSubVault':
-        out.push(k('sub_created'));
-        break;
-      case 'fundSubVault':
-        out.push(k('sub_funded'));
         break;
       case 'proposeSend':
         out.push(k('send_proposed'));

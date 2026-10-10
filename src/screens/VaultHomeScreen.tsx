@@ -24,7 +24,7 @@ import {fmtNum, displaySymbol} from '@/core/format';
 
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {assetCategory, type AssetCategory} from '@/core/assets';
-import {isAssetsList, showsCap, useFavorites, useWatchLists, watchListLabel, watchListNumber} from '@/core/favorites-store';
+import {isAssetsList, useFavorites, useWatchLists, watchListLabel, watchListNumber} from '@/core/favorites-store';
 import {getFlag, setFlag, HIDE_BALANCES} from '@/core/prefs';
 import {useWatchDraft} from '@/core/watch-draft';
 import {balanceOfSymbol} from '@/vault/read';
@@ -118,8 +118,9 @@ function AssetList({
   onTrade,
   onReorder,
   onDragging,
-  market,
-  showCap,
+  reorder,
+  markets,
+  stats,
 }: {
   rows: Row[];
   loading: boolean;
@@ -127,12 +128,24 @@ function AssetList({
   /** The eye above the total is off: every figure that is the user's own is masked. */
   hidden: boolean;
   /**
-   * Price, day change and market cap by symbol — given only for a list of the user's own, which
-   * is drawn as a market list rather than a holdings one. Null on "Assets".
+   * Draw these rows as a MARKET list — price, day move and cap — rather than as holdings.
+   *
+   * True for a list of the user's own, false for "Assets". It used to be inferred from `stats`
+   * being null, which conflated the layout with the data and meant the holdings rows could not
+   * have the day's move at all: the figures were there, withheld because of how the list reads.
    */
-  market: MarketStatMap | null;
-  /** Does this list show the market-cap column? Off moves price and change to the right edge. */
-  showCap: boolean;
+  markets: boolean;
+  /** Price, day change and market cap by symbol, for the whole catalog — see {useMarketStats}. */
+  stats: MarketStatMap;
+  /**
+   * Can these rows be picked up and dragged into a new order?
+   *
+   * Watch lists only. A list someone curated has no order of its own — they chose what is on it,
+   * so they choose the sequence — but "Assets" is sorted by what each holding is WORTH, and a
+   * hand-placed row in a list that sorts itself is a rule fighting a fact: the balances move on
+   * their own, so the row the user dragged to the top leaves it the next time a price does.
+   */
+  reorder: boolean;
   onTrade: (row: Row) => (() => void) | null;
   /** The new order, by symbol, once a drag settles. */
   onReorder: (symbols: string[]) => void;
@@ -314,18 +327,24 @@ function AssetList({
               <Animated.View
                 key={r.address}
                 onLayout={(e) => measure(i, e.nativeEvent.layout.height)}
-                onTouchStart={(e) => armHold(i, e)}
-                onTouchMove={holdDrift}
-                onTouchEnd={endTouch}
-                onTouchCancel={endTouch}
                 style={[
                   held && styles.lifted,
                   {transform: [{translateY: held ? dy : shiftFor(i)}]},
                 ]}
-                // Attached to every row, always. Adding them only once a row is held meant the
-                // view joined the responder negotiation after the touch had already started, and
-                // the move was never offered to it — which is why nothing moved.
-                {...responder.panHandlers}>
+                // Attached to every row of a list that CAN be reordered, always. Adding them only
+                // once a row is held meant the view joined the responder negotiation after the
+                // touch had already started, and the move was never offered to it — which is why
+                // nothing moved. A list that cannot be reordered attaches none of them, so a hold
+                // on it is just a long press on the row and the page keeps scrolling under it.
+                {...(reorder
+                  ? {
+                      onTouchStart: (e: GestureResponderEvent) => armHold(i, e),
+                      onTouchMove: holdDrift,
+                      onTouchEnd: endTouch,
+                      onTouchCancel: endTouch,
+                      ...responder.panHandlers,
+                    }
+                  : {})}>
                 <AssetRow
                   row={r}
                   first={i === 0}
@@ -335,10 +354,9 @@ function AssetList({
                   // press alive while the finger stays inside a generously padded press rect, so
                   // on its own it would fire part-way through a slow pull and pick the row up
                   // after `holdDrift` had already decided the gesture was a scroll.
-                  onHold={() => holdFrom.current && begin(i)}
-                  markets={market != null}
-                  showCap={showCap}
-                  stat={market?.get(r.symbol)}
+                  onHold={reorder ? () => holdFrom.current && begin(i) : undefined}
+                  markets={markets}
+                  stat={stats.get(r.symbol)}
                 />
               </Animated.View>
             );
@@ -365,19 +383,17 @@ function AssetRow({
   onTrade,
   onHold,
   markets,
-  showCap,
   stat,
 }: {
-  /** Does this list show the market-cap column? See {AssetList}. */
-  showCap: boolean;
   row: Row;
   first: boolean;
   /** Mask the balance and its value. The unit price under the ticker is market data and stays. */
   hidden: boolean;
   /** Null when this asset has nothing to trade against, which leaves the name inert. */
   onTrade: (() => void) | null;
-  /** A long press picks the row up so it can be dragged to a new place in the list. */
-  onHold: () => void;
+  /** A long press picks the row up so it can be dragged to a new place in the list. Undefined on
+   *  a list that sorts itself — see {AssetList}'s `reorder`. */
+  onHold?: () => void;
   /**
    * Show what the asset is doing rather than what is held of it.
    *
@@ -403,7 +419,6 @@ function AssetRow({
         price={row.price}
         change24h={stat?.change24h}
         marketCap={stat?.marketCap}
-        showCap={showCap}
         first={first}
         onPress={() => onTrade?.()}
         onLongPress={onHold}
@@ -416,6 +431,7 @@ function AssetRow({
         symbol={row.symbol}
         icon={row.icon}
         price={row.price}
+        change24h={stat?.change24h}
         total={row.total}
         earned={row.earned}
         usd={row.usd}
@@ -509,8 +525,6 @@ export function VaultHomeScreen() {
   const [receiveOpen, setReceiveOpen] = useState(false);
 
   const catalog = useAssetCatalog(network);
-  // Subscribed, not read once: toggling the column on the list's own page must redraw this pager.
-  const caps = useFavorites((s) => s.caps);
   // Priced from the catalog the rows actually render, so an asset that exists only in the live
   // catalog — every Ondo stock on mainnet — is no longer left without a price.
   const catalogSymbols = useMemo(() => catalog.map((a) => a.symbol), [catalog]);
@@ -616,10 +630,43 @@ export function VaultHomeScreen() {
   /** Where this list's rows were dragged to, by symbol. Empty until the user has moved one. */
   const rankFor = (listId: string) =>
     new Map((orders[`${network}:${listId}`] ?? []).map((sym, i) => [sym, i]));
+  /**
+   * How a watch list is arranged: BIGGEST MARKET CAP first, unless the user has hand-arranged the
+   * whole list.
+   *
+   * Cap is the default because a watch list is read as a market — the rows carry price, the day's
+   * move and the cap, and nothing about the vault — so the useful order is the one every market
+   * table uses. It replaces catalog order, which put a $2bn stock above ether for no reason the
+   * list could show.
+   *
+   * A manual drag can override it, but ONLY while it still describes every row on the list. The
+   * moment a new asset is starred it is not in that saved order, so the arrangement no longer
+   * covers the list and is treated as stale: the whole list — the new asset included — falls back
+   * to market cap, which is where someone adding an asset to a MARKET list expects to find it.
+   * (Before, a newly starred asset dropped to the end in add order, below the saved block, and
+   * read as "sorted by when I added it".) Re-dragging the full list restores a hand order.
+   *
+   * Caps arrive after the first paint, so a list drawn before they land is in catalog order and
+   * re-sorts once when they do.
+   */
+  /** How big the market thinks this asset is. Zero for one the catalog has no figure for, which
+   *  sorts it last wherever the cap is the tie-break. */
+  const capOf = (symbol: string) => marketStats.get(symbol)?.marketCap ?? 0;
   const sortFor = (listId: string) => {
     const rank = rankFor(listId);
-    return <T extends {symbol: string}>(items: T[]): T[] =>
-      [...items].sort((a, b) => (rank.get(a.symbol) ?? Infinity) - (rank.get(b.symbol) ?? Infinity));
+    return <T extends {symbol: string}>(items: T[]): T[] => {
+      // Honour a hand order only while it still names every row — otherwise a new addition has no
+      // place in it and the list sorts by cap, so the new row lands in its market-cap position.
+      const handArranged = items.length > 0 && items.every((it) => rank.has(it.symbol));
+      return [...items].sort((a, b) => {
+        if (handArranged) {
+          const ra = rank.get(a.symbol) ?? Infinity;
+          const rb = rank.get(b.symbol) ?? Infinity;
+          if (ra !== rb) return ra < rb ? -1 : 1;
+        }
+        return capOf(b.symbol) - capOf(a.symbol);
+      });
+    };
   };
   // A row held for dragging must not also scroll the page under it.
   const [dragging, setDragging] = useState(false);
@@ -660,28 +707,34 @@ export function VaultHomeScreen() {
     const visible = held
       ? rows.filter((r) => starred.has(r.symbol) || r.total > 0)
       : rows.filter((r) => starred.has(r.symbol));
-    const ordered = sortFor(listId)(visible);
-    // Funded first on "Assets" only. A list of the user's own no longer shows a balance at all —
-    // it shows price, the day and the market cap — so splitting it by one would be sorting on a
-    // column that is not there, and it would quietly override the order they dragged the rows into.
-    if (!held) return ordered;
+    // A list of the user's own keeps the order they dragged it into: they chose what is on it,
+    // so they choose the sequence, and it shows no balance to sort by anyway.
+    if (!held) return sortFor(listId)(visible);
     /**
-     * A row the user has placed stays where they put it; everything else sorts itself.
+     * "Assets" sorts itself: BIGGEST HOLDING FIRST.
      *
-     * The two default arrangements — stablecoins first from the catalog, then funded above empty —
-     * are guesses at what someone wants to see at the top. A drag is not a guess, so it outranks
-     * both: dragging a stock above USDC used to hold for a moment and then snap back, because the
-     * funded/empty split ran afterwards and rebuilt the list from the balances.
+     * The question this list answers is where the money is, and the answer is a ranking — so the
+     * list simply is that ranking, rather than an arrangement the user has to build and then
+     * maintain as the balances move. It replaces three rules that were each a guess at the same
+     * thing: stablecoins first out of the catalog, then funded rows above empty ones, then
+     * whatever had been dragged where. Dragging is gone from this list with them (see
+     * {AssetList}'s `reorder`) — a hand-placed row cannot survive in a list that re-sorts every
+     * time a price ticks, and watching one jump after a refresh reads as the app losing the
+     * change rather than as a value ranking doing its job.
      *
-     * Only rows that were never placed keep the defaults. That is what a list looks like before
-     * the first drag — unchanged — and afterwards it is what happens to an asset that arrives in
-     * the vault later: it lands among the funded rows at the bottom rather than at a position
-     * nobody chose for it.
+     * Value, not amount: 0.4 ETH is a bigger holding than 900 of a token worth a tenth of a cent,
+     * and the row's own right-hand figure is the dollar value, so the list is ordered by the
+     * number the rows are read down.
+     *
+     * Equal values are broken by MARKET CAP, the same default the watch lists sort by. That is
+     * what orders the empty rows — an asset starred and waiting to be funded has no value to rank,
+     * and all of them tie at nothing, so below the holdings the list reads biggest-asset-first
+     * instead of in whatever order the catalog happens to list them.
      */
-    const rank = rankFor(listId);
-    const placed = ordered.filter((r) => rank.has(r.symbol));
-    const rest = ordered.filter((r) => !rank.has(r.symbol));
-    return [...placed, ...rest.filter((r) => r.total > 0), ...rest.filter((r) => r.total <= 0)];
+    return [...visible].sort((a, b) => {
+      const byValue = (b.usd ?? 0) - (a.usd ?? 0);
+      return byValue !== 0 ? byValue : capOf(b.symbol) - capOf(a.symbol);
+    });
   };
 
   // Total portfolio value: every asset (free + yielding + lending) plus both sides of each LP position.
@@ -940,7 +993,7 @@ export function VaultHomeScreen() {
               <View key={l.id} style={{width: pageW}}>
                 <View
                   onLayout={(e) => {
-                    // Read the height now: the event is recycled before a state updater runs.
+                    // The layout event is recycled before a state updater runs.
                     const h = e.nativeEvent.layout.height;
                     const k = hkey(l.id);
                     setPageH((prev) => (prev[k] === h ? prev : {...prev, [k]: h}));
@@ -950,8 +1003,9 @@ export function VaultHomeScreen() {
                     loading={bal.loading && !bal.balances}
                     error={bal.error}
                     hidden={hidden}
-                    market={isAssetsList(l.id) ? null : marketStats}
-                    showCap={showsCap(caps, network, l.id)}
+                    markets={!isAssetsList(l.id)}
+                    reorder={!isAssetsList(l.id)}
+                    stats={marketStats}
                     onTrade={tradeFor}
                     onReorder={(symbols) => saveOrder(network, symbols)}
                     onDragging={setDragging}

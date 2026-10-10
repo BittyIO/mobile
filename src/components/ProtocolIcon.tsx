@@ -21,10 +21,15 @@ const LOGOS: Record<string, ImageSourcePropType> = {
   Sky: require('@/assets/protocols/sky.png'),
   Lido: require('@/assets/protocols/lido.png'),
   'Aave V3': require('@/assets/protocols/aave.png'),
-  // "Uniswap" flat is the Universal Router adapter — the market-TRADE half of the AMM split, and
-  // the single combined adapter on Robinhood Chain. "Uniswap V3" is the market-MAKER half, which
-  // is concentrated liquidity and v3 only. One mark serves all of them.
+  // "Uniswap Universal" is the Universal Router adapter — the market-TRADE half of the AMM split,
+  // and the single combined adapter on Robinhood Chain. "Uniswap V3" is the market-MAKER half,
+  // which is concentrated liquidity and v3 only, and the pre-split combined adapter on the chains
+  // where that one really was v3. One mark serves all of them.
+  //
+  // The flat "Uniswap" stays: it is what the service catalog called the Universal adapter until
+  // the name was spelled out, and a deployed server older than this build still serves it.
   Uniswap: require('@/assets/protocols/uniswap.png'),
+  'Uniswap Universal': require('@/assets/protocols/uniswap.png'),
   'Uniswap V3': require('@/assets/protocols/uniswap.png'),
   'Uniswap V4': require('@/assets/protocols/uniswap.png'),
   'CoW Swap': require('@/assets/protocols/cow.png'),
@@ -37,6 +42,10 @@ const LOGOS: Record<string, ImageSourcePropType> = {
  * by brand, so an exact lookup missed and the chip fell back to a lettered "C" disc. Tried whole
  * first, because "Uniswap V3" and "Uniswap V4" are deliberately separate keys from "Uniswap";
  * only when that misses is a trailing " V<n>" dropped.
+ *
+ * Which is why "Uniswap Universal" has a key of its own: the suffix is a WORD, not a version, so
+ * nothing here would have stripped it and the market-trade chip would have gone back to a disc
+ * reading "U" the moment its remote mark failed to load.
  */
 function bundledLogo(name: string): ImageSourcePropType | undefined {
   return LOGOS[name] ?? LOGOS[name.replace(/\s+V\d+$/i, '')];
