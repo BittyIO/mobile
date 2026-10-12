@@ -1,5 +1,8 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {useNavigation} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import type {RootStackParamList} from '@/App';
 import type {Address} from 'viem';
 import {Button} from '@/components/Button';
 import {useWallet} from '@/wallet/store';
@@ -8,12 +11,10 @@ import type {Network} from '@/core/chain';
 import {ownerVaultAddress} from '@/vault/read';
 import {
   getRiskConfig,
-  getTradeDisabledUntil,
   setNewPaymentProtection,
   setMaxSendValue,
   setMaxSendInterval,
   setChangeTimelock,
-  pauseTradingUntil,
   wrapNative,
   type RiskConfig,
 } from '@/vault/risk';
@@ -24,12 +25,12 @@ import {useConfirmAction} from '@/components/ConfirmAction';
 import {relayGasFor} from '@/vault/fee-quote';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {SettingsRow, SettingsGroup, makeSettingsStyles} from '@/components/SettingsRow';
+import {Sheet} from '@/components/Sheet';
 import {revealMnemonic} from '@/wallet/keyring';
 import {useRevealGuard} from '@/core/device-security';
 import {useAssetCatalog} from '@/core/asset-catalog';
 
 const HOUR = 3600;
-const now = () => Math.floor(Date.now() / 1000);
 
 // Durations edit in hours; maxSendValue edits in whole stablecoin tokens.
 const secToHours = (s: bigint) => {
@@ -38,23 +39,6 @@ const secToHours = (s: bigint) => {
 };
 const hoursToSec = (h: string) => BigInt(Math.max(0, Math.round(Number(h) * HOUR)));
 
-// Trade-pause presets (seconds from now); 0 = resume (label is translated at render).
-const PAUSES: {label: string; secs: number}[] = [
-  {label: 'Resume', secs: 0},
-  {label: '1h', secs: HOUR},
-  {label: '6h', secs: 6 * HOUR},
-  {label: '24h', secs: 24 * HOUR},
-  {label: '3d', secs: 3 * 24 * HOUR},
-  {label: '7d', secs: 7 * 24 * HOUR},
-];
-
-type T = ReturnType<typeof useT>['t'];
-
-function fmtUntil(t: T, ts: bigint): string {
-  if (ts === 0n || Number(ts) <= now()) return t('mobile.vault.trading_enabled');
-  return t('mobile.vault.paused_until', {time: new Date(Number(ts) * 1000).toLocaleString()});
-}
-
 /**
  * Security — owner protection controls. Payment risk (delays & send caps that govern the owner's and
  * operators' payments; tightening applies at once, loosening waits out the change timelock), a trading
@@ -62,6 +46,7 @@ function fmtUntil(t: T, ts: bigint): string {
  */
 export function SecurityScreen() {
   const {t} = useT();
+  const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const lock = useWallet((s) => s.lock);
   const [phrase, setPhrase] = useState<string | null>(null);
   // Hide the phrase while the screen is recorded, and pull it + warn if a screenshot is taken.
@@ -96,8 +81,9 @@ export function SecurityScreen() {
   type Acct = Awaited<ReturnType<typeof getSigner>>;
 
   const [risk, setRisk] = useState<RiskConfig | null>(null);
-  const [pausedUntil, setPausedUntil] = useState<bigint>(0n);
   const [busy, setBusy] = useState<string | null>(null);
+  // The change-timelock editor, opened from the row that now leads the page's first section.
+  const [timelockOpen, setTimelockOpen] = useState(false);
 
   // Editable field buffers (strings), seeded from the on-chain values.
   const [buf, setBuf] = useState<Record<string, string>>({});
@@ -113,7 +99,6 @@ export function SecurityScreen() {
         maxSendValue: String(r.maxSendValue),
       });
     });
-    getTradeDisabledUntil(vault, network).then(setPausedUntil);
   }, [vault, network]);
   useEffect(load, [load]);
 
@@ -177,25 +162,24 @@ export function SecurityScreen() {
       parse: hoursToSec,
       setter: setMaxSendInterval,
     },
-    {
-      key: 'changeTimelock',
-      label: t('mobile.vault.change_timelock'),
-      unit: t('vault.time_unit.hours'),
-      hint: t('mobile.vault.change_timelock_hint'),
-      parse: hoursToSec,
-      setter: setChangeTimelock,
-    },
+    // changeTimelock is NOT here any more: it leads the page as a row of its own in the first
+    // section, with its own clock icon and editor — see {timelockOpen}.
   ];
+
+  // Save the edited change-timelock. Closes the editor first so its sheet and the confirm sheet
+  // never stack, then goes through the same Face-ID + fee confirm as every other write here.
+  const saveTimelock = () => {
+    const v = buf.changeTimelock ?? '';
+    const num = Number(v);
+    if (v.trim() === '' || !Number.isFinite(num) || num < 0) return;
+    setTimelockOpen(false);
+    run('risk-changeTimelock', t('mobile.vault.change_timelock'), (acct) =>
+      setChangeTimelock({account: acct, vault: vault!, network, value: hoursToSec(v), stableCoin: stable!.address}),
+    );
+  };
 
   const currentDisplay = (key: keyof RiskConfig): string =>
     key === 'maxSendValue' ? String(risk?.[key] ?? 0n) : secToHours(risk?.[key] ?? 0n);
-
-  const onPause = (secs: number) => {
-    const ts = secs === 0 ? 0n : BigInt(now() + secs);
-    run('pause', t('mobile.vault.trading_pause'), (acct) =>
-      pauseTradingUntil({account: acct, vault: vault!, network, timestamp: ts, stableCoin: stable!.address}),
-    );
-  };
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
@@ -209,6 +193,21 @@ export function SecurityScreen() {
         * limits what the vault may do, and this is what grants it in the first place.
         */}
       <SettingsGroup>
+        {/* The allow list, leading the page: what the vault is even permitted to touch is the
+            broadest guardrail of all, so it sits above the delays and caps that qualify it. Moved
+            here from Settings, where it read as app configuration rather than the security control
+            it is. */}
+        <SettingsRow icon="allowlist" title={t('mobile.settings.allow_list')} onPress={() => nav.navigate('VaultAssets')} />
+        {/* The change timelock: the delay that makes every other control here safe — a loosening
+            cannot take effect until it has sat this long — so it reads near the top, as its own
+            row, rather than last among the payment fields. */}
+        <SettingsRow
+          icon="timelock"
+          title={t('mobile.vault.change_timelock')}
+          sub={t('mobile.vault.change_timelock_hint')}
+          value={risk ? `${secToHours(risk.changeTimelock)} ${t('vault.time_unit.hours')}` : undefined}
+          onPress={() => setTimelockOpen(true)}
+        />
         {phrase ? (
           <View style={[styles.phraseBox, styles.rowDivider]}>
             {reveal.captured ? (
@@ -280,23 +279,6 @@ export function SecurityScreen() {
         );
       })}
 
-      {/* ── Trading pause ─────────────────────────────────────────────── */}
-      <Text style={[styles.h, styles.h2]}>{t('mobile.vault.trading_pause')}</Text>
-      <Text style={styles.hint}>{t('mobile.vault.trading_pause_hint', {status: fmtUntil(t, pausedUntil)})}</Text>
-      <View style={styles.chips}>
-        {PAUSES.map((p) => (
-          <Pressable
-            key={p.label}
-            disabled={busy !== null}
-            onPress={() => onPause(p.secs)}
-            style={[styles.chip, p.label === 'Resume' && styles.resumeChip]}>
-            <Text style={[styles.chipText, p.label === 'Resume' && styles.resumeText]}>
-              {busy === 'pause' ? '…' : p.secs === 0 ? t('mobile.vault.resume') : p.label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
       {/* ── Utilities ─────────────────────────────────────────────────── */}
       <Text style={[styles.h, styles.h2]}>{t('mobile.vault.utilities')}</Text>
       <Button
@@ -309,6 +291,35 @@ export function SecurityScreen() {
         }
       />
       <Text style={styles.fine}>{t('mobile.vault.wrap_idle_eth_hint')}</Text>
+
+      {/* The change-timelock editor the leading row opens: the hint, the hours field, and Save. */}
+      <Sheet visible={timelockOpen} title={t('mobile.vault.change_timelock')} onClose={() => setTimelockOpen(false)} height={300}>
+        <View style={styles.editor}>
+          <Text style={styles.hint}>{t('mobile.vault.change_timelock_hint')}</Text>
+          <View style={styles.fieldHead}>
+            <Text style={styles.fieldLabel}>{t('mobile.vault.change_timelock')}</Text>
+            <Text style={styles.fieldUnit}>{t('vault.time_unit.hours')}</Text>
+          </View>
+          <View style={styles.fieldRow}>
+            <TextInput
+              style={styles.input}
+              keyboardType="decimal-pad"
+              placeholder="0"
+              placeholderTextColor={c.subtext}
+              value={buf.changeTimelock ?? ''}
+              onChangeText={(v) => setBuf((b) => ({...b, changeTimelock: v}))}
+            />
+            <Pressable
+              disabled={busy !== null || (buf.changeTimelock ?? '').trim() === currentDisplay('changeTimelock')}
+              onPress={saveTimelock}
+              style={[styles.saveBtn, (busy !== null || (buf.changeTimelock ?? '').trim() === currentDisplay('changeTimelock')) && styles.saveOff]}>
+              <Text style={[styles.saveText, (busy !== null || (buf.changeTimelock ?? '').trim() === currentDisplay('changeTimelock')) && styles.saveTextOff]}>
+                {t('vault.save')}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Sheet>
       {sheet}
     </ScrollView>
   );
@@ -327,6 +338,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   wordText: {color: c.text, fontSize: 14, fontWeight: '600'},
   warn: {color: c.danger, fontSize: 12, lineHeight: 17},
   body: {flexGrow: 1, padding: 20, paddingBottom: 24, gap: 10},
+  editor: {gap: 10, marginTop: 8},
   h: {color: c.text, fontSize: 20, fontWeight: '700'},
   h2: {marginTop: 24},
   hint: {color: c.subtext, fontSize: 13, lineHeight: 18},
@@ -358,16 +370,4 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   saveOff: {borderColor: c.border, backgroundColor: c.card},
   saveText: {color: c.accent, fontSize: 14, fontWeight: '700'},
   saveTextOff: {color: c.subtext},
-  chips: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4},
-  chip: {
-    paddingVertical: 9,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: c.border,
-    backgroundColor: c.card,
-  },
-  chipText: {color: c.text, fontSize: 14, fontWeight: '600'},
-  resumeChip: {borderColor: c.accent},
-  resumeText: {color: c.accent},
 });

@@ -20,7 +20,7 @@ import {fmtNum, fmtShort, displaySymbol, shortAddress} from '@/core/format';
 import {EXPLORER_TX, type Network} from '@/core/chain';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
-import {categoryForActions, defiMoveFromActions, describeActions} from '@/vault/tx-actions';
+import {categoryForActions, defiMoveFromActions, describeActions, swapFromActions} from '@/vault/tx-actions';
 import {GPV2_SETTLEMENT, fetchRecentOrders, type CowOrder} from '@/vault/limit';
 
 import {currentCatalog} from '@/core/asset-catalog';
@@ -86,8 +86,22 @@ function classify(
 
   const swapLegs = splitMarketSwap(core);
   const swapSet = new Set(swapLegs);
-  const swap = swapLegs.length ? netTrade(swapLegs) : null;
-  const rest = core.filter((l) => !swapSet.has(l));
+  let swap = swapLegs.length ? netTrade(swapLegs) : null;
+  let rest = core.filter((l) => !swapSet.has(l));
+
+  // The feed can miss a market swap's legs — on Sepolia the bought WETH leg is not indexed, leaving
+  // only the sold-token out-legs, which the heuristic below would read as a plain send. The decoded
+  // calldata is authoritative: when it says a market swap happened, name it one and draw it from the
+  // call's own figures, pulling its two tokens out of `rest` so no phantom "Sent"/"Received" part is
+  // produced from the one-sided legs.
+  if (!swap) {
+    const fromAction = swapFromActions(op.actions, network, core);
+    if (fromAction) {
+      swap = fromAction;
+      const swapTokens = new Set([fromAction.sold.address, fromAction.bought.address].map(lc));
+      rest = rest.filter((l) => !swapTokens.has(lc(l.assetAddress)));
+    }
+  }
 
   const parts: Part[] = [];
   // What the parts turned out to be, for the tab this row belongs to.

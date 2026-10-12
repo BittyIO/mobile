@@ -1,7 +1,7 @@
 import {useHeaderHeight} from '@react-navigation/elements';
 import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
 import React, {useCallback, useMemo, useRef, useState} from 'react';
-import {ActivityIndicator, Animated, PanResponder, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, type GestureResponderEvent} from 'react-native';
+import {ActivityIndicator, Animated, PanResponder, Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View, type GestureResponderEvent} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import Svg, {Circle, Line, Path} from 'react-native-svg';
@@ -10,6 +10,8 @@ import {MarketRow} from '@/components/MarketRow';
 import {HoldingRow, MASK} from '@/components/HoldingRow';
 import {Amount} from '@/components/Amount';
 import {ReceiveDialog} from '@/components/ReceiveDialog';
+import {Sheet} from '@/components/Sheet';
+import {PortfolioPie, type PieSlice} from '@/components/PortfolioPie';
 import {useNetwork, networkLabel} from '@/core/network-store';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {useVaultPositions} from '@/vault/useVaultPositions';
@@ -523,6 +525,9 @@ export function VaultHomeScreen() {
     setHidden(next);
   };
   const [receiveOpen, setReceiveOpen] = useState(false);
+  // The holdings-distribution sheet, opened from the pie icon on the Assets list's header.
+  const [showDistribution, setShowDistribution] = useState(false);
+  const {height: screenHeight} = useWindowDimensions();
 
   const catalog = useAssetCatalog(network);
   // Priced from the catalog the rows actually render, so an asset that exists only in the live
@@ -609,11 +614,16 @@ export function VaultHomeScreen() {
 
   // Category filter, the web's grouping: whichever categories this network's assets use, Crypto
   /**
-   * What the Overview lists: the starred assets, plus anything the vault holds.
+   * What the Overview lists: the starred assets, plus anything the vault holds worth more than a
+   * dime.
    *
    * Starring happens on an asset's trade page, and the defaults are the assets any vault is
    * expected to hold. A balance shows whether or not it is starred — money must not be able to
-   * disappear from this screen because of a display preference.
+   * disappear from this screen because of a display preference — but it is judged by VALUE, not
+   * amount: a holding worth over $0.10 earns a row, so a dust leftover or a scrap of a near-zero
+   * token does not clutter the list. A starred asset shows at any balance, dust included, because
+   * the user asked for it; the stablecoins, BTC and ETH are seeded starred, so none of them is
+   * ever hidden by this.
    */
   /**
    * Every watch list on this network, and the orders for all of them.
@@ -705,7 +715,7 @@ export function VaultHomeScreen() {
     const held = isAssetsList(listId);
     const starred = new Set(watch.lists.find((l) => l.id === listId)?.symbols ?? []);
     const visible = held
-      ? rows.filter((r) => starred.has(r.symbol) || r.total > 0)
+      ? rows.filter((r) => starred.has(r.symbol) || (r.usd ?? 0) > 0.1)
       : rows.filter((r) => starred.has(r.symbol));
     // A list of the user's own keeps the order they dragged it into: they chose what is on it,
     // so they choose the sequence, and it shows no balance to sort by anyway.
@@ -761,6 +771,18 @@ export function VaultHomeScreen() {
     });
     return any ? sum : null;
   }, [rows, lp.lp, prices]);
+
+  // Holdings distribution for the pie: EVERY asset the vault actually holds, largest first — no
+  // dust threshold, so a small position still appears in the legend (its slice may be too thin to
+  // see, but it is listed). The total the shares are taken against is the sum of exactly what is
+  // shown.
+  const distribution = useMemo(() => {
+    const held: PieSlice[] = rows
+      .filter((r) => (r.usd ?? 0) > 0)
+      .map((r) => ({symbol: r.symbol, icon: r.icon, usd: r.usd as number}))
+      .sort((a, b) => b.usd - a.usd);
+    return {held, total: held.reduce((s, x) => s + x.usd, 0)};
+  }, [rows]);
 
   // The pull spinner belongs to a pull only, never to the first load.
   const anyLoading = bal.loading || pos.loading || lp.loading;
@@ -892,7 +914,25 @@ export function VaultHomeScreen() {
             <EyeIcon off={hidden} color={c.subtext} />
           </Pressable>
         </View>
-        <Text style={styles.totalValue}>{hidden ? MASK_TOTAL : totalUsd != null ? fmtUsd(totalUsd) : '—'}</Text>
+        <View style={styles.totalRow}>
+          <Text style={styles.totalValue}>{hidden ? MASK_TOTAL : totalUsd != null ? fmtUsd(totalUsd) : '—'}</Text>
+          {/* Holdings distribution, right after the figure it breaks down. Disabled while balances
+              are hidden: the sheet would show the very values the eye toggle is masking. */}
+          <Pressable
+            style={styles.distBtn}
+            onPress={() => setShowDistribution(true)}
+            disabled={hidden}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityState={{disabled: hidden}}
+            accessibilityLabel={t('mobile.trade.distribution')}>
+            <Svg width={24} height={24} viewBox="0 0 24 24">
+              {/* Two-tone solid pie: the faint full circle is the whole, the accent sector a slice. */}
+              <Circle cx={12} cy={12} r={9} fill={c.subtext} fillOpacity={0.22} />
+              <Path d="M12 12 L12 3 A9 9 0 0 1 17.3 19.3 Z" fill={hidden ? c.border : c.accent} />
+            </Svg>
+          </Pressable>
+        </View>
         <View style={styles.actions}>
           {([
             {label: t('vault.send'), icon: 'send', onPress: () => nav.navigate('Payments')},
@@ -1023,6 +1063,18 @@ export function VaultHomeScreen() {
         vault={bal.vault}
         networkLabel={networkLabel(network, t)}
       />
+
+      {/* How the vault's holdings are distributed across assets — a donut and a legend, dust (under
+          a dollar) left out so it does not clutter the picture. */}
+      <Sheet
+        visible={showDistribution}
+        title={t('mobile.trade.distribution')}
+        onClose={() => setShowDistribution(false)}
+        height={Math.round(screenHeight * 0.618)}>
+        <View style={{marginTop: 16}}>
+          <PortfolioPie slices={distribution.held} total={distribution.total} />
+        </View>
+      </Sheet>
     </ScrollView>
   );
 }
@@ -1038,7 +1090,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   heroCard: {backgroundColor: c.card, borderRadius: 20, padding: 20, gap: 6},
   totalHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
   totalLabel: {color: c.subtext, fontSize: 13, fontWeight: '600'},
-  totalValue: {color: c.text, fontSize: 34, fontWeight: '800', marginTop: 2},
+  totalValue: {color: c.text, fontSize: 34, fontWeight: '800'},
   actions: {flexDirection: 'row', justifyContent: 'space-around', marginTop: 16, paddingTop: 18, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border},
   action: {alignItems: 'center', gap: 8},
   actionCircle: {width: 54, height: 54, borderRadius: 27, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center'},
@@ -1070,6 +1122,9 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   // "Total value" and the eye in the hero card above, which is the row this one echoes. At 4 they
   // hung off both edges, further out than anything they sit over.
   listHead: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: -6},
+  // The total value and the distribution pie icon beside it, on one line in the hero card.
+  totalRow: {flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 2},
+  distBtn: {flexShrink: 0},
   // The same weight and colour as "hide 0" across from it: the two ends of this row are both
   // labels on the list below, not a heading over a control. The one in front takes the text
   // colour, which is the only thing distinguishing it — a pill or an underline would make the row

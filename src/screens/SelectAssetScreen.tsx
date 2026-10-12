@@ -1,21 +1,22 @@
 import React, {useMemo} from 'react';
-import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
-import Svg, {Path} from 'react-native-svg';
+import {ScrollView, StyleSheet} from 'react-native';
 import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
 import {AssetCategoryList} from '@/components/AssetCategoryList';
-import {TokenIcon} from '@/components/TokenIcon';
-import {Amount} from '@/components/Amount';
+import {AssetPickRow} from '@/components/AssetPickRow';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {useAssetPick} from '@/core/asset-pick';
+import {useFavoriteSet} from '@/core/favorites-store';
 import {displaySymbol, fmtShort} from '@/core/format';
+import {usdValue} from '@/core/prices';
 import {useNetwork} from '@/core/network-store';
 import {balanceOfSymbol, ownerVaultAddress} from '@/vault/read';
 import {useVaultBalances} from '@/vault/useVaultBalances';
+import {usePrices} from '@/vault/usePrices';
 import {useVaultPositions} from '@/vault/useVaultPositions';
 import {useWallet} from '@/wallet/store';
-import {useColors, useStyles, type Colors} from '@/theme';
+import {useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 
 /**
@@ -30,8 +31,7 @@ import {useT} from '@/i18n';
  * navigation params is state React Navigation is right to complain about.
  */
 export function SelectAssetScreen() {
-  const {t, company} = useT();
-  const c = useColors();
+  const {t} = useT();
   const styles = useStyles(makeStyles);
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const {params} = useRoute<RouteProp<RootStackParamList, 'SelectAsset'>>();
@@ -45,6 +45,10 @@ export function SelectAssetScreen() {
   const balances = useVaultBalances(network);
   const positions = useVaultPositions(vault, network);
   const pick = useAssetPick((s) => s.pick);
+  const prices = usePrices(network);
+  // The active watch list, for the "Selected" first tab — the same tab, and the same default, as
+  // the Trade directory. Not for the quote side: a stablecoin picker is two rows, not a directory.
+  const favorites = useFavoriteSet(network);
 
   /**
    * The quote side is stable coins only — that is what a pair is quoted in — and the base side is
@@ -73,6 +77,25 @@ export function SelectAssetScreen() {
       .filter((p) => p.symbol === symbol && (p.kind === 'staked' || p.kind === 'supplied'))
       .reduce((n, p) => n + Number(p.formatted || 0), 0);
 
+  /**
+   * What counts as "Selected": the watch list PLUS anything the vault actually holds worth more
+   * than a dime — the same rule the Overview and the Trade directory use. Without the held half, a
+   * token the vault holds but never starred (UNI on a COW/USDC vault) was missing from the one tab
+   * a trader reaches for, and finding it meant scrolling the full crypto list. Judged by VALUE, so
+   * a dust leftover does not earn a place.
+   */
+  const selectedSet = useMemo(() => {
+    const s = new Set<string>(favorites);
+    for (const a of assets) {
+      const held = totalOf(a.symbol);
+      if (held <= 0) continue;
+      const v = usdValue(held, a.symbol, prices);
+      if (v != null && v > 0.1) s.add(a.symbol);
+    }
+    return s;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- totalOf closes over balances+positions
+  }, [favorites, assets, balances.balances, positions.positions, prices]);
+
   return (
     <ScrollView
       style={styles.container}
@@ -92,41 +115,22 @@ export function SelectAssetScreen() {
           // What the vault holds leads its category: that is nearly always what the picker was
           // opened to trade, and in catalog order it sat below two dozen stocks held at nothing.
           funded={(a) => totalOf(a.symbol) > 0}
-          renderItem={(a, i) => {
+          renderItem={(a, i, _last, q) => {
             const held = totalOf(a.symbol);
             const on = !!selected && displaySymbol(selected) === displaySymbol(a.symbol);
             return (
-              <Pressable
-                style={({pressed}) => [styles.row, i > 0 && styles.divided, pressed && styles.pressed]}
+              <AssetPickRow
+                asset={a}
+                first={i === 0}
+                query={q}
+                // Nothing against a zero: an empty end reads as "none" without a column of noughts.
+                value={held > 0 ? fmtShort(held) : undefined}
+                check={on ? 'accent' : 'none'}
                 onPress={() => {
                   pick(slot, a.symbol);
                   nav.goBack();
-                }}>
-                <TokenIcon symbol={a.symbol} size={30} />
-                <View style={styles.name}>
-                  <Text style={styles.symbol}>{displaySymbol(a.symbol)}</Text>
-                  {company(a.symbol, a.tokenName) ? (
-                    <Text style={styles.company} numberOfLines={1}>
-                      {company(a.symbol, a.tokenName) as string}
-                    </Text>
-                  ) : null}
-                </View>
-                {/* Nothing printed against a zero: an empty right-hand end reads as "none" without
-                    putting a column of noughts beside every asset the vault has never held. */}
-                {held > 0 ? <Amount v={fmtShort(held)} size={14} color={c.subtext} /> : null}
-                {on ? (
-                  <Svg width={18} height={18} viewBox="0 0 24 24">
-                    <Path
-                      d="M20 6 9 17l-5-5"
-                      stroke={c.accent}
-                      strokeWidth={2.5}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      fill="none"
-                    />
-                  </Svg>
-                ) : null}
-              </Pressable>
+                }}
+              />
             );
           }}
           placeholder={t('mobile.trade.search_assets')}
@@ -140,6 +144,7 @@ export function SelectAssetScreen() {
            */
           search={slot !== 'quote'}
           categories={slot !== 'quote'}
+          selectedSet={slot !== 'quote' ? selectedSet : undefined}
         />
     </ScrollView>
   );
@@ -150,10 +155,4 @@ const makeStyles = (c: Colors) =>
     container: {flex: 1, backgroundColor: c.bg},
     body: {padding: 16, paddingBottom: 32, gap: 10},
     card: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 12, gap: 2},
-    row: {flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56, paddingVertical: 10},
-    divided: {borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border},
-    pressed: {opacity: 0.6},
-    name: {flex: 1},
-    symbol: {color: c.text, fontSize: 16, fontWeight: '600'},
-    company: {color: c.subtext, fontSize: 12, marginTop: 1},
   });

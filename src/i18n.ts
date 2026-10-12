@@ -18,6 +18,7 @@ import id from '@/translations/id.json';
 import vi from '@/translations/vi.json';
 import th from '@/translations/th.json';
 import {useLanguage, type Language} from '@/core/language-store';
+import {useCurrency} from '@/core/currency-store';
 import {companyName} from '@/core/company-names';
 import {MOBILE_STRINGS} from '@/translations/mobile';
 
@@ -90,6 +91,14 @@ export function joinWords(language: Language, ...parts: (string | false | null |
 /** `t("vault.buy")`, `t("mobile.settings.language")`; re-renders when the language changes. */
 export function useT() {
   const language = useLanguage((s) => s.language);
+  /**
+   * Also subscribed to the display currency and its FX table, deliberately: {fmtUsd} reads them
+   * imperatively, so a screen printing fiat has no subscription of its own — and every screen that
+   * prints fiat already calls this hook, exactly as `company` rides along above. Without it a
+   * currency change in Settings repainted nothing until the next unrelated render.
+   */
+  useCurrency((s) => s.chosen);
+  useCurrency((s) => s.fx);
   const t = useCallback(
     (key: string, params?: Record<string, string | number>) => translate(language, key, params),
     [language],

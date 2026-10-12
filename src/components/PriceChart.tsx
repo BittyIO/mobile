@@ -46,8 +46,21 @@ export function PriceChart({symbol, reload = 0}: {symbol: string; reload?: numbe
   const network = useNetwork((st) => st.network);
   const [rangeIdx, setRangeIdx] = useState(1); // 1W
   const [pts, setPts] = useState<[number, number][] | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+
+  // Drop the previous asset's series the instant the asset changes — DURING render, not in an
+  // effect. An effect clears a tick too late: the first frame of the new asset still paints the old
+  // one's line and price (loading only shows when there is no series), which is the stale figure
+  // that flashed on every switch. Resetting here (React's "adjust state on prop change" pattern)
+  // means the new symbol never renders with the old symbol's points. A range switch keeps the asset,
+  // so it does not reset and the current line stays up while the new granularity loads.
+  const assetKey = `${network}:${symbol}`;
+  const [drawnAsset, setDrawnAsset] = useState(assetKey);
+  if (drawnAsset !== assetKey) {
+    setDrawnAsset(assetKey);
+    setPts(null);
+    setError(false);
+  }
 
   // The current price must be identical whichever range is selected. Each range's series ends on a
   // coarser, staler granularity (7d/30d/1y lag the 24h one), so pin the freshest price SEEN across
@@ -76,11 +89,9 @@ export function PriceChart({symbol, reload = 0}: {symbol: string; reload?: numbe
     if (hit && Date.now() - hit.at < (TTL_MS[days] ?? 60 * 60_000)) {
       setPts(pinLatest(hit.pts));
       setError(hit.pts == null);
-      setLoading(false);
       return;
     }
     let live = true;
-    setLoading(true);
     setError(false);
     apiFetch(`${API_BASE}/api/prices/chart?network=${network}&symbol=${encodeURIComponent(symbol)}&days=${days}`)
       .then(async (r) => {
@@ -101,8 +112,7 @@ export function PriceChart({symbol, reload = 0}: {symbol: string; reload?: numbe
         if (!live) return;
         setPts(null);
         setError(true);
-      })
-      .finally(() => live && setLoading(false));
+      });
     return () => {
       live = false;
     };
@@ -147,9 +157,11 @@ export function PriceChart({symbol, reload = 0}: {symbol: string; reload?: numbe
       </View>
 
       <View style={styles.plot}>
-        {loading && !g ? (
-          <ActivityIndicator color={c.accent} />
-        ) : g ? (
+        {/* A series for the current asset → draw it. An error → say so. Anything else (switching
+            asset, first load, refetching with nothing cached) → the spinner. Never the previous
+            asset's line: `pts` is cleared the moment the asset changes (see the render reset), so
+            `g` is null here until THIS asset's data lands. */}
+        {g ? (
           <>
             <Text style={[styles.corner, styles.top]}>{fmtUsd(g.max)}</Text>
             <Svg width="100%" height={H} viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -164,8 +176,10 @@ export function PriceChart({symbol, reload = 0}: {symbol: string; reload?: numbe
             </Svg>
             <Text style={[styles.corner, styles.bottom]}>{fmtUsd(g.min)}</Text>
           </>
+        ) : error ? (
+          <Text style={styles.msg}>{t('vault.price_unavailable')}</Text>
         ) : (
-          <Text style={styles.msg}>{error ? t('vault.price_unavailable') : ''}</Text>
+          <ActivityIndicator color={c.accent} />
         )}
       </View>
     </View>

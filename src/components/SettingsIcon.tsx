@@ -5,6 +5,7 @@ import Svg, {Circle, Line, Path, Rect} from 'react-native-svg';
 export type SettingsIconName =
   | 'vault'
   | 'language'
+  | 'currency'
   | 'network'
   | 'appearance'
   | 'assets'
@@ -13,6 +14,7 @@ export type SettingsIconName =
   | 'security'
   | 'recovery'
   | 'lock'
+  | 'timelock'
   | 'autoYield'
   | 'delegation'
   | 'gasless'
@@ -32,6 +34,7 @@ const TINT: Record<SettingsIconName, string> = {
   // The app's own accent: this is the row that decides what every row below it means.
   vault: '#0E85FF',
   language: '#0E85FF',
+  currency: '#34C759',
   network: '#5856D6',
   appearance: '#5E5CE6',
   assets: '#F5A623',
@@ -40,6 +43,7 @@ const TINT: Record<SettingsIconName, string> = {
   security: '#34C759',
   recovery: '#FF9500',
   lock: '#FF3B30',
+  timelock: '#5856D6',
   autoYield: '#34C759',
   delegation: '#0E85FF',
   gasless: '#AF52DE',
@@ -63,6 +67,14 @@ export function SettingsIcon({name, size = 29}: {name: SettingsIconName; size?: 
           <>
             <Circle cx={12} cy={12} r={9} {...c} />
             <Path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" {...c} />
+          </>
+        ) : name === 'currency' ? (
+          <>
+            {/* lucide CircleDollarSign — a denomination in a coin. Not the banknote: that is
+                already the payout row's mark, and two rows wearing one glyph read as one row
+                twice. */}
+            <Circle cx={12} cy={12} r={9} {...c} />
+            <Path d="M15.4 8.7h-4.5a1.9 1.9 0 1 0 0 3.8h2.2a1.9 1.9 0 1 1 0 3.8H8.6M12 6.5v11" {...c} />
           </>
         ) : name === 'network' ? (
           <>
@@ -99,6 +111,12 @@ export function SettingsIcon({name, size = 29}: {name: SettingsIconName; size?: 
           <>
             <Rect x={3} y={11} width={18} height={11} rx={2} {...c} />
             <Path d="M7 11V7a5 5 0 0 1 10 0v4" {...c} />
+          </>
+        ) : name === 'timelock' ? (
+          // A clock: the vault's change delay, the waiting period a loosening has to sit out.
+          <>
+            <Circle cx={12} cy={12} r={9} {...c} />
+            <Path d="M12 7v5l3.5 2" {...c} />
           </>
         ) : name === 'autoYield' ? (
           <Path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" {...c} />

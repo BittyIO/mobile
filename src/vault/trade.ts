@@ -135,6 +135,30 @@ export async function quotePreview(o: {
   if (!(Number(o.amount) > 0)) return null;
   const sell = assetMeta(o.network, o.sellToken);
   const buy = assetMeta(o.network, o.buyToken);
+  /*
+   * On a split-adapter chain the preview must come from the SAME quoting service the swap will
+   * use: the service routes across v2/v3/v4, while the local QuoterV2 fallback below sees v3
+   * only — on a chain whose liquidity lives in v4 pools (UNI/USDG on Robinhood) the fallback
+   * reports "no pool" for a pair the swap can fill. `est`/`guard` are what actually reaches the
+   * vault (the adapter's fee already off), which is the honest number to show next to a trade.
+   * Buy-mode falls through: the service builds exact-in routes only, and exact-out market orders
+   * are refused on split chains anyway (see {marketBuy}).
+   */
+  if (o.mode === 'sell') {
+    const amm = ammAdapters(o.network)[0];
+    if (amm && (await ammSpeaksUniversal(amm, o.network))) {
+      const amountIn = parseUnits(o.amount, sell.decimals);
+      const q = await fetchUniversalRoute({
+        network: o.network,
+        tokenIn: o.sellToken,
+        tokenOut: o.buyToken,
+        amountIn,
+        slippageBps: o.slippageBps,
+      });
+      if (!q) return null;
+      return {fee: 0, est: formatUnits(q.receive, buy.decimals), guard: formatUnits(q.minReceive, buy.decimals)};
+    }
+  }
   if (o.mode === 'sell') {
     const amountIn = parseUnits(o.amount, sell.decimals);
     const q = await bestSellQuote(o.network, o.sellToken, o.buyToken, amountIn);

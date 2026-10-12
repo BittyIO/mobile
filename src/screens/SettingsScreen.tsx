@@ -9,6 +9,7 @@ import type {RootStackParamList} from '@/App';
 import {useNetwork} from '@/core/network-store';
 
 import {useLanguage, LANGUAGES, languageLabel} from '@/core/language-store';
+import {useCurrency, useDisplayCurrency, CURRENCIES, currencyLabel, type Currency} from '@/core/currency-store';
 import Svg, {Circle, Path, Rect} from 'react-native-svg';
 import {useAppearance, APPEARANCES, useColors, useStyles, type Colors} from '@/theme';
 import {API_BASE} from '@/core/chain';
@@ -71,7 +72,11 @@ export function SettingsScreen() {
   // Language and Theme Mode use the app's own picker sheet, the one the asset and network selectors
   // use: it is part of the React tree, so it opens on the next frame, where the native action sheet
   // waits on a round trip to UIKit and a presentation animation of its own.
-  const [picker, setPicker] = useState<'language' | 'appearance' | null>(null);
+  const [picker, setPicker] = useState<'language' | 'currency' | 'appearance' | null>(null);
+  // The currency in force (explicit choice, else the language's default) and the setter. Choosing
+  // a language keeps currency in step automatically until the user picks one by hand.
+  const currency = useDisplayCurrency();
+  const setCurrency = useCurrency((s) => s.setCurrency);
   // Which coins may pay the relay fee is one short list of switches, so it is a sheet rather than a
   // page of its own: nothing on it leads anywhere, and pushing a screen for it made a two-tap trip
   // out of a one-tap decision.
@@ -110,7 +115,6 @@ export function SettingsScreen() {
             that is never spent. They were two rows opening two sheets, and each left the
             other's question hanging. */}
         <Row icon="gasless" title={t('mobile.settings.network_fee')} onPress={() => nav.navigate('NetworkFee')} />
-        <Row icon="allowlist" title={t('mobile.settings.allow_list')} onPress={() => nav.navigate('VaultAssets')} />
         {/* The vault's guardrails — how long a loosening has to wait, and how much may leave —
             behind one row. They were two, which was two ways of saying "open the security page":
             both already pushed the same screen, and splitting it only asked the user to decide
@@ -145,6 +149,7 @@ export function SettingsScreen() {
 
       <View style={styles.group}>
         <Row icon="language" title={t('mobile.settings.language')} value={languageLabel(language)} onPress={pickLanguage} />
+        <Row icon="currency" title={t('mobile.settings.currency')} value={currency} onPress={() => setPicker('currency')} />
         <Row icon="appearance" title={t('mobile.settings.appearance')} value={t(`mobile.settings.appearance_${appearance}`)} onPress={pickAppearance} last />
       </View>
 
@@ -161,6 +166,14 @@ export function SettingsScreen() {
         items={LANGUAGES.map((l) => ({key: l.code, label: l.label}))}
         selected={language}
         onSelect={(code) => setLanguage(code as (typeof LANGUAGES)[number]['code'])}
+        onClose={() => setPicker(null)}
+      />
+      <PickerSheet
+        visible={picker === 'currency'}
+        title={t('mobile.settings.currency')}
+        items={CURRENCIES.map((x) => ({key: x.code, label: currencyLabel(x.code)}))}
+        selected={currency}
+        onSelect={(code) => setCurrency(code as Currency)}
         onClose={() => setPicker(null)}
       />
       {/* The confirmations for the two rows that write on their own (asset manager, upgrade). */}

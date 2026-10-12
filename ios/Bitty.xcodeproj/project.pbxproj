@@ -263,7 +263,7 @@
 				DEVELOPMENT_TEAM = V73V784TR6;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Bitty/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Bitty;
+				INFOPLIST_KEY_CFBundleDisplayName = "Bitty Vault";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -293,7 +293,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = V73V784TR6;
 				INFOPLIST_FILE = Bitty/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Bitty;
+				INFOPLIST_KEY_CFBundleDisplayName = "Bitty Vault";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (

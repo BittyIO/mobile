@@ -5,7 +5,7 @@ import type {RootStackParamList, TradeParams} from '@/App';
 import {BottomTabBarHeightContext} from '@react-navigation/bottom-tabs';
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {Animated, Keyboard, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type TextStyle} from 'react-native';
-import Svg, {Circle, Path} from 'react-native-svg';
+import Svg, {Circle, Ellipse, Path} from 'react-native-svg';
 import {TokenIcon} from '@/components/TokenIcon';
 import {TradeMenu} from '@/components/TradeMenu';
 import {WatchlistMenu} from '@/components/WatchlistMenu';
@@ -30,6 +30,7 @@ import {useNetwork} from '@/core/network-store';
 import type {Network} from '@/core/chain';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {useVaultPositions} from '@/vault/useVaultPositions';
+import {useVaultLp} from '@/vault/useVaultLp';
 import {positionToken} from '@/vault/position-token';
 import {susdsRate} from '@/vault/yielding';
 import {buildLimitAppData} from '@/core/cow';
@@ -48,7 +49,10 @@ import {OrderRow, OrderDetailLines, fmtPrice, type OrderPart, type OrderValue} f
 import {describeOrder} from '@/vault/tx-actions';
 import {useConfirmAction, useConfirmLocal} from '@/components/ConfirmAction';
 import {fetchProtocolApy, EMPTY_APY, type ProtocolApy} from '@/vault/apy';
-import {marketSell, buildMarketSell, poolSpotPrice} from '@/vault/trade';
+import {marketSell, buildMarketSell, poolSpotPrice, quotePreview} from '@/vault/trade';
+import {PositionPanel} from '@/components/PositionPanel';
+import {AssetPickRow} from '@/components/AssetPickRow';
+import {fetchPosition, type Position} from '@/vault/position';
 import {placeLimitOrder, prepareIntent, cancelLimitOrders, fetchRecentOrders, type CowOrder} from '@/vault/limit';
 import {cancelledAt, cancelledAtAny, recordCancelled} from '@/vault/cancel-log';
 import {placeTwap, fetchTwapSchedules, cancelTwap, type TwapSchedule} from '@/vault/twap';
@@ -138,6 +142,15 @@ const fmtN = fmtNum;
 /** The Buy / Sell bar's own height: 14 of top padding, a 50pt button, 18 of bottom padding. */
 const BAR_HEIGHT = 82;
 const fmtAmt = (raw: string, decimals: number): string => fmtShort(Number(formatUnits(BigInt(raw), decimals)));
+// Short amount for the quote box's Min received. Like fmtShort (which truncates, so a floor is never
+// overstated), but a sub-0.01 value shows 3 significant digits instead of fmtShort's 7-decimal tail.
+const fmtQuote = (n: number): string =>
+  Math.abs(n) >= 0.01 || n === 0 ? fmtShort(n) : Number(n.toPrecision(3)).toString();
+// The Bitty fee, to 2 significant figures — so a small fee keeps its meaning ("0.012", not the
+// "0.01" a 2-decimal cap rounds it to) while a larger one still reads with 2 decimals like other
+// amounts. It is an informational figure, so rounding (rather than truncating) is fine here.
+const fmtFee = (n: number): string =>
+  n === 0 ? '0' : Math.abs(n) >= 1 ? fmtShort(n) : Number(n.toPrecision(2)).toString();
 
 /**
  * The watch list's name, as the screen's title, editable in place.
@@ -671,6 +684,7 @@ export function TradeScreen() {
 
   const balances = useVaultBalances(network);
   const positions = useVaultPositions(balances.vault, network);
+  const lp = useVaultLp(balances.vault, network);
 
   /**
    * The stablecoin to quote in when the app is choosing: one the vault actually HOLDS, USDC first.
@@ -712,6 +726,59 @@ export function TradeScreen() {
   const prices = usePrices(network, refreshNonce);
   const base = assets.find((a) => a.symbol === baseSym);
   const intent = adapterByName(network, 'CoW Swap');
+
+  // The base asset's position + P&L, computed on the server from the vault's swap history. Re-read
+  // whenever the asset, network or a pull changes — the panel above the action shows it when the
+  // vault actually holds some, so a pair it has never touched carries no empty card.
+  //
+  // Three states, not two: `undefined` is a fetch still in flight (the sheet shows dashes),
+  // `null` is a fetch that answered "nothing" (the sheet shows zeros, which is then true), and a
+  // Position is the figures. Collapsing the first two into null painted a full panel of zeros
+  // that snapped to the real numbers a beat later — and kept the PREVIOUS asset's figures on
+  // screen while a new pair's fetch was still out.
+  const [position, setPosition] = useState<Position | null | undefined>(undefined);
+  // Whether the full position sheet is open — opened from the Today P&L on the header line.
+  const [showPosition, setShowPosition] = useState(false);
+  useEffect(() => {
+    const vault = balances.vault;
+    if (!vault || !baseSym) {
+      setPosition(null);
+      return;
+    }
+    let live = true;
+    setPosition(undefined);
+    fetchPosition(vault, network, baseSym)
+      .then((p) => live && setPosition(p))
+      .catch(() => live && setPosition(null));
+    return () => {
+      live = false;
+    };
+  }, [balances.vault, baseSym, network, refreshNonce]);
+
+  // The vault's whole portfolio value — the SAME figure the Overview shows: every asset's free +
+  // yielding + lending holding, plus both sides of each LP position, priced off the shared catalog
+  // prices. The position sheet's pie takes the asset's share against this, so the slice is measured
+  // against what the user reads as their portfolio rather than a spot-only subset — and it needs no
+  // server round-trip, since the holdings and prices are already loaded here.
+  const portfolioValue = useMemo(() => {
+    if (!balances.balances) return 0;
+    let sum = 0;
+    for (const a of assets) {
+      const free = Number(balanceOfSymbol(balances.balances, a.symbol) || 0);
+      const held = positions.positions
+        .filter((p) => p.symbol === a.symbol)
+        .reduce((s, p) => s + Number(p.formatted), 0);
+      const v = usdValue(free + held, a.symbol, prices);
+      if (v != null) sum += v;
+    }
+    for (const p of lp.lp) {
+      const v0 = usdValue(p.amount0, p.symbol0, prices);
+      const v1 = usdValue(p.amount1, p.symbol1, prices);
+      if (v0 != null) sum += v0;
+      if (v1 != null) sum += v1;
+    }
+    return sum;
+  }, [assets, balances.balances, positions.positions, lp.lp, prices]);
 
   const usdcAsset = useMemo(() => stables.find((s) => s.symbol === 'USDC') ?? stables[0], [stables]);
   const quoteAsset = assets.find((a) => a.symbol === quoteSym);
@@ -1012,10 +1079,23 @@ export function TradeScreen() {
     };
   }, [network, base?.address, quoteAsset?.address, pairAmmLiquid, refreshNonce]);
 
+  // A pool price only counts when it shares a universe with the oracle. A near-empty pool passes the
+  // server's liquidity>0 test yet prices nothing — Sepolia's vault-WETH/USDC pool holds dust and
+  // quotes ETH at ~$4 against a ~$2,500 oracle — and showing that as "the price the swap executes at"
+  // is a worse error than the oracle, which is right to within the testnet's own spread. So a pool
+  // more than ~3x off the oracle is treated as no price at all, the way an illiquid stock pool is.
+  // With no oracle to check against, the pool stands on its own, as it did before.
+  const livePoolPrice =
+    poolPrice != null &&
+    (!(oraclePrice != null && oraclePrice > 0) ||
+      (poolPrice > oraclePrice / 3 && poolPrice < oraclePrice * 3))
+      ? poolPrice
+      : null;
+
   // For a liquid pair the pool is authoritative — it is where a market order executes — with the
-  // oracle standing in until the quote lands. For an illiquid one the pool is not a price at all, so
-  // the market rate is the only honest seed for a limit order.
-  const pairPrice = pairAmmLiquid ? poolPrice ?? oraclePrice : oraclePrice;
+  // oracle standing in until the quote lands (or when the pool quote is nonsense, see above). For an
+  // illiquid one the pool is not a price at all, so the market rate is the only honest seed.
+  const pairPrice = pairAmmLiquid ? livePoolPrice ?? oraclePrice : oraclePrice;
 
   // USDC per sUSDS, so an order whose sell leg is the savings share is valued by what it is worth
   // rather than by its number of shares — 81.0067 sUSDS is 90 USDC, and reading that as 81 priced the
@@ -1131,9 +1211,24 @@ export function TradeScreen() {
       onList.forEach((s) => next.add(s));
       return next;
     });
-  // The tab exists while anything is on the list OR has been shown on it this session (so the row
-  // you just unticked keeps its place).
-  const showSelected = isWatchlist && (onList.size > 0 || selSnapshot.size > 0);
+  // Assets the vault actually holds, worth more than a dime — counted as Selected whether or not
+  // they are on the list, the same rule the Overview's Assets list uses. Judged by VALUE, not
+  // amount, so a dust leftover does not earn a row. The free (spendable) balance is what matters on
+  // a trade directory, so that is what is priced.
+  const heldSet = useMemo(() => {
+    const s = new Set<string>();
+    if (!balances.balances) return s;
+    for (const a of assets) {
+      const amt = Number(balanceOfSymbol(balances.balances, a.symbol) || 0);
+      if (amt <= 0) continue;
+      const v = usdValue(amt, a.symbol, prices);
+      if (v != null && v > 0.1) s.add(a.symbol);
+    }
+    return s;
+  }, [assets, balances.balances, prices]);
+  // The tab exists while anything is on the list, held over $0.10, OR has been shown on it this
+  // session (so the row you just unticked keeps its place).
+  const showSelected = isWatchlist && (onList.size > 0 || selSnapshot.size > 0 || heldSet.size > 0);
   useEffect(() => {
     const valid: DirCategory[] = showSelected ? ['selected', ...categories] : categories;
     if (valid.length && !valid.includes(category)) setCategory(valid[0]);
@@ -1153,42 +1248,23 @@ export function TradeScreen() {
      * Marked in the quiet colour rather than the accent, and the row does not respond: a tick
      * that is a statement of fact should not look like one the user just made.
      */
+    // On "Assets", a funded row cannot be unticked: that list shows everything held whatever the
+    // ticks say, so a tick there is a statement of fact (the muted mark), not a control.
     const pinned = isWatchlist && builtIn && totalOf(a.symbol) > 0;
+    // Editing the watch list, a check takes the price's place — the same blue tick every picker in
+    // the app uses for "chosen"; only chosen rows carry a mark, so the list reads as what is on it.
+    // On a pair directory the row shows the price instead, lined up at the right edge as a column.
     return (
-    <Pressable
-      key={a.symbol}
-      style={[styles.resultRow, i > 0 && styles.resultDivided]}
-      disabled={pinned}
-      onPress={() => (isWatchlist ? star(a.symbol) : openPair(a.symbol))}>
-      <TokenIcon symbol={a.symbol} size={30} />
-      <View style={styles.resultName}>
-        <Highlight text={displaySymbol(a.symbol)} q={query.trim()} style={styles.resultText} />
-        {company(a.symbol, a.tokenName) ? (
-          <Highlight text={company(a.symbol, a.tokenName) as string} q={query.trim()} style={styles.resultCompany} numberOfLines={1} />
-        ) : null}
-      </View>
-      {/* Editing the watch list, a check takes the price's place — the same blue tick every picker
-          sheet in the app uses for "this one is chosen". A star said the same thing in a second
-          vocabulary, and only the chosen rows need a mark: an unchosen row is blank, so the list
-          reads as what is on it rather than as a field of empty outlines. The whole row toggles. */}
-      {isWatchlist ? (
-        onList.has(a.symbol) || pinned ? (
-          <Svg width={20} height={20} viewBox="0 0 24 24">
-            <Path
-              d="M20 6 9 17l-5-5"
-              stroke={pinned ? c.subtext : c.accent}
-              strokeWidth={2.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              fill="none"
-            />
-          </Svg>
-        ) : null
-      ) : (
-        // At the right edge, so the prices line up down the list and can be read as a column.
-        <Text style={styles.resultPrice}>{fmtUsd(usdValue(1, a.symbol, prices))}</Text>
-      )}
-    </Pressable>
+      <AssetPickRow
+        key={a.symbol}
+        asset={a}
+        first={i === 0}
+        query={query.trim()}
+        disabled={pinned}
+        value={isWatchlist ? undefined : fmtUsd(usdValue(1, a.symbol, prices))}
+        check={isWatchlist ? (onList.has(a.symbol) ? 'accent' : pinned ? 'muted' : 'none') : 'none'}
+        onPress={() => (isWatchlist ? star(a.symbol) : openPair(a.symbol))}
+      />
     );
   };
 
@@ -1323,7 +1399,7 @@ export function TradeScreen() {
 
   const inCategory = (k: DirCategory) =>
     k === 'selected'
-      ? assets.filter((a) => selSnapshot.has(a.symbol) || onList.has(a.symbol))
+      ? assets.filter((a) => selSnapshot.has(a.symbol) || onList.has(a.symbol) || heldSet.has(a.symbol))
       : assets
           .filter((a) => assetCategory(a.category) === k)
           .sort((x, y) => Number(y.kind === 'stable') - Number(x.kind === 'stable'));
@@ -1437,7 +1513,7 @@ export function TradeScreen() {
   // Price is always quote-per-base. Market prices strictly off the POOL (what it executes at); Limit/TWAP
   // use the entered price. The receive leg follows from the pay leg: sell → quote = base×price, buy →
   // base = quote÷price.
-  const effPrice = mode === 'Market' ? poolPrice ?? 0 : Number(price) || 0;
+  const effPrice = mode === 'Market' ? livePoolPrice ?? 0 : Number(price) || 0;
 
   // Pay ⇄ Receive are both editable and kept in sync through the price. sell: receive = pay×price;
   // buy: receive = pay÷price (and the inverse when the user edits Receive).
@@ -1460,6 +1536,44 @@ export function TradeScreen() {
     if (effPrice > 0 && p > 0) setReceiveInput(toField(paysBase ? p * effPrice : p / effPrice));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effPrice, paysBase, sheetSide]);
+
+  /**
+   * The market estimate and Min received, from the Universal route quote (v2/v3/v4) — the REAL
+   * output for THIS pay amount, with price impact and pool fees in it. The price × amount above is
+   * only a seed for instant feedback; it ignores depth, so it overstated both numbers on anything
+   * but a dust trade. This runs the SAME quote the swap itself uses, debounced so a keystroke does
+   * not spam it, and corrects the receive field + drives the real Min received below.
+   */
+  const [mktQuote, setMktQuote] = useState<{est: string; guard: string} | null>(null);
+  useEffect(() => {
+    const recvAsset = paysBase ? quoteAsset : base;
+    if (mode !== 'Market' || !spendAsset || !recvAsset || !(Number(amount) > 0)) {
+      setMktQuote(null);
+      return;
+    }
+    let live = true;
+    const h = setTimeout(() => {
+      quotePreview({
+        network,
+        mode: 'sell',
+        sellToken: spendAsset.address,
+        buyToken: recvAsset.address,
+        amount,
+        slippageBps: slippage,
+      })
+        .then((q) => {
+          if (!live) return;
+          setMktQuote(q ? {est: q.est, guard: q.guard} : null);
+          if (q) setReceiveInput(toField(Number(q.est)));
+        })
+        .catch(() => live && setMktQuote(null));
+    }, 300);
+    return () => {
+      live = false;
+      clearTimeout(h);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, amount, spendSym, recvSym, network, slippage]);
 
   /**
    * Which stablecoin the relayer should charge its fee to.
@@ -1945,11 +2059,12 @@ export function TradeScreen() {
 
   const visibleOrders = showOthers ? plainOrders : pairSettled ? plainOrders.filter(inPair) : [];
   const visibleTwaps = showOthers ? twapGroups : pairSettled ? twapGroups.filter((g) => inPair(g.rep)) : [];
-  // Open is the live list; Recently is everything, outcome included — see {Tab}. Both tabs are
-  // built on every render now (they are the pager's two pages), so these take the tab rather than
-  // reading the current one.
+  // Open is the live list; Recently is the HISTORY — finished, cancelled, expired — with open
+  // orders left out, since those are not history and already have the Open tab. Both tabs are built
+  // on every render (they are the pager's two pages), so these take the tab rather than reading the
+  // current one.
   const twapsFor = (which: Tab) =>
-    which === 'open' ? visibleTwaps.filter((g) => g.bucket === 'open') : visibleTwaps;
+    which === 'open' ? visibleTwaps.filter((g) => g.bucket === 'open') : visibleTwaps.filter((g) => g.bucket !== 'open');
   // Market swaps are always complete → they belong under Finished.
   const marketFinished = showOthers ? marketTrades : pairSettled ? marketTrades.filter(marketInPair) : [];
   /**
@@ -2011,8 +2126,9 @@ export function TradeScreen() {
   const counts = useMemo(() => {
     const c: Record<Tab, number> = {open: 0, recent: 0};
     const add = (bucket: OrderBucket, at: number) => {
+      // An open order is counted on Open alone — it is never part of Recently, which is history.
       if (bucket === 'open') c.open += 1;
-      if (inRecentWindow(at)) c.recent += 1;
+      else if (inRecentWindow(at)) c.recent += 1;
     };
     visibleOrders.forEach((o) => add(orderBucket(effectiveStatus(o, cancelledUids)), placedAt(o)));
     // One per SCHEDULE. Counting parts made a ten-part TWAP look like ten open orders.
@@ -2025,7 +2141,7 @@ export function TradeScreen() {
   const ordersFor = (which: Tab) =>
     which === 'open'
       ? visibleOrders.filter((o) => orderBucket(effectiveStatus(o, cancelledUids)) === 'open')
-      : visibleOrders;
+      : visibleOrders.filter((o) => orderBucket(effectiveStatus(o, cancelledUids)) !== 'open');
   const openUids = visibleOrders.filter((o) => effectiveStatus(o, cancelledUids) === 'open').map((o) => o.uid);
   const TABS: {key: Tab; label: string}[] = [
     {key: 'open', label: t('vault.orders_open_short')},
@@ -2075,9 +2191,19 @@ export function TradeScreen() {
   // (no Uniswap market prices them) and the savings share has no pool either, so those pairs offer
   // the intent modes only.
   const marketable = pairAmmLiquid;
+  // Limit and TWAP are CoW INTENT orders; a network with no intent adapter registered (Robinhood has
+  // only the AMM) cannot place them, so those modes are not offered there.
+  const intentable = intentAdapters(network).length > 0;
+  // Keep the selected order type to one the network/pair actually supports: no AMM → no Market, no
+  // intent adapter → no Limit/TWAP. If the current mode falls out of that set, drop to the first
+  // that is still available.
   useEffect(() => {
-    if (!marketable && mode === 'Market') setMode('Limit');
-  }, [marketable, mode]);
+    const avail: Mode[] = [
+      ...(marketable ? (['Market'] as Mode[]) : []),
+      ...(intentable ? (['Limit', 'TWAP'] as Mode[]) : []),
+    ];
+    if (avail.length && !avail.includes(mode)) setMode(avail[0]);
+  }, [marketable, intentable, mode]);
   // Market spends the vault balance and tops up from the positions by itself, so a named source has
   // no meaning there.
   useEffect(() => {
@@ -2127,8 +2253,12 @@ export function TradeScreen() {
 
   const MODES: {key: Mode; label: string}[] = [
     ...(marketable ? [{key: 'Market' as Mode, label: t('vault.market')}] : []),
-    {key: 'Limit', label: t('vault.limit')},
-    {key: 'TWAP', label: t('vault.twap')},
+    ...(intentable
+      ? [
+          {key: 'Limit' as Mode, label: t('vault.limit')},
+          {key: 'TWAP' as Mode, label: t('vault.twap')},
+        ]
+      : []),
   ];
   /**
    * Who settles the order type currently selected.
@@ -2212,6 +2342,11 @@ export function TradeScreen() {
    */
   const BAR_ZONE = 140;
   const BAR_THRESHOLD = 8;
+  // How far the finger must travel in ONE direction, since the last change, before the bar flips.
+  // Eight points was too little — a drag's natural small reversals each cleared it, so the bar
+  // flickered show/hide mid-scroll. A deliberate run is tens of points; this is the hysteresis that
+  // tells the two apart.
+  const BAR_REVEAL = 36;
   const showBar = (hide: boolean) => {
     if (barHidden.current === hide) return;
     barHidden.current = hide;
@@ -2239,7 +2374,9 @@ export function TradeScreen() {
       return;
     }
     const dy = y - barLast.current;
-    if (Math.abs(dy) < BAR_THRESHOLD) return;
+    // Re-anchor and act only after a deliberate run (BAR_REVEAL), so small back-and-forth within a
+    // drag neither re-anchors nor flips the bar — that back-and-forth was the flashing.
+    if (Math.abs(dy) < BAR_REVEAL) return;
     barLast.current = y;
     // At the very end, leave it as it is. Momentum can still deliver a frame or two of reversal
     // after the clamp — the deceleration settling — and the end of the list is the last place the
@@ -2788,7 +2925,9 @@ export function TradeScreen() {
       )});
       }
     for (const x of failedSwaps.filter(({a}) =>
-      which === 'open' ? a.status === 'submitted' : true,
+      // Open: the in-flight ones. Recently: only those that have come to rest (reverted/refused),
+      // never a swap still submitting — an in-flight swap is an open order, not history.
+      which === 'open' ? a.status === 'submitted' : a.status !== 'submitted',
     )) {
       const {a, trade: tr} = x;
       const leg = tr!.buy ? tr!.bought : tr!.sold;
@@ -2895,6 +3034,22 @@ export function TradeScreen() {
                   <Text style={styles.pairText}>{displaySymbol(quoteSym)}</Text>
                 </Pressable>
               </View>
+              {/* A tap opens the full position — amount, cost, today's P&L, every figure — as a
+                  sheet. A pie mark, not the day's number: a figure in dollars up here read as the
+                  asset's price, which is the one thing it is not. Always present on a pair, even
+                  before there is a position: the sheet then simply reads zeros. */}
+              <Pressable
+                style={styles.positionBtn}
+                onPress={() => setShowPosition(true)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel={t('mobile.trade.position')}>
+                <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+                  <Ellipse cx={12} cy={6} rx={6.5} ry={2.6} stroke={c.subtext} strokeWidth={2} />
+                  <Path d="M5.5 6v4c0 1.44 2.91 2.6 6.5 2.6s6.5-1.16 6.5-2.6V6" stroke={c.subtext} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                  <Path d="M5.5 10v4c0 1.44 2.91 2.6 6.5 2.6s6.5-1.16 6.5-2.6v-4" stroke={c.subtext} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                </Svg>
+              </Pressable>
             </>
           ) : null}
         </View>
@@ -3036,9 +3191,10 @@ export function TradeScreen() {
                   which sees no clock. The ⋯ menu carries it too, for the pages that have no
                   orders card at all. */}
               <Pressable
-                // Always opens on ALL assets — the history button is the route to the whole record
-                // (and to other pairs / cancelled orders), so it is never pre-filtered to this pair.
-                onPress={() => nav.navigate('OrderHistory')}
+                // Opens pre-filtered to the asset in front of the user — the record of THIS pair is
+                // what they are most likely after from here. It is a filter and not a lock: the
+                // page's own asset chip reaches the whole record (other pairs, cancelled orders).
+                onPress={() => nav.navigate('OrderHistory', {symbol: baseSym})}
                 hitSlop={10}
                 accessibilityRole="button"
                 accessibilityLabel={t('mobile.trade.order_history')}>
@@ -3217,7 +3373,7 @@ export function TradeScreen() {
                       of them to do it. "0" said nothing and read as a price of nothing. Formatted
                       with the same precision rule the fields use, so typing over it does not
                       change how many digits are shown. */}
-                  <TextInput style={styles.fieldInput} keyboardType="decimal-pad" placeholder={poolPrice && poolPrice > 0 ? toField(poolPrice) : '0'} placeholderTextColor={c.subtext} value={price} onChangeText={(v) => { setPrice(v); setPriceEdited(true); }} {...priceCaret} onFocus={(e) => { priceCaret.onFocus?.(e); setPriceEdited(true); }} />
+                  <TextInput style={styles.fieldInput} keyboardType="decimal-pad" placeholder={livePoolPrice && livePoolPrice > 0 ? toField(livePoolPrice) : '0'} placeholderTextColor={c.subtext} value={price} onChangeText={(v) => { setPrice(v); setPriceEdited(true); }} {...priceCaret} onFocus={(e) => { priceCaret.onFocus?.(e); setPriceEdited(true); }} />
                 </View>
               </View>
             ) : null}
@@ -3254,28 +3410,25 @@ export function TradeScreen() {
               * there is an amount to apply it to — a floor of zero is not information.
               */}
             {mode === 'Market' ? (
-              <View style={styles.quoteBox}>
-                {/* The one line here that is a control: tapping it picks the tolerance, and the
-                    minimum below re-reads from it. */}
-                <Pressable style={[styles.quoteLine, styles.quoteLineTight]} onPress={() => setPicker('slippage')} hitSlop={6}>
-                  {/* The figure right after the words, not pushed to the far edge.
-                      It is a SETTING the user picks, not a quoted amount — the line reads
-                      "Max slippage 2%" as one phrase, and holding it apart put the tappable half
-                      of a control a column away from its label. The minimum below is a quoted
-                      figure and keeps the right-hand column, where every amount in the app is
-                      read. */}
+              /* One line: the Max-slippage control on the left (tap to change it), the resulting
+                 Min received on the right — net of BOTH the slippage tolerance and the 0.2% Bitty
+                 fee, so it agrees with the fee line below. */
+              <View style={[styles.quoteBox, styles.quoteLine]}>
+                <Pressable onPress={() => setPicker('slippage')} hitSlop={6}>
                   <Text style={styles.quoteLabel}>
                     {t('mobile.trade.max_slippage')}{' '}
                     <Text style={[styles.quoteValue, styles.quoteLink]}>{slippage / 100}%</Text>
                   </Text>
                 </Pressable>
-                {Number(receiveInput) > 0 ? (
-                  <View style={styles.quoteLine}>
-                    <Text style={styles.quoteLabel}>{t('mobile.trade.min_received')}</Text>
+                {mktQuote ? (
+                  <Text style={styles.quoteLabel}>
+                    {t('mobile.trade.min_received')}{' '}
                     <Text style={styles.quoteValue}>
-                      {fmtShort(Number(receiveInput) * (1 - slippage / 10000))} {displaySymbol(recvSym)}
+                      {/* The real floor from the Universal route quote — net of price impact, pool
+                          fees and slippage — not price × amount, which ignored depth. */}
+                      {fmtQuote(Number(mktQuote.guard))} {displaySymbol(recvSym)}
                     </Text>
-                  </View>
+                  </Text>
                 ) : null}
               </View>
             ) : null}
@@ -3319,6 +3472,29 @@ export function TradeScreen() {
 
             {status === 'error' && err ? <Text style={styles.err} selectable>{err}</Text> : null}
 
+            {/* Bitty's trading fee, right above the action so it is the last thing read before
+                confirming. The rate sits with the label on the left ("Bitty fee 0.2%", as the
+                slippage line reads); the right-hand column carries only the amount + token it works
+                out to in the quote coin — blank until there is an amount to apply it to. */}
+            {(() => {
+              const quoteNotional =
+                (shownSide === 'buy' ? Number(amount) : Number(receiveInput)) || 0;
+              const fee = quoteNotional * PARTNER_FEE;
+              return (
+                <View style={[styles.quoteLine, styles.feeLine]}>
+                  <Text style={styles.quoteLabel}>
+                    {t('mobile.trade.bitty_fee')}{' '}
+                    <Text style={styles.quoteValue}>{(PARTNER_FEE * 100).toFixed(1)}%</Text>
+                  </Text>
+                  {fee > 0 ? (
+                    <Text style={styles.quoteValue}>
+                      {fmtFee(fee)} {displaySymbol(quoteSym)}
+                    </Text>
+                  ) : null}
+                </View>
+              );
+            })()}
+
             <ConfirmButton
               onPress={onSubmit}
               disabled={!canConfirm}
@@ -3330,6 +3506,39 @@ export function TradeScreen() {
             />
         </View>
       </FormSheet>
+      {/* The full position, opened from the Today P&L on the header line — amount, cost basis,
+          average price, realized/unrealized, all of it, which the header could only summarise. */}
+      <Sheet
+        visible={showPosition}
+        title={t('mobile.trade.position')}
+        onClose={() => setShowPosition(false)}
+        height={Math.round(screenHeight * 0.618)}>
+        {/* Space below the title/close row so the figures do not sit tight under it. A pair with no
+            position yet still opens — the panel reads zeros rather than vanishing. While the fetch
+            is still out it reads dashes instead: zeros that flip to numbers look like a change. */}
+        <View style={{marginTop: 16}}>
+          <PositionPanel
+            loading={position === undefined}
+            position={
+              position ?? {
+                symbol: baseSym,
+                amount: 0,
+                price: 0,
+                marketValue: 0,
+                avgPrice: 0,
+                costBasis: 0,
+                unrealizedPnl: 0,
+                realizedPnl: 0,
+                pnlPct: 0,
+                todayPnl: 0,
+                change24h: 0,
+              }
+            }
+            portfolioValue={portfolioValue}
+            bare
+          />
+        </View>
+      </Sheet>
       {/* A TWAP's terms: what it was placed on, as against the parts panel's what has happened.
           Read once and then rarely, which is why they are a tap away rather than six lines above
           the only part of the order that is still moving. */}
@@ -3385,6 +3594,8 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   pair: {flexDirection: 'row', alignItems: 'center', flexShrink: 1},
   pairPart: {flexDirection: 'row', alignItems: 'center', gap: 5},
   pairText: {color: c.text, fontSize: 17, fontWeight: '700'},
+  // The position icon on the header line, right-aligned, tappable — opens the full position sheet.
+  positionBtn: {flexShrink: 0, paddingLeft: 12},
   pairSlash: {color: c.subtext, fontSize: 17, fontWeight: '600', marginHorizontal: 6},
   card: {backgroundColor: c.card, borderRadius: 20, padding: 16, gap: 0},
   catWrap: {marginTop: -4, marginBottom: -4},
@@ -3487,6 +3698,8 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   // rows above rather than looking like another control.
   quoteBox: {gap: 6, paddingHorizontal: 4},
   quoteLine: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10},
+  // The Bitty-fee line sits just above the confirm button; a little breathing room on each side.
+  feeLine: {paddingHorizontal: 4, marginTop: 2, marginBottom: 2},
   // A line whose value sits with its label rather than in the right-hand column.
   quoteLineTight: {justifyContent: 'flex-start'},
   quoteLabel: {color: c.subtext, fontSize: 13},

@@ -15,6 +15,7 @@
  *    total rendered as a dash. Asking it from a server works; asking it from here does not.
  */
 import {API_BASE, apiFetch, type Network} from '@/core/chain';
+import {displayFx, CURRENCY_SYMBOL} from '@/core/currency-store';
 
 export type PriceMap = Map<string, number>; // SYMBOL -> usd
 
@@ -118,10 +119,26 @@ export function usdValue(amount: number, symbol: string, prices: PriceMap): numb
  */
 export function fmtUsd(v: number | null): string {
   if (v == null) return '';
-  const abs = Math.abs(v);
+  /*
+   * The argument stays a DOLLAR figure — every price in the system is one — and the display
+   * currency is applied here, at the last moment, from the Settings choice (see currency-store).
+   * Converting in one place means a screen can never mix currencies, and a missing rate degrades
+   * to printing dollars rather than to a wrong number.
+   */
+  const {currency, rate} = displayFx();
+  const n = v * rate;
+  const abs = Math.abs(n);
+  // Currencies with no everyday minor unit: ¥1,234.00 reads as a mistake where $1,234.00 does not.
+  const wholeUnit = currency === 'JPY' || currency === 'KRW' || currency === 'VND' || currency === 'IDR';
   const digits: Intl.NumberFormatOptions =
     abs > 0 && abs < 0.01
       ? {maximumSignificantDigits: 3}
-      : {minimumFractionDigits: 2, maximumFractionDigits: abs >= 1 ? 2 : 4};
-  return v.toLocaleString(undefined, {style: 'currency', currency: 'USD', ...digits});
+      : wholeUnit && abs >= 1
+        ? {maximumFractionDigits: 0}
+        : {minimumFractionDigits: 2, maximumFractionDigits: abs >= 1 ? 2 : 4};
+  // The symbol is OURS, not Intl's: Hermes has no currency-symbol data, so style:'currency' printed
+  // the ISO code ("CNY"). Format the number on its own (style:'decimal', which Hermes does support)
+  // and prepend the sign, with the minus ahead of the symbol so a loss reads "-¥12", not "¥-12".
+  const body = Math.abs(n).toLocaleString(undefined, {style: 'decimal', ...digits});
+  return `${n < 0 ? '-' : ''}${CURRENCY_SYMBOL[currency] ?? ''}${body}`;
 }

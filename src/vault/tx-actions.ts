@@ -8,8 +8,9 @@ import type {Network} from '@/core/chain';
 import {assetMeta} from '@/core/assets';
 import {protocolDisplayName, protocolMeta} from '@/core/protocols';
 import {displaySymbol, fmtNum} from '@/core/format';
-import {formatUnits} from 'viem';
+import {formatUnits, type Address} from 'viem';
 import type {CowOrder} from '@/vault/limit';
+import type {TransferRow} from '@/vault/transactions';
 
 export type VaultAction = {name: string; args: Record<string, string | string[]>};
 
@@ -23,6 +24,48 @@ export function describeOrder(o: CowOrder, network: Network): string {
   const buy = assetMeta(network, o.buyToken as `0x${string}`);
   const amt = (raw: string, dec: number) => fmtNum(Number(formatUnits(BigInt(raw), dec)));
   return `${amt(o.sellAmount, sell.decimals)} ${displaySymbol(sell.symbol)} → ${amt(o.buyAmount, buy.decimals)} ${displaySymbol(buy.symbol)}`;
+}
+
+/**
+ * A market swap reconstructed from the decoded calldata, when the transfer feed could not pair its
+ * legs into one — the `{sold, bought}` shape {netTrade} returns, so a history row can draw it the
+ * same way.
+ *
+ * The feed is built from `Transfer` logs for the indexed tokens, and on Sepolia the bought WETH leg
+ * is not indexed at all — the chain has two WETH contracts and the vault's is not the router's — so
+ * a market buy arrives as the sold-token out-legs and nothing coming back, which the transfer
+ * heuristic reads as a plain send. The `marketSell`/`marketBuy` call names both tokens and both
+ * amounts, so the trade is named from there instead: the sold side is the amount asked (fee
+ * included), and the bought side is the real in-leg when one survived, else the order's own floor
+ * (`buyAmountMin`) — the honest figure a trade that moved money we could not fully see can report.
+ */
+export function swapFromActions(
+  actions: VaultAction[] | undefined,
+  network: Network,
+  legs: TransferRow[],
+): {sold: {address: string; symbol: string; amount: number}; bought: {address: string; symbol: string; amount: number}} | null {
+  const swap = (actions ?? []).find((a) => a.name === 'marketSell' || a.name === 'marketBuy');
+  if (!swap) return null;
+  const str = (k: string) => (typeof swap.args[k] === 'string' ? (swap.args[k] as string) : undefined);
+  const sellToken = str('sellToken');
+  const buyToken = str('buyToken');
+  const sellRaw = str('sellAmount') ?? str('sellAmountMax');
+  const buyRaw = str('buyAmountMin') ?? str('buyAmount');
+  if (!sellToken || !buyToken || sellRaw == null || buyRaw == null) return null;
+  try {
+    const sellM = assetMeta(network, sellToken as Address);
+    const buyM = assetMeta(network, buyToken as Address);
+    const lc = (s?: string | null) => (s ?? '').toLowerCase();
+    const inLeg = legs
+      .filter((l) => l.direction === 'in' && lc(l.assetAddress) === lc(buyToken))
+      .reduce((s, l) => s + Number(l.amount ?? 0), 0);
+    return {
+      sold: {address: sellToken, symbol: sellM.symbol, amount: Number(formatUnits(BigInt(sellRaw), sellM.decimals))},
+      bought: {address: buyToken, symbol: buyM.symbol, amount: inLeg > 0 ? inLeg : Number(formatUnits(BigInt(buyRaw), buyM.decimals))},
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** The history tabs an action can belong to; mirrors TransactionsScreen's Category. */

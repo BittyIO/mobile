@@ -57,6 +57,13 @@ const subscribe = (fn: () => void) => {
 /** Re-renders when any network's catalog changes; pair it with `currentCatalog` in an effect. */
 export const useCatalogVersion = (): number => useSyncExternalStore(subscribe, () => version);
 
+/**
+ * The catalog version as a plain value, for non-React code that has to tell whether the rows it
+ * read against are still current — the balance reader starts before the catalog lands and must not
+ * reuse a read taken against the smaller, pre-fetch token set. See {useVaultBalances}.
+ */
+export const catalogVersionNow = (): number => version;
+
 // The API keeps icons relative (same-origin for the web); mobile has no same origin, so prepend the
 // configured base to make them absolute for remote <Image> loading.
 function iconUrl(icon?: string): string | undefined {
@@ -139,10 +146,15 @@ export function currentCatalog(network: Network): Asset[] {
 
 /** Reactive catalog for a network — bundled/cached immediately, refreshed from the API. */
 export function useAssetCatalog(network: Network): Asset[] {
+  // Subscribe to the global catalog version, so a consumer re-reads when ANY screen's fetch changed
+  // the rows — not only when its OWN fetch did. Without this a tab mounted before the change (the
+  // Overview, which stays mounted while the asset list is visited and adds a new asset) kept the old
+  // list until the app was relaunched: its effect below only re-runs on a network switch, and its
+  // own fetch had already resolved against the smaller list.
+  const version = useCatalogVersion();
   const [list, setList] = useState<Asset[]>(() => currentCatalog(network));
   useEffect(() => {
     let live = true;
-    setList(currentCatalog(network));
     // The merged view, not the raw rows: see {currentCatalog}.
     fetchCatalog(network).then((r) => {
       if (live && r) setList(currentCatalog(network));
@@ -151,6 +163,12 @@ export function useAssetCatalog(network: Network): Asset[] {
       live = false;
     };
   }, [network]);
+  // Resync to the global catalog on a network switch and on every version bump (a fetch anywhere
+  // found new rows). currentCatalog hands back a fresh merged list, so this reflects additions the
+  // moment they land, in every mounted consumer at once.
+  useEffect(() => {
+    setList(currentCatalog(network));
+  }, [network, version]);
   return list;
 }
 

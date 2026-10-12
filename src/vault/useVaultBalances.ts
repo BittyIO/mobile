@@ -4,7 +4,7 @@ import {create} from 'zustand';
 import type {Address} from 'viem';
 import type {Network} from '@/core/chain';
 import {useWallet} from '@/wallet/store';
-import {fetchCatalog, useCatalogVersion} from '@/core/asset-catalog';
+import {catalogVersionNow, fetchCatalog, useCatalogVersion} from '@/core/asset-catalog';
 import {usePending} from '@/vault/pending';
 import {ownerVaultAddress, readVaultBalances, type VaultBalances} from './read';
 
@@ -38,6 +38,14 @@ type Entry = {balances: VaultBalances | null; loading: boolean; error: string | 
 
 const useStore = create<{byKey: Record<string, Entry>}>(() => ({byKey: {}}));
 const inflight = new Map<string, Promise<void>>();
+// The catalog version each in-flight read was STARTED at. A read taken against an older catalog
+// (before a network's rows had loaded — the moment that hid COW, an asset no build bundles) must
+// not be reused once the catalog has grown, so dedup is keyed by version, not by key alone.
+const inflightVersion = new Map<string, number>();
+// A per-key sequence so a stale read that resolves LATE cannot overwrite the fresh one that
+// superseded it — without it, the slower pre-catalog read landing last would restore the 0.
+let seqCounter = 0;
+const lastSeq = new Map<string, number>();
 const keyFor = (network: Network, vault: Address) => `${network}:${vault.toLowerCase()}`;
 
 /**
@@ -55,19 +63,33 @@ const patch = (key: string, next: Partial<Entry>) =>
 
 function load(network: Network, vault: Address): Promise<void> {
   const key = keyFor(network, vault);
+  const version = catalogVersionNow();
   const running = inflight.get(key);
-  if (running) return running;
+  // Reuse an in-flight read only when it was started against the SAME catalog. One started against
+  // an older catalog is stale by definition — the catalog grew since — so let it finish (its result
+  // is ignored below) and start a fresh read against the current rows. This is what turns the
+  // catalog landing after a network switch into a real re-read instead of a no-op.
+  if (running && inflightVersion.get(key) === version) return running;
 
+  const seq = ++seqCounter;
+  lastSeq.set(key, seq);
+  inflightVersion.set(key, version);
   patch(key, {loading: true, error: null});
   // The catalog decides which tokens are read; warming it here means the first read after a cold
   // launch is complete rather than limited to what this build bundles.
   void fetchCatalog(network);
+  const current = () => lastSeq.get(key) === seq;
   const task = readVaultBalances(vault, network)
-    .then((b) => patch(key, {balances: b, error: null}))
-    .catch((e) => patch(key, {error: String((e as Error)?.message ?? e)}))
+    .then((b) => {
+      if (current()) patch(key, {balances: b, error: null});
+    })
+    .catch((e) => {
+      if (current()) patch(key, {error: String((e as Error)?.message ?? e)});
+    })
     .finally(() => {
-      patch(key, {loading: false, at: Date.now()});
-      inflight.delete(key);
+      if (current()) patch(key, {loading: false, at: Date.now()});
+      // Only clear the slot if THIS task still owns it — a fresher read may have replaced it.
+      if (inflight.get(key) === task) inflight.delete(key);
     });
   inflight.set(key, task);
   return task;

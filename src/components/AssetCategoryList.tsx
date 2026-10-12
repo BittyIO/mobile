@@ -72,9 +72,16 @@ export function AssetCategoryList({
    * size, and sorting by balance would shuffle the catalog's own arrangement on every price move.
    */
   funded,
+  /**
+   * The symbols on the user's watch list, for a synthetic "Selected" FIRST tab — the same tab the
+   * Trade directory opens on. Only offered while it has something in it, and it is where the list
+   * lands by default: what someone opens a picker for is nearly always an asset they curated onto
+   * their list, not one of two dozen they have never touched.
+   */
+  selectedSet,
 }: {
   assets: Asset[];
-  renderItem: (asset: Asset, index: number, last: boolean) => React.ReactNode;
+  renderItem: (asset: Asset, index: number, last: boolean, query: string) => React.ReactNode;
   placeholder?: string;
   empty?: string;
   children?: React.ReactNode;
@@ -83,11 +90,13 @@ export function AssetCategoryList({
   search?: boolean;
   categories?: boolean;
   funded?: (asset: Asset) => boolean;
+  selectedSet?: Set<string>;
 }) {
   const {t, company} = useT();
   const c = useColors();
   const styles = useStyles(makeStyles);
-  const [category, setCategory] = useState<AssetCategory>('crypto_native');
+  type Tab = AssetCategory | 'selected';
+  const [category, setCategory] = useState<Tab>('crypto_native');
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
 
@@ -96,11 +105,32 @@ export function AssetCategoryList({
     () => ASSET_CATEGORIES.filter((k) => assets.some((a) => assetCategory(a.category) === k)),
     [assets],
   );
+  // Only while the list and the catalog actually intersect: a watch list carried over from another
+  // network would otherwise put up a tab with nothing under it.
+  const hasSelected = !!selectedSet?.size && assets.some((a) => selectedSet.has(a.symbol));
+  /** One tab's rows: the watch list for "Selected", the catalog's own grouping for the rest. */
+  const rowsFor = React.useCallback(
+    (k: Tab) =>
+      k === 'selected'
+        ? assets.filter((a) => selectedSet?.has(a.symbol))
+        : assets.filter((a) => assetCategory(a.category) === k),
+    [assets, selectedSet],
+  );
   // A category that has emptied out — a chain switch, a catalog that answered — hands back to the
   // first one that exists rather than leaving the list blank under a tab nothing is in.
   useEffect(() => {
-    if (categories.length && !categories.includes(category)) setCategory(categories[0]);
-  }, [categories, category]);
+    const valid: Tab[] = hasSelected ? ['selected', ...categories] : categories;
+    if (valid.length && !valid.includes(category)) setCategory(valid[0]);
+  }, [categories, category, hasSelected]);
+  // Land on "Selected" once it exists — the watch list and the catalog both load after the first
+  // render, so the default cannot be set at mount. Once only, and never over a tab the user has
+  // already chosen by hand (`landedRef` is also set by every manual pick below).
+  const landedRef = useRef(false);
+  useEffect(() => {
+    if (landedRef.current || !hasSelected) return;
+    landedRef.current = true;
+    setCategory('selected');
+  }, [hasSelected]);
 
   /**
    * Ticker matches first, then names.
@@ -145,10 +175,7 @@ export function AssetCategoryList({
       ),
     [funded],
   );
-  const inCategory = useMemo(
-    () => sortRows(assets.filter((a) => assetCategory(a.category) === category)),
-    [assets, category, sortRows],
-  );
+  const inCategory = useMemo(() => sortRows(rowsFor(category)), [rowsFor, category, sortRows]);
 
   // A query in progress spans every category, so the tabs stop applying while one is typed.
   const rows = query.trim() ? results : inCategory;
@@ -165,8 +192,10 @@ export function AssetCategoryList({
   const pagerX = useRef(new Animated.Value(0)).current;
   const [pageW, setPageW] = useState(0);
   const [pageH, setPageH] = useState<Record<string, number>>({});
-  const pages = categories.length > 0 ? categories : (['crypto_native'] as AssetCategory[]);
-  const pick = (k: AssetCategory) => {
+  const realPages = categories.length > 0 ? categories : (['crypto_native'] as AssetCategory[]);
+  const pages: Tab[] = hasSelected ? ['selected', ...realPages] : realPages;
+  const pick = (k: Tab) => {
+    landedRef.current = true;
     setCategory(k);
     const i = pages.indexOf(k);
     if (i >= 0 && pageW > 0) pagerRef.current?.scrollTo({x: i * pageW, animated: true});
@@ -174,7 +203,10 @@ export function AssetCategoryList({
   const settle = (x: number) => {
     if (pageW <= 0) return;
     const k = pages[Math.max(0, Math.min(pages.length - 1, Math.round(x / pageW)))];
-    if (k && k !== category) setCategory(k);
+    if (k && k !== category) {
+      landedRef.current = true;
+      setCategory(k);
+    }
   };
   const heights = pages.map((k) => pageH[k]);
   const sized = pages.length > 1 && pageW > 0 && heights.every((h) => h != null);
@@ -201,7 +233,7 @@ export function AssetCategoryList({
       <Text style={styles.empty}>{empty ?? t('vault.no_assets')}</Text>
     ) : (
       within.map((a, i) => (
-        <React.Fragment key={a.address}>{renderItem(a, i, i === within.length - 1)}</React.Fragment>
+        <React.Fragment key={a.address}>{renderItem(a, i, i === within.length - 1, query.trim())}</React.Fragment>
       ))
     );
 
@@ -234,12 +266,17 @@ export function AssetCategoryList({
             // is for the lists where it says nothing at all.
             <View style={styles.tabs}>
               <CategoryTabs
-                tabs={categories.map((k) => ({
+                tabs={pages.map((k) => ({
                   key: k,
-                  label: k === 'crypto_native' ? t('mobile.home.category_crypto') : t(`vault.category_${k}`),
+                  label:
+                    k === 'selected'
+                      ? t('vault.selected')
+                      : k === 'crypto_native'
+                        ? t('mobile.home.category_crypto')
+                        : t(`vault.category_${k}`),
                 }))}
                 value={category}
-                onChange={swipe ? pick : setCategory}
+                onChange={pick}
               />
             </View>
           ) : (
@@ -291,7 +328,7 @@ export function AssetCategoryList({
                       const h = e.nativeEvent.layout.height;
                       setPageH((prev) => (prev[k] === h ? prev : {...prev, [k]: h}));
                     }}>
-                    {list(sortRows(assets.filter((a) => assetCategory(a.category) === k)))}
+                    {list(sortRows(rowsFor(k)))}
                   </View>
                 </View>
               ))}

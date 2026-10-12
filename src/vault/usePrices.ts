@@ -1,6 +1,7 @@
 import {useEffect, useMemo, useState} from 'react';
 import type {Network} from '@/core/chain';
 import {knownAssets} from '@/core/assets';
+import {useCatalogVersion} from '@/core/asset-catalog';
 import {fetchPrices, type PriceMap} from '@/core/prices';
 
 /**
@@ -16,12 +17,18 @@ import {fetchPrices, type PriceMap} from '@/core/prices';
  */
 export function usePrices(network: Network, nonce = 0, symbols?: string[]): PriceMap {
   const [prices, setPrices] = useState<PriceMap>(new Map());
+  // On a cold launch the first render runs BEFORE the live catalog has answered, so the fallback
+  // list is the bundled one — and without this subscription it stayed that way: the memo below
+  // never recomputed, a catalog-only asset (every Base tokenized stock) was never asked for, and
+  // the Limit sheet seeded no price for it. The version bump re-derives the list once the rows land.
+  const catalogVersion = useCatalogVersion();
   // Sorted and joined so a re-render with the same set does not re-fetch.
   const key = useMemo(
     // `knownAssets`, not the bundled table: the fallback has to cover a token the catalog added
     // after this build, or it renders with a balance and no value beside it.
     () => [...new Set(['ETH', ...(symbols ?? knownAssets(network).map((a) => a.symbol))])].sort().join(','),
-    [network, symbols],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogVersion invalidates knownAssets()
+    [network, symbols, catalogVersion],
   );
   useEffect(() => {
     let live = true;
