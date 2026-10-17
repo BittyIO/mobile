@@ -10,7 +10,8 @@ import {useVaults} from '@/core/vault-store';
 import {useNetwork} from '@/core/network-store';
 import {useWallet} from '@/wallet/store';
 import {ownerVaultAddress} from '@/vault/read';
-import {fetchRemovals, fetchWhitelist, removeWhitelisted, type WhitelistedRecipient} from '@/vault/payments';
+import {fetchWhitelist, removeWhitelisted, type WhitelistedRecipient} from '@/vault/payments';
+import {WHITELIST_STATUS} from '@/core/abi';
 import {useVaultWrite} from '@/components/useVaultWrite';
 import {shortAddress} from '@/core/format';
 import {useRecipientNames, recipientName} from '@/core/recipient-names';
@@ -47,13 +48,13 @@ export function SelectRecipientScreen() {
   const vaults = useVaults((s) => s.vaults);
   const activeIndex = useVaults((s) => s.activeIndex);
 
-  const [book, setBook] = useState<WhitelistedRecipient[]>([]);
   /**
-   * Entries whose removal is queued, and when it lands. An entry the vault can already pay is not
-   * taken off at once — it stays payable until then, and a lock voids the removal — so its row says
-   * so instead of offering the ✕ again, which would only start the wait over.
+   * The book as the vault reports it, each entry with its status. An entry whose removal is queued
+   * is not taken off at once — it stays payable until then, and a lock voids the removal — so its
+   * row says when instead of offering the ✕ again, which would only start the wait over. One still
+   * waiting out its timelock says when it becomes payable, and one a lock voided says it never will.
    */
-  const [removals, setRemovals] = useState<Record<string, number>>({});
+  const [book, setBook] = useState<WhitelistedRecipient[]>([]);
   /**
    * Loading until the chain answers.
    *
@@ -68,15 +69,8 @@ export function SelectRecipientScreen() {
     let live = true;
     setLoading(true);
     fetchWhitelist(vault, network)
-      .then(async (rows) => {
-        const queued = await fetchRemovals(
-          vault,
-          network,
-          rows.map((r) => r.id),
-        );
-        if (!live) return;
-        setBook(rows);
-        setRemovals(queued);
+      .then((rows) => {
+        if (live) setBook(rows);
       })
       .catch(() => live && setBook([]))
       .finally(() => live && setLoading(false));
@@ -180,7 +174,15 @@ export function SelectRecipientScreen() {
         ) : (
           book.map((b, i) => {
             const named = recipientName(names, network, b.recipientAddress);
-            const removeAt = removals[b.id];
+            const removeAt = b.status === WHITELIST_STATUS.removalQueued ? b.removeAt : undefined;
+            const onDate = (at: number) => t('mobile.vault.on_date', {date: new Date(at * 1000).toLocaleDateString()});
+            const note = removeAt
+              ? t('mobile.payments.removal_pending', {when: onDate(removeAt)})
+              : b.status === WHITELIST_STATUS.pending && b.effectiveAt
+                ? t('mobile.payments.payable_from', {when: onDate(b.effectiveAt)})
+                : b.status === WHITELIST_STATUS.voided
+                  ? t('mobile.payments.voided_by_lock')
+                  : null;
             return (
               <Pressable
                 key={b.id}
@@ -200,11 +202,9 @@ export function SelectRecipientScreen() {
                       {shortAddress(b.recipientAddress)}
                     </Text>
                   </View>
-                  {removeAt ? (
-                    <Text style={styles.sub} numberOfLines={1}>
-                      {t('mobile.payments.removal_pending', {
-                        when: t('mobile.vault.on_date', {date: new Date(removeAt * 1000).toLocaleDateString()}),
-                      })}
+                  {note ? (
+                    <Text style={[styles.sub, b.status === WHITELIST_STATUS.voided && styles.subWarn]} numberOfLines={1}>
+                      {note}
                     </Text>
                   ) : null}
                 </View>
@@ -353,6 +353,7 @@ const makeStyles = (c: Colors) =>
     entryName: {color: c.text, fontSize: 16, fontWeight: '600', flexShrink: 1},
     addrMuted: {color: c.subtext, fontSize: 13, fontVariant: ['tabular-nums']},
     sub: {color: c.subtext, fontSize: 12, fontVariant: ['tabular-nums']},
+    subWarn: {color: c.danger},
     addr: {color: c.text, fontSize: 16, fontWeight: '600', fontVariant: ['tabular-nums']},
     emptyText: {color: c.subtext, fontSize: 15},
     centered: {justifyContent: 'center'},

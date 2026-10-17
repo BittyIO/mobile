@@ -5,10 +5,10 @@
  * Scheduled payments and the operator-proposed-send flow are GONE: the vault redesign removed both
  * from the contract, so the functions that drove those screens went with the screens.
  */
-import {parseUnits, zeroAddress, type Address, type Hex} from 'viem';
+import {maxUint256, parseUnits, zeroAddress, type Address, type Hex} from 'viem';
 import type {Signer} from '@/wallet/signer';
 import {apiFetch, apiUrl, publicClientFor, type Network} from '@/core/chain';
-import {VAULT_PAYMENTS_ABI, VAULT_PAYMENTS_V103_ABI, VAULT_RISK_ABI} from '@/core/abi';
+import {VAULT_PAYMENTS_ABI, VAULT_PAYMENTS_V103_ABI, VAULT_RISK_ABI, WHITELIST_STATUS} from '@/core/abi';
 import {isLegacy} from '@/core/vault-generation';
 import {assetMeta} from '@/core/assets';
 import {relayVaultWrite, relayVaultMulticall, type VaultCall} from './relay';
@@ -140,10 +140,20 @@ export async function sendWithWhitelist(o: {
 // ---- Whitelist / address book ----
 
 /**
- * An address-book entry as the server lists it. `allowedAsset` only ever appears on a v1.0.3 vault's
- * entries, and the app no longer narrows one: a v1.0.0 entry accepts any asset.
+ * An address-book entry. On v1.0.0 it is read from the vault itself and carries what the contract
+ * says about it: its `status` (WHITELIST_STATUS), when it becomes payable, and when a queued removal
+ * lands (unix seconds, 0 for none). An entry from the server — every v1.0.3 one, or a v1.0.0 one when
+ * the chain read failed — has none of those. `allowedAsset` only ever appears on a v1.0.3 entry, and
+ * the app no longer narrows one: a v1.0.0 entry accepts any asset.
  */
-export type WhitelistedRecipient = {id: string; recipientAddress: string; allowedAsset?: string};
+export type WhitelistedRecipient = {
+  id: string;
+  recipientAddress: string;
+  allowedAsset?: string;
+  status?: number;
+  effectiveAt?: number;
+  removeAt?: number;
+};
 
 /**
  * The call that writes `recipient` into the book. v1.0.0 takes the address alone; v1.0.3 also names
@@ -218,7 +228,34 @@ export async function sendToWhitelisted(o: {
   return hash;
 }
 
+/**
+ * The address book. On v1.0.0 it is read straight from the vault — the list is the vault's way out
+ * after a key leaks, so it comes from the contract rather than an indexer that can lag or be wrong —
+ * in one call, with removed entries left out. The server's list is the fallback: always for v1.0.3,
+ * which has no such read, and for v1.0.0 only when the chain cannot be reached.
+ */
 export async function fetchWhitelist(vault: Address, network: Network): Promise<WhitelistedRecipient[]> {
+  if (!isLegacy()) {
+    try {
+      const [, entries] = await publicClientFor(network).readContract({
+        address: vault,
+        abi: VAULT_PAYMENTS_ABI,
+        functionName: 'getWhitelist',
+        args: [1n, maxUint256],
+      });
+      return entries
+        .filter((e) => e.status !== WHITELIST_STATUS.removed)
+        .map((e) => ({
+          id: e.id.toString(),
+          recipientAddress: e.recipient,
+          status: e.status,
+          effectiveAt: Number(e.effectiveAt),
+          removeAt: Number(e.removeAt),
+        }));
+    } catch {
+      // fall through to the server's list
+    }
+  }
   try {
     const res = await apiFetch(apiUrl(`/api/ethereum/vaults/whitelisted-recipients/${vault}`, network));
     if (!res.ok) return [];
@@ -230,41 +267,26 @@ export async function fetchWhitelist(vault: Address, network: Network): Promise<
 }
 
 /**
- * When each entry's queued removal lands (unix seconds), keyed by id — only the entries with one.
- *
- * On v1.0.0, removing an entry the vault can already pay does not take it off at once: it waits out
- * the timelock, staying payable until then, and a lock voids it. So the ✕ may only have queued it,
- * and the book has to say so rather than show the entry as if nothing had happened. v1.0.3 removes
- * at once, so there is nothing to read there. An empty answer on any failure: this only annotates.
- */
-export async function fetchRemovals(vault: Address, network: Network, ids: string[]): Promise<Record<string, number>> {
-  if (isLegacy() || ids.length === 0) return {};
-  try {
-    const ats = await publicClientFor(network).readContract({
-      address: vault,
-      abi: VAULT_PAYMENTS_ABI,
-      functionName: 'getWhitelistedRecipientRemovals',
-      args: [ids.map((id) => BigInt(id))],
-    });
-    const out: Record<string, number> = {};
-    ats.forEach((at, i) => {
-      if (at > 0n) out[ids[i]] = Number(at);
-    });
-    return out;
-  } catch {
-    return {};
-  }
-}
-
-/**
  * The entries a forever lock may name as its way out: the ones the vault can pay right now.
  *
- * Asked of the contract itself, by simulating `foreverLock(id)` as the owner, rather than rebuilt
- * here from windows and lock epochs: the vault's own rule is the one that decides, and a copy of it
- * in the app is one that can drift. A simulation changes nothing.
+ * Both answers come from the contract, never from windows and lock epochs rebuilt here, since a copy
+ * of the vault's rule in the app is one that can drift. An entry read from the vault already carries
+ * the contract's verdict: payable, or payable until a queued removal lands. One that came from the
+ * server instead is asked by simulating `foreverLock(id)` as the owner, which changes nothing.
  */
-export async function fetchEscapeIds(vault: Address, owner: Address, network: Network, ids: string[]): Promise<string[]> {
-  if (isLegacy() || ids.length === 0) return [];
+export async function fetchEscapeIds(
+  vault: Address,
+  owner: Address,
+  network: Network,
+  book: WhitelistedRecipient[],
+): Promise<string[]> {
+  if (isLegacy() || book.length === 0) return [];
+  if (book.every((b) => b.status !== undefined)) {
+    return book
+      .filter((b) => b.status === WHITELIST_STATUS.payable || b.status === WHITELIST_STATUS.removalQueued)
+      .map((b) => b.id);
+  }
+  const ids = book.map((b) => b.id);
   const client = publicClientFor(network);
   const ok = await Promise.all(
     ids.map((id) =>

@@ -126,7 +126,8 @@ export const VAULT_TRADE_ABI = parseAbi([
  * The whitelist on v1.0.0: an entry is an address and nothing else — it accepts any asset, since a
  * locked vault pays out only through these and cannot trade into a narrower one. Removing an entry
  * the vault can already pay waits out the timelock (a lock voids it), so `removeWhitelistedRecipients`
- * may only QUEUE it: `getWhitelistedRecipientRemovals` says when each lands, 0 where none waits.
+ * may only QUEUE it. `getWhitelist` reads the whole book from state, each entry with its status
+ * (WHITELIST_STATUS) and the times it becomes payable and, if queued, is removed.
  */
 export const VAULT_PAYMENTS_ABI = parseAbi([
   'function send(address recipient,address asset,uint256 amount,address[] withdrawProtocols,uint256[] withdrawAmounts)',
@@ -135,8 +136,17 @@ export const VAULT_PAYMENTS_ABI = parseAbi([
   'function addWhitelistedRecipient(address recipient) returns (uint256 id)',
   'function removeWhitelistedRecipients(uint256[] ids)',
   'function sendToWhitelistedRecipient(uint256 id,address asset,uint256 amount,address[] withdrawProtocols,uint256[] withdrawAmounts)',
-  'function getWhitelistedRecipientRemovals(uint256[] ids) view returns (uint64[] removeAts)',
+  'function getWhitelist(uint256 fromId,uint256 count) view returns (uint256 lastId,(uint256 id,address recipient,uint64 effectiveAt,uint64 removeAt,uint8 status)[] entries)',
 ]);
+
+/** `getWhitelist`'s per-entry status, as the vault's WHITELIST_* constants. */
+export const WHITELIST_STATUS = {
+  removed: 0, // gone, or never issued
+  pending: 1, // still waiting out the timelock it was added under
+  payable: 2, // can be paid now, lock or no lock
+  voided: 3, // a lock landed before it matured, so it never will
+  removalQueued: 4, // payable until `removeAt`, then gone
+} as const;
 
 /** v1.0.3's whitelist entry also names the one asset it may be paid in; the app always passes "any". */
 export const VAULT_PAYMENTS_V103_ABI = parseAbi([

@@ -11,10 +11,12 @@ import {GPV2_SETTLEMENT} from '@/core/cow';
 import {fetchFillTxs} from './limit';
 import type {TransferRow, VaultAction} from './transactions';
 
-// The vault implementation's immutable fee sink — a relayed op pays its gas here, never a user transfer.
-export const BITTY_FEE_COLLECTOR = '0x76dc42c2e0ef4fb02600430cb0d3a68d015c30aa';
-// The Uniswap adapter's fee recipient — a stablecoin sell takes its 0.2% as a second out-leg to here.
-export const ADAPTER_FEE_RECIPIENT = '0x12ee2de7bf086388b1d560eb95e7191edfab9823';
+// The fee Safe: where a relayed op pays its gas (the vault's fee collector) and where the Uniswap
+// adapter takes its 0.2% (a stablecoin sell's second out-leg). Each set also keeps the address that
+// held the role before, since earlier vaults, older adapter clones and past history still pay there.
+const FEE_SAFE = '0x5837c8f4963f694c59e53445c070acb266187bf1';
+export const BITTY_FEE_COLLECTORS = new Set([FEE_SAFE, '0x76dc42c2e0ef4fb02600430cb0d3a68d015c30aa']);
+export const ADAPTER_FEE_RECIPIENTS = new Set([FEE_SAFE, '0x12ee2de7bf086388b1d560eb95e7191edfab9823']);
 
 // Yield receipt tokens a stake mints to the vault (Sky sUSDS, Lido stETH) — a tx moving one is a
 // stake/unstake into Flexible Yield ("Earn"), never a swap.
@@ -86,7 +88,7 @@ export function splitMarketSwap(legs: TransferRow[]): TransferRow[] {
   return legs.filter(
     (l) =>
       swapCps.has(lc(l.counterparty)) ||
-      (l.direction === 'out' && lc(l.counterparty) === ADAPTER_FEE_RECIPIENT && soldTokens.has(lc(l.assetAddress))),
+      (l.direction === 'out' && ADAPTER_FEE_RECIPIENTS.has(lc(l.counterparty)) && soldTokens.has(lc(l.assetAddress))),
   );
 }
 
@@ -174,7 +176,7 @@ export function tradeFeedFromTransfers(legs: TransferRow[]): TradeFeed {
   const trades: MarketTrade[] = [];
   const cowFills = new Map<string, number>();
   for (const [txHash, group] of groups) {
-    const opLegs = group.filter((l) => !(l.direction === 'out' && lc(l.counterparty) === BITTY_FEE_COLLECTOR));
+    const opLegs = group.filter((l) => !(l.direction === 'out' && BITTY_FEE_COLLECTORS.has(lc(l.counterparty))));
     const swapLegs = splitMarketSwap(opLegs);
     if (swapLegs.length === 0) continue;
     // A swap settled by CoW is a limit or TWAP order being filled, and the orderbook already has

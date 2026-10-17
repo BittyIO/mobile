@@ -85,7 +85,7 @@ export function VaultLockScreen() {
     setChecking(true);
     try {
       const book = await fetchWhitelist(vault, network);
-      const ok = new Set(await fetchEscapeIds(vault, owner as `0x${string}`, network, book.map((b) => b.id)));
+      const ok = new Set(await fetchEscapeIds(vault, owner as `0x${string}`, network, book));
       const usable = book.filter((b) => ok.has(b.id));
       if (usable.length === 0) {
         Alert.alert(t('mobile.vault.forever_lock'), t('mobile.vault.forever_lock_no_escape'));

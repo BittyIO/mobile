@@ -7,6 +7,7 @@
  */
 import {keccak256, stringToHex, type AbiParameter} from 'viem';
 import {CHAIN_ID, type Network} from '@/core/chain';
+import {isLegacy} from '@/core/vault-generation';
 
 // GPv2Settlement — the EIP-712 verifying contract for CoW orders. Same address on every chain.
 export const GPV2_SETTLEMENT = '0x9008D19f58AAbD9eD0D60971565AA8510560ab41' as const;
@@ -98,11 +99,14 @@ export const TWAP_TUPLE: AbiParameter = {
 // The fee-bearing appData a limit order carries — byte-identical to the contract's APP_DATA document,
 // so keccak256(fullAppData) == the intent clone's APP_DATA(). Registering it lets solvers resolve the
 // 0.2% partner fee; the contract requires exactly this appData, so the fee can't be stripped.
-const FEE_RECIPIENT = '0x12EE2de7BF086388B1D560eb95e7191Edfab9823';
+// The recipient is part of those bytes, so it follows the vault generation: v1.0.0's intent protocol
+// pays the fee Safe, while v1.0.3's was built with the earlier recipient and only accepts that one.
+const feeRecipient = () =>
+  isLegacy() ? '0x12EE2de7BF086388B1D560eb95e7191Edfab9823' : '0x5837C8F4963F694C59e53445C070acb266187bF1';
 export function buildLimitAppData(): {hash: `0x${string}`; fullAppData: string} {
   const fullAppData =
     '{"appCode":"BittyVault",' +
-    `"metadata":{"partnerFee":{"bps":20,"recipient":"${FEE_RECIPIENT}"}},` +
+    `"metadata":{"partnerFee":{"bps":20,"recipient":"${feeRecipient()}"}},` +
     '"version":"1.3.0"}';
   return {hash: keccak256(stringToHex(fullAppData)), fullAppData};
 }
@@ -112,7 +116,7 @@ export function buildLimitAppData(): {hash: `0x${string}`; fullAppData: string} 
 export function buildTwapAppData(salt: bigint): {hash: `0x${string}`; fullAppData: string} {
   const fullAppData =
     `{"appCode":"BittyVault","environment":"${salt.toString()}",` +
-    `"metadata":{"partnerFee":{"bps":20,"recipient":"${FEE_RECIPIENT}"}},` +
+    `"metadata":{"partnerFee":{"bps":20,"recipient":"${feeRecipient()}"}},` +
     '"version":"1.3.0"}';
   return {hash: keccak256(stringToHex(fullAppData)), fullAppData};
 }

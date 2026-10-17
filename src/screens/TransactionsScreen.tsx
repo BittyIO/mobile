@@ -15,7 +15,7 @@ import {useVaultTransactions} from '@/vault/useVaultTransactions';
 import type {Operation, TransferRow} from '@/vault/transactions';
 import {TokenIcon} from '@/components/TokenIcon';
 import {Amount} from '@/components/Amount';
-import {splitMarketSwap, netTrade, isReceiptToken, STAKE_TOKENS, SUPPLY_TOKENS, STAKE_COUNTERPARTY, SUPPLY_COUNTERPARTY, BITTY_FEE_COLLECTOR} from '@/vault/market-trades';
+import {splitMarketSwap, netTrade, isReceiptToken, STAKE_TOKENS, SUPPLY_TOKENS, STAKE_COUNTERPARTY, SUPPLY_COUNTERPARTY, BITTY_FEE_COLLECTORS} from '@/vault/market-trades';
 import {fmtNum, fmtShort, displaySymbol, shortAddress} from '@/core/format';
 import {EXPLORER_TX, type Network} from '@/core/chain';
 import {useColors, useStyles, type Colors} from '@/theme';
@@ -81,7 +81,7 @@ function classify(
   words: (...parts: (string | false | null | undefined)[]) => string,
 ): OpView {
   // The gasless relay fee leg (paid to Bitty's fee collector) — shown on its own line, not as a transfer.
-  const fee = op.legs.find((l) => l.direction === 'out' && lc(l.counterparty) === BITTY_FEE_COLLECTOR) ?? null;
+  const fee = op.legs.find((l) => l.direction === 'out' && BITTY_FEE_COLLECTORS.has(lc(l.counterparty))) ?? null;
   const core = op.legs.filter((l) => l !== fee);
 
   const swapLegs = splitMarketSwap(core);
