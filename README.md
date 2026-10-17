@@ -15,10 +15,10 @@ The full vault surface is built and wired (21 screens, 28 vault modules). What's
   existing recovery phrase from Onboarding → "Import a recovery phrase" to open your real vault.)
 - Wallet session store (`src/wallet/store.ts`, zustand) + cached address (MMKV) for locked display;
   every write re-reads the key from the Keychain, so each signature is Face-ID gated.
-- Gasless smart-account plumbing: EIP-712 `ForwardRequest` signed on-device, relayed via the web
+- Relayed smart-account plumbing: EIP-712 `ForwardRequest` signed on-device, relayed via the web
   backend's `/api/ethereum/vaults/relay`; fee paid in the vault's stablecoin.
 - Screens: Onboarding, Lock, VaultHome, Activate, Receive, Send, Transactions, Deposit, EarnAction,
-  Trade, LimitOrder (CoW), Twap, AddLiquidity, Scheduled, Whitelist, AutoYield, Gasless, Manage,
+  Trade, LimitOrder (CoW), Twap, AddLiquidity, Scheduled, Whitelist, AutoYield, NetworkFee, Manage,
   Delegation, Security, Settings.
 - Networks: mainnet / base / sepolia (`src/core/network-store.ts` + NetworkSwitcher).
 

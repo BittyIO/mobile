@@ -18,7 +18,7 @@ import Svg, {Path} from 'react-native-svg';
 import {TokenIcon} from '@/components/TokenIcon';
 import {PickerSheet, type PickerItem} from '@/components/AssetPicker';
 import {adapterByName} from '@/core/protocols';
-import {resolveFeeReserve, reserveHeld} from '@/vault/gasless';
+import {resolveFeeReserve, reserveHeld} from '@/vault/stableCoinAsGas';
 import type {RootStackParamList} from '@/App';
 import {FormSheet, FORM_SHEET_BODY} from '@/components/FormSheet';
 import {AvailableLine} from '@/components/AvailableLine';

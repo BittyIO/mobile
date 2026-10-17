@@ -10,8 +10,6 @@ export type PickedRecipient = {
   label?: string;
   /** Write the address into the whitelist, in the same transaction as the payment. */
   addToBook: boolean;
-  /** What that entry may be paid in. Undefined means any asset. */
-  allowedAsset?: Address;
 };
 
 /**

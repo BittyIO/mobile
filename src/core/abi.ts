@@ -41,6 +41,16 @@ export const VAULT_MANAGE_ABI = parseAbi([
   'function upgrade(address newImpl)',
 ]);
 
+/**
+ * v1.0.0's allow-list switch, named for the list a vault USES rather than whether it is restricted:
+ * `useBittyAllowList(true)` is the old `disableAllowlist`, `false` the old `enableAllowlist`, and
+ * `usingBittyAllowList()` is `!allowlistEnabled()`.
+ */
+export const VAULT_ALLOWLIST_V2_ABI = parseAbi([
+  'function useBittyAllowList(bool use)',
+  'function usingBittyAllowList() view returns (bool)',
+]);
+
 /** Guard reads for the upgrade target — the current build new vaults are activated on, per category. */
 export const GUARD_IMPL_ABI = parseAbi([
   'function latestImplementation(uint8 category) view returns (address)',
@@ -68,13 +78,17 @@ export const ERC1967_IMPL_SLOT =
 export const IMPLEMENTATION_VAULT = 1;
 
 /**
- * Gasless config — which stable coins may pay the relay fee (empty = any guard-registered coin), plus
- * the daily budget + per-op cap. `disableGasless` turns relaying off entirely.
+ * StableCoinAsGas config — which stable coins may pay the relay fee (empty = any guard-registered coin), plus
+ * the daily budget + per-op cap. `disableStableCoinAsGas` turns relaying off entirely.
  */
-export const VAULT_GASLESS_ABI = parseAbi([
+export const VAULT_STABLE_COIN_AS_GAS_ABI = parseAbi([
+  'function setStableCoinAsGas(address[] stableCoins,uint64 dailyLimit,uint64 maxFeePerOp)',
+  'function disableStableCoinAsGas()',
+  'function stableCoinAsGasConfig() view returns (address[] stableCoins,uint256 dailyLimit,uint256 maxFeePerOp)',
   'function setGasless(address[] stableCoins,uint64 dailyLimit,uint64 maxFeePerOp)',
   'function disableGasless()',
   'function gaslessConfig() view returns (address[] stableCoins,uint256 dailyLimit,uint256 maxFeePerOp)',
+  'function vaultVersion() view returns (uint256)',
   'function gasBudgetRemaining() view returns (uint256)',
 ]);
 
@@ -103,72 +117,115 @@ export const VAULT_TRADE_ABI = parseAbi([
   'function marketBuy(address ammProtocol,address sellToken,uint256 sellAmountMax,address buyToken,uint256 buyAmount,bytes reversedPath)',
 ]);
 
-/** LP management on the AMM adapter. `data` is the ABI-encoded Uniswap params (see vault/lp-actions). */
-export const VAULT_LP_ABI = parseAbi([
-  'function addLiquidity(address ammProtocol,address token0,uint256 amount0,address token1,uint256 amount1,bytes data)',
-  'function removeLiquidity(address ammProtocol,bytes data)',
-  'function decreaseLiquidity(address ammProtocol,bytes data)',
-  'function claimAMMFees(address ammProtocol,bytes data)',
-]);
-
 /**
- * Payments (v1.0.x). `send` transfers from the vault to a recipient (empty withdraw arrays = pay from
- * free balance). Scheduled payments recur from a start time; `payScheduled` executes a due one.
+ * Payments. `send` transfers from the vault to a recipient (empty withdraw arrays = pay from
+ * free balance). Scheduled payments and the operator-proposed-send governance (approveSend /
+ * cancelSend) are GONE from the contract: the payment surface is wholly the owner's now, so the
+ * fragments went with the screens that called them.
+ *
+ * The whitelist on v1.0.0: an entry is an address and nothing else — it accepts any asset, since a
+ * locked vault pays out only through these and cannot trade into a narrower one. Removing an entry
+ * the vault can already pay waits out the timelock (a lock voids it), so `removeWhitelistedRecipients`
+ * may only QUEUE it: `getWhitelistedRecipientRemovals` says when each lands, 0 where none waits.
  */
-const SCHEDULED_PAYMENT_TUPLE =
-  '(address scheduledPaymentAddress,uint256 paymentCount,bool isImmutable,bool payWithInsufficientBalance,address trigger,address assetAddress,uint256 amount,uint256 startTimestamp,uint256 paymentInterval)';
-
 export const VAULT_PAYMENTS_ABI = parseAbi([
   'function send(address recipient,address asset,uint256 amount,address[] withdrawProtocols,uint256[] withdrawAmounts)',
   'function batchSend(address[] recipients,address[] assets,uint256[] amounts,address[][] withdrawProtocols,uint256[][] withdrawAmounts)',
-  `function addScheduledPayment(${SCHEDULED_PAYMENT_TUPLE} scheduledPayment) returns (uint256 id)`,
-  `function updateScheduledPayments(uint256[] ids,${SCHEDULED_PAYMENT_TUPLE}[] scheduledPayments)`,
-  'function removeScheduledPayments(uint256[] ids)',
-  'function payScheduled(uint256 id,address[] withdrawProtocols)',
   // Whitelist / address book
-  'function addWhitelistedRecipient(address recipient,address allowedAsset) returns (uint256 id)',
+  'function addWhitelistedRecipient(address recipient) returns (uint256 id)',
   'function removeWhitelistedRecipients(uint256[] ids)',
-  'function updateWhitelistedRecipients(uint256[] ids,address[] recipients,address[] allowedAssets)',
   'function sendToWhitelistedRecipient(uint256 id,address asset,uint256 amount,address[] withdrawProtocols,uint256[] withdrawAmounts)',
-  // Operator-proposed send governance
-  'function approveSend(uint256 id)',
-  'function cancelSend(uint256 id)',
+  'function getWhitelistedRecipientRemovals(uint256[] ids) view returns (uint64[] removeAts)',
+]);
+
+/** v1.0.3's whitelist entry also names the one asset it may be paid in; the app always passes "any". */
+export const VAULT_PAYMENTS_V103_ABI = parseAbi([
+  'function addWhitelistedRecipient(address recipient,address allowedAsset) returns (uint256 id)',
 ]);
 
 /**
- * Delegation. `setAssetManager` appoints the single trading delegate until `expiresAt` (0 addr revokes;
- * appointing/extending waits out a change timelock, landing in the pending slot until it applies).
- * Payout operators (propose payments for owner approval) are toggled with `updatePayoutOperator`; there's
- * no list getter, so the current set is derived from `PayoutOperatorUpdated` events verified against
- * `isPayoutOperator`.
+ * Delegation (v1.0.0). `setAssetManager` appoints the single trading delegate until `expiresAt` with a
+ * `permissions` mask of what it may do (0 addr revokes; appointing, extending or widening the mask
+ * waits out a change timelock, landing in the pending slot until it applies).
+ * The payout-operator role was removed from the contract — a proposer in front of the only person
+ * who could release the money anyway — so no operator fragments remain.
  */
 export const VAULT_DELEGATE_ABI = parseAbi([
-  'function setAssetManager(address assetManager,uint64 expiresAt)',
-  'function getAssetManagerSettings() view returns (address manager,uint64 expiresAt,address pendingManager,uint64 pendingAt)',
-  'function updatePayoutOperator(address payoutOperator,bool add)',
-  'function isPayoutOperator(address account) view returns (bool)',
-  'event PayoutOperatorUpdated(address indexed payoutOperator,bool added)',
+  'function setAssetManager(address assetManager,uint64 expiresAt,uint32 permissions)',
+  'function getAssetManagerSettings() view returns (address manager,uint64 expiresAt,address pendingManager,uint64 pendingAt,uint32 permissions,uint32 pendingPermissions)',
 ]);
 
 /**
- * Owner risk & controls.
- *  - Payment risk: one 4-field `PaymentRisk` struct. Each field can be `type(uint256).max` (UNCHANGED)
- *    to write just one and leave the rest. Read via `getRiskConfig` — NOTE its tuple order swaps the
- *    last two vs the struct: (newPaymentProtection, maxSendValue, changeTimelock, maxSendInterval).
- *    Units: durations in seconds; maxSendValue in WHOLE stablecoin tokens (0 = unrestricted).
- *    Tightening applies at once; loosening waits out `changeTimelock`.
- *  - `disableTradeUntilTimestamp` pauses all trading until a unix second (a panic control).
+ * v1.0.3's delegation: no permission masks, so `setAssetManager` takes two arguments and
+ * `getAssetManagerSettings` returns four. Decoding a v1.0.3 return with the v1.0.0 fragment fails
+ * outright, so callers pick this one by generation.
+ */
+export const VAULT_DELEGATE_V103_ABI = parseAbi([
+  'function setAssetManager(address assetManager,uint64 expiresAt)',
+  'function getAssetManagerSettings() view returns (address manager,uint64 expiresAt,address pendingManager,uint64 pendingAt)',
+]);
+
+/**
+ * The asset-manager permission bits v1.0.0 defines (`PERM_*` in Constants.sol).
+ *  - yield: deposit into staking protocols.     - supply: deposit into lending protocols.
+ *  - marketTrade: `marketSell` / `marketBuy`.   - intent: limit orders and TWAP (relayer approval,
+ *    order signatures).
+ * Withdrawing and cancelling orders take no permission — any active manager may unwind.
+ */
+export const ASSET_MANAGER_PERMS = {
+  yield: 1 << 0,
+  supply: 1 << 1,
+  marketTrade: 1 << 2,
+  intent: 1 << 3,
+} as const;
+
+/** Every permission above: what a new appointment starts with. */
+export const ASSET_MANAGER_ALL_PERMISSIONS = 0b1111;
+
+/**
+ * Owner risk & controls, matching the v1.0.0 vault's risk surface.
+ *  - The risk surface is THREE numbers (`RiskSettings`): `timelock` — the one wait in front of
+ *    everything deferred — `sendDailyAllowance`, the ceiling on what regular sends may move per
+ *    rolling day in whole USD (0 = no cap; above 0, sends are held to stablecoins), and
+ *    `marketTradeDailyLossAllowance`, what market trades may lose against oracle value per rolling
+ *    day in whole USD (0 = unprotected). The two ceilings are kept apart, so trading never uses up
+ *    what may be sent. Any can be `type(uint256).max` (UNCHANGED) to write just some. Tightening applies at once; loosening waits
+ *    out the timelock in force when it was asked for. Read via `riskSettings`.
+ *  - The locks: `emergencyLock` freezes the risk surface where it stands (reversible with
+ *    `unlock`); `foreverLock` freezes it for good — no way back by any key. Both instant, by
+ *    design: a queued lock is one the thief cancels. `lockLevel` reads 0 / 1 / 2. `foreverLock`
+ *    names a whitelisted recipient the vault can pay right now and refuses (`NoEscapeRecipient`)
+ *    without one, since afterwards that list is the only way money ever leaves.
+ *  - `pendingChanges` lists what is waiting out the timelock: a loosened risk number shows here with
+ *    the moment it applies (`At` = 0 means nothing waiting), as do a handover and a queued grant.
  *  - `wrapNative` wraps native ETH the vault holds into WETH so it's usable.
  *  - `autoYield(asset)` manually sweeps an asset's idle balance into its configured yield route now.
  */
 export const VAULT_RISK_ABI = parseAbi([
+  'struct RiskSettings { uint256 timelock; uint256 sendDailyAllowance; uint256 marketTradeDailyLossAllowance; }',
+  'function updateRisk(RiskSettings riskSettings)',
+  'function riskSettings() view returns (uint64 timelock,uint64 sendDailyAllowance,uint64 marketTradeDailyLossAllowance)',
+  'function lockLevel() view returns (uint8)',
+  'struct PendingChanges { uint8 lockLevel; address newOwner; uint64 newOwnerReadyAt; address newAssetManager; uint64 newAssetManagerAt; uint32 newAssetManagerPerms; uint64 timelock; uint64 timelockAt; uint64 sendDailyAllowance; uint64 sendDailyAllowanceAt; uint64 marketTradeDailyLossAllowance; uint64 marketTradeDailyLossAllowanceAt; uint64 gasBudgetDaily; uint64 gasBudgetDailyAt; uint64 maxFeePerOp; uint64 maxFeePerOpAt; }',
+  'function pendingChanges() view returns (PendingChanges changes)',
+  'function emergencyLock()',
+  'function unlock()',
+  'function foreverLock(uint256 escapeRecipientId)',
+  'function wrapNative()',
+  'function autoYield(address asset)',
+]);
+
+/**
+ * v1.0.3's risk surface: one 4-field `PaymentRisk` struct, each field `type(uint256).max` (UNCHANGED)
+ * to leave it. `getRiskConfig`'s tuple order swaps the last two vs the struct. No locks on v1.0.3,
+ * and no market-trade allowance. The app maps v1.0.0's numbers onto it: `timelock` =
+ * `changeTimelock`, the send allowance = `maxSendValue` (per `maxSendInterval`, which v1.0.3 lets
+ * the owner set).
+ */
+export const VAULT_RISK_V103_ABI = parseAbi([
   'struct PaymentRisk { uint256 newPaymentProtection; uint256 maxSendValue; uint256 maxSendInterval; uint256 changeTimelock; }',
   'function updatePaymentRisk(PaymentRisk update)',
   'function getRiskConfig() view returns (uint64 newPaymentProtection,uint64 maxSendValue,uint64 changeTimelock,uint64 maxSendInterval)',
-  'function disableTradeUntilTimestamp(uint256 timestamp)',
-  'function tradeDisabledUntil() view returns (uint256)',
-  'function wrapNative()',
-  'function autoYield(address asset)',
 ]);
 
 /** Intent (CoW) — relayer approval + on-chain cancel (CoW can't soft-cancel an eip1271 vault order). */
@@ -214,7 +271,7 @@ export const FORWARD_REQUEST_TYPES = {
 } as const;
 
 /**
- * Gasless vault activation — signed against the FACTORY domain (see vault/activate.ts). `calls` is the
+ * Stablecoin-paid vault activation — signed against the FACTORY domain (see vault/activate.ts). `calls` is the
  * owner's FIRST batch of vault operations, run during the vault's init right after deploy ("activate and
  * call"). It's part of the signed struct so a relayer can't append operations of its own; an empty list
  * is plain activation. Must match the new factory's Activation typehash exactly or every signature is
@@ -227,6 +284,22 @@ export const ACTIVATION_TYPES = {
     {name: 'feeAmount', type: 'uint256'},
     {name: 'allowlistEnabled', type: 'bool'},
     {name: 'calls', type: 'bytes[]'},
+  ],
+} as const;
+
+/**
+ * The v1.0.0 generation's Activation: the allow-list flag is named for what it does
+ * (`restrictToOwnAllowList`), and the signature now expires at `deadline`, so one the relayer sat on
+ * cannot be spent later. Field names are part of the typehash — they must match the factory's exactly.
+ */
+export const ACTIVATION_TYPES_V2 = {
+  Activation: [
+    {name: 'owner', type: 'address'},
+    {name: 'stableCoinAddress', type: 'address'},
+    {name: 'feeAmount', type: 'uint256'},
+    {name: 'restrictToOwnAllowList', type: 'bool'},
+    {name: 'calls', type: 'bytes[]'},
+    {name: 'deadline', type: 'uint256'},
   ],
 } as const;
 

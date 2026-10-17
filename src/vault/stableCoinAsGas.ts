@@ -1,22 +1,23 @@
 /**
- * Gasless config — which stable coins the vault may be charged in for relayed ops. Ported from web
- * getGaslessConfig / setGasless / toggleGasCoin. An EMPTY allowlist means "any guard-registered coin"
+ * StableCoinAsGas config — which stable coins the vault may be charged in for relayed ops. Ported from web
+ * getStableCoinAsGasConfig / setStableCoinAsGas / toggleGasCoin. An EMPTY allowlist means "any guard-registered coin"
  * (the un-narrowed default); naming coins restricts to those; naming none turns relaying off.
  *
  * Changing the config is itself a relayed (gasless) write — a fresh activated vault already relays.
  */
 import {publicClientFor, type Network} from '@/core/chain';
-import {VAULT_GASLESS_ABI} from '@/core/abi';
+import {VAULT_STABLE_COIN_AS_GAS_ABI} from '@/core/abi';
 import {relayVaultWrite} from './relay';
 import type {Address, Hex} from 'viem';
 import {gasReserveCoin, gasReserveSize, RESERVE_NONE} from '@/core/prefs';
+import {stableCoinAsGasFunctionNames} from './manage';
 
 /**
  * `dailyLimit` and `maxFeePerOp` are whole dollars (the contract's uint64: 100 = $100/day, 10 = $10 per
  * operation; the vault reports the system default when the owner has not set a value). `remaining` and
  * `usedToday` are 18-decimal dollar amounts for the current UTC day.
  */
-export type GaslessConfig = {
+export type StableCoinAsGasConfig = {
   stableCoins: string[]; // allowlist; empty = any coin allowed
   dailyLimit: bigint;
   maxFeePerOp: bigint;
@@ -26,8 +27,8 @@ export type GaslessConfig = {
 };
 
 /** The contract's ceilings for the two caps (Constants.sol SYSTEM_DAILY_MAX_GAS_BUDGET / SYSTEM_MAX_FEE_PER_OP). */
-export const GASLESS_MAX_DAILY = 100;
-export const GASLESS_MAX_PER_OP = 10;
+export const STABLE_COIN_AS_GAS_MAX_DAILY = 100;
+export const STABLE_COIN_AS_GAS_MAX_PER_OP = 10;
 
 /**
  * What a relay actually costs, measured rather than guessed: an L2 relay runs to cents and a
@@ -36,16 +37,29 @@ export const GASLESS_MAX_PER_OP = 10;
  * {reserveAgainst} and {gasReserve}.
  */
 
-export async function getGaslessConfig(
+export async function getStableCoinAsGasConfig(
   vault: Address,
   network: Network,
-): Promise<GaslessConfig | null> {
+): Promise<StableCoinAsGasConfig | null> {
   try {
     const client = publicClientFor(network);
-    const [cfg, remaining] = (await Promise.all([
-      client.readContract({address: vault, abi: VAULT_GASLESS_ABI, functionName: 'gaslessConfig'}),
-      client.readContract({address: vault, abi: VAULT_GASLESS_ABI, functionName: 'gasBudgetRemaining'}),
-    ])) as [readonly [readonly Address[], bigint, bigint], bigint];
+    const names = stableCoinAsGasFunctionNames();
+    let cfg: readonly [readonly Address[], bigint, bigint];
+    let remaining: bigint;
+    try {
+      [cfg, remaining] = await client.multicall({
+        contracts: [
+          {address: vault, abi: VAULT_STABLE_COIN_AS_GAS_ABI, functionName: names.config},
+          {address: vault, abi: VAULT_STABLE_COIN_AS_GAS_ABI, functionName: 'gasBudgetRemaining'},
+        ] as const,
+        allowFailure: false,
+      });
+    } catch {
+      [cfg, remaining] = await Promise.all([
+        client.readContract({address: vault, abi: VAULT_STABLE_COIN_AS_GAS_ABI, functionName: names.config}),
+        client.readContract({address: vault, abi: VAULT_STABLE_COIN_AS_GAS_ABI, functionName: 'gasBudgetRemaining'}),
+      ]);
+    }
     const [stableCoins, dailyLimit, maxFeePerOp] = cfg;
     const limit18 = dailyLimit * BigInt(10) ** BigInt(18);
     return {
@@ -62,7 +76,7 @@ export async function getGaslessConfig(
 }
 
 /** Set the stable-coin allowlist (empty = any coin). Keeps the existing daily/per-op limits. */
-export async function setGaslessCoins(o: {
+export async function setStableCoinAsGasCoins(o: {
   account: Parameters<typeof relayVaultWrite>[0]['account'];
   vault: Address;
   network: Network;
@@ -75,8 +89,8 @@ export async function setGaslessCoins(o: {
     account: o.account,
     vault: o.vault,
     network: o.network,
-    abi: VAULT_GASLESS_ABI,
-    functionName: 'setGasless',
+    abi: VAULT_STABLE_COIN_AS_GAS_ABI,
+    functionName: stableCoinAsGasFunctionNames().set,
     args: [o.coins, o.dailyLimit, o.maxFeePerOp],
     stableCoin: o.stableCoin,
   });
@@ -84,7 +98,7 @@ export async function setGaslessCoins(o: {
 }
 
 /** Turn relaying off entirely. */
-export async function disableGasless(o: {
+export async function disableStableCoinAsGas(o: {
   account: Parameters<typeof relayVaultWrite>[0]['account'];
   vault: Address;
   network: Network;
@@ -94,8 +108,8 @@ export async function disableGasless(o: {
     account: o.account,
     vault: o.vault,
     network: o.network,
-    abi: VAULT_GASLESS_ABI,
-    functionName: 'disableGasless',
+    abi: VAULT_STABLE_COIN_AS_GAS_ABI,
+    functionName: stableCoinAsGasFunctionNames().disable,
     args: [],
     stableCoin: o.stableCoin,
   });
@@ -103,7 +117,7 @@ export async function disableGasless(o: {
 }
 
 /** Set the daily budget and the per-operation cap (whole dollars), keeping the coin allowlist as is. */
-export async function setGaslessLimits(o: {
+export async function setStableCoinAsGasLimits(o: {
   account: Parameters<typeof relayVaultWrite>[0]['account'];
   vault: Address;
   network: Network;
@@ -112,7 +126,7 @@ export async function setGaslessLimits(o: {
   maxFeePerOp: number;
   stableCoin: Address;
 }): Promise<Hex> {
-  return setGaslessCoins({...o, dailyLimit: BigInt(o.dailyLimit), maxFeePerOp: BigInt(o.maxFeePerOp)});
+  return setStableCoinAsGasCoins({...o, dailyLimit: BigInt(o.dailyLimit), maxFeePerOp: BigInt(o.maxFeePerOp)});
 }
 
 /** Tried in this order when the owner has not chosen: the relayer's own first choice, then the rest. */

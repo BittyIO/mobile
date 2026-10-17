@@ -4,9 +4,11 @@
  * updateAssets / updateProtocols / enable-disableAllowlist and use-upgrade.
  */
 import {getAddress, type Address, type Hex, parseAbi} from 'viem';
-import {publicClientFor, GUARD_ADDRESS, type Network} from '@/core/chain';
+import {publicClientFor, type Network} from '@/core/chain';
+import {generationConfig, isLegacy} from '@/core/vault-generation';
 import {
   VAULT_MANAGE_ABI,
+  VAULT_ALLOWLIST_V2_ABI,
   GUARD_IMPL_ABI,
   ERC1967_IMPL_SLOT,
   IMPLEMENTATION_VAULT,
@@ -17,14 +19,22 @@ type Acct = Parameters<typeof relayVaultWrite>[0]['account'];
 
 // ---- Reads ----
 
+/** Whether the vault is restricted to its OWN allow list (v1.0.0 asks the inverse question). */
 export async function isAllowlistEnabled(vault: Address, network: Network): Promise<boolean> {
   try {
     const client = publicClientFor(network);
-    return (await client.readContract({
+    if (isLegacy()) {
+      return (await client.readContract({
+        address: vault,
+        abi: VAULT_MANAGE_ABI,
+        functionName: 'allowlistEnabled',
+      })) as boolean;
+    }
+    return !((await client.readContract({
       address: vault,
-      abi: VAULT_MANAGE_ABI,
-      functionName: 'allowlistEnabled',
-    })) as boolean;
+      abi: VAULT_ALLOWLIST_V2_ABI,
+      functionName: 'usingBittyAllowList',
+    })) as boolean);
   } catch {
     return false;
   }
@@ -87,6 +97,18 @@ export function updateProtocol(o: {account: Acct; vault: Address; network: Netwo
 }
 
 export function setAllowlistEnabled(o: {account: Acct; vault: Address; network: Network; enabled: boolean; stableCoin: Address}): Promise<Hex> {
+  if (!isLegacy()) {
+    // Restricting to the vault's own list is NOT using Bitty's.
+    return relayVaultWrite({
+      account: o.account,
+      vault: o.vault,
+      network: o.network,
+      abi: VAULT_ALLOWLIST_V2_ABI,
+      functionName: 'useBittyAllowList',
+      args: [!o.enabled],
+      stableCoin: o.stableCoin,
+    }).then((r) => r.hash);
+  }
   return relayVaultWrite({
     account: o.account,
     vault: o.vault,
@@ -117,14 +139,17 @@ export function formatVaultVersion(v: bigint): string {
 export async function vaultImplVersion(vault: Address, network: Network): Promise<number> {
   try {
     const client = publicClientFor(network);
+    const code = await client.getCode({address: vault});
     const own = await (
       client.readContract({address: vault, abi: VAULT_VERSION_ABI, functionName: 'vaultVersion'}) as Promise<bigint>
     )
       .then((v) => Number(v))
       .catch(() => 0);
     if (own) return own;
+    // A deployed pre-versioned implementation is legacy; only counterfactual vaults inherit latest.
+    if (code && code !== '0x') return 0;
     const latest = (await client.readContract({
-      address: GUARD_ADDRESS,
+      address: generationConfig().guard,
       abi: GUARD_IMPL_ABI,
       functionName: 'latestImplementation',
       args: [IMPLEMENTATION_VAULT],
@@ -136,6 +161,19 @@ export async function vaultImplVersion(vault: Address, network: Network): Promis
   } catch {
     return 0;
   }
+}
+
+/**
+ * The stablecoin relay-fee entry points: `*Gasless` on the v1.0.3 generation, renamed
+ * `*StableCoinAsGas` on v1.0.0. By generation, not by version number — v1.0.0 reports a LOWER
+ * version than v1.0.3.
+ */
+export function stableCoinAsGasFunctionNames():
+  | {set: 'setGasless'; disable: 'disableGasless'; config: 'gaslessConfig'}
+  | {set: 'setStableCoinAsGas'; disable: 'disableStableCoinAsGas'; config: 'stableCoinAsGasConfig'} {
+  return isLegacy()
+    ? {set: 'setGasless', disable: 'disableGasless', config: 'gaslessConfig'}
+    : {set: 'setStableCoinAsGas', disable: 'disableStableCoinAsGas', config: 'stableCoinAsGasConfig'};
 }
 
 export type VaultUpgrade = {
@@ -158,7 +196,7 @@ export async function checkVaultUpgrade(vault: Address, network: Network): Promi
     const [slot, latest] = await Promise.all([
       client.getStorageAt({address: vault, slot: ERC1967_IMPL_SLOT}),
       client.readContract({
-        address: GUARD_ADDRESS,
+        address: generationConfig().guard,
         abi: GUARD_IMPL_ABI,
         functionName: 'latestImplementation',
         args: [IMPLEMENTATION_VAULT],

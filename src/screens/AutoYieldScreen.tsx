@@ -19,7 +19,7 @@ import {useAssetCatalog} from '@/core/asset-catalog';
 
 /**
  * Auto-yield — pick a default yield protocol per asset. Idle balances of that asset are swept into the
- * protocol by the keeper, so deposits earn without a manual step. "None" clears the route. Gasless.
+ * protocol by the keeper, so deposits earn without a manual step. "None" clears the route. Relayed.
  */
 export function AutoYieldScreen() {
   const {t} = useT();

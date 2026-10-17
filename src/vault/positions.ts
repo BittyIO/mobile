@@ -1,11 +1,10 @@
 /**
  * Vault positions (staking + lending) — served by the SAME backend cache the web uses
  * (`/api/ethereum/vaults/{vault}/positions`), not per-pair eth_calls. The server reads the chain,
- * caches, and revalidates; the client just formats. LP (AMM) positions come later (they need the
- * per-adapter on-chain read the web's getVaultLpPositions does).
+ * caches, and revalidates; the client just formats.
  */
 import {formatUnits, parseUnits, type Address} from 'viem';
-import {apiFetch, apiUrl, DEFAULT_VAULT_VERSION, type Network} from '@/core/chain';
+import {apiFetch, apiUrl, type Network} from '@/core/chain';
 import {ASSETS, assetMeta} from '@/core/assets';
 import {adapterByName, protocolMeta, type ProtocolCategory} from '@/core/protocols';
 import {fetchYielding} from './yielding';
@@ -45,9 +44,8 @@ export async function fetchPositions(
 ): Promise<Position[]> {
   const res = await apiFetch(
     apiUrl(
-      `/api/ethereum/vaults/${vault}/positions?version=${DEFAULT_VAULT_VERSION}${
-        fresh ? '&fresh=1' : ''
-      }`,
+      // `apiUrl` adds the generation's `version`.
+      `/api/ethereum/vaults/${vault}/positions${fresh ? '?fresh=1' : ''}`,
       network,
     ),
     undefined,

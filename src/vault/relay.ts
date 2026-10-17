@@ -227,8 +227,8 @@ function relayError(json: {reason?: string; error?: string; code?: string} | nul
       return withCode(t('mobile.actions.relay_no_liquid'), json.reason, json.code);
     case 'budget-exhausted':
       return withCode(t('mobile.actions.relay_budget'), json.reason, json.code);
-    case 'gasless-off':
-      return withCode(t('mobile.actions.relay_gasless_off'), json.reason, json.code);
+    case 'stable-coin-as-gas-off':
+      return withCode(t('mobile.actions.relay_stable_coin_as_gas_off'), json.reason, json.code);
     case 'simulation-failed':
       // The call itself reverts, so retrying it unchanged cannot work. Nothing was signed or sent.
       return withCode(t('mobile.actions.relay_refused'), json.reason, json.code);

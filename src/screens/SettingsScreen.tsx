@@ -17,6 +17,7 @@ import {SettingsRow as Row, makeSettingsStyles} from '@/components/SettingsRow';
 import {useVaultPicker} from '@/components/useVaultPicker';
 import {useVaultVersionRow} from '@/components/useVaultVersionRow';
 import {PickerSheet} from '@/components/AssetPicker';
+import {GENERATIONS, VAULT_GENERATIONS, useVaultGeneration, type VaultGeneration} from '@/core/vault-generation';
 
 import {useT} from '@/i18n';
 
@@ -72,7 +73,9 @@ export function SettingsScreen() {
   // Language and Theme Mode use the app's own picker sheet, the one the asset and network selectors
   // use: it is part of the React tree, so it opens on the next frame, where the native action sheet
   // waits on a round trip to UIKit and a presentation animation of its own.
-  const [picker, setPicker] = useState<'language' | 'currency' | 'appearance' | null>(null);
+  const [picker, setPicker] = useState<'language' | 'currency' | 'appearance' | 'generation' | null>(null);
+  const generation = useVaultGeneration((s) => s.generation);
+  const setGeneration = useVaultGeneration((s) => s.setGeneration);
   // The currency in force (explicit choice, else the language's default) and the setter. Choosing
   // a language keeps currency in step automatically until the user picks one by hand.
   const currency = useDisplayCurrency();
@@ -114,20 +117,13 @@ export function SettingsScreen() {
         {/* One row for the whole subject: which coins a fee may be billed to, and the float
             that is never spent. They were two rows opening two sheets, and each left the
             other's question hanging. */}
-        <Row icon="gasless" title={t('mobile.settings.network_fee')} onPress={() => nav.navigate('NetworkFee')} />
+        <Row icon="stableCoinAsGas" title={t('mobile.settings.network_fee')} onPress={() => nav.navigate('NetworkFee')} />
         {/* The vault's guardrails — how long a loosening has to wait, and how much may leave —
             behind one row. They were two, which was two ways of saying "open the security page":
             both already pushed the same screen, and splitting it only asked the user to decide
             which half they wanted before they could see either. The row now carries the page's
             own title, so the label they tap is the heading they land on. */}
         <Row icon="security" title={t('mobile.app.security')} onPress={() => nav.navigate('VaultSecurity')} />
-        {/* Who else may act for the vault. A section of its own for two rows read as a leftover
-            beside the group that now holds everything else about the vault.
-            
-            It wears the asset manager's own mark — lucide Users, the plural of the single
-            figure on Choose vault above it. The card glyph it had belongs to payouts, which is
-            the SECOND row on the page; the row should look like what the page leads with. */}
-        <Row icon="delegation" title={t('mobile.settings.team')} onPress={() => nav.navigate('VaultTeam')} />
         {/* Last, and in THIS section rather than under About: the version it shows is the
             vault's contract generation, not the app's, and tapping it upgrades the vault. That
             is a vault setting that happens to read like a credit, and it sat among the links to
@@ -135,6 +131,15 @@ export function SettingsScreen() {
         {/* While the upgrade is being mined the row is inert and says so: a spinner beside
             "Confirming", no chevron, and `onPress` already refuses. Tapping again would submit
             a second upgrade to the same implementation and pay for it. */}
+        {/* Which contract generation the app talks to. The two share nothing but the owner key:
+            each has its own factory, so the same owner has a different vault on each. Kept beside
+            the version row because it decides what that row is a version OF. */}
+        <Row
+          icon="settings"
+          title={t('mobile.settings.vault_generation')}
+          value={GENERATIONS[generation].label}
+          onPress={() => setPicker('generation')}
+        />
         <Row
           icon="settings"
           title={t('mobile.settings.vault_version')}
@@ -174,6 +179,18 @@ export function SettingsScreen() {
         items={CURRENCIES.map((x) => ({key: x.code, label: currencyLabel(x.code)}))}
         selected={currency}
         onSelect={(code) => setCurrency(code as Currency)}
+        onClose={() => setPicker(null)}
+      />
+      <PickerSheet
+        visible={picker === 'generation'}
+        title={t('mobile.settings.vault_generation')}
+        items={VAULT_GENERATIONS.map((g) => ({
+          key: g,
+          label: GENERATIONS[g].label,
+          sub: t(g === 'v1.0.3' ? 'mobile.settings.vault_generation_legacy' : 'mobile.settings.vault_generation_new'),
+        }))}
+        selected={generation}
+        onSelect={(g) => setGeneration(g as VaultGeneration)}
         onClose={() => setPicker(null)}
       />
       {/* The confirmations for the two rows that write on their own (asset manager, upgrade). */}

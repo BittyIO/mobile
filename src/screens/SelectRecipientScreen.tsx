@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, Keyboard, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View} from 'react-native';
 import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -10,19 +10,18 @@ import {useVaults} from '@/core/vault-store';
 import {useNetwork} from '@/core/network-store';
 import {useWallet} from '@/wallet/store';
 import {ownerVaultAddress} from '@/vault/read';
-import {fetchWhitelist, type WhitelistedRecipient} from '@/vault/payments';
+import {fetchRemovals, fetchWhitelist, removeWhitelisted, type WhitelistedRecipient} from '@/vault/payments';
+import {useVaultWrite} from '@/components/useVaultWrite';
 import {shortAddress} from '@/core/format';
 import {useRecipientNames, recipientName} from '@/core/recipient-names';
 import {useRecipientPick} from '@/core/recipient-pick';
-import {useAssetCatalog} from '@/core/asset-catalog';
-import {PickerSheet} from '@/components/AssetPicker';
-import {TokenIcon} from '@/components/TokenIcon';
-import {displaySymbol} from '@/core/format';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 
 /**
- * Who to pay, as its own page.
+ * Who to pay, as its own page — and the one place the address book is kept: chosen from, added to
+ * (a typed address with "Add to whitelist" on is written in with the send), and pruned (the ✕ on
+ * each entry, through the Face-ID and fee confirm).
  *
  * It was a sheet, and outgrew one: the book, the owner's other vaults, an address to type and a
  * decision to make about it do not fit in something you dismiss by dragging. A page can also be
@@ -50,6 +49,12 @@ export function SelectRecipientScreen() {
 
   const [book, setBook] = useState<WhitelistedRecipient[]>([]);
   /**
+   * Entries whose removal is queued, and when it lands. An entry the vault can already pay is not
+   * taken off at once — it stays payable until then, and a lock voids the removal — so its row says
+   * so instead of offering the ✕ again, which would only start the wait over.
+   */
+  const [removals, setRemovals] = useState<Record<string, number>>({});
+  /**
    * Loading until the chain answers.
    *
    * The empty state used to show while the read was still in flight, so every open of this page
@@ -57,18 +62,38 @@ export function SelectRecipientScreen() {
    * about what came back, and until something has, there is nothing to claim.
    */
   const [loading, setLoading] = useState(true);
+  const [reload, setReload] = useState(0);
   useEffect(() => {
     if (!vault) return;
     let live = true;
     setLoading(true);
     fetchWhitelist(vault, network)
-      .then((rows) => live && setBook(rows))
+      .then(async (rows) => {
+        const queued = await fetchRemovals(
+          vault,
+          network,
+          rows.map((r) => r.id),
+        );
+        if (!live) return;
+        setBook(rows);
+        setRemovals(queued);
+      })
       .catch(() => live && setBook([]))
       .finally(() => live && setLoading(false));
     return () => {
       live = false;
     };
-  }, [vault, network]);
+  }, [vault, network, reload]);
+
+  // Removing an entry is a relayed write: confirmed first, so a mis-tap cannot spend anything.
+  const {busy, ready, run, sheet} = useVaultWrite(useCallback(() => setReload((n) => n + 1), []));
+  const removeEntry = (b: WhitelistedRecipient) =>
+    run(
+      `rm-${b.id}`,
+      `${t('vault.remove')} · ${t('vault.address_book')}`,
+      (base) => removeWhitelisted({...base, id: b.id}),
+      shortAddress(b.recipientAddress),
+    );
 
   /**
    * The owner's OTHER vaults on this chain.
@@ -97,18 +122,6 @@ export function SelectRecipientScreen() {
   const [draft, setDraft] = useState('');
   const [nameDraft, setNameDraft] = useState('');
   /**
-   * What the book entry may be paid in. Null is "any asset", which is what the contract reads
-   * the zero address as and what almost every entry wants.
-   *
-   * Offered because the contract offers it: an entry can be narrowed to one token, which turns
-   * the whitelist from "who may be paid" into "who may be paid what". Defaulted to any, because
-   * narrowing it means the next payment in a different token needs a second entry.
-   */
-  const [asset, setAsset] = useState<Address | null>(null);
-  const [assetSheet, setAssetSheet] = useState(false);
-  const catalog = useAssetCatalog(network);
-  const assetSymbol = asset ? displaySymbol(catalog.find((a2) => a2.address === asset)?.symbol ?? '') : null;
-  /**
    * Whether a typed address is written into the book.
    *
    * On by default, because a vault with new-payment protection enabled will refuse to pay an
@@ -118,8 +131,8 @@ export function SelectRecipientScreen() {
    */
   const [addToBook, setAddToBook] = useState(true);
 
-  const pick = (address: string, label?: string, add = false, allowedAsset?: Address) => {
-    setPicked({slot, address: address as Address, label, addToBook: add, allowedAsset});
+  const pick = (address: string, label?: string, add = false) => {
+    setPicked({slot, address: address as Address, label, addToBook: add});
     nav.goBack();
   };
 
@@ -127,7 +140,7 @@ export function SelectRecipientScreen() {
   const useTyped = () => {
     const given = nameDraft.trim();
     if (given) setName(network, draft, given);
-    pick(draft, given || undefined, addToBook, asset ?? undefined);
+    pick(draft, given || undefined, addToBook);
   };
 
   const valid = isPayableAddress(draft, network);
@@ -167,6 +180,7 @@ export function SelectRecipientScreen() {
         ) : (
           book.map((b, i) => {
             const named = recipientName(names, network, b.recipientAddress);
+            const removeAt = removals[b.id];
             return (
               <Pressable
                 key={b.id}
@@ -175,16 +189,38 @@ export function SelectRecipientScreen() {
                 {/* Name and address across one line, as on the Send card: the name is what the
                     user recognises and the address is what gets paid, so the row shows both.
                     The name yields first; the address is the part that must stay whole. */}
-                <View style={styles.entry}>
-                  {named ? (
-                    <Text style={styles.entryName} numberOfLines={1}>
-                      {named}
+                <View style={styles.entryCol}>
+                  <View style={styles.entry}>
+                    {named ? (
+                      <Text style={styles.entryName} numberOfLines={1}>
+                        {named}
+                      </Text>
+                    ) : null}
+                    <Text style={named ? styles.addrMuted : styles.addr} numberOfLines={1}>
+                      {shortAddress(b.recipientAddress)}
+                    </Text>
+                  </View>
+                  {removeAt ? (
+                    <Text style={styles.sub} numberOfLines={1}>
+                      {t('mobile.payments.removal_pending', {
+                        when: t('mobile.vault.on_date', {date: new Date(removeAt * 1000).toLocaleDateString()}),
+                      })}
                     </Text>
                   ) : null}
-                  <Text style={named ? styles.addrMuted : styles.addr} numberOfLines={1}>
-                    {shortAddress(b.recipientAddress)}
-                  </Text>
                 </View>
+                {busy === `rm-${b.id}` ? (
+                  <ActivityIndicator color={c.subtext} />
+                ) : removeAt ? null : (
+                  <Pressable
+                    hitSlop={10}
+                    disabled={!ready}
+                    onPress={() => removeEntry(b)}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('vault.remove')}
+                    style={({pressed}) => [styles.remove, (pressed || !ready) && styles.pressed]}>
+                    <Text style={styles.removeText}>✕</Text>
+                  </Pressable>
+                )}
               </Pressable>
             );
           })
@@ -221,34 +257,17 @@ export function SelectRecipientScreen() {
         {/* Named, not just refused: a well-formed address the field rejects looks like a bug
             unless the screen says what is wrong with it. */}
         {isToken ? <Text style={styles.warn}>{t('mobile.payments.token_address_warning')}</Text> : null}
-        {/* Asset first, then the name. The asset is part of the entry the CONTRACT stores and
-            always has a value, so it leads; the name is optional, local, and takes whatever
-            width is left. */}
-        <View style={styles.nameRow}>
-          <Pressable
-            style={({pressed}) => [styles.assetPill, pressed && styles.pressed]}
-            onPress={() => setAssetSheet(true)}
-            accessibilityRole="button">
-            {asset ? <TokenIcon symbol={catalog.find((a2) => a2.address === asset)?.symbol ?? ''} size={18} /> : null}
-            <Text style={styles.assetText} numberOfLines={1}>
-              {assetSymbol ?? t('vault.any_asset')}
-            </Text>
-            <Text style={styles.pillChev}>⌄</Text>
-          </Pressable>
-          <View style={styles.nameCol}>
-            <TextInput
-              style={[styles.input, styles.nameInput]}
-              placeholder={t('mobile.payments.recipient_name')}
-              placeholderTextColor={c.subtext}
-              autoCapitalize="words"
-              value={nameDraft}
-              onChangeText={setNameDraft}
-            />
-            {/* Under the field it is about, not under the whole line: the asset beside it is
-                stored by the vault, and only the name is local. */}
-            <Text style={styles.note}>{t('mobile.payments.name_local_only')}</Text>
-          </View>
-        </View>
+        {/* The name is all there is to add: an entry accepts any asset, since a locked vault pays
+            out only through this list and cannot trade into a narrower one. The name is local. */}
+        <TextInput
+          style={[styles.input, styles.nameInput]}
+          placeholder={t('mobile.payments.recipient_name')}
+          placeholderTextColor={c.subtext}
+          autoCapitalize="words"
+          value={nameDraft}
+          onChangeText={setNameDraft}
+        />
+        <Text style={styles.note}>{t('mobile.payments.name_local_only')}</Text>
         <View style={styles.toggleRow}>
           <Text style={styles.toggleLabel}>{t('mobile.payments.add_to_whitelist')}</Text>
           <Switch value={addToBook} onValueChange={setAddToBook} style={styles.switch} />
@@ -260,24 +279,6 @@ export function SelectRecipientScreen() {
           <Text style={[styles.useText, !valid && styles.useTextOff]}>{t('vault.confirm')}</Text>
         </Pressable>
       </View>
-
-      {/* Any asset, or exactly one. The catalog's own order, with "any" at the top as the
-          default rather than buried among the tokens. */}
-      <PickerSheet
-        visible={assetSheet}
-        title={t('vault.select_asset')}
-        items={[
-          {key: 'any', label: t('vault.any_asset')},
-          ...catalog.map((a2) => ({
-            key: a2.address,
-            label: displaySymbol(a2.symbol),
-            icon: <TokenIcon symbol={a2.symbol} uri={a2.icon} size={30} />,
-          })),
-        ]}
-        selected={asset ?? 'any'}
-        onSelect={(k) => setAsset(k === 'any' ? null : (k as Address))}
-        onClose={() => setAssetSheet(false)}
-      />
 
       {/* The vaults, in a sheet: one tap to open, one to choose, and the page behind it keeps
           whatever was typed. */}
@@ -301,6 +302,7 @@ export function SelectRecipientScreen() {
           </View>
         </ScrollView>
       </Sheet>
+      {sheet}
       </Pressable>
     </ScrollView>
   );
@@ -316,22 +318,6 @@ const makeStyles = (c: Colors) =>
     sheetScroll: {flexGrow: 0},
 
     input: {height: 48, borderRadius: 12, backgroundColor: c.input, color: c.text, paddingHorizontal: 12, fontSize: 15, marginTop: 16},
-    nameRow: {flexDirection: 'row', alignItems: 'flex-start', gap: 8},
-    nameCol: {flex: 1, minWidth: 0},
-    // Sized to its content with a floor, so "Any asset" fits and a ticker does not leave a gap.
-    assetPill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      height: 48,
-      minWidth: 108,
-      borderRadius: 12,
-      backgroundColor: c.input,
-      paddingHorizontal: 12,
-      marginTop: 16,
-    },
-    assetText: {color: c.text, fontSize: 15, fontWeight: '600', flexShrink: 1},
-    pillChev: {color: c.subtext, fontSize: 13, marginTop: -2},
     nameInput: {width: '100%'},
     inputErr: {borderWidth: 1, borderColor: c.danger},
     warn: {color: c.danger, fontSize: 12, lineHeight: 17, marginTop: 8},
@@ -362,7 +348,8 @@ const makeStyles = (c: Colors) =>
     pressed: {opacity: 0.6},
     rowText: {flex: 1, gap: 2},
     rowLabel: {color: c.text, fontSize: 16, fontWeight: '600', flex: 1},
-    entry: {flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0},
+    entryCol: {flex: 1, gap: 2, minWidth: 0},
+    entry: {flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0},
     entryName: {color: c.text, fontSize: 16, fontWeight: '600', flexShrink: 1},
     addrMuted: {color: c.subtext, fontSize: 13, fontVariant: ['tabular-nums']},
     sub: {color: c.subtext, fontSize: 12, fontVariant: ['tabular-nums']},
@@ -371,4 +358,6 @@ const makeStyles = (c: Colors) =>
     centered: {justifyContent: 'center'},
     count: {color: c.subtext, fontSize: 14, fontVariant: ['tabular-nums']},
     chev: {color: c.subtext, fontSize: 20, fontWeight: '300'},
+    remove: {width: 28, height: 28, borderRadius: 14, backgroundColor: c.neutralSoft, alignItems: 'center', justifyContent: 'center'},
+    removeText: {color: c.subtext, fontSize: 13, fontWeight: '700'},
   });

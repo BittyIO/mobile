@@ -30,7 +30,6 @@ import {useNetwork} from '@/core/network-store';
 import type {Network} from '@/core/chain';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {useVaultPositions} from '@/vault/useVaultPositions';
-import {useVaultLp} from '@/vault/useVaultLp';
 import {positionToken} from '@/vault/position-token';
 import {susdsRate} from '@/vault/yielding';
 import {buildLimitAppData} from '@/core/cow';
@@ -38,7 +37,7 @@ import {usePrices} from '@/vault/usePrices';
 import {getFlag, setFlag, getPref, setPref, SHOW_OTHER_ORDERS, LAST_PAIR} from '@/core/prefs';
 import {usdValue, fmtUsd} from '@/core/prices';
 import {ownerVaultAddress, balanceOfSymbol} from '@/vault/read';
-import {resolveFeeReserve, reserveHeld} from '@/vault/gasless';
+import {resolveFeeReserve, reserveHeld} from '@/vault/stableCoinAsGas';
 import {FINISHED_WINDOWS, finishedSince, setSlippageBps, slippageBps, useFinishedWindow, type FinishedWindow} from '@/core/prefs';
 import {relayGasFor} from '@/vault/fee-quote';
 import {intentPrepCalls, needsRelayerApproval} from '@/vault/limit';
@@ -684,7 +683,6 @@ export function TradeScreen() {
 
   const balances = useVaultBalances(network);
   const positions = useVaultPositions(balances.vault, network);
-  const lp = useVaultLp(balances.vault, network);
 
   /**
    * The stablecoin to quote in when the app is choosing: one the vault actually HOLDS, USDC first.
@@ -756,8 +754,7 @@ export function TradeScreen() {
   }, [balances.vault, baseSym, network, refreshNonce]);
 
   // The vault's whole portfolio value — the SAME figure the Overview shows: every asset's free +
-  // yielding + lending holding, plus both sides of each LP position, priced off the shared catalog
-  // prices. The position sheet's pie takes the asset's share against this, so the slice is measured
+  // yielding + lending holding, priced off the shared catalog prices. The position sheet's pie takes the asset's share against this, so the slice is measured
   // against what the user reads as their portfolio rather than a spot-only subset — and it needs no
   // server round-trip, since the holdings and prices are already loaded here.
   const portfolioValue = useMemo(() => {
@@ -771,14 +768,8 @@ export function TradeScreen() {
       const v = usdValue(free + held, a.symbol, prices);
       if (v != null) sum += v;
     }
-    for (const p of lp.lp) {
-      const v0 = usdValue(p.amount0, p.symbol0, prices);
-      const v1 = usdValue(p.amount1, p.symbol1, prices);
-      if (v0 != null) sum += v0;
-      if (v1 != null) sum += v1;
-    }
     return sum;
-  }, [assets, balances.balances, positions.positions, lp.lp, prices]);
+  }, [assets, balances.balances, positions.positions, prices]);
 
   const usdcAsset = useMemo(() => stables.find((s) => s.symbol === 'USDC') ?? stables[0], [stables]);
   const quoteAsset = assets.find((a) => a.symbol === quoteSym);

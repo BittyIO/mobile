@@ -1,16 +1,17 @@
 /**
- * Payments — plain sends and scheduled/recurring payments, all relayed gaslessly. Ported from web
- * sendPayment / addScheduledPayment. A send pays from the vault's free balance (empty withdraw arrays);
- * a scheduled payment recurs from a start time and is executed with payScheduled when due.
+ * Payments — plain sends and the whitelist (address book), all relayed gaslessly. A send pays from
+ * the vault's free balance (empty withdraw arrays) or pulls from named positions to cover itself.
+ *
+ * Scheduled payments and the operator-proposed-send flow are GONE: the vault redesign removed both
+ * from the contract, so the functions that drove those screens went with the screens.
  */
-import {parseUnits, type Address, type Hex} from 'viem';
+import {parseUnits, zeroAddress, type Address, type Hex} from 'viem';
 import type {Signer} from '@/wallet/signer';
-import {apiFetch, apiUrl, type Network} from '@/core/chain';
-import {VAULT_PAYMENTS_ABI} from '@/core/abi';
+import {apiFetch, apiUrl, publicClientFor, type Network} from '@/core/chain';
+import {VAULT_PAYMENTS_ABI, VAULT_PAYMENTS_V103_ABI, VAULT_RISK_ABI} from '@/core/abi';
+import {isLegacy} from '@/core/vault-generation';
 import {assetMeta} from '@/core/assets';
 import {relayVaultWrite, relayVaultMulticall, type VaultCall} from './relay';
-
-const ZERO = '0x0000000000000000000000000000000000000000' as const;
 
 /** Send `amount` of `asset` from the vault to `recipient` (from free balance). */
 export async function sendPayment(o: {
@@ -33,94 +34,6 @@ export async function sendPayment(o: {
     abi: VAULT_PAYMENTS_ABI,
     functionName: 'send',
     args: [o.recipient, o.asset, parseUnits(o.amount, decimals), o.withdrawProtocols ?? [], o.withdrawAmounts ?? []],
-    stableCoin: o.stableCoin,
-  });
-  return hash;
-}
-
-/** Schedule a payment. `interval` = 0 for one-time; `count` = number of payments. */
-export async function addScheduledPayment(o: {
-  account: Signer;
-  vault: Address;
-  network: Network;
-  recipient: Address;
-  asset: Address;
-  amount: string; // human, per payment
-  startTimestamp: number; // unix seconds
-  intervalSeconds: number; // 0 = one-time
-  count: number;
-  stableCoin: Address;
-  /** An address allowed to trigger the payment (zero = anyone / the keeper). */
-  trigger?: Address;
-  /** Locked once approved: no later edit or removal. */
-  isImmutable?: boolean;
-  /** Pay what the vault holds when the full amount is short, instead of skipping. */
-  payWithInsufficientBalance?: boolean;
-}): Promise<Hex> {
-  const {decimals} = assetMeta(o.network, o.asset);
-  const payment = {
-    scheduledPaymentAddress: o.recipient,
-    paymentCount: BigInt(o.count),
-    isImmutable: o.isImmutable ?? false,
-    payWithInsufficientBalance: o.payWithInsufficientBalance ?? false,
-    trigger: o.trigger ?? ZERO,
-    assetAddress: o.asset,
-    amount: parseUnits(o.amount, decimals),
-    startTimestamp: BigInt(o.startTimestamp),
-    paymentInterval: BigInt(o.intervalSeconds),
-  };
-  const {hash} = await relayVaultWrite({
-    account: o.account,
-    vault: o.vault,
-    network: o.network,
-    abi: VAULT_PAYMENTS_ABI,
-    functionName: 'addScheduledPayment',
-    args: [payment],
-    stableCoin: o.stableCoin,
-  });
-  return hash;
-}
-
-/** Remove a scheduled payment by id. */
-export async function removeScheduledPayment(o: {
-  account: Signer;
-  vault: Address;
-  network: Network;
-  id: string;
-  stableCoin: Address;
-}): Promise<Hex> {
-  const {hash} = await relayVaultWrite({
-    account: o.account,
-    vault: o.vault,
-    network: o.network,
-    abi: VAULT_PAYMENTS_ABI,
-    functionName: 'removeScheduledPayments',
-    args: [[BigInt(o.id)]],
-    stableCoin: o.stableCoin,
-  });
-  return hash;
-}
-
-/**
- * Execute a due scheduled payment now. `withdrawProtocols` (adapter addresses) funds the payment by
- * pulling from those positions when free balance is short — the v1.0.x replacement for the old
- * payScheduledFromStaking/Lending. Empty = pay from free balance.
- */
-export async function payScheduledNow(o: {
-  account: Signer;
-  vault: Address;
-  network: Network;
-  id: string;
-  stableCoin: Address;
-  withdrawProtocols?: Address[];
-}): Promise<Hex> {
-  const {hash} = await relayVaultWrite({
-    account: o.account,
-    vault: o.vault,
-    network: o.network,
-    abi: VAULT_PAYMENTS_ABI,
-    functionName: 'payScheduled',
-    args: [BigInt(o.id), o.withdrawProtocols ?? []],
     stableCoin: o.stableCoin,
   });
   return hash;
@@ -181,13 +94,8 @@ export async function sendWithWhitelist(o: {
   vault: Address;
   network: Network;
   rows: SendRow[];
-  /**
-   * Entries to write into the book first, deduplicated by the caller.
-   *
-   * `allowedAsset` is what that entry may be paid in; the zero address means any of them, which
-   * is what the contract reads an unset asset as.
-   */
-  addRecipients: {recipient: Address; allowedAsset?: Address}[];
+  /** Entries to write into the book first, deduplicated by the caller. */
+  addRecipients: {recipient: Address}[];
   stableCoin: Address;
 }): Promise<Hex> {
   if (o.addRecipients.length === 0) {
@@ -221,11 +129,7 @@ export async function sendWithWhitelist(o: {
     vault: o.vault,
     network: o.network,
     calls: [
-      ...o.addRecipients.map((r): VaultCall => ({
-        abi: VAULT_PAYMENTS_ABI,
-        functionName: 'addWhitelistedRecipient',
-        args: [r.recipient, r.allowedAsset ?? ZERO],
-      })),
+      ...o.addRecipients.map((r) => addRecipientCall(r.recipient)),
       send,
     ],
     stableCoin: o.stableCoin,
@@ -233,70 +137,40 @@ export async function sendWithWhitelist(o: {
   return hash;
 }
 
-/** Edit an existing scheduled payment (same struct as add). */
-export async function updateScheduledPayment(o: {
-  account: Signer;
-  vault: Address;
-  network: Network;
-  id: string;
-  recipient: Address;
-  asset: Address;
-  amount: string;
-  startTimestamp: number;
-  intervalSeconds: number;
-  count: number;
-  stableCoin: Address;
-  /** An address allowed to trigger the payment (zero = anyone / the keeper). */
-  trigger?: Address;
-  /** Locked once approved: no later edit or removal. */
-  isImmutable?: boolean;
-  /** Pay what the vault holds when the full amount is short, instead of skipping. */
-  payWithInsufficientBalance?: boolean;
-}): Promise<Hex> {
-  const {decimals} = assetMeta(o.network, o.asset);
-  const payment = {
-    scheduledPaymentAddress: o.recipient,
-    paymentCount: BigInt(o.count),
-    isImmutable: o.isImmutable ?? false,
-    payWithInsufficientBalance: o.payWithInsufficientBalance ?? false,
-    trigger: o.trigger ?? ZERO,
-    assetAddress: o.asset,
-    amount: parseUnits(o.amount, decimals),
-    startTimestamp: BigInt(o.startTimestamp),
-    paymentInterval: BigInt(o.intervalSeconds),
-  };
-  const {hash} = await relayVaultWrite({
-    account: o.account,
-    vault: o.vault,
-    network: o.network,
-    abi: VAULT_PAYMENTS_ABI,
-    functionName: 'updateScheduledPayments',
-    args: [[BigInt(o.id)], [payment]],
-    stableCoin: o.stableCoin,
-  });
-  return hash;
-}
-
 // ---- Whitelist / address book ----
 
-export type WhitelistedRecipient = {id: string; recipientAddress: string; allowedAsset: string};
+/**
+ * An address-book entry as the server lists it. `allowedAsset` only ever appears on a v1.0.3 vault's
+ * entries, and the app no longer narrows one: a v1.0.0 entry accepts any asset.
+ */
+export type WhitelistedRecipient = {id: string; recipientAddress: string; allowedAsset?: string};
 
-/** Add a recipient to the address book. `allowedAsset` = zero address means any asset is allowed. */
+/**
+ * The call that writes `recipient` into the book. v1.0.0 takes the address alone; v1.0.3 also names
+ * the asset the entry may be paid in, and is always given "any", which is what its zero address means.
+ */
+function addRecipientCall(recipient: Address): VaultCall {
+  return isLegacy()
+    ? {abi: VAULT_PAYMENTS_V103_ABI, functionName: 'addWhitelistedRecipient', args: [recipient, zeroAddress]}
+    : {abi: VAULT_PAYMENTS_ABI, functionName: 'addWhitelistedRecipient', args: [recipient]};
+}
+
+/** Add a recipient to the address book. It accepts any asset the vault holds. */
 export async function addWhitelisted(o: {
   account: Signer;
   vault: Address;
   network: Network;
   recipient: Address;
-  allowedAsset?: Address;
   stableCoin: Address;
 }): Promise<Hex> {
+  const call = addRecipientCall(o.recipient);
   const {hash} = await relayVaultWrite({
     account: o.account,
     vault: o.vault,
     network: o.network,
-    abi: VAULT_PAYMENTS_ABI,
-    functionName: 'addWhitelistedRecipient',
-    args: [o.recipient, o.allowedAsset ?? ZERO],
+    abi: call.abi,
+    functionName: call.functionName,
+    args: call.args,
     stableCoin: o.stableCoin,
   });
   return hash;
@@ -355,86 +229,50 @@ export async function fetchWhitelist(vault: Address, network: Network): Promise<
   }
 }
 
-// ---- Operator-proposed send governance ----
-
-export async function approveSend(o: {
-  account: Signer;
-  vault: Address;
-  network: Network;
-  id: string;
-  stableCoin: Address;
-}): Promise<Hex> {
-  const {hash} = await relayVaultWrite({
-    account: o.account,
-    vault: o.vault,
-    network: o.network,
-    abi: VAULT_PAYMENTS_ABI,
-    functionName: 'approveSend',
-    args: [BigInt(o.id)],
-    stableCoin: o.stableCoin,
-  });
-  return hash;
-}
-
-export async function cancelSend(o: {
-  account: Signer;
-  vault: Address;
-  network: Network;
-  id: string;
-  stableCoin: Address;
-}): Promise<Hex> {
-  const {hash} = await relayVaultWrite({
-    account: o.account,
-    vault: o.vault,
-    network: o.network,
-    abi: VAULT_PAYMENTS_ABI,
-    functionName: 'cancelSend',
-    args: [BigInt(o.id)],
-    stableCoin: o.stableCoin,
-  });
-  return hash;
-}
-
-export type PaymentAction = {kind: string; action: string; itemId: string; blockTimestamp: string; txHash: string};
-
-/** Pending payment-governance actions (operator proposals awaiting owner approval). */
-export async function fetchPaymentActions(vault: Address, network: Network): Promise<PaymentAction[]> {
+/**
+ * When each entry's queued removal lands (unix seconds), keyed by id — only the entries with one.
+ *
+ * On v1.0.0, removing an entry the vault can already pay does not take it off at once: it waits out
+ * the timelock, staying payable until then, and a lock voids it. So the ✕ may only have queued it,
+ * and the book has to say so rather than show the entry as if nothing had happened. v1.0.3 removes
+ * at once, so there is nothing to read there. An empty answer on any failure: this only annotates.
+ */
+export async function fetchRemovals(vault: Address, network: Network, ids: string[]): Promise<Record<string, number>> {
+  if (isLegacy() || ids.length === 0) return {};
   try {
-    const res = await apiFetch(apiUrl(`/api/ethereum/vaults/payment-actions/${vault}`, network));
-    if (!res.ok) return [];
-    const j = (await res.json()) as {data?: PaymentAction[]};
-    return j.data ?? [];
+    const ats = await publicClientFor(network).readContract({
+      address: vault,
+      abi: VAULT_PAYMENTS_ABI,
+      functionName: 'getWhitelistedRecipientRemovals',
+      args: [ids.map((id) => BigInt(id))],
+    });
+    const out: Record<string, number> = {};
+    ats.forEach((at, i) => {
+      if (at > 0n) out[ids[i]] = Number(at);
+    });
+    return out;
   } catch {
-    return [];
+    return {};
   }
 }
 
-export type ScheduledPayment = {
-  id: string;
-  scheduledPaymentAddress: string;
-  assetAddress: string;
-  amount: string;
-  paymentCount: number;
-  startTimestamp: string;
-  paymentInterval: string;
-  approved: boolean;
-  lastPaidTimestamp: string;
-  triggerAddress?: string;
-  isImmutable?: boolean;
-  payWithInsufficientBalance?: boolean;
-};
-
-/** The vault's active scheduled payments (server-indexed). */
-export async function fetchScheduledPayments(
-  vault: Address,
-  network: Network,
-): Promise<ScheduledPayment[]> {
-  try {
-    const res = await apiFetch(apiUrl(`/api/ethereum/vaults/scheduled-payments/${vault}`, network));
-    if (!res.ok) return [];
-    const j = (await res.json()) as {data?: ScheduledPayment[]};
-    return j.data ?? [];
-  } catch {
-    return [];
-  }
+/**
+ * The entries a forever lock may name as its way out: the ones the vault can pay right now.
+ *
+ * Asked of the contract itself, by simulating `foreverLock(id)` as the owner, rather than rebuilt
+ * here from windows and lock epochs: the vault's own rule is the one that decides, and a copy of it
+ * in the app is one that can drift. A simulation changes nothing.
+ */
+export async function fetchEscapeIds(vault: Address, owner: Address, network: Network, ids: string[]): Promise<string[]> {
+  if (isLegacy() || ids.length === 0) return [];
+  const client = publicClientFor(network);
+  const ok = await Promise.all(
+    ids.map((id) =>
+      client
+        .simulateContract({address: vault, abi: VAULT_RISK_ABI, functionName: 'foreverLock', args: [BigInt(id)], account: owner})
+        .then(() => true)
+        .catch(() => false),
+    ),
+  );
+  return ids.filter((_, i) => ok[i]);
 }

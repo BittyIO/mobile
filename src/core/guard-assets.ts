@@ -1,6 +1,7 @@
 import {useEffect, useSyncExternalStore} from 'react';
 import {parseAbi, type Address} from 'viem';
-import {publicClientFor, GUARD_ADDRESS, type Network} from '@/core/chain';
+import {publicClientFor, type Network} from '@/core/chain';
+import {generationConfig, generationKey, useVaultGeneration} from '@/core/vault-generation';
 import {ASSETS, registerAssetCategories} from '@/core/assets';
 import {useAssetCatalog} from '@/core/asset-catalog';
 
@@ -27,7 +28,8 @@ const ASSET_ABI = parseAbi(['function assetCategory(address) view returns (uint8
 /** Bit 4. Named for the vault constant it mirrors. */
 const ASSET_AMM_LIQUID = 4;
 
-const cache = new Map<Network, Map<string, number>>();
+// Keyed by generation AND network: each generation asks its own guard.
+const cache = new Map<string, Map<string, number>>();
 const inflight = new Map<string, Promise<void>>();
 
 let version = 0;
@@ -45,11 +47,13 @@ const bump = () => {
 
 /** Read any categories not already known. Resolves when the map is as complete as it will get. */
 export async function fetchAssetCategories(network: Network, addresses: string[]): Promise<void> {
-  const known = cache.get(network) ?? new Map<string, number>();
+  const genKey = generationKey(network);
+  const guard = generationConfig().guard;
+  const known = cache.get(genKey) ?? new Map<string, number>();
   const want = [...new Set(addresses.map((a) => a.toLowerCase()))].filter((a) => !known.has(a));
   if (want.length === 0) return;
 
-  const key = `${network}:${want.join(',')}`;
+  const key = `${genKey}:${want.join(',')}`;
   const running = inflight.get(key);
   if (running) return running;
 
@@ -57,7 +61,7 @@ export async function fetchAssetCategories(network: Network, addresses: string[]
     try {
       const client = publicClientFor(network);
       const calls = want.map((a) => ({
-        address: GUARD_ADDRESS,
+        address: guard,
         abi: ASSET_ABI,
         functionName: 'assetCategory' as const,
         args: [a as Address] as const,
@@ -71,7 +75,7 @@ export async function fetchAssetCategories(network: Network, addresses: string[]
         cats = await Promise.all(
           want.map((a) =>
             client
-              .readContract({address: GUARD_ADDRESS, abi: ASSET_ABI, functionName: 'assetCategory', args: [a as Address]})
+              .readContract({address: guard, abi: ASSET_ABI, functionName: 'assetCategory', args: [a as Address]})
               .then((v) => Number(v))
               .catch(() => null),
           ),
@@ -89,7 +93,7 @@ export async function fetchAssetCategories(network: Network, addresses: string[]
        * list is non-empty, so a set with no bit 4 in it is a bad read, not news.
        */
       if (![...next.values()].some((c) => (c & ASSET_AMM_LIQUID) !== 0)) return;
-      cache.set(network, next);
+      cache.set(genKey, next);
       registerAssetCategories(network, next);
       bump();
     } finally {
@@ -110,11 +114,12 @@ export async function fetchAssetCategories(network: Network, addresses: string[]
 export function useGuardAssets(network: Network): number {
   const catalog = useAssetCatalog(network);
   const seen = useSyncExternalStore(subscribe, () => version);
+  const generation = useVaultGeneration((s) => s.generation);
   useEffect(() => {
     void fetchAssetCategories(network, [
       ...catalog.map((a) => a.address),
       ...ASSETS[network].map((a) => a.address),
     ]);
-  }, [network, catalog]);
+  }, [network, catalog, generation]);
   return seen;
 }

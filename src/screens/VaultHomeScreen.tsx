@@ -15,7 +15,6 @@ import {PortfolioPie, type PieSlice} from '@/components/PortfolioPie';
 import {useNetwork, networkLabel} from '@/core/network-store';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {useVaultPositions} from '@/vault/useVaultPositions';
-import {useVaultLp} from '@/vault/useVaultLp';
 import {useFlows} from '@/vault/useFlows';
 import {earnedRaw} from '@/vault/flows';
 import {usePrices} from '@/vault/usePrices';
@@ -511,7 +510,6 @@ export function VaultHomeScreen() {
   const network = useNetwork((s) => s.network);
   const bal = useVaultBalances(network);
   const pos = useVaultPositions(bal.vault, network);
-  const lp = useVaultLp(bal.vault, network);
   const flows = useFlows(bal.vault, network);
 
   // The hooks load once on mount; after that the data refreshes only on pull-to-refresh. Refetching on
@@ -747,7 +745,7 @@ export function VaultHomeScreen() {
     });
   };
 
-  // Total portfolio value: every asset (free + yielding + lending) plus both sides of each LP position.
+  // Total portfolio value: every asset (free + yielding + lending).
   const totalUsd = useMemo(() => {
     let sum = 0;
     let any = false;
@@ -757,20 +755,8 @@ export function VaultHomeScreen() {
         any = true;
       }
     });
-    lp.lp.forEach((p) => {
-      const v0 = usdValue(p.amount0, p.symbol0, prices);
-      const v1 = usdValue(p.amount1, p.symbol1, prices);
-      if (v0 != null) {
-        sum += v0;
-        any = true;
-      }
-      if (v1 != null) {
-        sum += v1;
-        any = true;
-      }
-    });
     return any ? sum : null;
-  }, [rows, lp.lp, prices]);
+  }, [rows]);
 
   // Holdings distribution for the pie: EVERY asset the vault actually holds, largest first — no
   // dust threshold, so a small position still appears in the legend (its slice may be too thin to
@@ -785,7 +771,7 @@ export function VaultHomeScreen() {
   }, [rows]);
 
   // The pull spinner belongs to a pull only, never to the first load.
-  const anyLoading = bal.loading || pos.loading || lp.loading;
+  const anyLoading = bal.loading || pos.loading;
   const [pulled, setPulled] = useState(false);
   const refreshing = pulled && anyLoading;
   const onRefresh = useCallback(() => {
@@ -795,11 +781,10 @@ export function VaultHomeScreen() {
     setPulled(true);
     bal.refresh();
     pos.refresh();
-    lp.refresh();
     // Prices too: a pull that refreshed the balances but left last minute's prices behind moved
     // the amounts and not the values, which reads as a bug.
     setPriceNonce((n) => n + 1);
-  }, [bal, pos, lp]);
+  }, [bal, pos]);
   React.useEffect(() => {
     if (!anyLoading) setPulled(false);
   }, [anyLoading]);

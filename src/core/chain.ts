@@ -9,6 +9,7 @@
 import {createPublicClient, http, fallback, type PublicClient} from 'viem';
 import {mainnet, base, sepolia} from 'viem/chains';
 import {defineChain} from 'viem';
+import {generationConfig} from '@/core/vault-generation';
 
 // Sepolia is the testnet — included so the app can be exercised end to end (activate, deposit, trade)
 // without real funds. "Ethereum" in the UI means Sepolia on a testnet build, mainnet on production.
@@ -25,27 +26,8 @@ export const robinhood = defineChain({
   contracts: {multicall3: {address: '0xcA11bde05977b3631167028862bE2a173976CA11'}},
 });
 
-// The vault generation these addresses belong to. The positions API reads differently per generation,
-// so it must be told which one (mirrors web `DEFAULT_VAULT_VERSION`).
-export const DEFAULT_VAULT_VERSION = 'v1.0.0' as const;
-
-// The Bitty guard — the stable ERC1967 anchor; SAME address on every chain by construction.
-export const GUARD_ADDRESS =
-  '0x00006Dc0000DBB00d9bd462ad2005E20007e0Dc7' as const;
-
-// v1.0.x vault factory — a deterministic ERC1967 proxy, SAME address on every chain (web `factory`).
-export const FACTORY_ADDRESS: Record<Network, `0x${string}`> = {
-  mainnet: '0xCe9c32Bf9720027EE0137153A3C5BC803570DCbf',
-  base: '0xCe9c32Bf9720027EE0137153A3C5BC803570DCbf',
-  sepolia: '0xCe9c32Bf9720027EE0137153A3C5BC803570DCbf',
-  robinhood: '0xCe9c32Bf9720027EE0137153A3C5BC803570DCbf',
-};
-
-// BITTY_VAULT_BOOTSTRAP — the constant implementation every vault proxy is BORN on. A vault's address
-// is fixed by (factory, bootstrap, owner) and never moves when the vault implementation upgrades. Same
-// on every chain (web `bootstrap`). Used by predict-vault.ts for local CREATE2 address prediction.
-export const BOOTSTRAP_ADDRESS =
-  '0x06dBcce6A83230B1Ea281F449f960c8F7124cc72' as const;
+// The guard, factory and bootstrap differ per vault GENERATION, so they live with the generation
+// the user has chosen — see `core/vault-generation`.
 
 // Public RPCs as a default; point these at the app's own indexer endpoints before release (the web
 // app uses per-provider keys to stay under free getLogs caps). Several per network so a single node
@@ -145,8 +127,12 @@ export async function apiFetch(url: string, init?: RequestInit, timeoutMs = 30_0
   }
 }
 
-/** Build an API URL, tagging the chain the same way the web app does (`?network=`). */
+/**
+ * Build an API URL, tagging the chain (`?network=`) and the vault generation (`&version=`) the same
+ * way the web app does. The version is what the server resolves the factory, guard and catalog by,
+ * so it rides on every call rather than on the few that happened to need it first.
+ */
 export function apiUrl(path: string, network: Network): string {
   const sep = path.includes('?') ? '&' : '?';
-  return `${API_BASE}${path}${sep}network=${network}`;
+  return `${API_BASE}${path}${sep}network=${network}&version=${generationConfig().apiVersion}`;
 }

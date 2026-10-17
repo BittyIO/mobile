@@ -14,13 +14,13 @@ export type SettingsIconName =
   | 'security'
   | 'recovery'
   | 'lock'
+  | 'eth'
   | 'timelock'
   | 'autoYield'
   | 'delegation'
-  | 'gasless'
+  | 'stableCoinAsGas'
   | 'dailyLimit'
   | 'perTx'
-  | 'payout'
   | 'settings'
   | 'allowlist'
   | 'follow'
@@ -43,13 +43,13 @@ const TINT: Record<SettingsIconName, string> = {
   security: '#34C759',
   recovery: '#FF9500',
   lock: '#FF3B30',
+  eth: '#627EEA',
   timelock: '#5856D6',
   autoYield: '#34C759',
   delegation: '#0E85FF',
-  gasless: '#AF52DE',
+  stableCoinAsGas: '#AF52DE',
   dailyLimit: '#FF9500',
   perTx: '#5856D6',
-  payout: '#34C759',
   settings: '#8E8E93',
   allowlist: '#30B0C7',
   follow: '#0E85FF',
@@ -70,9 +70,7 @@ export function SettingsIcon({name, size = 29}: {name: SettingsIconName; size?: 
           </>
         ) : name === 'currency' ? (
           <>
-            {/* lucide CircleDollarSign — a denomination in a coin. Not the banknote: that is
-                already the payout row's mark, and two rows wearing one glyph read as one row
-                twice. */}
+            {/* lucide CircleDollarSign — a denomination in a coin. */}
             <Circle cx={12} cy={12} r={9} {...c} />
             <Path d="M15.4 8.7h-4.5a1.9 1.9 0 1 0 0 3.8h2.2a1.9 1.9 0 1 1 0 3.8H8.6M12 6.5v11" {...c} />
           </>
@@ -111,6 +109,12 @@ export function SettingsIcon({name, size = 29}: {name: SettingsIconName; size?: 
           <>
             <Rect x={3} y={11} width={18} height={11} rx={2} {...c} />
             <Path d="M7 11V7a5 5 0 0 1 10 0v4" {...c} />
+          </>
+        ) : name === 'eth' ? (
+          // Ether's diamond: the native coin the Legacy ETH row wraps.
+          <>
+            <Path d="M12 2L5 12.5 12 16.5 19 12.5z" {...c} />
+            <Path d="M5 14l7 8 7-8-7 4z" {...c} />
           </>
         ) : name === 'timelock' ? (
           // A clock: the vault's change delay, the waiting period a loosening has to sit out.
@@ -159,12 +163,6 @@ export function SettingsIcon({name, size = 29}: {name: SettingsIconName; size?: 
             {/* A receipt: one transaction's fee. */}
             <Path d="M5 3h14v18l-2.3-1.6L14.4 21l-2.4-1.6L9.6 21l-2.3-1.6L5 21z" {...c} />
             <Path d="M9 8h6M9 12h6M9 16h4" {...c} />
-          </>
-        ) : name === 'payout' ? (
-          <>
-            <Rect x={2} y={6} width={20} height={12} rx={2} {...c} />
-            <Circle cx={12} cy={12} r={2.5} {...c} />
-            <Path d="M6 12h.01M18 12h.01" {...c} />
           </>
         ) : name === 'allowlist' ? (
           <>

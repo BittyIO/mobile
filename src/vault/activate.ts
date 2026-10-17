@@ -1,8 +1,8 @@
 /**
- * Gasless vault activation — the ONLY bootstrap path for a no-ETH owner. The owner
+ * Stablecoin-paid vault activation — the ONLY bootstrap path for a no-ETH owner. The owner
  * signs an Activation (against the FACTORY's EIP-712 domain); the relayer deploys + activates the
  * vault and takes the fee from the deposited stable coin. A fresh activated vault already relays, so
- * no separate setGasless is needed — activation IS "turning gasless on".
+ * no separate setStableCoinAsGas is needed — activation IS "turning stablecoin-as-gas on".
  *
  * Ported from web `activateByStablecoin`. The fee is priced from live gas + ETH/USD and SIGNED, so the
  * server accepts it within a band (see core/activation-fee).
@@ -12,12 +12,11 @@ import type {Signer} from '@/wallet/signer';
 import {
   apiUrl,
   CHAIN_ID,
-  DEFAULT_VAULT_VERSION,
-  FACTORY_ADDRESS,
   publicClientFor,
   type Network,
 } from '@/core/chain';
-import {ACTIVATION_TYPES, PRICE_FEED_ABI} from '@/core/abi';
+import {ACTIVATION_TYPES, ACTIVATION_TYPES_V2, PRICE_FEED_ABI} from '@/core/abi';
+import {generationConfig, isLegacy} from '@/core/vault-generation';
 import {activationFeeUnits} from '@/core/activation-fee';
 // One copy of the ETH/USD feeds: the fee shown before signing and the fee actually signed must be
 // priced from the same source, or the two disagree for no reason the user can see.
@@ -32,6 +31,9 @@ export async function isActivated(vault: Address, network: Network): Promise<boo
   return !!code && code !== '0x';
 }
 
+/** How long a v1.0.0 activation signature stays spendable — the same window a relayed write gets. */
+const ACTIVATION_DEADLINE_SECONDS = 600;
+
 const DECIMALS_ABI = parseAbi(['function decimals() view returns (uint8)']);
 
 export async function activateVault(o: {
@@ -43,7 +45,7 @@ export async function activateVault(o: {
   calls?: readonly Hex[];
 }): Promise<{hash: Hex; vault: Address; feeAmount: bigint}> {
   const client = publicClientFor(o.network);
-  const factory = FACTORY_ADDRESS[o.network];
+  const factory = generationConfig().factory;
 
   const feedAddress = ETH_USD_FEED[o.network];
   const [gasPrice, ethUsd, decimals] = await Promise.all([
@@ -70,23 +72,41 @@ export async function activateVault(o: {
 
   const calls = (o.calls ?? []) as Hex[];
 
-  const signature = await o.account.signTypedData({
-    domain: {
-      name: 'BittyV1VaultFactory',
-      version: '1',
-      chainId: CHAIN_ID[o.network],
-      verifyingContract: factory,
-    },
-    types: ACTIVATION_TYPES,
-    primaryType: 'Activation',
-    message: {
-      owner: o.account.address,
-      stableCoinAddress: o.stableCoin,
-      feeAmount,
-      allowlistEnabled: o.allowlistEnabled,
-      calls,
-    },
-  });
+  const domain = {
+    name: 'BittyV1VaultFactory',
+    version: '1',
+    chainId: CHAIN_ID[o.network],
+    verifyingContract: factory,
+  } as const;
+  // v1.0.3 signs the flag as `allowlistEnabled` with no expiry; v1.0.0 renames it and adds `deadline`.
+  const legacy = isLegacy();
+  const deadline = BigInt(Math.floor(Date.now() / 1000) + ACTIVATION_DEADLINE_SECONDS);
+  const signature = legacy
+    ? await o.account.signTypedData({
+        domain,
+        types: ACTIVATION_TYPES,
+        primaryType: 'Activation',
+        message: {
+          owner: o.account.address,
+          stableCoinAddress: o.stableCoin,
+          feeAmount,
+          allowlistEnabled: o.allowlistEnabled,
+          calls,
+        },
+      })
+    : await o.account.signTypedData({
+        domain,
+        types: ACTIVATION_TYPES_V2,
+        primaryType: 'Activation',
+        message: {
+          owner: o.account.address,
+          stableCoinAddress: o.stableCoin,
+          feeAmount,
+          restrictToOwnAllowList: o.allowlistEnabled,
+          calls,
+          deadline,
+        },
+      });
 
   const res = await fetch(apiUrl('/api/ethereum/vaults/activate', o.network), {
     method: 'POST',
@@ -96,10 +116,12 @@ export async function activateVault(o: {
       stableCoinAddress: o.stableCoin,
       feeAmount: feeAmount.toString(),
       signature,
-      version: DEFAULT_VAULT_VERSION,
+      version: generationConfig().apiVersion,
       factory,
       allowlistEnabled: o.allowlistEnabled,
       calls,
+      // Signed only on v1.0.0, where the factory refuses the activation after it.
+      ...(legacy ? {} : {deadline: deadline.toString()}),
     }),
   });
 

@@ -1,10 +1,10 @@
 /**
  * Embedded keyring — the vault owner's key lives ON THIS DEVICE, in the iOS Keychain behind biometrics
- * (Face ID / passcode). The app IS the wallet: it creates or imports a BIP-39 recovery phrase, derives
+ * (Face ID / passcode). The app IS the wallet: it creates a BIP-39 recovery phrase, derives
  * the account with viem, and signs every vault action locally. The mnemonic is never in JS-readable
  * storage and never leaves the device.
  *
- * Recovery is the phrase: shown once on create, re-imported on a new device. No server ever sees it.
+ * Recovery is the phrase: shown once on create. No server ever sees it.
  */
 import * as Keychain from 'react-native-keychain';
 import {generateMnemonic, mnemonicToAccount, english, type HDAccount} from 'viem/accounts';
@@ -24,24 +24,17 @@ export async function hasWallet(): Promise<boolean> {
   return !!r;
 }
 
-/** A fresh 12-word BIP-39 phrase. Show once, then commit with {@link importWallet}. Never log/transmit. */
+/** A fresh 12-word BIP-39 phrase. Show once, then persist after the backup check. Never log/transmit. */
 export function generateNewMnemonic(): string {
   return generateMnemonic(english);
 }
 
-/** Import (and persist) an existing BIP-39 mnemonic behind biometrics. Throws if the phrase is invalid. */
-export async function importWallet(mnemonic: string): Promise<HDAccount> {
+/** Persist the phrase generated in onboarding after its backup check. */
+export async function createWallet(mnemonic: string): Promise<HDAccount> {
   const normalized = mnemonic.trim().toLowerCase().replace(/\s+/g, ' ');
   const account = mnemonicToAccount(normalized); // throws on an invalid phrase
   await Keychain.setGenericPassword('bitty', normalized, SECURE);
   return account;
-}
-
-/** Generate + persist a brand-new wallet. Returns the phrase to reveal once. */
-export async function createWallet(): Promise<{mnemonic: string; account: HDAccount}> {
-  const mnemonic = generateNewMnemonic();
-  const account = await importWallet(mnemonic);
-  return {mnemonic, account};
 }
 
 /** Read the mnemonic from the Keychain behind a biometric prompt (null if cancelled). */

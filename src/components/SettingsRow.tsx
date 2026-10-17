@@ -68,13 +68,51 @@ export function SettingsRow({
   );
 }
 
-/** The rounded card a run of rows sits in, with an optional label above it. */
-export function SettingsGroup({label, children}: {label?: string; children: React.ReactNode}) {
+/**
+ * One choice in a pick-one list: a title (and optional second line), a check on the chosen one.
+ * No icon — the list's subject is the page title, and the rows are its answers.
+ */
+export function OptionRow({
+  title,
+  sub,
+  checked,
+  busy,
+  disabled,
+  onPress,
+  last,
+}: {
+  title: string;
+  sub?: string;
+  checked?: boolean;
+  /** This choice's write is in flight. */
+  busy?: boolean;
+  disabled?: boolean;
+  onPress?: () => void;
+  last?: boolean;
+}) {
+  const styles = useStyles(makeStyles);
+  return (
+    <Pressable style={[styles.row, !last && styles.rowDivider]} onPress={onPress} disabled={disabled}>
+      <View style={styles.rowText}>
+        <Text style={[styles.rowTitle, disabled && !checked && styles.rowTitleOff]}>{title}</Text>
+        {sub ? <Text style={styles.rowSub}>{sub}</Text> : null}
+      </View>
+      {busy ? <Text style={styles.rowValue}>…</Text> : checked ? <Text style={styles.check}>✓</Text> : null}
+    </Pressable>
+  );
+}
+
+/**
+ * The rounded card a run of rows sits in, with an optional label above it and an optional
+ * description below it — the iOS footer that says what the rows in the card do.
+ */
+export function SettingsGroup({label, footer, children}: {label?: string; footer?: string; children: React.ReactNode}) {
   const styles = useStyles(makeStyles);
   return (
     <View style={styles.section}>
       {label ? <Text style={styles.groupLabel}>{label}</Text> : null}
       <View style={styles.group}>{children}</View>
+      {footer ? <Text style={styles.groupFooter}>{footer}</Text> : null}
     </View>
   );
 }
@@ -82,6 +120,7 @@ export function SettingsGroup({label, children}: {label?: string; children: Reac
 export const makeSettingsStyles = (c: Colors) =>
   StyleSheet.create({
     groupLabel: {color: c.subtext, fontSize: 15, fontWeight: '600', paddingHorizontal: 16, marginTop: 8, marginBottom: 6},
+    groupFooter: {color: c.subtext, fontSize: 12, lineHeight: 17, paddingHorizontal: 16, marginTop: 6},
     section: {gap: 0},
     group: {backgroundColor: c.card, borderRadius: 20, overflow: 'hidden'},
     row: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 15, paddingHorizontal: 16, gap: 12},
@@ -89,6 +128,8 @@ export const makeSettingsStyles = (c: Colors) =>
     rowText: {gap: 3, flexShrink: 1, flex: 1},
     rowTitle: {color: c.text, fontSize: 15, fontWeight: '600'},
     rowSub: {color: c.subtext, fontSize: 12},
+    rowTitleOff: {color: c.subtext},
+    check: {color: c.accent, fontSize: 17, fontWeight: '700'},
     rowRight: {flexDirection: 'row', alignItems: 'center', gap: 6},
     // A chevron's glyph sits a few points inside its box; a switch fills its own exactly, so
     // without this it looks nearer the edge than every other row in the group.

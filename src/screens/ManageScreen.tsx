@@ -26,36 +26,30 @@ import {useStyles, type Colors} from '@/theme';
 import {displaySymbol} from '@/core/format';
 
 /**
- * Allow list management (Settings › Vault › Allow list). Vault / adapter upgrades will return here later. Gasless, Face-ID-gated. The
+ * Allow list management (Settings › Vault › Allow list). Vault / adapter upgrades will return here later. Relayed, Face-ID-gated. The
  * Bitty allowlist switch first, then the assets and the protocols, each in its own card.
  */
 /**
  * Which service a protocol category powers, by translation key.
  *
  * Typed against ProtocolCategory rather than `string`, so adding a category to the registry fails
- * to compile until it has a name here. It was `Record<string, string>` when the AMM split added
- * `marketMaker`, and the lookup silently returned undefined — `t(undefined)` then threw inside
+ * to compile until it has a name here. It was `Record<string, string>` when the AMM split added a
+ * category, and the lookup silently returned undefined — `t(undefined)` then threw inside
  * `resolve` and took the whole Allow list page down.
  */
 const SERVICE_KEY: Record<ProtocolCategory, string> = {
   staking: 'vault.flexible_yield',
   lending: 'vault.flexible_lend',
   amm: 'vault.market_trade',
-  marketMaker: 'vault.market_maker',
   intent: 'vault.limit_trade',
   unknown: 'mobile.vault.category_unknown',
 };
 
 /**
- * The order the services are listed in: what the vault earns with, then what it trades with, then
- * market making.
- *
- * Registry order put Market Maker in the middle of the trading services, between the adapter that
- * swaps and the one that posts intents, where it reads as a third way to trade. It is the one
- * service that puts the vault's money INTO a pool rather than through one, so it goes last.
+ * The order the services are listed in: what the vault earns with, then what it trades with.
  * Anything with no rank here follows, in the order the registry gave it.
  */
-const SERVICE_ORDER: ProtocolCategory[] = ['staking', 'lending', 'amm', 'intent', 'marketMaker', 'unknown'];
+const SERVICE_ORDER: ProtocolCategory[] = ['staking', 'lending', 'amm', 'intent', 'unknown'];
 const serviceRank = (c: ProtocolCategory) => {
   const i = SERVICE_ORDER.indexOf(c);
   return i < 0 ? SERVICE_ORDER.length : i;
@@ -80,7 +74,7 @@ export function ManageScreen() {
     fetchVaultVersions(network).then(setCatalog);
   }, [network]);
   // The vault's own impl version decides which services apply: a ≤1.0.2 vault sees the combined
-  // Uniswap adapter; a 1.0.3+ vault sees the split Market Trade + Market Maker.
+  // Uniswap adapter; a 1.0.3+ vault sees the split Market Trade adapter.
   const [implVersion, setImplVersion] = useState(0);
   useEffect(() => {
     if (vault) vaultImplVersion(vault, network).then(setImplVersion);
@@ -90,10 +84,9 @@ export function ManageScreen() {
    *
    * Keyed by category and name, not by name alone. Name alone was right before the AMM split,
    * when a protocol appeared twice only because two adapter versions of it were registered and
-   * one row was wanted. Since the split two different services legitimately share a name — the
-   * catalog calls both the market-trade adapter and the market-maker adapter "Uniswap V3" — and
-   * a Map keyed on that kept whichever came last, which silently dropped Market Trade from the
-   * list. Two versions of one adapter within a category still collapse to one row.
+   * one row was wanted. Since the split two different services can share a name, and a Map keyed
+   * on that kept whichever came last, which silently dropped one from the list. Two versions of
+   * one adapter within a category still collapse to one row.
    */
   const protocols = useMemo(
     () =>

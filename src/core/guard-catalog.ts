@@ -1,6 +1,7 @@
 import {useEffect, useState} from 'react';
 import {parseAbi, type Address} from 'viem';
-import {publicClientFor, GUARD_ADDRESS, type Network} from '@/core/chain';
+import {publicClientFor, type Network} from '@/core/chain';
+import {generationConfig, generationKey, useVaultGeneration, IGNORED_GUARD_CATEGORIES} from '@/core/vault-generation';
 import type {ProtocolCategory} from '@/core/protocols';
 
 /**
@@ -32,39 +33,32 @@ const GUARD_ABI = parseAbi([
 ]);
 
 /**
- * The guard's category numbers.
- *
- * 3 is the market-TRADE adapter: `PROTOCOL_MARKET_TRADE` aliases the old `PROTOCOL_AMM`, so a
- * chain on the combined adapter and a chain on the split one both report 3 for the thing a swap
- * routes through. 5 is the split's maker side, and its absence is how a pre-split chain is
- * recognised — see {marketMakerAdapters}.
+ * The guard's category numbers come from the generation (`protocolCategories`): the v1.0.0 guard
+ * swapped staking and lending to 1 and 2. 3 is the market-TRADE adapter on both — the old guard's
+ * `PROTOCOL_AMM`. 5, market maker, is dropped: see {IGNORED_GUARD_CATEGORIES}.
  */
-const CATEGORY: Record<number, ProtocolCategory> = {
-  1: 'lending',
-  2: 'staking',
-  3: 'amm',
-  4: 'intent',
-  5: 'marketMaker',
-};
 
 export type GuardProtocol = {address: Address; category: ProtocolCategory};
 
-const cache = new Map<Network, GuardProtocol[]>();
-const inflight = new Map<Network, Promise<GuardProtocol[] | null>>();
+// Keyed by generation AND network: the two generations' guards hold different adapters.
+const cache = new Map<string, GuardProtocol[]>();
+const inflight = new Map<string, Promise<GuardProtocol[] | null>>();
 
 /**
  * Read the catalog for one network. Null when the guard cannot be reached, which leaves whatever
  * the caller already had — the last good read, or the vendored table.
  */
 export async function fetchGuardProtocols(network: Network): Promise<GuardProtocol[] | null> {
-  const running = inflight.get(network);
+  const key = generationKey(network);
+  const {guard, protocolCategories} = generationConfig();
+  const running = inflight.get(key);
   if (running) return running;
 
   const task = (async () => {
     try {
       const client = publicClientFor(network);
       const list = (await client.readContract({
-        address: GUARD_ADDRESS,
+        address: guard,
         abi: GUARD_ABI,
         functionName: 'getProtocols',
       })) as readonly Address[];
@@ -76,7 +70,7 @@ export async function fetchGuardProtocols(network: Network): Promise<GuardProtoc
       const cats = await Promise.all(
         list.map((a) =>
           client
-            .readContract({address: GUARD_ADDRESS, abi: GUARD_ABI, functionName: 'protocolCategory', args: [a]})
+            .readContract({address: guard, abi: GUARD_ABI, functionName: 'protocolCategory', args: [a]})
             .catch(() => 0),
         ),
       );
@@ -84,22 +78,25 @@ export async function fetchGuardProtocols(network: Network): Promise<GuardProtoc
       // Reversed, so `[0]` of any category is the most recently registered — the canonical target
       // for a fresh clone, a market swap and an upgrade.
       const out: GuardProtocol[] = list
-        .map((address, i) => ({address, category: CATEGORY[Number(cats[i])] ?? 'unknown'}))
+        .map((address, i) => ({address, raw: Number(cats[i])}))
+        .filter((p) => !IGNORED_GUARD_CATEGORIES.has(p.raw))
+        .map(({address, raw}) => ({address, category: protocolCategories[raw] ?? 'unknown'}))
         .reverse();
-      cache.set(network, out);
+      cache.set(key, out);
       return out;
     } catch {
       return null;
     } finally {
-      inflight.delete(network);
+      inflight.delete(key);
     }
   })();
-  inflight.set(network, task);
+  inflight.set(key, task);
   return task;
 }
 
 /** The best catalog we have right now, or null when the guard has never answered. */
-export const currentGuardProtocols = (network: Network): GuardProtocol[] | null => cache.get(network) ?? null;
+export const currentGuardProtocols = (network: Network): GuardProtocol[] | null =>
+  cache.get(generationKey(network)) ?? null;
 
 /**
  * Keep the catalog warm and re-render when it lands.
@@ -110,6 +107,8 @@ export const currentGuardProtocols = (network: Network): GuardProtocol[] | null 
  */
 export function useGuardProtocols(network: Network): GuardProtocol[] | null {
   const [list, setList] = useState<GuardProtocol[] | null>(() => currentGuardProtocols(network));
+  // A generation switch is a different guard, so it refetches exactly as a network change does.
+  const generation = useVaultGeneration((s) => s.generation);
   useEffect(() => {
     let live = true;
     setList(currentGuardProtocols(network));
@@ -119,6 +118,6 @@ export function useGuardProtocols(network: Network): GuardProtocol[] | null {
     return () => {
       live = false;
     };
-  }, [network]);
+  }, [network, generation]);
   return list;
 }

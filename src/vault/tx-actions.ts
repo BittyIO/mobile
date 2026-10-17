@@ -241,10 +241,12 @@ export function describeActions(
         out.push(k('auto_yield_run'));
         break;
       case 'setGasless':
-        out.push(k('gasless_set'));
+      case 'setStableCoinAsGas':
+        out.push(k('stable_coin_as_gas_set'));
         break;
       case 'disableGasless':
-        out.push(k('gasless_disabled'));
+      case 'disableStableCoinAsGas':
+        out.push(k('stable_coin_as_gas_disabled'));
         break;
       case 'updatePaymentRisk':
         out.push(k('payment_risk'));
@@ -292,7 +294,7 @@ export function describeActions(
         out.push(k('send_cancelled'));
         break;
       default:
-        // marketSell/marketBuy, deposit/withdraw, send, liquidity: the legs already say it.
+        // marketSell/marketBuy, deposit/withdraw, send: the legs already say it.
         break;
     }
   }

@@ -57,7 +57,7 @@ export async function buildSetupCalls(o: {
     // no clone to validate against. The clone itself is the question there.
     //
     // And ONLY there. `updateProtocols` clones eagerly for intent protocols and nothing else, while
-    // `marketSell` and the liquidity calls clone on demand through `_cloneProtocol` — so asking
+    // `marketSell` clones on demand through `_cloneProtocol` — so asking
     // `getClone` for an AMM adapter would be asking for something registration never creates, and
     // would re-register it on every single trade for ever. Tried; reverted.
     o.intent

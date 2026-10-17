@@ -1,6 +1,6 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
-import {GaslessCoins} from '@/components/GaslessCoins';
+import {StableCoinAsGasCoins} from '@/components/StableCoinAsGasCoins';
 import {PickerSheet} from '@/components/AssetPicker';
 import {makeSettingsStyles} from '@/components/SettingsRow';
 import {TokenIcon} from '@/components/TokenIcon';
@@ -15,7 +15,7 @@ import {
   setGasReserveCoin,
 } from '@/core/prefs';
 import {useWallet} from '@/wallet/store';
-import {resolveFeeReserve} from '@/vault/gasless';
+import {resolveFeeReserve} from '@/vault/stableCoinAsGas';
 import {ownerVaultAddress, balanceOfSymbol} from '@/vault/read';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {useStyles, type Colors} from '@/theme';
@@ -25,7 +25,7 @@ import {useT} from '@/i18n';
  * What the vault's network fees are paid WITH, and what it always keeps to pay them.
  *
  * Two sections, in the order the questions arrive: which stable coins the relayer may bill, then
- * the float that is held back so it can. `GaslessCoins` carries the first entirely — its own
+ * the float that is held back so it can. `StableCoinAsGasCoins` carries the first entirely — its own
  * card, switches and footnote.
  *
  * The reserve is deliberately plain. Its value lives in the preferences file that is already open
@@ -120,7 +120,7 @@ export function NetworkFeeScreen() {
       style={styles.container}
       contentContainerStyle={styles.body}>
       <View>
-        <GaslessCoins />
+        <StableCoinAsGasCoins />
       </View>
 
       {/* The reserve: one row for WHICH coin holds it, one for how much. */}

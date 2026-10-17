@@ -19,7 +19,7 @@ import {useNetwork} from '@/core/network-store';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {useVaultPositions} from '@/vault/useVaultPositions';
 import {ownerVaultAddress, balanceOfSymbol} from '@/vault/read';
-import {sendWithWhitelist, fetchWhitelist, type WhitelistedRecipient} from '@/vault/payments';
+import {sendWithWhitelist} from '@/vault/payments';
 import type {Position} from '@/vault/positions';
 
 import {shortAddress} from '@/core/format';
@@ -27,7 +27,7 @@ import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {displaySymbol, fmtNum, fmtShort} from '@/core/format';
 import {relayGasFor} from '@/vault/fee-quote';
-import {resolveFeeReserve} from '@/vault/gasless';
+import {resolveFeeReserve} from '@/vault/stableCoinAsGas';
 
 import {useAssetCatalog} from '@/core/asset-catalog';
 
@@ -41,8 +41,6 @@ type Recipient = {
   label?: string;
   /** Typed in and not yet in the book: the send writes the entry in the same transaction. */
   needsWhitelist?: boolean;
-  /** What that entry may be paid in. Undefined means any asset. */
-  allowedAsset?: Address;
 };
 
 // See {shortAddress}: one formatter, so no screen can drift to its own idea of short.
@@ -140,7 +138,6 @@ export function SendScreen() {
   const pos = useVaultPositions(vault, network);
 
   const [recipients, setRecipients] = useState<Recipient[]>([{to: '', lines: [newLine(first)]}]);
-  const [book, setBook] = useState<WhitelistedRecipient[]>([]);
   /** Which recipient card's address is being chosen, if any. */
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   /**
@@ -153,16 +150,12 @@ export function SendScreen() {
   const clearPicked = useRecipientPick((st) => st.clear);
   useEffect(() => {
     if (!picked) return;
-    patchR(picked.slot, {to: picked.address, label: picked.label, needsWhitelist: picked.addToBook, allowedAsset: picked.allowedAsset});
+    patchR(picked.slot, {to: picked.address, label: picked.label, needsWhitelist: picked.addToBook});
     clearPicked();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [picked]);
   const [status, setStatus] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
   const [err, setErr] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (vault) fetchWhitelist(vault, network).then(setBook).catch(() => setBook([]));
-  }, [vault, network]);
 
   const meta = (sym: string) => assets.find((a) => a.symbol === sym);
   const stakePos = (sym: string): Position | undefined => pos.positions.find((p) => p.kind === 'staked' && p.symbol === sym);
@@ -359,7 +352,7 @@ export function SendScreen() {
         ...new Map(
           recipients
             .filter((r) => r.needsWhitelist && isPayableAddress(r.to, network))
-            .map((r) => [r.to.toLowerCase(), {recipient: r.to.toLowerCase() as Address, allowedAsset: r.allowedAsset}]),
+            .map((r) => [r.to.toLowerCase(), {recipient: r.to.toLowerCase() as Address}]),
         ).values(),
       ];
       const h = await sendWithWhitelist({account: acct, vault, network, rows, addRecipients: toAdd, stableCoin: stable.address});

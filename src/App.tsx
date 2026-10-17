@@ -11,6 +11,8 @@ import {NetworkSwitcher} from '@/components/NetworkSwitcher';
 import {useGuardProtocols} from '@/core/guard-catalog';
 import {useGuardAssets} from '@/core/guard-assets';
 import {useNetwork} from '@/core/network-store';
+import {useVaultGeneration} from '@/core/vault-generation';
+import {RISK_TITLE} from '@/components/riskFormat';
 import {ToastHost} from '@/components/Toast';
 import {resumePending} from '@/vault/pending';
 import {OnboardingScreen} from '@/screens/OnboardingScreen';
@@ -86,9 +88,7 @@ export type RootStackParamList = {
   Browser: {url: string; title?: string};
   /** What relay fees are billed in, and the float the app will not spend below. */
   NetworkFee: undefined;
-  AddLiquidity: undefined;
   AutoYield: undefined;
-  Delegation: undefined;
   /**
    * The allow list. Without a section it is the two summary rows; with one it is that list.
    *
@@ -105,7 +105,14 @@ export type RootStackParamList = {
    */
   SelectAsset: {slot: 'base' | 'quote'; selected?: string; exclude?: string};
   VaultSecurity: undefined;
-  VaultTeam: undefined;
+  /** Security › Risk settings, Vault lock, Legacy ETH — each a row on the Security page. */
+  VaultRiskSettings: undefined;
+  /** Pick one risk number: presets, or a custom value. */
+  VaultRiskValue: {field: 'timelock' | 'sendDailyAllowance' | 'marketTradeDailyLossAllowance'};
+  VaultLock: undefined;
+  VaultLegacyEth: undefined;
+  VaultRecoveryPhrase: undefined;
+  VaultAssetManager: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -271,6 +278,14 @@ function Root() {
   const init = useWallet((s) => s.init);
   const network = useNetwork((s) => s.network);
   /**
+   * The vault generation keys the whole navigator.
+   *
+   * Switching it changes the factory, so the owner's vault ADDRESS changes under every screen —
+   * and most screens read the address once, from the network alone. Remounting is what makes each
+   * of them start again against the new vault rather than go on showing the old one's balances.
+   */
+  const generation = useVaultGeneration((s) => s.generation);
+  /**
    * The guard's protocol catalog, read before anything needs it.
    *
    * Every relayed write resolves its adapter through a plain function, which cannot wait on a
@@ -299,7 +314,7 @@ function Root() {
   if (status === 'locked') return <LockScreen />;
 
   return (
-    <NavigationContainer theme={navTheme} ref={navigationRef}>
+    <NavigationContainer key={generation} theme={navTheme} ref={navigationRef}>
       <Stack.Navigator
         screenOptions={{
           // Translucent header with the same tinted ground as the tab header, so a pushed page and a
@@ -408,9 +423,7 @@ function Root() {
           getComponent={() => require('@/screens/NetworkFeeScreen').NetworkFeeScreen}
           options={{title: t('mobile.settings.network_fee')}}
         />
-        <Stack.Screen name="AddLiquidity" getComponent={() => require('@/screens/AddLiquidityScreen').AddLiquidityScreen} options={{title: t('mobile.app.add_liquidity'), presentation: 'modal'}} />
         <Stack.Screen name="AutoYield" getComponent={() => require('@/screens/AutoYieldScreen').AutoYieldScreen} options={{title: t('mobile.app.auto_yield'), presentation: 'modal'}} />
-        <Stack.Screen name="Delegation" getComponent={() => require('@/screens/DelegationScreen').DelegationScreen} options={{title: t('vault.payout_operators')}} />
         <Stack.Screen
           name="VaultAssets"
           getComponent={() => require('@/screens/ManageScreen').ManageScreen}
@@ -432,7 +445,16 @@ function Root() {
           })}
         />
         <Stack.Screen name="VaultSecurity" getComponent={() => require('@/screens/SecurityScreen').SecurityScreen} options={{title: t('mobile.app.security')}} />
-        <Stack.Screen name="VaultTeam" getComponent={() => require('@/screens/TeamScreen').TeamScreen} options={{title: t('mobile.settings.team')}} />
+        <Stack.Screen name="VaultRiskSettings" getComponent={() => require('@/screens/RiskSettingsScreen').RiskSettingsScreen} options={{title: t('mobile.vault.risk_settings')}} />
+        <Stack.Screen
+          name="VaultRiskValue"
+          getComponent={() => require('@/screens/RiskValueScreen').RiskValueScreen}
+          options={({route}) => ({title: t(RISK_TITLE[route.params.field])})}
+        />
+        <Stack.Screen name="VaultLock" getComponent={() => require('@/screens/VaultLockScreen').VaultLockScreen} options={{title: t('mobile.vault.vault_lock')}} />
+        <Stack.Screen name="VaultLegacyEth" getComponent={() => require('@/screens/LegacyEthScreen').LegacyEthScreen} options={{title: t('mobile.vault.legacy_eth')}} />
+        <Stack.Screen name="VaultAssetManager" getComponent={() => require('@/screens/AssetManagerScreen').AssetManagerScreen} options={{title: t('vault.asset_manager')}} />
+        <Stack.Screen name="VaultRecoveryPhrase" getComponent={() => require('@/screens/RecoveryPhraseScreen').RecoveryPhraseScreen} options={{title: t('mobile.settings.recovery_phrase')}} />
       </Stack.Navigator>
     </NavigationContainer>
   );

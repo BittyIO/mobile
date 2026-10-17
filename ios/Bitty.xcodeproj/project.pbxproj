@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0C80B921A6F3F58F76C31292 /* libPods-Bitty.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-Bitty.a */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		6A2739686A9034485FC0A6C5 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5737DAED570BAFD67C16DE8D /* InfoPlist.strings */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		CAFF055F79865E33F181B05F /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
@@ -19,12 +20,27 @@
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = Bitty/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = Bitty/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = Bitty/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		1A2DEDBAE963BFC970F769F3 /* hi */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = hi; path = Bitty/hi.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		231243C805435BCABB9FE3C3 /* fr */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = fr; path = Bitty/fr.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		2F704A5B2E6F86DCB26295B4 /* tr */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = tr; path = Bitty/tr.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		3587FD69C49F621CBD1DDEEE /* ja */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = ja; path = Bitty/ja.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		3B4392A12AC88292D35C810B /* Pods-Bitty.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Bitty.debug.xcconfig"; path = "Target Support Files/Pods-Bitty/Pods-Bitty.debug.xcconfig"; sourceTree = "<group>"; };
+		45C06705E93AE98F119A7DC5 /* id */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = id; path = Bitty/id.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		4AD51C3CD975183F27F278B3 /* en */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = en; path = Bitty/en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		5709B34CF0A7D63546082F79 /* Pods-Bitty.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Bitty.release.xcconfig"; path = "Target Support Files/Pods-Bitty/Pods-Bitty.release.xcconfig"; sourceTree = "<group>"; };
 		5DCACB8F33CDC322A6C60F78 /* libPods-Bitty.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Bitty.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		6405F4F795E7C85D92538FCA /* zh-Hant */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = "zh-Hant"; path = "Bitty/zh-Hant.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
+		6A865EE67B287B9317B4C0E5 /* ko */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = ko; path = Bitty/ko.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Bitty/AppDelegate.swift; sourceTree = "<group>"; };
+		813F422E1D38B6252E7BCD3F /* zh-Hans */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "Bitty/zh-Hans.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = Bitty/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		A13544C67EE10350B79041FE /* vi */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = vi; path = Bitty/vi.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		DD5887E37F4B6592FC5053AC /* th */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = th; path = Bitty/th.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		DEA1E578122F415B65A883A1 /* de */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = de; path = Bitty/de.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		E7FD9C084ECF40ACF71E1B05 /* pt-BR */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = "pt-BR"; path = "Bitty/pt-BR.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
+		EDFD83A29E5B580C26C8D649 /* ru */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = ru; path = Bitty/ru.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		F91D1373286282234B69C156 /* es */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = es; path = Bitty/es.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -47,6 +63,7 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
+				5737DAED570BAFD67C16DE8D /* InfoPlist.strings */,
 			);
 			name = Bitty;
 			sourceTree = "<group>";
@@ -142,6 +159,20 @@
 			knownRegions = (
 				en,
 				Base,
+				"zh-Hans",
+				"zh-Hant",
+				ja,
+				ko,
+				fr,
+				es,
+				de,
+				"pt-BR",
+				hi,
+				tr,
+				ru,
+				id,
+				vi,
+				th,
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
 			productRefGroup = 83CBBA001A601CBA00E9B192 /* Products */;
@@ -161,6 +192,7 @@
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				CAFF055F79865E33F181B05F /* PrivacyInfo.xcprivacy in Resources */,
+				6A2739686A9034485FC0A6C5 /* InfoPlist.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -251,6 +283,31 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		5737DAED570BAFD67C16DE8D /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				4AD51C3CD975183F27F278B3 /* en */,
+				813F422E1D38B6252E7BCD3F /* zh-Hans */,
+				6405F4F795E7C85D92538FCA /* zh-Hant */,
+				3587FD69C49F621CBD1DDEEE /* ja */,
+				6A865EE67B287B9317B4C0E5 /* ko */,
+				231243C805435BCABB9FE3C3 /* fr */,
+				F91D1373286282234B69C156 /* es */,
+				DEA1E578122F415B65A883A1 /* de */,
+				E7FD9C084ECF40ACF71E1B05 /* pt-BR */,
+				1A2DEDBAE963BFC970F769F3 /* hi */,
+				2F704A5B2E6F86DCB26295B4 /* tr */,
+				EDFD83A29E5B580C26C8D649 /* ru */,
+				45C06705E93AE98F119A7DC5 /* id */,
+				A13544C67EE10350B79041FE /* vi */,
+				DD5887E37F4B6592FC5053AC /* th */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {

@@ -1,6 +1,6 @@
 import type {MobileTable} from './index';
 
-// Overview tab, Receive dialog, History, and the Earn action / Add Liquidity forms.
+// Overview tab, Receive dialog, History, and the Earn action form.
 export const home: MobileTable = {
   en: {
     watch_list: 'Watch list',
@@ -30,11 +30,7 @@ export const home: MobileTable = {
     view: 'View',
     deposit_to: 'Deposit to {{name}}',
     withdraw_from: 'Withdraw from {{name}}',
-    amount_in: 'Amount in {{symbol}}',
     category_crypto: 'Crypto',
-    token_a: 'Token A',
-    token_b: 'Token B',
-    lp_hint: 'Full-range position. Unused input is refunded to the vault.',
     your_vault_on: 'Your vault address on {{network}}',
   },
   zh: {
@@ -65,11 +61,7 @@ export const home: MobileTable = {
     view: '查看',
     deposit_to: '存入 {{name}}',
     withdraw_from: '从 {{name}} 取出',
-    amount_in: '{{symbol}} 数量',
     category_crypto: '加密',
-    token_a: '代币 A',
-    token_b: '代币 B',
-    lp_hint: '全区间头寸。未使用的输入将退回金库。',
     your_vault_on: '你在 {{network}} 上的金库地址',
   },
   'zh-TW': {
@@ -100,11 +92,7 @@ export const home: MobileTable = {
     view: '檢視',
     deposit_to: '存入 {{name}}',
     withdraw_from: '從 {{name}} 取出',
-    amount_in: '{{symbol}} 數量',
     category_crypto: '加密',
-    token_a: '代幣 A',
-    token_b: '代幣 B',
-    lp_hint: '全區間部位。未使用的輸入將退回金庫。',
     your_vault_on: '你在 {{network}} 上的金庫地址',
   },
   ja: {
@@ -135,11 +123,7 @@ export const home: MobileTable = {
     view: '表示',
     deposit_to: '{{name}} に預け入れ',
     withdraw_from: '{{name}} から引き出し',
-    amount_in: '{{symbol}} の数量',
     category_crypto: '暗号資産',
-    token_a: 'トークン A',
-    token_b: 'トークン B',
-    lp_hint: '全レンジのポジション。未使用の入力はボールトに返金されます。',
     your_vault_on: '{{network}} 上のあなたのボールトアドレス',
   },
   ko: {
@@ -170,11 +154,7 @@ export const home: MobileTable = {
     view: '보기',
     deposit_to: '{{name}}에 예치',
     withdraw_from: '{{name}}에서 출금',
-    amount_in: '{{symbol}} 수량',
     category_crypto: '암호화폐',
-    token_a: '토큰 A',
-    token_b: '토큰 B',
-    lp_hint: '전체 범위 포지션. 사용되지 않은 입력은 볼트로 환불됩니다.',
     your_vault_on: '{{network}}의 내 볼트 주소',
   },
   fr: {
@@ -205,11 +185,7 @@ export const home: MobileTable = {
     view: 'Voir',
     deposit_to: 'Déposer sur {{name}}',
     withdraw_from: 'Retirer de {{name}}',
-    amount_in: 'Montant en {{symbol}}',
     category_crypto: 'Crypto',
-    token_a: 'Jeton A',
-    token_b: 'Jeton B',
-    lp_hint: 'Position sur toute la plage. Les montants non utilisés sont remboursés au coffre.',
     your_vault_on: 'L’adresse de votre coffre sur {{network}}',
   },
   es: {
@@ -240,11 +216,7 @@ export const home: MobileTable = {
     view: 'Ver',
     deposit_to: 'Depositar en {{name}}',
     withdraw_from: 'Retirar de {{name}}',
-    amount_in: 'Cantidad en {{symbol}}',
     category_crypto: 'Cripto',
-    token_a: 'Token A',
-    token_b: 'Token B',
-    lp_hint: 'Posición de rango completo. Lo no utilizado se devuelve a la bóveda.',
     your_vault_on: 'La dirección de tu bóveda en {{network}}',
   },
   de: {
@@ -275,11 +247,7 @@ export const home: MobileTable = {
     view: 'Ansehen',
     deposit_to: 'In {{name}} einzahlen',
     withdraw_from: 'Aus {{name}} abheben',
-    amount_in: 'Betrag in {{symbol}}',
     category_crypto: 'Krypto',
-    token_a: 'Token A',
-    token_b: 'Token B',
-    lp_hint: 'Position über die gesamte Preisspanne. Nicht verwendete Beträge gehen an den Tresor zurück.',
     your_vault_on: 'Die Adresse deines Tresors auf {{network}}',
   },
   'pt-BR': {
@@ -310,11 +278,7 @@ export const home: MobileTable = {
     view: 'Ver',
     deposit_to: 'Depositar em {{name}}',
     withdraw_from: 'Sacar de {{name}}',
-    amount_in: 'Valor em {{symbol}}',
     category_crypto: 'Cripto',
-    token_a: 'Token A',
-    token_b: 'Token B',
-    lp_hint: 'Posição de faixa completa. A sobra é devolvida ao cofre.',
     your_vault_on: 'O endereço do seu cofre na {{network}}',
   },
   hi: {
@@ -345,11 +309,7 @@ export const home: MobileTable = {
     view: 'देखें',
     deposit_to: '{{name}} में जमा करें',
     withdraw_from: '{{name}} से निकालें',
-    amount_in: '{{symbol}} में राशि',
     category_crypto: 'क्रिप्टो',
-    token_a: 'टोकन A',
-    token_b: 'टोकन B',
-    lp_hint: 'पूर्ण-रेंज पोजीशन। बची हुई राशि वॉल्ट में वापस।',
     your_vault_on: '{{network}} पर आपके वॉल्ट का पता',
   },
   tr: {
@@ -380,11 +340,7 @@ export const home: MobileTable = {
     view: 'Görüntüle',
     deposit_to: '{{name}} hesabına yatır',
     withdraw_from: '{{name}} hesabından çek',
-    amount_in: '{{symbol}} cinsinden tutar',
     category_crypto: 'Kripto',
-    token_a: 'Token A',
-    token_b: 'Token B',
-    lp_hint: 'Tam aralık pozisyonu. Kullanılmayan tutar kasaya iade edilir.',
     your_vault_on: '{{network}} üzerindeki kasa adresiniz',
   },
   ru: {
@@ -415,11 +371,7 @@ export const home: MobileTable = {
     view: 'Открыть',
     deposit_to: 'Внести в {{name}}',
     withdraw_from: 'Вывести из {{name}}',
-    amount_in: 'Сумма в {{symbol}}',
     category_crypto: 'Крипто',
-    token_a: 'Токен A',
-    token_b: 'Токен B',
-    lp_hint: 'Позиция на весь диапазон. Неиспользованное возвращается в хранилище.',
     your_vault_on: 'Адрес вашего хранилища в сети {{network}}',
   },
   id: {
@@ -450,11 +402,7 @@ export const home: MobileTable = {
     view: 'Lihat',
     deposit_to: 'Setor ke {{name}}',
     withdraw_from: 'Tarik dari {{name}}',
-    amount_in: 'Jumlah dalam {{symbol}}',
     category_crypto: 'Kripto',
-    token_a: 'Token A',
-    token_b: 'Token B',
-    lp_hint: 'Posisi rentang penuh. Sisa dana dikembalikan ke brankas.',
     your_vault_on: 'Alamat brankas Anda di {{network}}',
   },
   vi: {
@@ -485,11 +433,7 @@ export const home: MobileTable = {
     view: 'Xem',
     deposit_to: 'Nạp vào {{name}}',
     withdraw_from: 'Rút từ {{name}}',
-    amount_in: 'Số lượng tính bằng {{symbol}}',
     category_crypto: 'Crypto',
-    token_a: 'Token A',
-    token_b: 'Token B',
-    lp_hint: 'Vị thế toàn dải. Phần dư được hoàn lại kho.',
     your_vault_on: 'Địa chỉ kho của bạn trên {{network}}',
   },
   th: {
@@ -520,11 +464,7 @@ export const home: MobileTable = {
     view: 'ดู',
     deposit_to: 'ฝากเข้า {{name}}',
     withdraw_from: 'ถอนจาก {{name}}',
-    amount_in: 'จำนวนเป็น {{symbol}}',
     category_crypto: 'คริปโต',
-    token_a: 'โทเคน A',
-    token_b: 'โทเคน B',
-    lp_hint: 'สถานะเต็มช่วงราคา ส่วนที่ไม่ได้ใช้คืนเข้าวอลต์',
     your_vault_on: 'ที่อยู่วอลต์ของคุณบน {{network}}',
   },
 };

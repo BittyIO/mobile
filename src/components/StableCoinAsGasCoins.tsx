@@ -5,7 +5,7 @@ import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {ownerVaultAddress} from '@/vault/read';
 import {isActivated} from '@/vault/activate';
-import {getGaslessConfig, setGaslessCoins, GASLESS_MAX_DAILY, GASLESS_MAX_PER_OP, type GaslessConfig} from '@/vault/gasless';
+import {getStableCoinAsGasConfig, setStableCoinAsGasCoins, STABLE_COIN_AS_GAS_MAX_DAILY, STABLE_COIN_AS_GAS_MAX_PER_OP, type StableCoinAsGasConfig} from '@/vault/stableCoinAsGas';
 
 import {TokenIcon} from '@/components/TokenIcon';
 import {PendingSwitch} from '@/components/PendingSwitch';
@@ -18,12 +18,12 @@ import {displaySymbol} from '@/core/format';
 import {useAssetCatalog} from '@/core/asset-catalog';
 
 /**
- * Gasless config as one section card — which stable coins may pay the relay fee. Empty allowlist = any
+ * StableCoinAsGas config as one section card — which stable coins may pay the relay fee. Empty allowlist = any
  * coin (the default); turning them all off disables relaying. Mobile always relays (no wallet
- * fallback), so this is the only gasless control it needs. Each change is itself a gasless, Face-ID-
+ * fallback), so this is the only stablecoin-as-gas control it needs. Each change is itself a gasless, Face-ID-
  * gated write. Rendered inline on the Services page.
  */
-export function GaslessCoins() {
+export function StableCoinAsGasCoins() {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const getSigner = useWallet((s) => s.signer);
@@ -32,7 +32,7 @@ export function GaslessCoins() {
   const stablecoins = useAssetCatalog(network).filter((a) => a.kind === 'stable');
   const vault = owner ? ownerVaultAddress(owner, network) : null;
 
-  const [cfg, setCfg] = useState<GaslessConfig | null | 'loading'>('loading');
+  const [cfg, setCfg] = useState<StableCoinAsGasConfig | null | 'loading'>('loading');
   // Deployed yet? A counterfactual vault has no config to read: it shows the defaults it will start
   // with, and the coin that will pay its activation fee.
   const [activated, setActivated] = useState<boolean | null>(null);
@@ -43,16 +43,16 @@ export function GaslessCoins() {
   const load = useCallback(() => {
     if (!vault) return;
     isActivated(vault, network).then(setActivated).catch(() => setActivated(null));
-    getGaslessConfig(vault, network).then(setCfg);
+    getStableCoinAsGasConfig(vault, network).then(setCfg);
   }, [vault, network]);
   useEffect(load, [load]);
 
-  // Before activation every gasless setting is the system default: any stablecoin, $100/day, $10/op.
-  const DEFAULTS: GaslessConfig = {
+  // Before activation every stablecoin-as-gas setting is the system default: any stablecoin, $100/day, $10/op.
+  const DEFAULTS: StableCoinAsGasConfig = {
     stableCoins: [],
-    dailyLimit: BigInt(GASLESS_MAX_DAILY),
-    maxFeePerOp: BigInt(GASLESS_MAX_PER_OP),
-    remaining: BigInt(GASLESS_MAX_DAILY) * BigInt(10) ** BigInt(18),
+    dailyLimit: BigInt(STABLE_COIN_AS_GAS_MAX_DAILY),
+    maxFeePerOp: BigInt(STABLE_COIN_AS_GAS_MAX_PER_OP),
+    remaining: BigInt(STABLE_COIN_AS_GAS_MAX_DAILY) * BigInt(10) ** BigInt(18),
     usedToday: BigInt(0),
     configured: true,
   };
@@ -102,7 +102,7 @@ export function GaslessCoins() {
       // Covering every coin IS the default — write [] to leave it un-narrowed (cheaper).
       const coversAll = allCoins.every((c) => next.some((n) => n.toLowerCase() === c.toLowerCase()));
       tx.success(
-        await setGaslessCoins({
+        await setStableCoinAsGasCoins({
           account: acct,
           vault,
           network,

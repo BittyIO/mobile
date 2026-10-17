@@ -46,8 +46,7 @@ interface WalletState {
    */
   account: HDAccount | null;
   init: () => Promise<void>;
-  createWallet: () => Promise<{mnemonic: string}>;
-  importWallet: (mnemonic: string) => Promise<void>;
+  createWallet: (mnemonic: string) => Promise<void>;
   unlock: () => Promise<void>;
   lock: () => void;
   wipe: () => Promise<void>;
@@ -84,15 +83,8 @@ export const useWallet = create<WalletState>((set) => ({
     set({status: exists ? 'locked' : 'no-wallet', lockedBy: 'launch'});
   },
 
-  createWallet: async () => {
-    const {mnemonic, account} = await keyring.createWallet();
-    remember(account);
-    set({account, address: account.address, status: 'unlocked', unlocked: true});
-    return {mnemonic};
-  },
-
-  importWallet: async (mnemonic: string) => {
-    const account = await keyring.importWallet(mnemonic);
+  createWallet: async (mnemonic: string) => {
+    const account = await keyring.createWallet(mnemonic);
     remember(account);
     set({account, address: account.address, status: 'unlocked', unlocked: true});
   },

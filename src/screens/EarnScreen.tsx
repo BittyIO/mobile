@@ -11,7 +11,6 @@ import {ProtocolChip} from '@/components/ProtocolIcon';
 import {useNetwork} from '@/core/network-store';
 import {formatUnits} from 'viem';
 import {useVaultPositions} from '@/vault/useVaultPositions';
-import {useVaultLp} from '@/vault/useVaultLp';
 import {useFlows} from '@/vault/useFlows';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {earnedRaw} from '@/vault/flows';
@@ -101,7 +100,7 @@ function EarnTable({
   children,
 }: {
   title?: string;
-  /** Sits right after the title text (the Market Maker "+"). */
+  /** Sits right after the title text. */
   afterTitle?: React.ReactNode;
   /** Pushed to the card's right edge (the protocol logo). */
   right?: React.ReactNode;
@@ -135,7 +134,6 @@ export function EarnScreen() {
   const assets = useAssetCatalog(network);
   const bal = useVaultBalances(network);
   const pos = useVaultPositions(bal.vault, network);
-  const lp = useVaultLp(bal.vault, network);
   const flows = useFlows(bal.vault, network);
   // Auto-Yield routes: lowercased asset address → configured protocol (zero = off).
   const [apy, setApy] = useState<ProtocolApy>(EMPTY_APY);
@@ -215,7 +213,7 @@ export function EarnScreen() {
   // so turning one on turns any other off — the contract stores a single route per asset.
 
   // The pull spinner belongs to a pull only, never to the first load.
-  const anyLoading = pos.loading || lp.loading;
+  const anyLoading = pos.loading;
   const [pulled, setPulled] = useState(false);
   const refreshing = pulled && anyLoading;
   const onRefresh = useCallback(() => {
@@ -230,8 +228,7 @@ export function EarnScreen() {
     if (!bal.vault) return;
     setPulled(true);
     pos.refresh();
-    lp.refresh();
-  }, [pos, lp, bal.vault]);
+  }, [pos, bal.vault]);
   useEffect(() => {
     if (!anyLoading) setPulled(false);
   }, [anyLoading]);
