@@ -1,13 +1,16 @@
 /**
  * Owner risk & controls — the vault's risk surface, plus the locks.
  *
- *  Risk is three numbers on v1.0.0 (v1.0.3 had four):
+ *  Risk is three numbers on v1.0.0 (v1.0.3 had four), none of which can be turned off:
  *   - timelock: seconds a LOOSENING of anything deferred waits out (tightening is immediate).
- *   - sendDailyAllowance: the ceiling on what regular sends may move per rolling day, in whole USD.
- *     0 = no cap; above 0, regular sends are held to stablecoins.
+ *     1 to 30 days.
+ *   - sendDailyAllowance: the ceiling on what regular sends may move per rolling day, in whole USD,
+ *     1 to 10,000. Regular sends are held to stablecoins.
  *   - marketTradeDailyLossAllowance: what market trades may lose against oracle value per rolling
- *     day, in whole USD — a leaked key selling into a pool it set up loses value without sending
- *     anything. 0 = unprotected. Kept apart from the send cap so neither uses up the other.
+ *     day, in whole USD, 1 to 10,000 — a leaked key selling into a pool it set up loses value
+ *     without sending anything. Kept apart from the send cap so neither uses up the other.
+ *  A vault that never set one reads 1 day and 10,000 (see {RISK_BOUNDS}); the contract refuses
+ *  anything outside the bounds.
  *  Each setter writes only its field (the others go in as UNCHANGED = type(uint256).max).
  *
  *  The locks, which the risk numbers exist to serve:
@@ -38,6 +41,16 @@ type Acct = Parameters<typeof relayVaultWrite>[0]['account'];
 
 /** Leave a RiskSettings field untouched. */
 const UNCHANGED = (1n << 256n) - 1n; // type(uint256).max
+
+/**
+ * What a v1.0.0 vault accepts for each risk number (MIN_RISK_TIMELOCK, MAX_RISK_TIMELOCK and the two
+ * MAX_*_DAILY_*_ALLOWANCE constants in the vault). v1.0.3 has no bounds and keeps 0 as "off".
+ */
+export const RISK_BOUNDS: Record<'timelock' | 'sendDailyAllowance' | 'marketTradeDailyLossAllowance', {min: bigint; max: bigint}> = {
+  timelock: {min: 86_400n, max: 30n * 86_400n},
+  sendDailyAllowance: {min: 1n, max: 10_000n},
+  marketTradeDailyLossAllowance: {min: 1n, max: 10_000n},
+};
 
 export type RiskConfig = {
   timelock: bigint; // seconds

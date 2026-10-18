@@ -2,9 +2,9 @@ import React, {useCallback, useState} from 'react';
 import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {useFocusEffect, useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '@/App';
-import {getRiskConfig, getLockLevel, type RiskConfig, type LockLevel} from '@/vault/risk';
+import {getRiskConfig, getLockLevel, RISK_BOUNDS, type RiskConfig, type LockLevel} from '@/vault/risk';
 import {OptionRow, SettingsGroup} from '@/components/SettingsRow';
-import {fmtRiskValue, fmtPending, RISK_TITLE} from '@/components/riskFormat';
+import {fmtRiskValue, fmtPending, riskHintKey} from '@/components/riskFormat';
 import {useRiskDraft} from '@/core/risk-draft';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
@@ -16,8 +16,16 @@ import {useColors, useStyles, type Colors} from '@/theme';
 const HOUR = 3600n;
 const DAY = 86400n;
 
-/** The answers worth offering. Anything else is one Custom entry away. */
+/**
+ * The answers worth offering. Anything else is one Custom entry away. A v1.0.0 vault refuses 0 and
+ * anything outside {RISK_BOUNDS}, so it is offered only what it accepts; v1.0.3 keeps 0 as "off".
+ */
 const PRESETS = {
+  timelock: [DAY, 2n * DAY, 7n * DAY, 14n * DAY, 30n * DAY],
+  sendDailyAllowance: [100n, 500n, 1_000n, 5_000n, 10_000n],
+  marketTradeDailyLossAllowance: [50n, 100n, 500n, 1_000n, 5_000n, 10_000n],
+} as const;
+const LEGACY_PRESETS = {
   timelock: [0n, HOUR, 6n * HOUR, 24n * HOUR, 48n * HOUR, 7n * DAY],
   sendDailyAllowance: [0n, 100n, 500n, 1_000n, 5_000n, 10_000n],
   marketTradeDailyLossAllowance: [0n, 50n, 100n, 500n, 1_000n, 5_000n],
@@ -62,7 +70,8 @@ export function RiskValueScreen() {
   const inForce = risk ? risk[field] : null;
   // What the page is set to: the unsaved pick where there is one, otherwise the value in force.
   const current = drafted ?? inForce;
-  const presets: readonly bigint[] = PRESETS[field];
+  const presets: readonly bigint[] = (legacy ? LEGACY_PRESETS : PRESETS)[field];
+  const bounds = legacy ? null : RISK_BOUNDS[field];
   const isCustom = current != null && !presets.includes(current);
   // A lock freezes these too, so nothing can be picked rather than signed and refused on chain.
   const locked = lockLevel === 1 || lockLevel === 2;
@@ -78,10 +87,20 @@ export function RiskValueScreen() {
   const customValue = (): bigint | null => {
     const n = Number(custom);
     if (custom.trim() === '' || !Number.isFinite(n) || n < 0) return null;
-    return isTimelock ? BigInt(Math.round(n * Number(HOUR))) : BigInt(Math.floor(n));
+    const v = isTimelock ? BigInt(Math.round(n * Number(HOUR))) : BigInt(Math.floor(n));
+    // Outside the bounds the vault would refuse it, so it cannot be picked.
+    if (bounds && (v < bounds.min || v > bounds.max)) return null;
+    return v;
   };
   const parsed = customValue();
   const customOff = !canPick || parsed == null || parsed === current;
+
+  // The accepted range, in the unit typed: hours for the timelock, whole USD for the allowances.
+  const range = bounds
+    ? isTimelock
+      ? `${Number(bounds.min / HOUR)}–${Number(bounds.max / HOUR)}`
+      : `${Number(bounds.min).toLocaleString()}–${Number(bounds.max).toLocaleString()}`
+    : '0';
 
   const unit = isTimelock
     ? t('vault.time_unit.hours')
@@ -100,7 +119,7 @@ export function RiskValueScreen() {
       <SettingsGroup
         footer={[
           fmtPending(field, risk, stable?.symbol, t),
-          t(`${RISK_TITLE[field]}_hint`),
+          t(riskHintKey(field, !legacy)),
         ]
           .filter(Boolean)
           .join('\n\n')}>
@@ -133,7 +152,7 @@ export function RiskValueScreen() {
               style={styles.input}
               autoFocus
               keyboardType="decimal-pad"
-              placeholder="0"
+              placeholder={range}
               placeholderTextColor={c.subtext}
               value={custom}
               onChangeText={setCustom}

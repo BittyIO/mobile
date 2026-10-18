@@ -9,6 +9,16 @@ export const RISK_TITLE = {
   marketTradeDailyLossAllowance: 'mobile.vault.market_trade_loss_allowance',
 } as const satisfies Record<RiskField, string>;
 
+/**
+ * The explanation under a risk field. A v1.0.0 vault bounds every number and has no "off", so its
+ * timelock and send cap get their own text; v1.0.3 keeps the one that explains 0. The loss allowance
+ * exists on v1.0.0 only.
+ */
+export function riskHintKey(field: RiskField, bounded: boolean): string {
+  if (!bounded || field === 'marketTradeDailyLossAllowance') return `${RISK_TITLE[field]}_hint`;
+  return field === 'timelock' ? 'mobile.vault.change_timelock_bounded_hint' : 'mobile.vault.send_daily_allowance_bounded_hint';
+}
+
 const HOUR = 3600n;
 const DAY = 86400n;
 
