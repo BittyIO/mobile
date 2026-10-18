@@ -33,7 +33,14 @@ const PROTOCOLS: Record<VaultGeneration, Record<Network, Record<string, Protocol
    */
   'v1.0.0': {
     mainnet: {},
-    base: {},
+    // Registered on the Base guard 2026-10-18. Sky is the SkyV1EvmProtocol the old generation also
+    // runs; the other three are this generation's own, with fees to the Safe.
+    base: {
+      '0x8e14e91f29066ccdd9e9e2db6bafe6fef7c14ac6': {name: 'Sky', category: 'staking'},
+      '0xb3ff9df07f2901d97c07146d18093de914141ad3': {name: 'Aave V3', category: 'lending'},
+      '0xb5b4313d88b4aa68d03bd6467eb1460ffaf136e5': {name: 'Uniswap Universal', category: 'amm'},
+      '0x646248f1ad34a4ef927726bd818c19107231322b': {name: 'CoW Swap', category: 'intent'},
+    },
     robinhood: {},
     sepolia: {
       '0x9c01f9b6ed7bbd86f7a309a3414595608ab9d80d': {name: 'Aave V3', category: 'lending'},
