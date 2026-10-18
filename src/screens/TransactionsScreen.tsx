@@ -57,8 +57,8 @@ type Part = {
   counterparty?: {address: string; direction: 'to' | 'from'};
 };
 /** The web's own grouping of an operation, in its order. */
-type Category = 'trade' | 'stake' | 'send' | 'receive' | 'gas';
-const CATEGORY_ORDER: Category[] = ['trade', 'stake', 'send', 'receive', 'gas'];
+type Category = 'trade' | 'stake' | 'send' | 'receive' | 'settings' | 'gas';
+const CATEGORY_ORDER: Category[] = ['trade', 'stake', 'send', 'receive', 'settings', 'gas'];
 
 type OpView = {
   parts: Part[];
@@ -163,7 +163,7 @@ function classify(
     }
   }
 
-  const details = describeActions(op.actions, network, t, orders);
+  const described = describeActions(op.actions, network, t, orders);
   /**
    * The tab a row lands on.
    *
@@ -184,6 +184,14 @@ function classify(
             : kinds.received
               ? 'receive'
               : 'gas'));
+  /**
+   * A settings change moves nothing but the relay fee, and with the fee hidden the vault's balance
+   * dropped with no line to say why. So on Settings rows the fee is shown, as the last detail.
+   */
+  const details =
+    category === 'settings' && fee
+      ? [...described, t('mobile.actions.network_fee', {amount: `${fmtAmt(fee.amount)} ${displaySymbol(fee.assetSymbol ?? '')}`})]
+      : described;
   if (parts.length === 0) {
     /**
      * Nothing visible moved but the fee. What the row is called then comes from the CALL.
@@ -286,7 +294,7 @@ function Op({op, explorer, network, orders}: {op: Operation; explorer: string; n
       <View style={styles.footer}>
         <View style={styles.meta}>
           {/* The gasless relay fee is still split out of the transfer legs (so it never inflates a
-              send), but it is not shown: the fee a relayed op pays is not something the owner did. */}
+              send), and shown only on Settings rows, as a detail line (see {classify}). */}
           <Text style={styles.date}>{fmtDate(op.timestamp, language)}</Text>
         </View>
         <Text style={styles.link}>{t('mobile.home.view')} ↗</Text>
@@ -460,7 +468,17 @@ export function TransactionsScreen() {
     ...CATEGORY_ORDER.filter((cat) => ops.some((op) => views.get(op.txHash)?.category === cat)).map((cat) => ({
       key: cat,
       label: t(
-        cat === 'trade' ? 'vault.trade' : cat === 'stake' ? 'vault.earn' : cat === 'send' ? 'vault.sent' : cat === 'receive' ? 'vault.received' : 'mobile.settings.gas',
+        cat === 'trade'
+          ? 'vault.trade'
+          : cat === 'stake'
+            ? 'vault.earn'
+            : cat === 'send'
+              ? 'vault.sent'
+              : cat === 'receive'
+                ? 'vault.received'
+                : cat === 'settings'
+                  ? 'vault.settings'
+                  : 'mobile.settings.gas',
       ),
     })),
   ];

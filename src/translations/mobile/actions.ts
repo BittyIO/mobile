@@ -48,6 +48,8 @@ export const actions: MobileTable = {
     send_proposed: 'Propose send',
     send_approved: 'Approve send',
     send_cancelled: 'Cancel send',
+    risk_updated: 'Update safety settings',
+    network_fee: 'Network fee: {{amount}}',
   },
   zh: {
     deposit_to: '存入 {{name}}',
@@ -94,6 +96,8 @@ export const actions: MobileTable = {
     send_proposed: '提议转账',
     send_approved: '批准转账',
     send_cancelled: '取消转账',
+    risk_updated: '更新安全设置',
+    network_fee: '网络费：{{amount}}',
   },
   'zh-TW': {
     deposit_to: '存入 {{name}}',
@@ -140,6 +144,8 @@ export const actions: MobileTable = {
     send_proposed: '提議轉帳',
     send_approved: '核准轉帳',
     send_cancelled: '取消轉帳',
+    risk_updated: '更新安全設定',
+    network_fee: '網路費：{{amount}}',
   },
   ja: {
     deposit_to: '{{name}} へ入金',
@@ -186,6 +192,8 @@ export const actions: MobileTable = {
     send_proposed: '送金を提案',
     send_approved: '送金を承認',
     send_cancelled: '送金をキャンセル',
+    risk_updated: '安全設定を更新',
+    network_fee: 'ネットワーク手数料：{{amount}}',
   },
   ko: {
     deposit_to: '{{name}}에 예치',
@@ -232,6 +240,8 @@ export const actions: MobileTable = {
     send_proposed: '송금 제안',
     send_approved: '송금 승인',
     send_cancelled: '송금 취소',
+    risk_updated: '안전 설정 업데이트',
+    network_fee: '네트워크 수수료: {{amount}}',
   },
   fr: {
     deposit_to: 'Dépôt vers {{name}}',
@@ -278,6 +288,8 @@ export const actions: MobileTable = {
     send_proposed: 'Proposer un envoi',
     send_approved: 'Approuver l’envoi',
     send_cancelled: 'Annuler l’envoi',
+    risk_updated: 'Mettre à jour les paramètres de sécurité',
+    network_fee: 'Frais de réseau : {{amount}}',
   },
   es: {
     deposit_to: 'Depósito en {{name}}',
@@ -324,6 +336,8 @@ export const actions: MobileTable = {
     send_proposed: 'Proponer envío',
     send_approved: 'Aprobar envío',
     send_cancelled: 'Cancelar envío',
+    risk_updated: 'Actualizar ajustes de seguridad',
+    network_fee: 'Comisión de red: {{amount}}',
   },
   de: {
     deposit_to: 'Einzahlung bei {{name}}',
@@ -370,6 +384,8 @@ export const actions: MobileTable = {
     send_proposed: 'Sendung vorschlagen',
     send_approved: 'Sendung genehmigen',
     send_cancelled: 'Sendung stornieren',
+    risk_updated: 'Sicherheitseinstellungen aktualisieren',
+    network_fee: 'Netzwerkgebühr: {{amount}}',
   },
   'pt-BR': {
     deposit_to: 'Depositar em {{name}}',
@@ -416,6 +432,8 @@ export const actions: MobileTable = {
     send_proposed: 'Propor envio',
     send_approved: 'Aprovar envio',
     send_cancelled: 'Cancelar envio',
+    risk_updated: 'Atualizar configurações de segurança',
+    network_fee: 'Taxa de rede: {{amount}}',
   },
   hi: {
     deposit_to: '{{name}} में जमा करें',
@@ -462,6 +480,8 @@ export const actions: MobileTable = {
     send_proposed: 'भेजने का प्रस्ताव',
     send_approved: 'भेजना स्वीकृत करें',
     send_cancelled: 'भेजना रद्द करें',
+    risk_updated: 'सुरक्षा सेटिंग्स अपडेट करें',
+    network_fee: 'नेटवर्क शुल्क: {{amount}}',
   },
   tr: {
     deposit_to: '{{name}} hesabına yatır',
@@ -508,6 +528,8 @@ export const actions: MobileTable = {
     send_proposed: 'Gönderim öner',
     send_approved: 'Gönderimi onayla',
     send_cancelled: 'Gönderimi iptal et',
+    risk_updated: 'Güvenlik ayarlarını güncelle',
+    network_fee: 'Ağ ücreti: {{amount}}',
   },
   ru: {
     deposit_to: 'Внести в {{name}}',
@@ -554,6 +576,8 @@ export const actions: MobileTable = {
     send_proposed: 'Предложить отправку',
     send_approved: 'Одобрить отправку',
     send_cancelled: 'Отменить отправку',
+    risk_updated: 'Обновить настройки безопасности',
+    network_fee: 'Сетевая комиссия: {{amount}}',
   },
   id: {
     deposit_to: 'Setor ke {{name}}',
@@ -600,6 +624,8 @@ export const actions: MobileTable = {
     send_proposed: 'Ajukan pengiriman',
     send_approved: 'Setujui pengiriman',
     send_cancelled: 'Batalkan pengiriman',
+    risk_updated: 'Perbarui pengaturan keamanan',
+    network_fee: 'Biaya jaringan: {{amount}}',
   },
   vi: {
     deposit_to: 'Nạp vào {{name}}',
@@ -646,6 +672,8 @@ export const actions: MobileTable = {
     send_proposed: 'Đề xuất gửi',
     send_approved: 'Duyệt gửi',
     send_cancelled: 'Hủy gửi',
+    risk_updated: 'Cập nhật cài đặt an toàn',
+    network_fee: 'Phí mạng: {{amount}}',
   },
   th: {
     deposit_to: 'ฝากเข้า {{name}}',
@@ -692,5 +720,7 @@ export const actions: MobileTable = {
     send_proposed: 'เสนอการส่ง',
     send_approved: 'อนุมัติการส่ง',
     send_cancelled: 'ยกเลิกการส่ง',
+    risk_updated: 'อัปเดตการตั้งค่าความปลอดภัย',
+    network_fee: 'ค่าธรรมเนียมเครือข่าย: {{amount}}',
   },
 };

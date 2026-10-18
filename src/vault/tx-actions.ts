@@ -11,6 +11,8 @@ import {displaySymbol, fmtNum} from '@/core/format';
 import {formatUnits, type Address} from 'viem';
 import type {CowOrder} from '@/vault/limit';
 import type {TransferRow} from '@/vault/transactions';
+import {RISK_TITLE, fmtRiskValue} from '@/components/riskFormat';
+import type {RiskField} from '@/vault/risk';
 
 export type VaultAction = {name: string; args: Record<string, string | string[]>};
 
@@ -69,7 +71,7 @@ export function swapFromActions(
 }
 
 /** The history tabs an action can belong to; mirrors TransactionsScreen's Category. */
-export type ActionCategory = 'trade' | 'stake' | 'send' | 'gas';
+export type ActionCategory = 'trade' | 'stake' | 'send' | 'settings' | 'gas';
 
 /**
  * Which tab a transaction belongs to, judged by what the vault was ASKED to do.
@@ -79,9 +81,9 @@ export type ActionCategory = 'trade' | 'stake' | 'send' | 'gas';
  * intent protocol, both filed themselves under the fee they happened to pay. An action is direct
  * evidence of intent where a counterparty address is a guess, so it is consulted first.
  *
- * Only actions with an unambiguous home are listed. Anything else, and anything genuinely about
- * the vault's configuration, still lands on the fee tab, which is where a pure config change
- * belongs.
+ * Only actions with an unambiguous home are listed. A change to the vault's own configuration goes
+ * to Settings: it moves nothing but the relay fee, so on the fee tab it read as a payment with no
+ * reason. Anything not listed still lands on the fee tab.
  */
 const ACTION_CATEGORY: Record<string, ActionCategory> = {
   // Earn, and the reason this map exists at all: a lending supply moves the underlying OUT and the
@@ -112,6 +114,30 @@ const ACTION_CATEGORY: Record<string, ActionCategory> = {
   proposeSend: 'send',
   approveSend: 'send',
   cancelSends: 'send',
+  // The vault's own configuration.
+  updateRisk: 'settings',
+  setStableCoinAsGas: 'settings',
+  disableStableCoinAsGas: 'settings',
+  setGasless: 'settings',
+  disableGasless: 'settings',
+  updateAssets: 'settings',
+  updateProtocols: 'settings',
+  upgradeProtocol: 'settings',
+  upgrade: 'settings',
+  setAssetManager: 'settings',
+  clearDelegates: 'settings',
+  useBittyAllowList: 'settings',
+  enableAllowlist: 'settings',
+  disableAllowlist: 'settings',
+  updatePaymentRisk: 'settings',
+  updatePayoutOperator: 'settings',
+  emergencyLock: 'settings',
+  foreverLock: 'settings',
+  unlock: 'settings',
+  transferOwnership: 'settings',
+  acceptOwnership: 'settings',
+  settleOwnershipTransfer: 'settings',
+  cancelOwnershipTransfer: 'settings',
 };
 
 /**
@@ -136,13 +162,38 @@ export function defiMoveFromActions(
   return null;
 }
 
-/** The tab these actions put a transaction on, or null when none of them says. */
+/**
+ * The tab these actions put a transaction on, or null when none of them says.
+ *
+ * Settings only when nothing else in the transaction has a home: an order's first approval
+ * registers its adapter with `updateProtocols` in the same multicall, and that is a trade.
+ */
 export function categoryForActions(actions: VaultAction[] | undefined): ActionCategory | null {
+  let settings = false;
   for (const a of actions ?? []) {
     const c = ACTION_CATEGORY[a.name];
-    if (c) return c;
+    if (c === 'settings') settings = true;
+    else if (c) return c;
   }
-  return null;
+  return settings ? 'settings' : null;
+}
+
+/** `type(uint256).max`: the field is left as it is. */
+const RISK_UNCHANGED = (BigInt(1) << BigInt(256)) - BigInt(1);
+const RISK_FIELDS: RiskField[] = ['timelock', 'sendDailyAllowance', 'marketTradeDailyLossAllowance'];
+
+/** One line per risk field the call set, worded as the Safety settings screen words it. */
+function riskLines(raw: string | string[] | undefined, t: T): string[] {
+  try {
+    const settings = JSON.parse(String(raw)) as Partial<Record<RiskField, string>>;
+    return RISK_FIELDS.flatMap((f) => {
+      if (settings[f] === undefined) return [];
+      const v = BigInt(settings[f]!);
+      return v === RISK_UNCHANGED ? [] : [`${t(RISK_TITLE[f])}: ${fmtRiskValue(f, v, null, undefined, t)}`];
+    });
+  } catch {
+    return [];
+  }
 }
 
 export function describeActions(
@@ -250,6 +301,10 @@ export function describeActions(
         break;
       case 'updatePaymentRisk':
         out.push(k('payment_risk'));
+        break;
+      case 'updateRisk':
+        // The deployed vault names the struct `riskSettings`; an earlier one named it `settings`.
+        out.push(k('risk_updated'), ...riskLines(g.riskSettings ?? g.settings, t));
         break;
       case 'updatePayoutOperator':
         out.push(k(String(g.add) === 'true' ? 'operator_added' : 'operator_removed'));
