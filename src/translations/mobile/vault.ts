@@ -3,6 +3,15 @@ import type {MobileTable} from './index';
 // Settings › Security / Manage / StableCoinAsGas / Auto-yield / Delegation screens.
 export const vault: MobileTable = {
   en: {
+    pending_changes: 'Pending',
+    pending_none: 'Nothing is waiting to take effect.',
+    pending_lock_hint: "Didn't ask for one of these? Lock the vault before it takes effect.",
+    pending_gas_budget: 'Network fee daily budget',
+    pending_max_fee: 'Network fee per operation',
+    pending_new_owner: 'New owner',
+    pending_new_asset_manager: 'New asset manager',
+    pending_whitelist_add: 'New whitelisted recipient',
+    pending_whitelist_remove: 'Whitelisted recipient removal',
     permissions: 'Permissions',
     perm_market_trade: 'Market trade',
     perm_intent: 'Limit orders & TWAP',
@@ -92,6 +101,15 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'The delegate loses trading access immediately.',
   },
   zh: {
+    pending_changes: '待生效',
+    pending_none: '没有待生效的变更。',
+    pending_lock_hint: '不是你发起的？请在生效前锁定金库。',
+    pending_gas_budget: '网络费每日预算',
+    pending_max_fee: '单笔网络费上限',
+    pending_new_owner: '新所有者',
+    pending_new_asset_manager: '新资产管理人',
+    pending_whitelist_add: '新增白名单收款人',
+    pending_whitelist_remove: '移除白名单收款人',
     permissions: '权限',
     perm_market_trade: '市价交易',
     perm_intent: '限价单与 TWAP',

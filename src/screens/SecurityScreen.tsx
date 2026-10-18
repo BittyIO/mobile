@@ -1,6 +1,6 @@
 import React, {useCallback, useState} from 'react';
 import {ScrollView, StyleSheet} from 'react-native';
-import {useFocusEffect, useNavigation} from '@react-navigation/native';
+import {useFocusEffect, useIsFocused, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
 import {useT} from '@/i18n';
@@ -12,10 +12,12 @@ import {getLockLevel, type LockLevel} from '@/vault/risk';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {ownerVaultAddress} from '@/vault/read';
+import {customRpc} from '@/core/chain';
 
 /**
  * Security — three groups of rows, each opening what it names: Risk settings (the timelock and the
- * two daily allowances); the allow list, the asset manager and Legacy ETH (wrap idle native ETH);
+ * two daily allowances); the allow list, the asset manager, Legacy ETH (wrap idle native ETH) and RPC
+ * (the owner's own node for on-chain reads);
  * Vault lock (emergency / forever lock) and the recovery phrase. The writes live on the pages the
  * rows open.
  *
@@ -30,6 +32,8 @@ export function SecurityScreen() {
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
   const vault = owner ? ownerVaultAddress(owner, network) : null;
+  // Re-render on return from the RPC page, so its row shows what was just saved.
+  useIsFocused();
 
   // The lock state answers the Vault lock row. Re-read on focus: the row's own page changes it.
   const [lockLevel, setLockLevel] = useState<LockLevel | null>(null);
@@ -60,7 +64,14 @@ export function SecurityScreen() {
           sub={manager.sub}
           onPress={manager.onPress}
         />
-        <SettingsRow icon="eth" title={t('mobile.vault.legacy_eth')} onPress={() => nav.navigate('VaultLegacyEth')} last />
+        <SettingsRow icon="eth" title={t('mobile.vault.legacy_eth')} onPress={() => nav.navigate('VaultLegacyEth')} />
+        <SettingsRow
+          icon="network"
+          title={t('mobile.settings.rpc')}
+          value={customRpc(network) ? t('mobile.settings.rpc_custom') : t('mobile.settings.rpc_default')}
+          onPress={() => nav.navigate('Rpc')}
+          last
+        />
       </SettingsGroup>
       {/* The last resorts: freezing the vault, and the phrase that restores the key. */}
       <SettingsGroup>

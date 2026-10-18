@@ -29,9 +29,10 @@
  */
 import type {Address, Hex} from 'viem';
 import {publicClientFor, type Network} from '@/core/chain';
-import {VAULT_RISK_ABI, VAULT_RISK_V103_ABI} from '@/core/abi';
+import {VAULT_RISK_ABI, VAULT_RISK_V103_ABI, WHITELIST_STATUS} from '@/core/abi';
 import {isLegacy} from '@/core/vault-generation';
 import {relayVaultWrite} from './relay';
+import {fetchWhitelist} from './payments';
 
 type Acct = Parameters<typeof relayVaultWrite>[0]['account'];
 
@@ -235,4 +236,46 @@ export async function triggerAutoYield(o: {
     stableCoin: o.stableCoin,
   });
   return hash;
+}
+
+/**
+ * One change the vault has been told to make and has not made yet — the thing a leaked key would
+ * queue, and the owner has until `at` to notice and lock against.
+ */
+export type PendingChange =
+  | {kind: RiskField | 'gasBudgetDaily' | 'maxFeePerOp'; value: bigint; at: bigint}
+  | {kind: 'newOwner'; address: Address; at: bigint}
+  | {kind: 'newAssetManager'; address: Address; perms: number; at: bigint}
+  | {kind: 'whitelistAdd' | 'whitelistRemove'; address: Address; at: bigint};
+
+/**
+ * Everything in flight, soonest first: the vault's own `pendingChanges()` slot read, plus the address
+ * book entries still maturing or queued for removal, which the contract leaves out of that read and
+ * reports per entry. Empty on v1.0.3 (no such surface) and on any failed read.
+ */
+export async function getPendingChanges(vault: Address, network: Network): Promise<PendingChange[]> {
+  if (isLegacy()) return [];
+  const [p, book] = await Promise.all([
+    publicClientFor(network)
+      .readContract({address: vault, abi: VAULT_RISK_ABI, functionName: 'pendingChanges'})
+      .catch(() => null),
+    fetchWhitelist(vault, network),
+  ]);
+  const out: PendingChange[] = [];
+  if (p) {
+    for (const k of ['timelock', 'sendDailyAllowance', 'marketTradeDailyLossAllowance', 'gasBudgetDaily', 'maxFeePerOp'] as const) {
+      const at = p[`${k}At`];
+      if (at) out.push({kind: k, value: p[k], at});
+    }
+    if (p.newOwnerReadyAt) out.push({kind: 'newOwner', address: p.newOwner, at: p.newOwnerReadyAt});
+    if (p.newAssetManagerAt)
+      out.push({kind: 'newAssetManager', address: p.newAssetManager, perms: p.newAssetManagerPerms, at: p.newAssetManagerAt});
+  }
+  for (const e of book) {
+    if (e.status === WHITELIST_STATUS.pending && e.effectiveAt)
+      out.push({kind: 'whitelistAdd', address: e.recipientAddress as Address, at: BigInt(e.effectiveAt)});
+    if (e.status === WHITELIST_STATUS.removalQueued && e.removeAt)
+      out.push({kind: 'whitelistRemove', address: e.recipientAddress as Address, at: BigInt(e.removeAt)});
+  }
+  return out.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
 }

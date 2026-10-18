@@ -2,7 +2,7 @@ import {useHeaderHeight} from '@react-navigation/elements';
 import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
 import React, {useCallback, useMemo, useRef, useState} from 'react';
 import {ActivityIndicator, Animated, PanResponder, Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View, type GestureResponderEvent} from 'react-native';
-import {useNavigation} from '@react-navigation/native';
+import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import Svg, {Circle, Line, Path} from 'react-native-svg';
 import type {RootStackParamList} from '@/App';
@@ -29,6 +29,8 @@ import {isAssetsList, useFavorites, useWatchLists, watchListLabel, watchListNumb
 import {getFlag, setFlag, HIDE_BALANCES} from '@/core/prefs';
 import {useWatchDraft} from '@/core/watch-draft';
 import {balanceOfSymbol} from '@/vault/read';
+import {getPendingChanges} from '@/vault/risk';
+import {useVaultGeneration} from '@/core/vault-generation';
 import {formatUnits} from 'viem';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
@@ -54,8 +56,8 @@ function EyeIcon({off, color, size = 20}: {off: boolean; color: string; size?: n
   );
 }
 
-/** Send (arrow out, up-right) / Receive (arrow in, down-left) / History (clock) action icons. */
-function ActionIcon({name, color, size = 22}: {name: 'send' | 'receive' | 'history'; color: string; size?: number}) {
+/** Send (arrow out, up-right) / Receive (arrow in, down-left) / History (clock) / Pending (hourglass) action icons. */
+function ActionIcon({name, color, size = 22}: {name: 'send' | 'receive' | 'history' | 'pending'; color: string; size?: number}) {
   const c = {stroke: color, strokeWidth: 2.2, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const};
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
@@ -70,6 +72,12 @@ function ActionIcon({name, color, size = 22}: {name: 'send' | 'receive' | 'histo
         <>
           <Path d="M17 7L7 17" {...c} />
           <Path d="M16 17H7V8" {...c} />
+        </>
+      ) : name === 'pending' ? (
+        // Waiting to happen (lucide hourglass).
+        <>
+          <Path d="M6 3h12M6 21h12" {...c} />
+          <Path d="M7 3v3a5 5 0 0 0 10 0V3M7 21v-3a5 5 0 0 1 10 0v3" {...c} />
         </>
       ) : (
         <>
@@ -511,6 +519,15 @@ export function VaultHomeScreen() {
   const bal = useVaultBalances(network);
   const pos = useVaultPositions(bal.vault, network);
   const flows = useFlows(bal.vault, network);
+  // Queued changes, counted on the Pending action. Re-read on focus: one call, and a change queued
+  // elsewhere (or by someone else holding the key) is exactly what this badge is for.
+  const legacy = useVaultGeneration((g) => g.generation) === 'v1.0.3';
+  const [pendingCount, setPendingCount] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      if (bal.vault) getPendingChanges(bal.vault, network).then((p) => setPendingCount(p.length));
+    }, [bal.vault, network, legacy]),
+  );
 
   // The hooks load once on mount; after that the data refreshes only on pull-to-refresh. Refetching on
   // every focus flashed the loading state each time the tab was opened.
@@ -923,10 +940,17 @@ export function VaultHomeScreen() {
             {label: t('vault.send'), icon: 'send', onPress: () => nav.navigate('Payments')},
             {label: t('vault.receive'), icon: 'receive', onPress: () => setReceiveOpen(true)},
             {label: t('mobile.app.history'), icon: 'history', onPress: () => nav.navigate('Transactions')},
+            // v1.0.3 vaults have no pending-changes surface.
+            ...(legacy ? [] : [{label: t('mobile.vault.pending_changes'), icon: 'pending', onPress: () => nav.navigate('PendingChanges')}] as const),
           ] as const).map((a) => (
             <Pressable key={a.icon} style={styles.action} onPress={a.onPress}>
               <View style={styles.actionCircle}>
                 <ActionIcon name={a.icon} color={c.accent} />
+                {a.icon === 'pending' && pendingCount > 0 ? (
+                  <View style={styles.actionBadge}>
+                    <Text style={styles.actionBadgeText}>{pendingCount}</Text>
+                  </View>
+                ) : null}
               </View>
               <Text style={styles.actionLabel}>{a.label}</Text>
             </Pressable>
@@ -1080,6 +1104,8 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   action: {alignItems: 'center', gap: 8},
   actionCircle: {width: 54, height: 54, borderRadius: 27, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center'},
   actionLabel: {color: c.text, fontSize: 13, fontWeight: '600'},
+  actionBadge: {position: 'absolute', top: -2, right: -2, minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 5, backgroundColor: c.danger, alignItems: 'center', justifyContent: 'center'},
+  actionBadgeText: {color: '#fff', fontSize: 12, fontWeight: '700'},
   note: {color: c.subtext, fontSize: 13, paddingVertical: 8},
   err: {color: c.danger, fontSize: 13, paddingVertical: 8},
   // The card carries only the side padding; the rows own their own vertical space, so the first

@@ -17,7 +17,7 @@ import {
 } from '@/core/chain';
 import {ACTIVATION_TYPES, ACTIVATION_TYPES_V2, PRICE_FEED_ABI} from '@/core/abi';
 import {generationConfig, isLegacy} from '@/core/vault-generation';
-import {activationFeeUnits} from '@/core/activation-fee';
+import {activationFeeUnits, relayFeeUnits} from '@/core/activation-fee';
 // One copy of the ETH/USD feeds: the fee shown before signing and the fee actually signed must be
 // priced from the same source, or the two disagree for no reason the user can see.
 import {ETH_USD_FEED} from './fee-quote';
@@ -35,6 +35,13 @@ export async function isActivated(vault: Address, network: Network): Promise<boo
 const ACTIVATION_DEADLINE_SECONDS = 600;
 
 const DECIMALS_ABI = parseAbi(['function decimals() view returns (uint8)']);
+
+// What the signed path costs over a plain activateVault from the owner: the factory's signature check
+// plus the fee transfer. Must match the server's figure (web activateExec), which quotes the same way.
+const SIGNED_ACTIVATION_OVERHEAD_GAS = BigInt(80_000);
+const ACTIVATE_ESTIMATE_ABI = parseAbi([
+  'function activateVault(bool allowlistEnabled, bytes[] calls) returns (address vault)',
+]);
 
 export async function activateVault(o: {
   account: Signer;
@@ -68,9 +75,26 @@ export async function activateVault(o: {
 
   // TODO(base): add the OP Stack L1 data fee for exact Base pricing (0 undercharges slightly there).
   const l1FeeWei = BigInt(0);
-  const feeAmount = activationFeeUnits(gasPrice, ethUsd, Number(decimals), l1FeeWei);
-
   const calls = (o.calls ?? []) as Hex[];
+  // A batch is priced from a live estimate of the owner's own entry point, as the server prices it.
+  // The flat ACTIVATION_GAS covers a bare deploy only: signed under a send that costs more, it fell
+  // below the server's floor and was refused `fee-too-low`.
+  const feeAmount =
+    calls.length > 0
+      ? relayFeeUnits(
+          (await client.estimateContractGas({
+            abi: ACTIVATE_ESTIMATE_ABI,
+            address: factory,
+            functionName: 'activateVault',
+            args: [o.allowlistEnabled, calls],
+            account: o.account.address,
+          })) + SIGNED_ACTIVATION_OVERHEAD_GAS,
+          gasPrice,
+          ethUsd,
+          Number(decimals),
+          l1FeeWei,
+        )
+      : activationFeeUnits(gasPrice, ethUsd, Number(decimals), l1FeeWei);
 
   const domain = {
     name: 'BittyV1VaultFactory',

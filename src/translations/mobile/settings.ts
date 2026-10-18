@@ -2,6 +2,13 @@ import type {MobileTable} from './index';
 
 export const settings: MobileTable = {
   en: {
+    rpc: 'RPC',
+    rpc_default: 'Default',
+    rpc_custom: 'Custom',
+    rpc_hint: 'Your own node for reading the chain on this network — the address book, pending changes and balances. Leave it on Default to use public RPCs. A custom RPC is used alone, with no fallback.',
+    rpc_reset: 'Use default',
+    rpc_invalid: 'Enter an https:// URL.',
+    rpc_wrong_chain: 'This RPC did not answer as {{network}}.',
     choose_vault: 'Choose Vault',
     choose_network: 'Choose Network',
     add_vault: 'Add a vault',
@@ -39,6 +46,13 @@ export const settings: MobileTable = {
     gas: 'Network fee',
   },
   zh: {
+    rpc: 'RPC',
+    rpc_default: '默认',
+    rpc_custom: '自定义',
+    rpc_hint: '用你自己的节点读取此网络的链上数据——白名单、待生效变更和余额。保持默认则使用公共 RPC。自定义 RPC 会单独使用，不会回退。',
+    rpc_reset: '使用默认',
+    rpc_invalid: '请输入 https:// 开头的地址。',
+    rpc_wrong_chain: '该 RPC 不是 {{network}} 网络。',
     choose_vault: '选择金库',
     choose_network: '选择网络',
     add_vault: '新建金库',
