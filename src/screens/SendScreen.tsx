@@ -26,13 +26,17 @@ import type {Position} from '@/vault/positions';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {displaySymbol, fmtNum, fmtShort} from '@/core/format';
-import {relayGasFor} from '@/vault/fee-quote';
-import {resolveFeeReserve} from '@/vault/stableCoinAsGas';
+import {quoteRelayFeeUsd, relayGasFor} from '@/vault/fee-quote';
+import {reserveHeld, resolveFeeReserve} from '@/vault/stableCoinAsGas';
 
 import {useAssetCatalog} from '@/core/asset-catalog';
 
-/** Where a line's tokens come from: the vault's free balance, its Sky position, or its Aave supply. */
-type Source = 'free' | 'yield' | 'lend';
+/**
+ * Where a line's tokens come from: the vault's free balance, its Sky position, its Aave supply, or
+ * the stablecoin reserve — the part of the free balance the Network fee page sets aside for fees,
+ * shown as its own line so spending it is a choice the owner sees.
+ */
+type Source = 'free' | 'yield' | 'lend' | 'reserve';
 type Line = {sym: string; source: Source; amount: string};
 type Recipient = {
   to: string;
@@ -53,6 +57,21 @@ const lineKey = (l: {sym: string; source: Source}) => `${l.sym}:${l.source}`;
  * the 0 rather than landing after it.
  */
 const newLine = (sym: string, source: Source = 'free'): Line => ({sym, source, amount: '0'});
+
+type Row = {asset: Address; amount: string; withdrawProtocols: Address[]; withdrawAmounts: bigint[]; decimals: number};
+/**
+ * A coin's free and reserve lines are one balance on chain, so they go out as one transfer: two
+ * rows of the same asset with nothing to withdraw are summed into the first.
+ */
+const mergeFree = (rows: Row[]): Omit<Row, 'decimals'>[] => {
+  const out: Row[] = [];
+  for (const r of rows) {
+    const same = r.withdrawProtocols.length === 0 && out.find((o) => o.asset === r.asset && o.withdrawProtocols.length === 0);
+    if (same) same.amount = formatUnits(parseUnits(same.amount, r.decimals) + parseUnits(r.amount, r.decimals), r.decimals);
+    else out.push({...r});
+  }
+  return out.map(({decimals: _d, ...r}) => r);
+};
 const parse = (v: string, d: number): bigint => {
   try {
     return v && Number(v) > 0 ? parseUnits(v as `${number}`, d) : 0n;
@@ -144,16 +163,40 @@ export function SendScreen() {
       const p = lendPos(sym);
       return {balance: p?.formatted ?? '0', protocol: p?.protocol ?? null};
     }
-    return {balance: balanceOfSymbol(bal.balances, sym), protocol: null};
+    // The free balance, split: what the reserve sets aside, and the rest. Both are paid from the
+    // same balance on chain; the split is only how the card shows it.
+    const total = balanceOfSymbol(bal.balances, sym);
+    const held = reserveHeld(reserveSize(sym), Number(total));
+    const d = meta(sym)?.decimals ?? 18;
+    const heldUnits = held > 0 ? parse(held.toFixed(Math.min(d, 6)), d) : 0n;
+    const totalUnits = parse(total, d);
+    const units = source === 'reserve' ? heldUnits : totalUnits - heldUnits;
+    return {balance: formatUnits(units > 0n ? units : 0n, d), protocol: null};
   };
+  /** The reserve this coin carries, in tokens: its size when it is the reserve coin, else 0. */
+  const reserveSize = (sym: string): number =>
+    resolveFeeReserve({
+      network,
+      vault: bal.vault,
+      heldStables: assets
+        .filter((a) => a.kind === 'stable')
+        .map((a) => ({symbol: a.symbol, amount: Number(balanceOfSymbol(bal.balances, a.symbol))})),
+      spendSymbol: sym,
+    }).keep;
   const sourceLabel = (source: Source) =>
-    source === 'yield' ? t('vault.yielding') : source === 'lend' ? t('vault.lending') : t('mobile.payments.from_vault');
+    source === 'yield'
+      ? t('vault.yielding')
+      : source === 'lend'
+        ? t('vault.lending')
+        : source === 'reserve'
+          ? t('mobile.payments.source_reserve')
+          : t('mobile.payments.from_vault');
 
   // Every asset/source the vault can actually pay from — the picker's rows.
   const sourceOptions = useMemo(
     () =>
       assets.flatMap((a) =>
-        (['free', 'yield', 'lend'] as Source[])
+        (['free', 'reserve', 'yield', 'lend'] as Source[])
           .map((source) => ({asset: a, source, ...sourceOf(a.symbol, source)}))
           .filter((o) => o.source === 'free' || Number(o.balance) > 0),
       ),
@@ -209,6 +252,24 @@ export function SendScreen() {
    */
   const [picker, setPicker] = useState<{k: number | null} | null>(null);
   const fundRows = useMemo(() => sourceOptions.filter((o) => Number(o.balance) > 0), [sourceOptions]);
+
+  // The fee for sending EVERYTHING: one transfer per source, one withdrawal per position. Twice the
+  // live quote, whole cents up, at least one cent — what the fee coin keeps back (see {remaining}).
+  const worstGas = useMemo(
+    () => relayGasFor({transfer: fundRows.length, withdraw: fundRows.filter((o) => o.source !== 'free').length}),
+    [fundRows],
+  );
+  const [feeKeep, setFeeKeep] = useState<number | null>(null);
+  useEffect(() => {
+    let live = true;
+    setFeeKeep(null);
+    quoteRelayFeeUsd(network, worstGas).then((usd) => {
+      if (live && usd != null) setFeeKeep(Math.max(0.01, Math.ceil(usd * 2 * 100) / 100));
+    });
+    return () => {
+      live = false;
+    };
+  }, [network, worstGas]);
   /** What the recipient has not taken yet, plus whatever the row being changed already shows. */
   const pickableFor = (k: number | null) =>
     fundRows.filter((o) => {
@@ -236,13 +297,14 @@ export function SendScreen() {
       amount: formatUnits(total, m.decimals),
       withdrawProtocols: protocol ? [protocol] : [],
       withdrawAmounts: protocol ? [total] : [],
+      decimals: m.decimals,
     };
   };
 
   const rows = useMemo(
     () =>
       isPayableAddress(recipient.to, network)
-        ? recipient.lines.map(lineToRow).filter((x): x is NonNullable<typeof x> => x != null)
+        ? mergeFree(recipient.lines.map(lineToRow).filter((x): x is NonNullable<typeof x> => x != null))
         : [],
     [recipient, network, pos.positions],
   );
@@ -251,26 +313,20 @@ export function SendScreen() {
    * source, so no other line claims from it. Counted in base units, not floats, so Max on an
    * 18-decimal token is exact rather than a rounded value that overshoots by a wei.
    *
-   * The free balance of the fee coin also holds the owner's gas reserve back — see
-   * {reserveAgainst}, and the switch on the Network fee page. The relayer charges the fee
-   * AFTER the transfers, so a batch that sends every last unit of the coin it is billed in reverts
-   * at the charge with `fee-leg-failed` — the same trap the market order avoids the same way.
+   * The fee coin keeps back what this very send will be billed: the relayer charges AFTER the
+   * transfers, so a batch that sends every last unit of the coin it is billed in reverts at the
+   * charge with `fee-leg-failed`. That fee is priced for the largest send the card can make — every
+   * source the vault holds, each position unwound — at twice the live quote, so neither a fuller
+   * card nor a gas spike before it lands can outgrow it. It comes out of the reserve line first and
+   * the free line after; while the quote is out (or failed), the whole reserve is held.
    */
   const remaining = (sym: string, source: Source): bigint => {
     const d = meta(sym)?.decimals ?? 18;
-    const keep =
-      source === 'free'
-        ? resolveFeeReserve({
-            network,
-            vault: bal.vault,
-            heldStables: assets
-              .filter((a) => a.kind === 'stable')
-              .map((a) => ({symbol: a.symbol, amount: Number(balanceOfSymbol(bal.balances, a.symbol))})),
-            spendSymbol: sym,
-          }).keep
-        : 0;
-    const reserve = keep > 0 ? parse(String(keep), d) : 0n;
-    const left = parse(sourceOf(sym, source).balance, d) - reserve;
+    const own = parse(sourceOf(sym, source).balance, d);
+    if (sym !== stable?.symbol || (source !== 'free' && source !== 'reserve')) return own;
+    const held = parse(sourceOf(sym, 'reserve').balance, d);
+    const fee = feeKeep == null ? held : parse(feeKeep.toFixed(Math.min(d, 6)), d);
+    const left = source === 'reserve' ? own - fee : own - (fee > held ? fee - held : 0n);
     return left > 0n ? left : 0n;
   };
   const anyOver = recipient.lines.some((l) => exceedsMax(l.amount, maxFor(l)));

@@ -35,14 +35,14 @@ const ICON = {timelock: 'timelock', sendDailyAllowance: 'dailyLimit', marketTrad
 /**
  * Safety settings (Security › Safety settings).
  *
- * On v1.0.0+ the page is a choice of safety level — Maximum, Balanced, Standard — each a card that
- * spells out its three numbers in full, and Custom for any other values, which opens the three
- * number rows. Picking a level fills all three into the draft; Save writes every changed number in
- * ONE transaction, and leaving with changes unsaved asks whether to discard them.
+ * On v1.0.0+ the page is two groups: the safety level — Maximum, Balanced, Standard, Custom — and
+ * under it the three numbers, which follow the level picked. Picking a level fills all three into
+ * the draft; the numbers can be edited by hand only under Custom. Save writes every changed number in ONE transaction,
+ * and leaving with changes unsaved asks whether to discard them.
  *
  * Before saving, the page says when the change lands: a stricter level applies at once, a looser one
- * waits out the timelock in force now. A change already waiting shows on the vault's current card,
- * counting down to the second. Maximum asks first, since leaving it later takes a week. A locked
+ * waits out the timelock in force now. A change already waiting shows under the levels, counting
+ * down to the second. A locked
  * vault cannot change any of it, so the cards are shown but cannot be picked.
  *
  * v1.0.3 has no levels: its rules are different (0 turns a number off, there is no trade-loss
@@ -154,7 +154,6 @@ export function RiskSettingsScreen() {
       }
     : null;
   const selected: SafetyLevelOrCustom | null = picked ? levelOf(picked) : null;
-  const current: SafetyLevelOrCustom | null = inForce ? levelOf(inForce) : null;
   const locked = lockLevel === 1 || lockLevel === 2;
 
   // A change already waiting: the level it lands on, and when the last of it does.
@@ -191,57 +190,38 @@ export function RiskSettingsScreen() {
   };
   const pick = (id: SafetyLevel) => {
     if (locked || !inForce || selected === id) return;
-    if (id !== 'maximum') return apply(id);
-    Alert.alert(t('mobile.vault.safety_maximum_confirm_title'), t('mobile.vault.safety_maximum_confirm_msg'), [
-      {text: t('common.cancel'), style: 'cancel'},
-      {text: t('mobile.vault.safety_switch'), onPress: () => apply(id)},
-    ]);
+    apply(id);
   };
 
-  const valueRows = (v: RiskValues) =>
-    RISK_FIELDS.map((f) => (
-      <View key={f} style={styles.valueRow}>
-        <Text style={styles.valueName} numberOfLines={1}>
-          {t(RISK_TITLE[f])}
-        </Text>
-        <Text style={styles.valueNum}>{fmt(f, v[f])}</Text>
-      </View>
-    ));
+  // Custom is a choice of its own: picking it keeps the numbers and opens them for editing.
+  const level: SafetyLevelOrCustom | null = customOpen ? 'custom' : selected;
 
-  const card = (id: SafetyLevelOrCustom, values: RiskValues | null, onPress: () => void, recommended?: boolean) => {
+  const levelRow = (id: SafetyLevelOrCustom, onPress: () => void, last: boolean) => {
     const color = safetyColor(id, c);
-    const isSelected = selected === id;
+    const on = level === id;
     return (
       <Pressable
         key={id}
         onPress={onPress}
         disabled={locked || !inForce}
-        style={({pressed}) => [styles.card, isSelected && {borderColor: color}, pressed && styles.pressed]}
+        style={({pressed}) => [styles.levelRow, !last && styles.divider, pressed && styles.pressed]}
         accessibilityRole="radio"
-        accessibilityState={{selected: isSelected, disabled: locked}}>
-        <View style={styles.cardHead}>
-          <View style={[styles.dot, {backgroundColor: color}]} />
-          <Text style={[styles.cardTitle, locked && styles.dim]}>{t(SAFETY_TITLE[id])}</Text>
-          {recommended ? (
-            <View style={styles.tag}>
-              <Text style={styles.tagText}>{t('mobile.vault.safety_recommended')}</Text>
-            </View>
-          ) : null}
-          {id === 'custom' ? <Text style={styles.cardSub}>{t('mobile.vault.safety_custom_sub')}</Text> : null}
-          <View style={styles.flex} />
-          {isSelected ? <Text style={[styles.check, {color}]}>✓</Text> : id === 'custom' ? <Text style={styles.chev}>›</Text> : null}
-        </View>
-        {values ? valueRows(values) : null}
-        {id === current && landsOn && landsAt > now ? (
-          <Text style={styles.waiting}>
-            {t('mobile.vault.safety_changing_to', {level: t(SAFETY_TITLE[landsOn]), time: fmtCountdown(landsAt - now, t) ?? ''})}
-          </Text>
-        ) : null}
+        accessibilityState={{selected: on, disabled: locked}}>
+        <View style={[styles.dot, {backgroundColor: color}]} />
+        <Text style={[styles.levelTitle, locked && styles.dim]}>{t(SAFETY_TITLE[id])}</Text>
+        <View style={styles.flex} />
+        {on ? <Text style={[styles.check, {color}]}>✓</Text> : null}
       </Pressable>
     );
   };
 
-  const showNumbers = customOpen || selected === 'custom';
+  const editable = !locked && level === 'custom';
+
+  // The change already waiting, under the levels: what it lands on and when.
+  const waitingNote =
+    landsOn && landsAt > now
+      ? t('mobile.vault.safety_changing_to', {level: t(SAFETY_TITLE[landsOn]), time: fmtCountdown(landsAt - now, t) ?? ''})
+      : undefined;
 
   return (
     <ScrollView
@@ -250,13 +230,27 @@ export function RiskSettingsScreen() {
       contentInsetAdjustmentBehavior="automatic"
       style={styles.container}
       contentContainerStyle={styles.body}>
-      <View style={styles.cards}>
-        {SAFETY_LEVELS.map((l) => card(l.id, l.values, () => pick(l.id), l.recommended))}
-        {card('custom', picked, () => !locked && setCustomOpen(true))}
-        {locked ? <Text style={styles.note}>{t('mobile.vault.safety_locked')}</Text> : null}
-      </View>
-      {showNumbers ? numberRows(true) : null}
-      {preview ? <Text style={styles.note}>{preview}</Text> : null}
+      {/* First the choice; the three numbers below follow it, and editing one makes it Custom. */}
+      <SettingsGroup label={t('mobile.vault.safety_level')} footer={locked ? t('mobile.vault.safety_locked') : waitingNote}>
+        {SAFETY_LEVELS.map((l) => levelRow(l.id, () => pick(l.id), false))}
+        {levelRow('custom', () => !locked && setCustomOpen(true), true)}
+      </SettingsGroup>
+
+      <SettingsGroup label={t('mobile.vault.safety_parameters')} footer={preview}>
+        {RISK_FIELDS.map((f, i) => (
+          <SettingsRow
+            key={f}
+            icon={ICON[f]}
+            title={t(RISK_TITLE[f])}
+            value={picked ? fmt(f, picked[f]) : undefined}
+            sub={sub(f)}
+            // Only Custom is edited by hand; a preset level's numbers are shown, not offered.
+            onPress={editable ? () => nav.navigate('VaultRiskValue', {field: f}) : undefined}
+            chevron={editable}
+            last={i === RISK_FIELDS.length - 1}
+          />
+        ))}
+      </SettingsGroup>
       {saveButton}
       {sheet}
     </ScrollView>
@@ -267,22 +261,13 @@ const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: {flex: 1, backgroundColor: c.bg},
     body: {flexGrow: 1, padding: 16, gap: 24},
-    cards: {gap: 12},
-    card: {backgroundColor: c.card, borderRadius: 20, padding: 16, gap: 8, borderWidth: 2, borderColor: 'transparent'},
+    levelRow: {flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 52, paddingHorizontal: 16},
+    divider: {borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},
     pressed: {opacity: 0.7},
-    cardHead: {flexDirection: 'row', alignItems: 'center', gap: 8},
     dot: {width: 10, height: 10, borderRadius: 5},
-    cardTitle: {color: c.text, fontSize: 16, fontWeight: '700'},
-    cardSub: {color: c.subtext, fontSize: 13},
+    levelTitle: {color: c.text, fontSize: 16, fontWeight: '600'},
     dim: {color: c.subtext},
-    tag: {backgroundColor: c.accentSoft, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2},
-    tagText: {color: c.accent, fontSize: 11, fontWeight: '700'},
     flex: {flex: 1},
     check: {fontSize: 17, fontWeight: '700'},
-    chev: {color: c.subtext, fontSize: 22, fontWeight: '300'},
-    valueRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingLeft: 18},
-    valueName: {color: c.subtext, fontSize: 13, flexShrink: 1},
-    valueNum: {color: c.text, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums']},
-    waiting: {color: c.accent, fontSize: 12, fontWeight: '600', paddingLeft: 18, fontVariant: ['tabular-nums']},
     note: {color: c.subtext, fontSize: 13, lineHeight: 18, paddingHorizontal: 4},
   });
