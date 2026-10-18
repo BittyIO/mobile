@@ -35,7 +35,7 @@ export type TabParamList = {
 export type RootStackParamList = {
   Main: undefined;
   Payments: undefined;
-  SelectRecipient: {slot: number};
+  SelectRecipient: undefined;
   /** The asset directory as a watch list editor: no prices, a star on every row. */
   Watchlist: undefined;
   /** One Earn position in full: its rate over time, what Auto-Yield does, and both actions. */

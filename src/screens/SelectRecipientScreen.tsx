@@ -1,6 +1,6 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, Keyboard, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View} from 'react-native';
-import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
+import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {Address} from 'viem';
 import type {RootStackParamList} from '@/App';
@@ -41,7 +41,6 @@ export function SelectRecipientScreen() {
   const c = useColors();
   const styles = useStyles(makeStyles);
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const {slot} = useRoute<RouteProp<RootStackParamList, 'SelectRecipient'>>().params;
   const network = useNetwork((s) => s.network);
   const owner = useWallet((s) => s.address);
   const vault = owner ? ownerVaultAddress(owner, network) : null;
@@ -126,7 +125,7 @@ export function SelectRecipientScreen() {
   const [addToBook, setAddToBook] = useState(true);
 
   const pick = (address: string, label?: string, add = false) => {
-    setPicked({slot, address: address as Address, label, addToBook: add});
+    setPicked({address: address as Address, label, addToBook: add});
     nav.goBack();
   };
 

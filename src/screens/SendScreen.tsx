@@ -65,31 +65,6 @@ const parse = (v: string, d: number): bigint => {
 
 
 /**
- * The one control at the end of a recipient's address row: add another recipient, or drop this one.
- *
- * The first card can never be removed, so it carries the add — which is where the web puts it too,
- * and it means the right-hand end of the row always holds exactly one control rather than a button
- * for the book plus a delete floating above the card.
- */
-function RecipientBtn({mode, onPress, label}: {mode: 'add' | 'remove'; onPress: () => void; label: string}) {
-  const c = useColors();
-  const styles = useStyles(makeStyles);
-  return (
-    <Pressable style={styles.recipBtn} onPress={onPress} hitSlop={12} accessibilityRole="button" accessibilityLabel={label}>
-      <Svg width={18} height={18} viewBox="0 0 24 24">
-        <Path
-          d={mode === 'add' ? 'M12 5v14M5 12h14' : 'M6 6l12 12M18 6 6 18'}
-          stroke={mode === 'add' ? c.accent : c.subtext}
-          strokeWidth={2.2}
-          strokeLinecap="round"
-          fill="none"
-        />
-      </Svg>
-    </Pressable>
-  );
-}
-
-/**
  * The avatar that opens the address book — a mark inside the address field rather than a labelled
  * button beside it. The field is what it acts on, so it belongs in the field; the width it gives
  * back is width the address itself needed.
@@ -112,8 +87,9 @@ function AvatarIcon({color}: {color: string}) {
 }
 
 /**
- * Send composer, laid out like the web's: one card per recipient, each with token lines, and a line is
- * a single amount field with the asset pill inside it.
+ * Send composer: one recipient, with token lines, and a line is a single amount field with the asset
+ * pill inside it. One recipient per payment, as the vault's own sends are; several tokens to that
+ * recipient go out together.
  *
  * The pill picks the SOURCE as well as the token — "USDC", "USDC (Yielding)", "USDC (Lending)" — the
  * same way the web's asset dropdown surfaces the earning balance as its own entry. A line drawn from a
@@ -137,8 +113,7 @@ export function SendScreen() {
   const bal = useVaultBalances(network);
   const pos = useVaultPositions(vault, network);
 
-  const [recipients, setRecipients] = useState<Recipient[]>([{to: '', lines: [newLine(first)]}]);
-  /** Which recipient card's address is being chosen, if any. */
+  const [recipient, setRecipient] = useState<Recipient>({to: '', lines: [newLine(first)]});
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   /**
    * A recipient chosen on the pushed page is left in a one-slot store and the page unwinds.
@@ -150,7 +125,7 @@ export function SendScreen() {
   const clearPicked = useRecipientPick((st) => st.clear);
   useEffect(() => {
     if (!picked) return;
-    patchR(picked.slot, {to: picked.address, label: picked.label, needsWhitelist: picked.addToBook});
+    patchR({to: picked.address, label: picked.label, needsWhitelist: picked.addToBook});
     clearPicked();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [picked]);
@@ -187,7 +162,7 @@ export function SendScreen() {
     [assets, bal.balances, pos.positions],
   );
 
-  // What a recipient starts with: EVERY funded source of one token — a stablecoin the vault holds,
+  // What the recipient starts with: EVERY funded source of one token — a stablecoin the vault holds,
   // since that is what people send — so a vault with free, yielding and supplied USDC opens with all
   // three lines ready and nothing to add by hand. Falls back to any funded token, then to a blank
   // line on the first asset.
@@ -198,7 +173,7 @@ export function SendScreen() {
     return funded.filter((o) => o.asset.symbol === pick.asset.symbol).map((o) => newLine(o.asset.symbol, o.source));
   }, [sourceOptions, first]);
 
-  // Until the user edits the token lines, every recipient tracks that set.
+  // Until the user edits the token lines, the recipient tracks that set.
   //
   // It has to be a flag rather than "does this still look like the blank line": balances arrive
   // before positions, so the first pass sets [USDC], and a guard comparing against the original blank
@@ -206,29 +181,25 @@ export function SendScreen() {
   const [linesTouched, setLinesTouched] = useState(false);
   useEffect(() => {
     if (linesTouched) return;
-    setRecipients((rs) => rs.map((r) => ({...r, lines: defaultLines})));
+    setRecipient((r) => ({...r, lines: defaultLines}));
   }, [defaultLines, linesTouched]);
 
-  const patchR = (i: number, patch: Partial<Recipient>) => setRecipients((rs) => rs.map((r, j) => (j === i ? {...r, ...patch} : r)));
+  const patchR = (patch: Partial<Recipient>) => setRecipient((r) => ({...r, ...patch}));
 
-  const addRecipient = () => setRecipients((rs) => [...rs, {to: '', lines: defaultLines}]);
-
-  // One transfer per funded line, plus one withdrawal for each distinct position the batch draws
-  // on, so adding a recipient or funding a line from Earn moves the fee line with it.
+  // One transfer per funded line, plus one withdrawal for each distinct position the payment draws
+  // on, so funding a line from Earn moves the fee line with it.
   const feeGas = useMemo(() => {
-    const funded = recipients.flatMap((r) => r.lines.filter((l) => Number(l.amount) > 0));
+    const funded = recipient.lines.filter((l) => Number(l.amount) > 0);
     const unwinds = new Set(funded.filter((l) => l.source !== 'free').map(lineKey));
     return relayGasFor({transfer: funded.length, withdraw: unwinds.size});
-  }, [recipients]);
-  const removeRecipient = (i: number) => setRecipients((rs) => rs.filter((_, j) => j !== i));
+  }, [recipient]);
 
-  const patchLine = (i: number, k: number, patch: Partial<Line>) => {
+  const patchLine = (k: number, patch: Partial<Line>) => {
     setLinesTouched(true);
-    patchR(i, {lines: recipients[i].lines.map((l, j) => (j === k ? {...l, ...patch} : l))});
+    patchR({lines: recipient.lines.map((l, j) => (j === k ? {...l, ...patch} : l))});
   };
-  /** One line's ceiling: what its own source still holds for this recipient. */
-  const maxFor = (l: Line, ri: number): string =>
-    formatUnits(remaining(l.sym, l.source, ri), meta(l.sym)?.decimals ?? 18);
+  /** One line's ceiling: what its own source still holds. */
+  const maxFor = (l: Line): string => formatUnits(remaining(l.sym, l.source), meta(l.sym)?.decimals ?? 18);
 
   /**
    * Source picker — every place the vault can pay from as its own entry, "USDC", "USDC Yielding",
@@ -238,18 +209,18 @@ export function SendScreen() {
    * its own row on the card and its own amount, and choosing it is the same act as choosing a
    * different coin. `k` is the line being changed, or null when the row is being added.
    */
-  const [picker, setPicker] = useState<{i: number; k: number | null} | null>(null);
+  const [picker, setPicker] = useState<{k: number | null} | null>(null);
   const fundRows = useMemo(() => sourceOptions.filter((o) => Number(o.balance) > 0), [sourceOptions]);
-  /** What a recipient has not taken yet, plus whatever the row being changed already shows. */
-  const pickableFor = (i: number, k: number | null) =>
+  /** What the recipient has not taken yet, plus whatever the row being changed already shows. */
+  const pickableFor = (k: number | null) =>
     fundRows.filter((o) => {
       const key = `${o.asset.symbol}:${o.source}`;
-      return !recipients[i].lines.some((l, j) => j !== k && lineKey(l) === key);
+      return !recipient.lines.some((l, j) => j !== k && lineKey(l) === key);
     });
-  const choose = (i: number, k: number | null, sym: string, source: Source) => {
+  const choose = (k: number | null, sym: string, source: Source) => {
     setLinesTouched(true);
-    const lines = recipients[i].lines;
-    patchR(i, {lines: k == null ? [...lines, newLine(sym, source)] : lines.map((l, j) => (j === k ? newLine(sym, source) : l))});
+    const lines = recipient.lines;
+    patchR({lines: k == null ? [...lines, newLine(sym, source)] : lines.map((l, j) => (j === k ? newLine(sym, source) : l))});
     setPicker(null);
   };
 
@@ -272,33 +243,23 @@ export function SendScreen() {
 
   const rows = useMemo(
     () =>
-      recipients.flatMap((r) =>
-        isPayableAddress(r.to, network)
-          ? r.lines
-              .map(lineToRow)
-              .filter((x): x is NonNullable<typeof x> => x != null)
-              .map((x) => ({recipient: r.to as Address, ...x}))
-          : [],
-      ),
-    [recipients, network, pos.positions],
+      isPayableAddress(recipient.to, network)
+        ? recipient.lines.map(lineToRow).filter((x): x is NonNullable<typeof x> => x != null)
+        : [],
+    [recipient, network, pos.positions],
   );
   /**
-   * What ONE line may still draw: its source's balance less everything every other line already
-   * claims from that same source.
-   *
-   * Without the subtraction, Max on the first recipient took the whole balance and the second
-   * recipient was offered the same balance again — the composer looked fine and the batch then
-   * failed on-chain for want of funds. Counted in base units, not floats, so Max on an 18-decimal
-   * token is exact rather than a rounded value that overshoots by a wei.
+   * What ONE line may still draw: its source's balance. The recipient never holds two lines of one
+   * source, so no other line claims from it. Counted in base units, not floats, so Max on an
+   * 18-decimal token is exact rather than a rounded value that overshoots by a wei.
    *
    * The free balance of the fee coin also holds the owner's gas reserve back — see
    * {reserveAgainst}, and the switch on the Network fee page. The relayer charges the fee
    * AFTER the transfers, so a batch that sends every last unit of the coin it is billed in reverts
    * at the charge with `fee-leg-failed` — the same trap the market order avoids the same way.
    */
-  const remaining = (sym: string, source: Source, ri: number): bigint => {
+  const remaining = (sym: string, source: Source): bigint => {
     const d = meta(sym)?.decimals ?? 18;
-    const key = `${sym}:${source}`;
     const keep =
       source === 'free'
         ? resolveFeeReserve({
@@ -311,18 +272,10 @@ export function SendScreen() {
           }).keep
         : 0;
     const reserve = keep > 0 ? parse(String(keep), d) : 0n;
-    let left = parse(sourceOf(sym, source).balance, d) - reserve;
-    // Every OTHER recipient's claim on the same source. A recipient never holds two lines of one
-    // source, so skipping its own row is enough to leave its own amount editable.
-    recipients.forEach((r, i) => {
-      if (i === ri) return;
-      r.lines.forEach((o) => {
-        if (lineKey(o) === key) left -= parse(o.amount, d);
-      });
-    });
+    const left = parse(sourceOf(sym, source).balance, d) - reserve;
     return left > 0n ? left : 0n;
   };
-  const anyOver = recipients.some((r, i) => r.lines.some((l) => exceedsMax(l.amount, maxFor(l, i))));
+  const anyOver = recipient.lines.some((l) => exceedsMax(l.amount, maxFor(l)));
   const canSubmit = unlocked && !!stable && status !== 'busy' && rows.length > 0 && !anyOver;
 
   const onSubmit = async () => {
@@ -339,26 +292,18 @@ export function SendScreen() {
     );
     try {
       const acct = await getSigner();
-      /**
-       * Addresses this payment has to write into the book first.
-       *
-       * Only the ones typed in that are not already there, deduplicated — two recipient cards
-       * pointing at the same new address must not add it twice, which the contract would
-       * refuse. `sendWithWhitelist` bundles them ahead of the send in one multicall, so the
-       * send is validated against a book that already contains them, and a vault with
-       * new-payment protection on does not reject its own first payment.
-       */
-      const toAdd = [
-        ...new Map(
-          recipients
-            .filter((r) => r.needsWhitelist && isPayableAddress(r.to, network))
-            .map((r) => [r.to.toLowerCase(), {recipient: r.to.toLowerCase() as Address}]),
-        ).values(),
-      ];
-      const h = await sendWithWhitelist({account: acct, vault, network, rows, addRecipients: toAdd, stableCoin: stable.address});
+      const h = await sendWithWhitelist({
+        account: acct,
+        vault,
+        network,
+        recipient: recipient.to as Address,
+        rows,
+        addToWhitelist: !!recipient.needsWhitelist,
+        stableCoin: stable.address,
+      });
       tx.success(h);
       setStatus('done');
-      setRecipients([{to: '', lines: defaultLines}]);
+      setRecipient({to: '', lines: defaultLines});
       setLinesTouched(false);
     } catch (e) {
       const msg = String((e as Error)?.message ?? e);
@@ -372,16 +317,15 @@ export function SendScreen() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* The scroll view is the whole page, so a drag anywhere scrolls; the button holds the bottom. */}
       <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.scroll} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-        {recipients.map((r, i) => (
-          <View key={i} style={styles.card}>
+        <View style={styles.card}>
             {/* Chosen, not typed. The common case on this screen is paying somewhere the vault
                 has paid before, or one of the owner's own vaults, and both are lists the app
                 already holds; typing an address is the exception and lives inside the picker.
-                The one button at the end of the row adds the next recipient or drops this one. */}
+                */}
             <View style={styles.toRow}>
               <Pressable
                 style={({pressed}) => [styles.toField, pressed && styles.pressed]}
-                onPress={() => nav.navigate('SelectRecipient', {slot: i})}
+                onPress={() => nav.navigate('SelectRecipient')}
                 accessibilityRole="button"
                 accessibilityLabel={t('mobile.payments.select_recipient')}>
                 {/* The mark alone, no disc. It was a tinted tile when it was a BUTTON inside a
@@ -393,15 +337,15 @@ export function SendScreen() {
                     Stacking them made the bar taller than every other control on the card, so
                     they run across instead — the name truncates under pressure, the address
                     does not, because a half-shown address is worse than none. */}
-                {r.to ? (
+                {recipient.to ? (
                   <View style={styles.toLine}>
-                    {r.label ? (
+                    {recipient.label ? (
                       <Text style={styles.toValue} numberOfLines={1}>
-                        {r.label}
+                        {recipient.label}
                       </Text>
                     ) : null}
-                    <Text style={r.label ? styles.toAddrMuted : styles.toAddr} numberOfLines={1}>
-                      {short(r.to)}
+                    <Text style={recipient.label ? styles.toAddrMuted : styles.toAddr} numberOfLines={1}>
+                      {short(recipient.to)}
                     </Text>
                   </View>
                 ) : (
@@ -411,14 +355,9 @@ export function SendScreen() {
                 )}
                 <Text style={styles.chev}>›</Text>
               </Pressable>
-              <RecipientBtn
-                mode={i === 0 ? 'add' : 'remove'}
-                label={i === 0 ? t('vault.add_recipient') : t('vault.remove')}
-                onPress={() => (i === 0 ? addRecipient() : removeRecipient(i))}
-              />
             </View>
-            {r.lines.map((l, k) => {
-              const max = maxFor(l, i);
+            {recipient.lines.map((l, k) => {
+              const max = maxFor(l);
               const over = exceedsMax(l.amount, max);
               const sym = displaySymbol(l.sym);
               const hasAmount = Number(l.amount) > 0;
@@ -435,7 +374,7 @@ export function SendScreen() {
                       control at the end of the bar instead of two that both look like they undo
                       something. */}
                   <View style={[styles.field, over && styles.fieldOver]}>
-                    <Pressable style={styles.assetPill} onPress={() => setPicker({i, k})}>
+                    <Pressable style={styles.assetPill} onPress={() => setPicker({k})}>
                       <TokenIcon symbol={l.sym} size={20} />
                       <Text style={styles.assetSym}>{sym}</Text>
                       {l.source !== 'free' ? <Text style={styles.assetSource}>{sourceLabel(l.source)}</Text> : null}
@@ -445,12 +384,12 @@ export function SendScreen() {
                       keyboardType="decimal-pad"
                       value={l.amount}
                       selectTextOnFocus
-                      onChangeText={(v) => patchLine(i, k, {amount: v})}
+                      onChangeText={(v) => patchLine(k, {amount: v})}
                     />
                     {hasAmount ? (
-                      <ClearBtn onPress={() => patchLine(i, k, {amount: '0'})} />
+                      <ClearBtn onPress={() => patchLine(k, {amount: '0'})} />
                     ) : Number(max) > 0 ? (
-                      <Pressable style={styles.maxBtn} onPress={() => patchLine(i, k, {amount: max})} hitSlop={8}>
+                      <Pressable style={styles.maxBtn} onPress={() => patchLine(k, {amount: max})} hitSlop={8}>
                         <Text style={styles.balInline} numberOfLines={1}>{fmtNum(Number(max))}</Text>
                         {/* `common.max` and NOT `vault.max`: the latter is the literal "Max" in
                             every locale that has it and missing from seven of them, so the badge
@@ -466,17 +405,16 @@ export function SendScreen() {
               );
             })}
 
-            {/* Offered while this recipient still has a token left to take — the same list the
+            {/* Offered while the recipient still has a token left to take — the same list the
                 chooser would show, so the control never opens an empty sheet. Counting lines
                 against sources, as this once did, hid it whenever one token filled every funded
                 source and left the second token unreachable. */}
-            {pickableFor(i, null).length > 0 ? (
-              <Pressable onPress={() => setPicker({i, k: null})}>
+            {pickableFor(null).length > 0 ? (
+              <Pressable onPress={() => setPicker({k: null})}>
                 <Text style={styles.addToken}>＋ {t('mobile.payments.add_token')}</Text>
               </Pressable>
             ) : null}
           </View>
-        ))}
 
         {status === 'error' && err ? <Text style={styles.err}>{err}</Text> : null}
       </ScrollView>
@@ -494,19 +432,19 @@ export function SendScreen() {
         <ScrollView showsVerticalScrollIndicator={false}>
           {picker == null
             ? null
-            : pickableFor(picker.i, picker.k).map((o) => {
+            : pickableFor(picker.k).map((o) => {
                 const sym = displaySymbol(o.asset.symbol);
                 const key = `${o.asset.symbol}:${o.source}`;
-                const line = picker.k == null ? null : recipients[picker.i].lines[picker.k];
+                const line = picker.k == null ? null : recipient.lines[picker.k];
                 const on = line != null && lineKey(line) === key;
                 return (
-                  <Pressable key={key} style={styles.pickRow} onPress={() => choose(picker.i, picker.k, o.asset.symbol, o.source)}>
+                  <Pressable key={key} style={styles.pickRow} onPress={() => choose(picker.k, o.asset.symbol, o.source)}>
                     <TokenIcon symbol={o.asset.symbol} size={30} />
                     <View style={styles.pickCol}>
                       <Text style={styles.pickLabel}>{o.source === 'free' ? sym : `${sym} ${sourceLabel(o.source)}`}</Text>
                     </View>
                     <Text style={styles.pickSub}>
-                      {fmtNum(Number(formatUnits(remaining(o.asset.symbol, o.source, picker.i), o.asset.decimals)))}
+                      {fmtNum(Number(formatUnits(remaining(o.asset.symbol, o.source), o.asset.decimals)))}
                     </Text>
                     {on ? (
                       <Svg width={18} height={18} viewBox="0 0 24 24">
@@ -552,7 +490,6 @@ const makeStyles = (c: Colors) => StyleSheet.create({
    * hitSlop on each control carries it back past 44, which is what the finger actually hits.
    * Full field height, so the mark centres on the field rather than floating beside it.
    */
-  recipBtn: {width: 26, height: 44, alignItems: 'center', justifyContent: 'center'},
   // No rule between rows: the card's own gap separates them, and each field is a filled bar that
   // already reads as its own object.
   line: {gap: 6},

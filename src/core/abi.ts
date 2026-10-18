@@ -131,7 +131,11 @@ export const VAULT_TRADE_ABI = parseAbi([
  */
 export const VAULT_PAYMENTS_ABI = parseAbi([
   'function send(address recipient,address asset,uint256 amount,address[] withdrawProtocols,uint256[] withdrawAmounts)',
-  'function batchSend(address[] recipients,address[] assets,uint256[] amounts,address[][] withdrawProtocols,uint256[][] withdrawAmounts)',
+  // One recipient, several assets: the vault pays one recipient per call (from 1.0.1).
+  'function batchSend(address recipient,address[] assets,uint256[] amounts,address[][] withdrawProtocols,uint256[][] withdrawAmounts)',
+  // Pay one recipient and save them in the same call (from 1.0.1): cheaper than the two in a multicall.
+  'function sendAndAddWhitelistedRecipient(address recipient,address asset,uint256 amount,address[] withdrawProtocols,uint256[] withdrawAmounts) returns (uint256 id)',
+  'function batchSendAndAddWhitelistedRecipient(address recipient,address[] assets,uint256[] amounts,address[][] withdrawProtocols,uint256[][] withdrawAmounts) returns (uint256 id)',
   // Whitelist / address book
   'function addWhitelistedRecipient(address recipient) returns (uint256 id)',
   'function removeWhitelistedRecipients(uint256[] ids)',
@@ -151,6 +155,8 @@ export const WHITELIST_STATUS = {
 /** v1.0.3's whitelist entry also names the one asset it may be paid in; the app always passes "any". */
 export const VAULT_PAYMENTS_V103_ABI = parseAbi([
   'function addWhitelistedRecipient(address recipient,address allowedAsset) returns (uint256 id)',
+  // One recipient per leg; the app passes the same recipient for every leg.
+  'function batchSend(address[] recipients,address[] assets,uint256[] amounts,address[][] withdrawProtocols,uint256[][] withdrawAmounts)',
 ]);
 
 /**

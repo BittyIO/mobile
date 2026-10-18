@@ -39,34 +39,11 @@ export async function sendPayment(o: {
   return hash;
 }
 
-/** Send the same/different assets to several recipients in ONE tx (from free balance). */
-export async function batchSendPayment(o: {
-  account: Signer;
-  vault: Address;
-  network: Network;
-  rows: {recipient: Address; asset: Address; amount: string; withdrawProtocols?: Address[]; withdrawAmounts?: bigint[]}[];
-  stableCoin: Address;
-}): Promise<Hex> {
-  const recipients = o.rows.map((r) => r.recipient);
-  const assets = o.rows.map((r) => r.asset);
-  const amounts = o.rows.map((r) => parseUnits(r.amount, assetMeta(o.network, r.asset).decimals));
-  const withdrawProtocols = o.rows.map((r) => r.withdrawProtocols ?? []);
-  const withdrawAmounts = o.rows.map((r) => r.withdrawAmounts ?? []);
-  const {hash} = await relayVaultWrite({
-    account: o.account,
-    vault: o.vault,
-    network: o.network,
-    abi: VAULT_PAYMENTS_ABI,
-    functionName: 'batchSend',
-    args: [recipients, assets, amounts, withdrawProtocols, withdrawAmounts],
-    stableCoin: o.stableCoin,
-  });
-  return hash;
-}
-
-/** One row of a send: who, what, how much, and which positions to unwind to cover it. */
+/**
+ * One leg of a payment: what, how much, and which positions to unwind to cover it. Every leg goes to
+ * the same recipient — the vault pays one recipient per call.
+ */
 export type SendRow = {
-  recipient: Address;
   asset: Address;
   amount: string;
   withdrawProtocols?: Address[];
@@ -74,64 +51,89 @@ export type SendRow = {
 };
 
 /**
- * Add recipients to the address book and pay them, in ONE transaction.
+ * Several assets to one recipient, as one `batchSend` — or, with `andAdd`, as one
+ * `batchSendAndAddWhitelistedRecipient`, which also saves the recipient. v1.0.0+ takes the recipient
+ * once; v1.0.3 still takes one per leg, so the same address is repeated there, and it has no combined
+ * call.
+ */
+function batchSendCall(network: Network, recipient: Address, rows: SendRow[], andAdd = false): VaultCall {
+  const assets = rows.map((r) => r.asset);
+  const amounts = rows.map((r) => parseUnits(r.amount, assetMeta(network, r.asset).decimals));
+  const withdrawProtocols = rows.map((r) => r.withdrawProtocols ?? []);
+  const withdrawAmounts = rows.map((r) => r.withdrawAmounts ?? []);
+  if (isLegacy()) {
+    return {
+      abi: VAULT_PAYMENTS_V103_ABI,
+      functionName: 'batchSend',
+      args: [rows.map(() => recipient), assets, amounts, withdrawProtocols, withdrawAmounts],
+    };
+  }
+  return {
+    abi: VAULT_PAYMENTS_ABI,
+    functionName: andAdd ? 'batchSendAndAddWhitelistedRecipient' : 'batchSend',
+    args: [recipient, assets, amounts, withdrawProtocols, withdrawAmounts],
+  };
+}
+
+/** Send several assets to one recipient in ONE tx. */
+export async function batchSendPayment(o: {
+  account: Signer;
+  vault: Address;
+  network: Network;
+  recipient: Address;
+  rows: SendRow[];
+  stableCoin: Address;
+}): Promise<Hex> {
+  const call = batchSendCall(o.network, o.recipient, o.rows);
+  const {hash} = await relayVaultWrite({account: o.account, vault: o.vault, network: o.network, ...call, stableCoin: o.stableCoin});
+  return hash;
+}
+
+/**
+ * Pay one recipient and, if asked, add them to the address book, in ONE transaction.
  *
- * A vault with new-payment protection on will not pay an address it has never seen, so sending to
- * someone new is two steps — whitelist, then send. As two transactions that is two Face ID prompts
- * and two relay fees, and a window in between where the book has an entry that was never paid. As
- * one `vault.multicall` it is one signature, one fee, and either both land or neither does.
- *
- * `addRecipients` is only the addresses not already in the book; the caller works that out, since
- * it is the one holding the book. An empty list falls through to the plain send, which is cheaper
- * to encode and identical in effect.
- *
- * Order matters and is the whole point: every `addWhitelistedRecipient` is encoded before the
- * send, and multicall preserves it, so the send is validated against a book that already has the
- * recipient in it.
+ * As two transactions that is two Face ID prompts and two relay fees, and a window in between where
+ * the book has an entry that was never paid. On v1.0.0+ it is one call that does both —
+ * `sendAndAddWhitelistedRecipient`, or the batch form for several assets — which costs about 9,000
+ * gas less than the same two in a multicall: the owner and lock checks run once and the calldata is
+ * under half the size. v1.0.3 has no such call, so there the add and the send go in one
+ * `vault.multicall`. Either way it is one signature and one fee, and both land or neither does.
+ * Without the add it falls through to the plain send.
  */
 export async function sendWithWhitelist(o: {
   account: Signer;
   vault: Address;
   network: Network;
+  recipient: Address;
   rows: SendRow[];
-  /** Entries to write into the book first, deduplicated by the caller. */
-  addRecipients: {recipient: Address}[];
+  /** Write the recipient into the book in the same transaction. */
+  addToWhitelist: boolean;
   stableCoin: Address;
 }): Promise<Hex> {
-  if (o.addRecipients.length === 0) {
+  if (!o.addToWhitelist) {
     return o.rows.length === 1
       ? sendPayment({...o, ...o.rows[0]})
-      : batchSendPayment({account: o.account, vault: o.vault, network: o.network, rows: o.rows, stableCoin: o.stableCoin});
+      : batchSendPayment({account: o.account, vault: o.vault, network: o.network, recipient: o.recipient, rows: o.rows, stableCoin: o.stableCoin});
   }
 
-  const amount = (r: SendRow) => parseUnits(r.amount, assetMeta(o.network, r.asset).decimals);
-  const send: VaultCall =
-    o.rows.length === 1
-      ? {
-          abi: VAULT_PAYMENTS_ABI,
-          functionName: 'send',
-          args: [o.rows[0].recipient, o.rows[0].asset, amount(o.rows[0]), o.rows[0].withdrawProtocols ?? [], o.rows[0].withdrawAmounts ?? []],
-        }
-      : {
-          abi: VAULT_PAYMENTS_ABI,
-          functionName: 'batchSend',
-          args: [
-            o.rows.map((r) => r.recipient),
-            o.rows.map((r) => r.asset),
-            o.rows.map(amount),
-            o.rows.map((r) => r.withdrawProtocols ?? []),
-            o.rows.map((r) => r.withdrawAmounts ?? []),
-          ],
-        };
+  const row = o.rows[0];
+  const one = (functionName: 'send' | 'sendAndAddWhitelistedRecipient'): VaultCall => ({
+    abi: VAULT_PAYMENTS_ABI,
+    functionName,
+    args: [o.recipient, row.asset, parseUnits(row.amount, assetMeta(o.network, row.asset).decimals), row.withdrawProtocols ?? [], row.withdrawAmounts ?? []],
+  });
+
+  if (!isLegacy()) {
+    const call = o.rows.length === 1 ? one('sendAndAddWhitelistedRecipient') : batchSendCall(o.network, o.recipient, o.rows, true);
+    const {hash} = await relayVaultWrite({account: o.account, vault: o.vault, network: o.network, ...call, stableCoin: o.stableCoin});
+    return hash;
+  }
 
   const {hash} = await relayVaultMulticall({
     account: o.account,
     vault: o.vault,
     network: o.network,
-    calls: [
-      ...o.addRecipients.map((r) => addRecipientCall(r.recipient)),
-      send,
-    ],
+    calls: [addRecipientCall(o.recipient), o.rows.length === 1 ? one('send') : batchSendCall(o.network, o.recipient, o.rows)],
     stableCoin: o.stableCoin,
   });
   return hash;

@@ -3,8 +3,6 @@ import type {Address} from 'viem';
 
 /** A recipient chosen on the Select recipient page, on its way back to the Send card. */
 export type PickedRecipient = {
-  /** Which recipient card asked for it. */
-  slot: number;
   address: Address;
   /** What to show beside the address — a saved name, or a vault's own. */
   label?: string;
