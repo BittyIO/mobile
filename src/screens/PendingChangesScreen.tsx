@@ -1,15 +1,15 @@
 import React, {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react';
-import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text} from 'react-native';
+import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import Svg, {Path, Rect} from 'react-native-svg';
+import {ProgressRing, waitDone} from '@/components/ProgressRing';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
-import {getPendingChanges, type PendingChange} from '@/vault/risk';
-import {SettingsRow, SettingsGroup} from '@/components/SettingsRow';
-import type {SettingsIconName} from '@/components/SettingsIcon';
-import {RISK_TITLE, fmtCountdown, fmtRiskValue} from '@/components/riskFormat';
+import {getPendingChanges, getRiskConfig, type PendingChange} from '@/vault/risk';
+import {SettingsGroup} from '@/components/SettingsRow';
+import {SettingsIcon, type SettingsIconName} from '@/components/SettingsIcon';
+import {RISK_TITLE, fmtRiskValue} from '@/components/riskFormat';
 import {fmtPerms} from '@/components/useAssetManagerRow';
-import {shortAddress} from '@/core/format';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {ownerVaultAddress} from '@/vault/read';
@@ -62,7 +62,7 @@ function value(p: PendingChange, t: T): string {
       // Whole dollars, as the contract stores them.
       return `$${Number(p.value).toLocaleString()}`;
     default:
-      return shortAddress(p.address);
+      return p.address;
   }
 }
 
@@ -101,6 +101,7 @@ export function PendingChangesScreen() {
   const network = useNetwork((s) => s.network);
   const vault = owner ? ownerVaultAddress(owner, network) : null;
   const [items, setItems] = useState<PendingChange[] | null>(null);
+  const [timelock, setTimelock] = useState(0);
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const lastRead = useRef(0);
 
@@ -108,6 +109,7 @@ export function PendingChangesScreen() {
     if (!vault) return;
     lastRead.current = Date.now();
     getPendingChanges(vault, network).then(setItems);
+    getRiskConfig(vault, network).then((r) => setTimelock(Number(r.timelock)));
   }, [vault, network]);
 
   useFocusEffect(
@@ -145,19 +147,21 @@ export function PendingChangesScreen() {
       ) : (
         <SettingsGroup footer={t('mobile.vault.pending_lock_hint')}>
           {items.map((p, i) => {
-            const left = fmtCountdown(Number(p.at) - now, t);
-            const date = new Date(Number(p.at) * 1000).toLocaleString();
+            const at = Number(p.at);
+            // ponytail: the chain keeps only when an item lands, not when it was queued, so the start
+            // is `at` less today's timelock; exact if the timelock hasn't changed since, else read the
+            // queuing event's block time.
+            const done = waitDone(at, now, timelock);
             const perms = p.kind === 'newAssetManager' ? ` · ${fmtPerms(p.perms, t)}` : '';
             return (
-              <SettingsRow
-                key={`${p.kind}:${'address' in p ? p.address : ''}:${p.at}`}
-                icon={ICON[p.kind]}
-                title={title(p, t)}
-                value={value(p, t)}
-                sub={`${left ? t('mobile.vault.pending_countdown', {time: left}) : t('mobile.vault.pending_due')}\n${date}${perms}`}
-                chevron={false}
-                last={i === items.length - 1}
-              />
+              <View key={`${p.kind}:${'address' in p ? p.address : ''}:${p.at}`} style={[styles.item, i < items.length - 1 && styles.divider]}>
+                <SettingsIcon name={ICON[p.kind]} />
+                <View style={styles.itemText}>
+                  <Text style={styles.title} numberOfLines={1}>{title(p, t)}</Text>
+                  <Text style={styles.value}>{value(p, t)}{perms}</Text>
+                </View>
+                <ProgressRing done={done} left={at - now} />
+              </View>
             );
           })}
         </SettingsGroup>
@@ -171,5 +175,11 @@ const makeStyles = (c: Colors) =>
     container: {flex: 1, backgroundColor: c.bg},
     body: {flexGrow: 1, padding: 16, gap: 24},
     empty: {color: c.subtext, fontSize: 15, textAlign: 'center', marginTop: 24},
-    lockBtn: {paddingHorizontal: 4, paddingVertical: 2},
+    // Sized to the bar's 44 like the trade menu's: the native bar anchors a custom view by its bottom.
+    lockBtn: {width: 44, height: 44, paddingBottom: 12, alignItems: 'center', justifyContent: 'center'},
+    item: {flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 16, backgroundColor: c.card},
+    divider: {borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},
+    itemText: {flex: 1, gap: 3},
+    title: {color: c.text, fontSize: 15, fontWeight: '600', flexShrink: 1},
+    value: {color: c.subtext, fontSize: 13},
   });

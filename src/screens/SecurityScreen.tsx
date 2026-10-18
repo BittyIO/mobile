@@ -7,7 +7,6 @@ import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {SettingsRow, SettingsGroup} from '@/components/SettingsRow';
 import {useVaultGeneration} from '@/core/vault-generation';
-import {useAssetManagerRow} from '@/components/useAssetManagerRow';
 import {getLockLevel, getRiskConfig, type LockLevel} from '@/vault/risk';
 import {SAFETY_TITLE, levelOf, safetyColor, valuesInForce, type SafetyLevelOrCustom} from '@/core/safety-levels';
 import {useWallet} from '@/wallet/store';
@@ -29,7 +28,6 @@ export function SecurityScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const styles = useStyles(makeStyles);
   const hasLocks = useVaultGeneration((s) => s.generation) !== 'v1.0.3';
-  const manager = useAssetManagerRow();
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
   const vault = owner ? ownerVaultAddress(owner, network) : null;
@@ -81,13 +79,8 @@ export function SecurityScreen() {
           for it, and the idle native ETH it can wrap. */}
       <SettingsGroup>
         <SettingsRow icon="allowlist" title={t('mobile.settings.allow_list')} onPress={() => nav.navigate('VaultAssets')} />
-        <SettingsRow
-          icon="delegation"
-          title={t('vault.asset_manager')}
-          value={manager.value}
-          sub={manager.sub}
-          onPress={manager.onPress}
-        />
+        {/* No status here: who it is and what is pending live on the asset manager's own page. */}
+        <SettingsRow icon="delegation" title={t('vault.asset_manager')} onPress={() => nav.navigate('VaultAssetManager')} />
         <SettingsRow icon="eth" title={t('mobile.vault.legacy_eth')} onPress={() => nav.navigate('VaultLegacyEth')} />
         <SettingsRow
           icon="network"

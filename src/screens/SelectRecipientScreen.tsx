@@ -1,36 +1,32 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {ActivityIndicator, Keyboard, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View} from 'react-native';
+import React, {useCallback, useEffect, useLayoutEffect, useMemo, useState} from 'react';
+import Svg, {Path} from 'react-native-svg';
+import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {Address} from 'viem';
 import type {RootStackParamList} from '@/App';
-import {Sheet} from '@/components/Sheet';
-import {isPayableAddress, isTokenAddress} from '@/core/asset-catalog';
 import {useVaults} from '@/core/vault-store';
 import {useNetwork} from '@/core/network-store';
 import {useWallet} from '@/wallet/store';
 import {ownerVaultAddress} from '@/vault/read';
 import {fetchWhitelist, removeWhitelisted, type WhitelistedRecipient} from '@/vault/payments';
 import {WHITELIST_STATUS} from '@/core/abi';
+import {getRiskConfig, type RiskConfig} from '@/vault/risk';
+import {fmtAllowance} from '@/components/riskFormat';
+import {useAssetCatalog} from '@/core/asset-catalog';
+import Clipboard from '@react-native-clipboard/clipboard';
+import {showToast} from '@/components/Toast';
+import {ProgressRing, leftUnit, waitDone} from '@/components/ProgressRing';
 import {useVaultWrite} from '@/components/useVaultWrite';
-import {shortAddress} from '@/core/format';
 import {useRecipientNames, recipientName} from '@/core/recipient-names';
 import {useRecipientPick} from '@/core/recipient-pick';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 
 /**
- * Who to pay, as its own page — and the one place the address book is kept: chosen from, added to
- * (a typed address with "Add to whitelist" on is written in with the send), and pruned (the ✕ on
- * each entry, through the Face-ID and fee confirm).
- *
- * It was a sheet, and outgrew one: the book, the owner's other vaults, an address to type and a
- * decision to make about it do not fit in something you dismiss by dragging. A page can also be
- * backed out of without losing a half-typed address to a stray gesture.
- *
- * The vaults are a sheet WITHIN the page rather than a third list down it. They are the one
- * section whose rows are interchangeable — pick one and you are done — and inlining four of them
- * pushed the thing most people came here to do, typing a new address, below the fold.
+ * Who to pay, as its own page, in two groups: the whitelisted address book, each entry under its
+ * name; and the owner's other vaults. "New recipient" is the + in the header ({NewRecipientScreen}).
+ * The book is also pruned here (the ✕ on each entry, through the Face-ID and fee confirm).
  *
  * Hands its answer back through {useRecipientPick} and then calls `goBack`. A route param would
  * have to be delivered by `navigate`, which is as willing to push a second Send page as it is to
@@ -63,6 +59,11 @@ export function SelectRecipientScreen() {
    */
   const [loading, setLoading] = useState(true);
   const [reload, setReload] = useState(0);
+  const symbol = useAssetCatalog(network).find((a) => a.kind === 'stable')?.symbol;
+  const [risk, setRisk] = useState<RiskConfig | null>(null);
+  useEffect(() => {
+    if (vault) getRiskConfig(vault, network).then(setRisk);
+  }, [vault, network]);
   useEffect(() => {
     if (!vault) return;
     let live = true;
@@ -85,7 +86,7 @@ export function SelectRecipientScreen() {
       `rm-${b.id}`,
       `${t('vault.remove')} · ${t('vault.address_book')}`,
       (base) => removeWhitelisted({...base, id: b.id}),
-      shortAddress(b.recipientAddress),
+      b.recipientAddress,
     );
 
   /**
@@ -109,35 +110,105 @@ export function SelectRecipientScreen() {
 
   const setPicked = useRecipientPick((st) => st.set);
   const names = useRecipientNames((st) => st.names);
-  const setName = useRecipientNames((st) => st.setName);
 
-  const [vaultSheet, setVaultSheet] = useState(false);
-  const [draft, setDraft] = useState('');
-  const [nameDraft, setNameDraft] = useState('');
-  /**
-   * Whether a typed address is written into the book.
-   *
-   * On by default, because a vault with new-payment protection enabled will refuse to pay an
-   * address it has never seen, and the common reason to type one is that you intend to use it.
-   * It is a choice and not a side effect, though: a one-off payment to an address you will never
-   * use again should not leave an entry behind, and turning this off is how that is said.
-   */
-  const [addToBook, setAddToBook] = useState(true);
-
-  const pick = (address: string, label?: string, add = false) => {
-    setPicked({address: address as Address, label, addToBook: add});
+  const pick = (address: string, label?: string) => {
+    setPicked({address: address as Address, label, addToBook: false});
     nav.goBack();
   };
 
-  /** A typed address, with whatever it was called — the name is written here, on this device. */
-  const useTyped = () => {
-    const given = nameDraft.trim();
-    if (given) setName(network, draft, given);
-    pick(draft, given || undefined, addToBook);
+  /** One book entry: its name, the full address, a status note where it has one, and the ✕. */
+  // Long press any address to copy it.
+  const copy = (a: string) => {
+    Clipboard.setString(a);
+    showToast('success', t('common.copied'), a, 1500);
   };
 
-  const valid = isPayableAddress(draft, network);
-  const isToken = isTokenAddress(draft, network);
+  // A clock for the pending rings, ticking while the page is up.
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
+  useEffect(() => {
+    const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const entryRow = (b: WhitelistedRecipient, i: number, list: WhitelistedRecipient[]) => {
+    const named = recipientName(names, network, b.recipientAddress);
+    const removeAt = b.status === WHITELIST_STATUS.removalQueued ? b.removeAt : undefined;
+    const onDate = (at: number) => t('mobile.vault.on_date', {date: new Date(at * 1000).toLocaleDateString()});
+    const note = removeAt
+      ? t('mobile.payments.removal_pending', {when: onDate(removeAt)})
+      : b.status === WHITELIST_STATUS.voided
+          ? t('mobile.payments.voided_by_lock')
+          : null;
+    return (
+      <Pressable
+        key={b.id}
+        style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === list.length - 1 && styles.rowLast, pressed && styles.pressed]}
+        onPress={() => pick(b.recipientAddress, named)}
+        onLongPress={() => copy(b.recipientAddress)}>
+        {/* Every entry under a name: the one saved on this device, or its place in the
+            book where none was given. The full address below, since that is what gets paid. */}
+        <View style={styles.entryCol}>
+          <View style={styles.nameLine}>
+            <Text style={[styles.entryName, !named && styles.entryNameOff]} numberOfLines={1}>
+              {named ?? t('mobile.payments.recipient_n', {n: b.id})}
+            </Text>
+            {/* Still waiting out the timelock: how far it has run, and what is left. */}
+            {b.status === WHITELIST_STATUS.pending && b.effectiveAt ? (
+              <>
+                <ProgressRing size={16} done={waitDone(b.effectiveAt, now, Number(risk?.timelock ?? 0))} left={b.effectiveAt - now} />
+                <Text style={styles.left}>{leftUnit(b.effectiveAt - now, t).join(' ')}</Text>
+              </>
+            ) : null}
+          </View>
+          <Text style={styles.addrMuted}>{b.recipientAddress}</Text>
+          {note ? (
+            <Text style={[styles.sub, b.status === WHITELIST_STATUS.voided && styles.subWarn]} numberOfLines={1}>
+              {note}
+            </Text>
+          ) : null}
+        </View>
+        {busy === `rm-${b.id}` ? (
+          <ActivityIndicator color={c.subtext} />
+        ) : removeAt ? null : (
+          <Pressable
+            hitSlop={10}
+            disabled={!ready}
+            onPress={() => removeEntry(b)}
+            accessibilityRole="button"
+            accessibilityLabel={t('vault.remove')}
+            style={({pressed}) => [styles.remove, (pressed || !ready) && styles.pressed]}>
+            <Text style={styles.removeText}>✕</Text>
+          </Pressable>
+        )}
+      </Pressable>
+    );
+  };
+
+  // Payable now (a queued removal still is, until it lands) vs still waiting out the timelock, or
+  // voided by a lock. A v1.0.3 entry carries no status and is payable.
+  const isPending = (b: WhitelistedRecipient) => b.status === WHITELIST_STATUS.pending || b.status === WHITELIST_STATUS.voided;
+  const live = book.filter((b) => !isPending(b));
+  const waiting = book.filter(isPending);
+  const allowance = risk ? t('mobile.payments.max_send_daily', {value: fmtAllowance(risk.sendDailyAllowance, risk, symbol, t)}) : null;
+  const whitelisted = (a: string) => live.some((b) => b.recipientAddress.toLowerCase() === a.toLowerCase());
+
+  // New recipient in the header: always in reach, however long the book grows.
+  useLayoutEffect(() => {
+    nav.setOptions({
+      headerRight: () => (
+        <Pressable
+          onPress={() => nav.navigate('NewRecipient')}
+          hitSlop={10}
+          style={styles.headerBtn}
+          accessibilityRole="button"
+          accessibilityLabel={t('mobile.payments.new_recipient')}>
+          <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+            <Path d="M12 5v14M5 12h14" stroke={c.accent} strokeWidth={2.2} strokeLinecap="round" />
+          </Svg>
+        </Pressable>
+      ),
+    });
+  }, [nav, t, c, styles]);
 
   return (
     <ScrollView
@@ -146,163 +217,67 @@ export function SelectRecipientScreen() {
       alwaysBounceVertical
       // A PUSHED screen: the header inset is the system's to apply, so this and nothing else.
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={styles.body}
-      // Drag the page and the keyboard goes with it; `handled` keeps a tap on a row working on
-      // the first try rather than spending it on the dismiss.
-      keyboardDismissMode="on-drag"
-      keyboardShouldPersistTaps="handled">
-      {/* A tap on the page, anywhere that is not a control, puts the keyboard away. The nested
-          pressables and the fields win the gesture before this does. */}
-      <Pressable accessible={false} onPress={Keyboard.dismiss} style={styles.dismiss}>
-      {/* The whitelist first, and always — even with nothing in it.
-      
-          Paying somewhere this vault has already paid is the common case, and the whole reason
-          not to make someone type an address. Hiding the section when it is empty also hides
-          the fact that the vault HAS a whitelist, which is what someone needs to know before
-          deciding whether the address they are about to type belongs on it. */}
-      <Text style={styles.section}>{t('vault.address_book')}</Text>
+      contentContainerStyle={styles.body}>
+      {/* The whitelist first, and always — even with nothing in it: paying somewhere this vault
+          already pays is the common case, and an empty list still says the vault HAS one. */}
+      <Text style={styles.section}>
+        {t('mobile.payments.whitelisted_book')} · {t('mobile.payments.max_send_none')}
+      </Text>
       <View style={styles.card}>
         {loading ? (
-          <View style={[styles.row, styles.rowOnly, styles.centered]}>
+          <View style={[styles.row, styles.rowFirst, styles.rowLast, styles.centered]}>
             <ActivityIndicator color={c.accent} />
           </View>
-        ) : book.length === 0 ? (
-          <View style={[styles.row, styles.rowOnly]}>
+        ) : live.length === 0 ? (
+          <View style={[styles.row, styles.rowFirst, styles.rowLast]}>
             <Text style={styles.emptyText}>{t('mobile.payments.book_empty_title')}</Text>
           </View>
         ) : (
-          book.map((b, i) => {
-            const named = recipientName(names, network, b.recipientAddress);
-            const removeAt = b.status === WHITELIST_STATUS.removalQueued ? b.removeAt : undefined;
-            const onDate = (at: number) => t('mobile.vault.on_date', {date: new Date(at * 1000).toLocaleDateString()});
-            const note = removeAt
-              ? t('mobile.payments.removal_pending', {when: onDate(removeAt)})
-              : b.status === WHITELIST_STATUS.pending && b.effectiveAt
-                ? t('mobile.payments.payable_from', {when: onDate(b.effectiveAt)})
-                : b.status === WHITELIST_STATUS.voided
-                  ? t('mobile.payments.voided_by_lock')
-                  : null;
-            return (
-              <Pressable
-                key={b.id}
-                style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === book.length - 1 && styles.rowLast, pressed && styles.pressed]}
-                onPress={() => pick(b.recipientAddress, named)}>
-                {/* Name and address across one line, as on the Send card: the name is what the
-                    user recognises and the address is what gets paid, so the row shows both.
-                    The name yields first; the address is the part that must stay whole. */}
-                <View style={styles.entryCol}>
-                  <View style={styles.entry}>
-                    {named ? (
-                      <Text style={styles.entryName} numberOfLines={1}>
-                        {named}
-                      </Text>
-                    ) : null}
-                    <Text style={named ? styles.addrMuted : styles.addr} numberOfLines={1}>
-                      {shortAddress(b.recipientAddress)}
-                    </Text>
-                  </View>
-                  {note ? (
-                    <Text style={[styles.sub, b.status === WHITELIST_STATUS.voided && styles.subWarn]} numberOfLines={1}>
-                      {note}
-                    </Text>
-                  ) : null}
-                </View>
-                {busy === `rm-${b.id}` ? (
-                  <ActivityIndicator color={c.subtext} />
-                ) : removeAt ? null : (
-                  <Pressable
-                    hitSlop={10}
-                    disabled={!ready}
-                    onPress={() => removeEntry(b)}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('vault.remove')}
-                    style={({pressed}) => [styles.remove, (pressed || !ready) && styles.pressed]}>
-                    <Text style={styles.removeText}>✕</Text>
-                  </Pressable>
-                )}
-              </Pressable>
-            );
-          })
+          live.map((b, i) => entryRow(b, i, live))
         )}
       </View>
 
-      {mine.length > 0 ? (
+      {/* Not payable as whitelisted yet: until then, a send to one of these is held to the daily
+          send allowance, which the title says. */}
+      {waiting.length > 0 ? (
         <>
-          <Text style={styles.section}>{t('mobile.payments.my_vaults')}</Text>
-          <View style={styles.card}>
-            <Pressable
-              style={({pressed}) => [styles.row, styles.rowOnly, pressed && styles.pressed]}
-              onPress={() => setVaultSheet(true)}>
-              <Text style={styles.rowLabel}>{t('mobile.settings.choose_vault')}</Text>
-              <Text style={styles.count}>{mine.length}</Text>
-              <Text style={styles.chev}>›</Text>
-            </Pressable>
-          </View>
+          <Text style={styles.section}>
+            {t('mobile.payments.pending_whitelisted')}
+            {allowance ? ` · ${allowance}` : ''}
+          </Text>
+          <View style={styles.card}>{waiting.map((b, i) => entryRow(b, i, waiting))}</View>
         </>
       ) : null}
 
-      {/* Typing last: the exception, and the only one of the three that can go wrong. */}
-      <Text style={styles.section}>{t('mobile.payments.new_recipient')}</Text>
-      <View style={styles.card}>
-        <TextInput
-          style={[styles.input, draft.length > 0 && !valid && styles.inputErr]}
-          placeholder={t('mobile.vault.enter_address')}
-          placeholderTextColor={c.subtext}
-          autoCapitalize="none"
-          autoCorrect={false}
-          value={draft}
-          onChangeText={setDraft}
-        />
-        {/* Named, not just refused: a well-formed address the field rejects looks like a bug
-            unless the screen says what is wrong with it. */}
-        {isToken ? <Text style={styles.warn}>{t('mobile.payments.token_address_warning')}</Text> : null}
-        {/* The name is all there is to add: an entry accepts any asset, since a locked vault pays
-            out only through this list and cannot trade into a narrower one. The name is local. */}
-        <TextInput
-          style={[styles.input, styles.nameInput]}
-          placeholder={t('mobile.payments.recipient_name')}
-          placeholderTextColor={c.subtext}
-          autoCapitalize="words"
-          value={nameDraft}
-          onChangeText={setNameDraft}
-        />
-        <Text style={styles.note}>{t('mobile.payments.name_local_only')}</Text>
-        <View style={styles.toggleRow}>
-          <Text style={styles.toggleLabel}>{t('mobile.payments.add_to_whitelist')}</Text>
-          <Switch value={addToBook} onValueChange={setAddToBook} style={styles.switch} />
-        </View>
-        <Pressable
-          style={({pressed}) => [styles.use, !valid && styles.useOff, pressed && styles.pressed]}
-          disabled={!valid}
-          onPress={useTyped}>
-          <Text style={[styles.useText, !valid && styles.useTextOff]}>{t('vault.confirm')}</Text>
-        </Pressable>
-      </View>
-
-      {/* The vaults, in a sheet: one tap to open, one to choose, and the page behind it keeps
-          whatever was typed. */}
-      <Sheet visible={vaultSheet} title={t('mobile.settings.choose_vault')} onClose={() => setVaultSheet(false)}>
-        <ScrollView showsVerticalScrollIndicator={false} style={styles.sheetScroll}>
+      {mine.length > 0 ? (
+        <>
+          {/* Your own vaults are paid like anyone else: no limit once whitelisted, else the allowance. */}
+          <Text style={styles.section}>
+            {t('mobile.payments.my_vaults')}
+            {allowance ? ` · ${allowance}` : ''}
+          </Text>
           <View style={styles.card}>
             {mine.map((v, i) => (
               <Pressable
                 key={v.index}
                 style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === mine.length - 1 && styles.rowLast, pressed && styles.pressed]}
-                onPress={() => {
-                  setVaultSheet(false);
-                  pick(v.address, v.name);
-                }}>
-                <View style={styles.rowText}>
-                  <Text style={styles.rowLabel}>{v.name}</Text>
-                  <Text style={styles.sub}>{shortAddress(v.address)}</Text>
+                onPress={() => pick(v.address, v.name)}
+                onLongPress={() => copy(v.address)}>
+                <View style={styles.entryCol}>
+                  <Text style={styles.entryName} numberOfLines={1}>{v.name}</Text>
+                  <Text style={styles.addrMuted}>{v.address}</Text>
+                  {whitelisted(v.address) ? (
+                    <Text style={styles.sub}>
+                      {t('mobile.payments.whitelisted_book')} · {t('mobile.payments.max_send_none')}
+                    </Text>
+                  ) : null}
                 </View>
               </Pressable>
             ))}
           </View>
-        </ScrollView>
-      </Sheet>
+        </>
+      ) : null}
       {sheet}
-      </Pressable>
     </ScrollView>
   );
 }
@@ -311,26 +286,8 @@ const makeStyles = (c: Colors) =>
   StyleSheet.create({
     flex: {flex: 1, backgroundColor: c.bg},
     body: {flexGrow: 1, padding: 16, paddingBottom: 32},
-    dismiss: {flex: 1},
     section: {color: c.subtext, fontSize: 13, fontWeight: '600', paddingHorizontal: 4, paddingTop: 18, paddingBottom: 8},
     card: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 16},
-    sheetScroll: {flexGrow: 0},
-
-    input: {height: 48, borderRadius: 12, backgroundColor: c.input, color: c.text, paddingHorizontal: 12, fontSize: 15, marginTop: 16},
-    nameInput: {width: '100%'},
-    inputErr: {borderWidth: 1, borderColor: c.danger},
-    warn: {color: c.danger, fontSize: 12, lineHeight: 17, marginTop: 8},
-    note: {color: c.subtext, fontSize: 12, lineHeight: 17, marginTop: 6, paddingHorizontal: 2},
-    toggleRow: {flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14},
-    // A chevron's glyph sits a few points inside its box; a switch fills its own exactly, so
-    // without this it looks nearer the card's edge than everything above it.
-    switch: {marginRight: 10},
-    toggleLabel: {color: c.text, fontSize: 15, fontWeight: '600', flex: 1},
-    use: {height: 44, borderRadius: 12, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', marginBottom: 16},
-    useOff: {backgroundColor: c.neutralSoft},
-    useText: {color: '#fff', fontSize: 15, fontWeight: '700'},
-    useTextOff: {color: c.subtext},
-
     // The same row metrics the asset picker uses, so a list is a list.
     row: {
       flexDirection: 'row',
@@ -343,21 +300,19 @@ const makeStyles = (c: Colors) =>
     },
     rowFirst: {borderTopWidth: 0, paddingTop: 16},
     rowLast: {paddingBottom: 16},
-    rowOnly: {borderTopWidth: 0, paddingTop: 16, paddingBottom: 16},
     pressed: {opacity: 0.6},
-    rowText: {flex: 1, gap: 2},
-    rowLabel: {color: c.text, fontSize: 16, fontWeight: '600', flex: 1},
     entryCol: {flex: 1, gap: 2, minWidth: 0},
-    entry: {flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0},
+    nameLine: {flexDirection: 'row', alignItems: 'center', gap: 6},
     entryName: {color: c.text, fontSize: 16, fontWeight: '600', flexShrink: 1},
+    left: {color: c.subtext, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums']},
+    entryNameOff: {color: c.subtext},
+    // Sized to the bar's 44, as the Pending page's lock: the native bar anchors a custom view by its bottom.
+    headerBtn: {width: 44, height: 44, paddingBottom: 9, alignItems: 'center', justifyContent: 'center'},
     addrMuted: {color: c.subtext, fontSize: 13, fontVariant: ['tabular-nums']},
     sub: {color: c.subtext, fontSize: 12, fontVariant: ['tabular-nums']},
     subWarn: {color: c.danger},
-    addr: {color: c.text, fontSize: 16, fontWeight: '600', fontVariant: ['tabular-nums']},
     emptyText: {color: c.subtext, fontSize: 15},
     centered: {justifyContent: 'center'},
-    count: {color: c.subtext, fontSize: 14, fontVariant: ['tabular-nums']},
-    chev: {color: c.subtext, fontSize: 20, fontWeight: '300'},
     remove: {width: 28, height: 28, borderRadius: 14, backgroundColor: c.neutralSoft, alignItems: 'center', justifyContent: 'center'},
     removeText: {color: c.subtext, fontSize: 13, fontWeight: '700'},
   });

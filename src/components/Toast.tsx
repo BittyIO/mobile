@@ -21,6 +21,8 @@ export type Toast = {
   detail?: string;
   hash?: string;
   network?: Network;
+  /** How long a finished toast stays up, when not its kind's default. */
+  ms?: number;
 };
 
 type State = {
@@ -121,8 +123,8 @@ export function showTx(
 }
 
 /** A toast for something that finished without a transaction (a local change, a failed precondition). */
-export function showToast(kind: ToastKind, title: string, detail?: string) {
-  useToasts.getState().show({kind, title, detail});
+export function showToast(kind: ToastKind, title: string, detail?: string, ms?: number) {
+  useToasts.getState().show({kind, title, detail, ms});
 }
 
 const AUTO_MS: Record<ToastKind, number> = {pending: 0, success: 4000, error: 7000};
@@ -143,11 +145,11 @@ function Row({item, index}: {item: Toast; index: number}) {
 
   // A finished toast clears itself; a pending one waits to be flipped.
   useEffect(() => {
-    const ms = AUTO_MS[item.kind];
+    const ms = item.kind === 'pending' ? 0 : (item.ms ?? AUTO_MS[item.kind]);
     if (!ms) return;
     const timer = setTimeout(() => dismiss(item.id), ms);
     return () => clearTimeout(timer);
-  }, [item.kind, item.id, dismiss]);
+  }, [item.kind, item.id, item.ms, dismiss]);
 
   const explorer = item.network ? EXPLORER_TX[item.network] : null;
   /**

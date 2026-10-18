@@ -3,6 +3,13 @@ import type {MobileTable} from './index';
 // Payments tab (Send / Scheduled / Address Book), plus first-run onboarding and the lock screen.
 export const payments: MobileTable = {
   en: {
+    whitelisted_book: 'Whitelisted',
+    pending_whitelisted: 'Pending whitelisted',
+    recipient_n: 'Recipient #{{n}}',
+    max_send: 'Max you can send',
+    max_send_none: 'No limit',
+    whitelist_wait: 'Whitelisted after',
+    max_send_daily: '{{value}} per 24 hours',
     token_address_warning: 'That is a token contract, not a wallet. Funds sent there cannot be recovered.',
     select_recipient: 'Select recipient',
     my_vaults: 'My vaults',
@@ -47,6 +54,13 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Unlock',
   },
   zh: {
+    whitelisted_book: '白名单',
+    pending_whitelisted: '待生效白名单',
+    recipient_n: '收款地址 #{{n}}',
+    max_send: '最多可发送',
+    max_send_none: '无限制',
+    whitelist_wait: '加入白名单需等待',
+    max_send_daily: '每 24 小时 {{value}}',
     token_address_warning: '这是代币合约地址，不是钱包地址。转入后资金将无法找回。',
     select_recipient: '选择收款地址',
     my_vaults: '我的金库',
@@ -91,6 +105,13 @@ export const payments: MobileTable = {
     lock_unlock_face_id: '解锁',
   },
   'zh-TW': {
+    whitelisted_book: '白名單',
+    pending_whitelisted: '待生效白名單',
+    recipient_n: '收款位址 #{{n}}',
+    max_send: '最多可傳送',
+    max_send_none: '無限制',
+    whitelist_wait: '加入白名單需等待',
+    max_send_daily: '每 24 小時 {{value}}',
     token_address_warning: '這是代幣合約位址，不是錢包位址。轉入後資金將無法找回。',
     select_recipient: '選擇收款地址',
     my_vaults: '我的金庫',

@@ -12,6 +12,7 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
 import Svg, {Circle, Path} from 'react-native-svg';
 import {Sheet} from '@/components/Sheet';
+import {SettingsGroup} from '@/components/SettingsRow';
 import {ConfirmButton} from '@/components/Button';
 import {showTx} from '@/components/Toast';
 import {useWallet} from '@/wallet/store';
@@ -22,7 +23,6 @@ import {ownerVaultAddress, balanceOfSymbol} from '@/vault/read';
 import {sendWithWhitelist} from '@/vault/payments';
 import type {Position} from '@/vault/positions';
 
-import {shortAddress} from '@/core/format';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {displaySymbol, fmtNum, fmtShort} from '@/core/format';
@@ -43,8 +43,6 @@ type Recipient = {
   needsWhitelist?: boolean;
 };
 
-// See {shortAddress}: one formatter, so no screen can drift to its own idea of short.
-const short = shortAddress;
 const lineKey = (l: {sym: string; source: Source}) => `${l.sym}:${l.source}`;
 /**
  * A new line starts at 0, not blank.
@@ -317,12 +315,12 @@ export function SendScreen() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* The scroll view is the whole page, so a drag anywhere scrolls; the button holds the bottom. */}
       <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.scroll} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-        <View style={styles.card}>
+        {/* Grouped like Settings: who, then what, then a way to add more. */}
+        <SettingsGroup>
             {/* Chosen, not typed. The common case on this screen is paying somewhere the vault
                 has paid before, or one of the owner's own vaults, and both are lists the app
                 already holds; typing an address is the exception and lives inside the picker.
                 */}
-            <View style={styles.toRow}>
               <Pressable
                 style={({pressed}) => [styles.toField, pressed && styles.pressed]}
                 onPress={() => nav.navigate('SelectRecipient')}
@@ -332,11 +330,10 @@ export function SendScreen() {
                     text field and had to look tappable; the whole row is the button now, so the
                     disc was a second target drawn around nothing. */}
                 <AvatarIcon color={c.accent} />
-                {/* One line, name AND address: the name is what the user recognises and the
-                    address is what actually gets paid, so neither can be the only thing shown.
-                    Stacking them made the bar taller than every other control on the card, so
-                    they run across instead — the name truncates under pressure, the address
-                    does not, because a half-shown address is worse than none. */}
+                {/* Name AND address: the name is what the user recognises and the address is what
+                    actually gets paid, so neither can be the only thing shown. The address is
+                    shown in full, wrapping if it must — the bar grows rather than cut it, since
+                    a shortened address is one a look-alike can pass for. */}
                 {recipient.to ? (
                   <View style={styles.toLine}>
                     {recipient.label ? (
@@ -344,8 +341,8 @@ export function SendScreen() {
                         {recipient.label}
                       </Text>
                     ) : null}
-                    <Text style={recipient.label ? styles.toAddrMuted : styles.toAddr} numberOfLines={1}>
-                      {short(recipient.to)}
+                    <Text style={recipient.label ? styles.toAddrMuted : styles.toAddr}>
+                      {recipient.to}
                     </Text>
                   </View>
                 ) : (
@@ -355,14 +352,15 @@ export function SendScreen() {
                 )}
                 <Text style={styles.chev}>›</Text>
               </Pressable>
-            </View>
+        </SettingsGroup>
+        <SettingsGroup>
             {recipient.lines.map((l, k) => {
               const max = maxFor(l);
               const over = exceedsMax(l.amount, max);
               const sym = displaySymbol(l.sym);
               const hasAmount = Number(l.amount) > 0;
               return (
-                <View key={k} style={styles.line}>
+                <View key={k} style={[styles.line, k < recipient.lines.length - 1 && styles.lineDivider]}>
                   {/* Asset first, amount after it, as on the web: the row reads "what, then how
                       much". The pill picks the token AND the source it comes out of. At the end,
                       exactly one control — what this source still holds with a Max badge while the
@@ -373,14 +371,14 @@ export function SendScreen() {
                       funded rows alone. Clearing the amount IS removing the row, which leaves one
                       control at the end of the bar instead of two that both look like they undo
                       something. */}
-                  <View style={[styles.field, over && styles.fieldOver]}>
+                  <View style={styles.field}>
                     <Pressable style={styles.assetPill} onPress={() => setPicker({k})}>
                       <TokenIcon symbol={l.sym} size={20} />
                       <Text style={styles.assetSym}>{sym}</Text>
                       {l.source !== 'free' ? <Text style={styles.assetSource}>{sourceLabel(l.source)}</Text> : null}
                     </Pressable>
                     <TextInput
-                      style={styles.fieldInput}
+                      style={[styles.fieldInput, over && styles.inputOver]}
                       keyboardType="decimal-pad"
                       value={l.amount}
                       selectTextOnFocus
@@ -404,17 +402,19 @@ export function SendScreen() {
                 </View>
               );
             })}
+        </SettingsGroup>
 
             {/* Offered while the recipient still has a token left to take — the same list the
                 chooser would show, so the control never opens an empty sheet. Counting lines
                 against sources, as this once did, hid it whenever one token filled every funded
                 source and left the second token unreachable. */}
             {pickableFor(null).length > 0 ? (
-              <Pressable onPress={() => setPicker({k: null})}>
-                <Text style={styles.addToken}>＋ {t('mobile.payments.add_token')}</Text>
-              </Pressable>
+              <SettingsGroup>
+                <Pressable style={({pressed}) => [styles.addRow, pressed && styles.pressed]} onPress={() => setPicker({k: null})}>
+                  <Text style={styles.addToken}>＋ {t('mobile.payments.add_token')}</Text>
+                </Pressable>
+              </SettingsGroup>
             ) : null}
-          </View>
 
         {status === 'error' && err ? <Text style={styles.err}>{err}</Text> : null}
       </ScrollView>
@@ -464,15 +464,13 @@ export function SendScreen() {
 const makeStyles = (c: Colors) => StyleSheet.create({
   container: {flex: 1, backgroundColor: c.bg},
   scroll: {flex: 1},
-  body: {flexGrow: 1, padding: 16, gap: 12, paddingBottom: 16},
+  body: {flexGrow: 1, padding: 16, gap: 24, paddingBottom: 16},
   footer: {paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16},
-  card: {backgroundColor: c.card, borderRadius: 20, borderCurve: 'continuous', padding: 12, gap: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border},
-  toRow: {flexDirection: 'row', alignItems: 'center', gap: 2},
   // The whole bar is the button: the mark, the chosen recipient, and a chevron.
-  toField: {flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, height: 44, borderRadius: 10, backgroundColor: c.input, paddingHorizontal: 12},
+  toField: {flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56, paddingVertical: 12, paddingHorizontal: 16},
   pressed: {opacity: 0.6},
   // Two lines where a vault has a name, one where the address is all there is.
-  toLine: {flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0},
+  toLine: {flex: 1, gap: 2, minWidth: 0},
   // The name yields first; the address is the part that must stay whole.
   toValue: {color: c.text, fontSize: 15, fontWeight: '600', flexShrink: 1},
   toAddr: {color: c.text, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums']},
@@ -490,11 +488,10 @@ const makeStyles = (c: Colors) => StyleSheet.create({
    * hitSlop on each control carries it back past 44, which is what the finger actually hits.
    * Full field height, so the mark centres on the field rather than floating beside it.
    */
-  // No rule between rows: the card's own gap separates them, and each field is a filled bar that
-  // already reads as its own object.
-  line: {gap: 6},
-  field: {flexDirection: 'row', alignItems: 'center', height: 56, borderRadius: 12, backgroundColor: c.input, paddingLeft: 8, paddingRight: 8, gap: 8},
-  fieldOver: {borderWidth: 1, borderColor: c.danger},
+  // One row per token in the group, a hairline between, as a Settings group draws its rows.
+  line: {gap: 4, paddingHorizontal: 16, paddingVertical: 8},
+  lineDivider: {borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},
+  field: {flexDirection: 'row', alignItems: 'center', height: 48, gap: 8},
   // minWidth 0 so a long balance beside it cannot push the input past the field's edge.
   fieldInput: {flex: 1, minWidth: 0, color: c.text, fontSize: 17, paddingVertical: 0},
   // Balance and badge are one target: tapping either fills the field, as on the web.
@@ -504,7 +501,8 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   assetPill: {flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.neutralSoft, borderRadius: 18, paddingVertical: 7, paddingHorizontal: 10},
   assetSym: {color: c.text, fontSize: 14, fontWeight: '700'},
   assetSource: {color: c.subtext, fontSize: 11, fontWeight: '600'},
-  over: {color: c.danger, fontSize: 12},
+  over: {color: c.danger, fontSize: 12, paddingBottom: 4},
+  inputOver: {color: c.danger},
   hint: {color: c.subtext, fontSize: 12},
   // The chooser's rows: FundRow's head metrics, so switching from the list to the sources does
   // not shift anything sideways or vertically.
@@ -512,7 +510,8 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   pickCol: {flex: 1},
   pickLabel: {color: c.text, fontSize: 15, fontWeight: '600'},
   pickSub: {color: c.subtext, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums']},
-  addToken: {color: c.accent, fontSize: 13, fontWeight: '600'},
+  addRow: {minHeight: 52, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16},
+  addToken: {color: c.accent, fontSize: 15, fontWeight: '600'},
   ok: {color: c.success, fontSize: 12, fontFamily: 'Menlo'},
   err: {color: c.danger, fontSize: 13},
 });

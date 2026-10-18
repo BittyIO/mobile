@@ -36,6 +36,7 @@ export type RootStackParamList = {
   Main: undefined;
   Payments: undefined;
   SelectRecipient: undefined;
+  NewRecipient: undefined;
   /** The asset directory as a watch list editor: no prices, a star on every row. */
   Watchlist: undefined;
   /** One Earn position in full: its rate over time, what Auto-Yield does, and both actions. */
@@ -117,6 +118,7 @@ export type RootStackParamList = {
   VaultLegacyEth: undefined;
   VaultRecoveryPhrase: undefined;
   VaultAssetManager: undefined;
+  VaultSetAssetManager: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -342,6 +344,11 @@ function Root() {
           options={{title: t('mobile.payments.select_recipient')}}
         />
         <Stack.Screen
+          name="NewRecipient"
+          getComponent={() => require('@/screens/NewRecipientScreen').NewRecipientScreen}
+          options={{title: t('mobile.payments.new_recipient')}}
+        />
+        <Stack.Screen
           name="Watchlist"
           getComponent={() => require('@/screens/TradeScreen').TradeScreen}
           options={{title: t('mobile.home.watch_list'), fullScreenGestureEnabled: true}}
@@ -460,6 +467,11 @@ function Root() {
         <Stack.Screen name="PendingChanges" getComponent={() => require('@/screens/PendingChangesScreen').PendingChangesScreen} options={{title: t('mobile.vault.pending_changes')}} />
         <Stack.Screen name="VaultLegacyEth" getComponent={() => require('@/screens/LegacyEthScreen').LegacyEthScreen} options={{title: t('mobile.vault.legacy_eth')}} />
         <Stack.Screen name="VaultAssetManager" getComponent={() => require('@/screens/AssetManagerScreen').AssetManagerScreen} options={{title: t('vault.asset_manager')}} />
+        <Stack.Screen
+          name="VaultSetAssetManager"
+          getComponent={() => require('@/screens/SetAssetManagerScreen').SetAssetManagerScreen}
+          options={{title: t('mobile.vault.set_asset_manager')}}
+        />
         <Stack.Screen name="VaultRecoveryPhrase" getComponent={() => require('@/screens/RecoveryPhraseScreen').RecoveryPhraseScreen} options={{title: t('mobile.settings.recovery_phrase')}} />
       </Stack.Navigator>
     </NavigationContainer>
