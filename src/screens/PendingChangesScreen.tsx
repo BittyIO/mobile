@@ -7,7 +7,7 @@ import type {RootStackParamList} from '@/App';
 import {getPendingChanges, type PendingChange} from '@/vault/risk';
 import {SettingsRow, SettingsGroup} from '@/components/SettingsRow';
 import type {SettingsIconName} from '@/components/SettingsIcon';
-import {RISK_TITLE, fmtRiskValue} from '@/components/riskFormat';
+import {RISK_TITLE, fmtCountdown, fmtRiskValue} from '@/components/riskFormat';
 import {fmtPerms} from '@/components/useAssetManagerRow';
 import {shortAddress} from '@/core/format';
 import {useWallet} from '@/wallet/store';
@@ -64,20 +64,6 @@ function value(p: PendingChange, t: T): string {
     default:
       return shortAddress(p.address);
   }
-}
-
-const pad = (n: number) => String(n).padStart(2, '0');
-
-/**
- * What is left until `at`, to the second: "2 days 03:12:45", or "03:12:45" inside the last day.
- * Null once it is due.
- */
-function countdown(at: bigint, nowSec: number, t: T): string | null {
-  const left = Number(at) - nowSec;
-  if (left <= 0) return null;
-  const days = Math.floor(left / 86_400);
-  const clock = `${pad(Math.floor((left % 86_400) / 3600))}:${pad(Math.floor((left % 3600) / 60))}:${pad(left % 60)}`;
-  return days > 0 ? `${t('mobile.vault.duration_days', {n: days})} ${clock}` : clock;
 }
 
 /**
@@ -159,7 +145,7 @@ export function PendingChangesScreen() {
       ) : (
         <SettingsGroup footer={t('mobile.vault.pending_lock_hint')}>
           {items.map((p, i) => {
-            const left = countdown(p.at, now, t);
+            const left = fmtCountdown(Number(p.at) - now, t);
             const date = new Date(Number(p.at) * 1000).toLocaleString();
             const perms = p.kind === 'newAssetManager' ? ` · ${fmtPerms(p.perms, t)}` : '';
             return (

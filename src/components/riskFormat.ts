@@ -53,6 +53,19 @@ export function fmtRiskValue(field: RiskField, v: bigint, risk: RiskConfig | nul
   return fmtAllowance(v, risk, symbol, t);
 }
 
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/**
+ * What is left, to the second: "2 days 03:12:45", or "03:12:45" inside the last day. Null once it
+ * has run out.
+ */
+export function fmtCountdown(leftSeconds: number, t: T): string | null {
+  if (leftSeconds <= 0) return null;
+  const days = Math.floor(leftSeconds / 86_400);
+  const clock = `${pad(Math.floor((leftSeconds % 86_400) / 3600))}:${pad(Math.floor((leftSeconds % 3600) / 60))}:${pad(leftSeconds % 60)}`;
+  return days > 0 ? `${t('mobile.vault.duration_days', {n: days})} ${clock}` : clock;
+}
+
 /** "Pending: 48 hours · applies on 18/10/2026" for a loosening still waiting, else undefined. */
 export function fmtPending(field: RiskField, risk: RiskConfig | null, symbol: string | undefined, t: T): string | undefined {
   const p = risk?.pending[field];
