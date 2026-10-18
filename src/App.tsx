@@ -113,6 +113,7 @@ export type RootStackParamList = {
   /** Pick one risk number: presets, or a custom value. */
   VaultRiskValue: {field: 'timelock' | 'sendDailyAllowance' | 'marketTradeDailyLossAllowance'};
   VaultLock: undefined;
+  VaultLockAction: {action: 'emergency' | 'unlock' | 'forever'};
   /** Overview › Pending: changes the vault has queued and not applied yet. */
   PendingChanges: undefined;
   VaultLegacyEth: undefined;
@@ -463,8 +464,21 @@ function Root() {
           options={({route}) => ({title: t(RISK_TITLE[route.params.field])})}
         />
         <Stack.Screen name="VaultLock" getComponent={() => require('@/screens/VaultLockScreen').VaultLockScreen} options={{title: t('mobile.vault.vault_lock')}} />
+        <Stack.Screen
+          name="VaultLockAction"
+          getComponent={() => require('@/screens/VaultLockActionScreen').VaultLockActionScreen}
+          options={({route}) => ({
+            title: t(
+              route.params.action === 'unlock'
+                ? 'mobile.vault.unlock'
+                : route.params.action === 'forever'
+                  ? 'mobile.vault.forever_lock'
+                  : 'mobile.vault.emergency_lock',
+            ),
+          })}
+        />
         <Stack.Screen name="Rpc" getComponent={() => require('@/screens/RpcScreen').RpcScreen} options={{title: t('mobile.settings.rpc')}} />
-        <Stack.Screen name="PendingChanges" getComponent={() => require('@/screens/PendingChangesScreen').PendingChangesScreen} options={{title: t('mobile.vault.pending_changes')}} />
+        <Stack.Screen name="PendingChanges" getComponent={() => require('@/screens/PendingChangesScreen').PendingChangesScreen} options={{title: t('mobile.vault.timelock_page')}} />
         <Stack.Screen name="VaultLegacyEth" getComponent={() => require('@/screens/LegacyEthScreen').LegacyEthScreen} options={{title: t('mobile.vault.legacy_eth')}} />
         <Stack.Screen name="VaultAssetManager" getComponent={() => require('@/screens/AssetManagerScreen').AssetManagerScreen} options={{title: t('vault.asset_manager')}} />
         <Stack.Screen

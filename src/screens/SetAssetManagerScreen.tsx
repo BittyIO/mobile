@@ -1,5 +1,5 @@
 import React, {useCallback, useState} from 'react';
-import {Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View} from 'react-native';
+import {Keyboard, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {Address} from 'viem';
 import {getAssetManager, setAssetManager} from '@/vault/delegate';
@@ -72,10 +72,12 @@ export function SetAssetManagerScreen() {
       showsVerticalScrollIndicator={false}
       alwaysBounceVertical
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
       contentInsetAdjustmentBehavior="automatic"
       style={styles.container}
       contentContainerStyle={styles.body}>
-      <View style={styles.section}>
+      {/* A tap anywhere that is not a control puts the keyboard away. */}
+      <Pressable accessible={false} onPress={Keyboard.dismiss} style={styles.section}>
         {/* Who, and for how long, in one group: the address row, then the expiry row. */}
         <View style={styles.group}>
           <TextInput
@@ -139,7 +141,7 @@ export function SetAssetManagerScreen() {
         )}
 
         <Button title={t('vault.set')} onPress={set} loading={busy === 'set'} disabled={!canSet} style={styles.setBtn} />
-      </View>
+      </Pressable>
       {sheet}
     </ScrollView>
   );
@@ -149,7 +151,7 @@ const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: {flex: 1, backgroundColor: c.bg},
     body: {flexGrow: 1, padding: 16, gap: 20},
-    section: {gap: 10},
+    section: {flex: 1, gap: 10},
     label: {color: c.subtext, fontSize: 15, fontWeight: '600', paddingHorizontal: 16, marginTop: 8},
     group: {backgroundColor: c.card, borderRadius: 20, overflow: 'hidden'},
     divider: {borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},

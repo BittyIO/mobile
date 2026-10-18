@@ -258,7 +258,7 @@ export type PendingChange =
   | {kind: RiskField | 'gasBudgetDaily' | 'maxFeePerOp'; value: bigint; at: bigint}
   | {kind: 'newOwner'; address: Address; at: bigint}
   | {kind: 'newAssetManager'; address: Address; perms: number; at: bigint}
-  | {kind: 'whitelistAdd' | 'whitelistRemove'; address: Address; at: bigint};
+  | {kind: 'whitelistAdd' | 'whitelistRemove'; address: Address; at: bigint; id: string};
 
 /**
  * Everything in flight, soonest first: the vault's own `pendingChanges()` slot read, plus the address
@@ -285,9 +285,9 @@ export async function getPendingChanges(vault: Address, network: Network): Promi
   }
   for (const e of book) {
     if (e.status === WHITELIST_STATUS.pending && e.effectiveAt)
-      out.push({kind: 'whitelistAdd', address: e.recipientAddress as Address, at: BigInt(e.effectiveAt)});
+      out.push({kind: 'whitelistAdd', address: e.recipientAddress as Address, at: BigInt(e.effectiveAt), id: e.id});
     if (e.status === WHITELIST_STATUS.removalQueued && e.removeAt)
-      out.push({kind: 'whitelistRemove', address: e.recipientAddress as Address, at: BigInt(e.removeAt)});
+      out.push({kind: 'whitelistRemove', address: e.recipientAddress as Address, at: BigInt(e.removeAt), id: e.id});
   }
   return out.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
 }

@@ -129,4 +129,24 @@ export function revokeAssetManager(o: {
   return setAssetManager({...o, manager: zeroAddress, expiresAt: 0n});
 }
 
+/**
+ * Call off an appointment still waiting out the timelock, leaving the manager in force as it is.
+ * The vault has no cancel of its own, but re-setting the current grant unchanged is a tightening:
+ * it applies at once and clears the pending slot. With no live grant to re-set, a revoke does the
+ * same and loses nothing.
+ */
+export function cancelPendingAssetManager(o: {
+  account: Acct;
+  vault: Address;
+  network: Network;
+  stableCoin: Address;
+  current: AssetManagerSettings;
+}): Promise<Hex> {
+  const {manager, expiresAt, permissions} = o.current;
+  const live = !isZero(manager) && expiresAt > BigInt(Math.floor(Date.now() / 1000));
+  return live
+    ? setAssetManager({...o, manager, expiresAt, permissions: Number(permissions)})
+    : revokeAssetManager(o);
+}
+
 export {isZero as isZeroAddress};

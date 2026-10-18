@@ -56,7 +56,7 @@ function EyeIcon({off, color, size = 20}: {off: boolean; color: string; size?: n
   );
 }
 
-/** Send (arrow out, up-right) / Receive (arrow in, down-left) / History (clock) / Pending (hourglass) action icons. */
+/** Send (arrow out, up-right) / Receive (arrow in, down-left) / History (clock) / Security (shield) action icons. */
 function ActionIcon({name, color, size = 22}: {name: 'send' | 'receive' | 'history' | 'pending'; color: string; size?: number}) {
   const c = {stroke: color, strokeWidth: 2.2, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const};
   return (
@@ -74,11 +74,8 @@ function ActionIcon({name, color, size = 22}: {name: 'send' | 'receive' | 'histo
           <Path d="M16 17H7V8" {...c} />
         </>
       ) : name === 'pending' ? (
-        // Waiting to happen (lucide hourglass).
-        <>
-          <Path d="M6 3h12M6 21h12" {...c} />
-          <Path d="M7 3v3a5 5 0 0 0 10 0V3M7 21v-3a5 5 0 0 1 10 0v3" {...c} />
-        </>
+        // Security: what is waiting out the timelock (lucide shield).
+        <Path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" {...c} />
       ) : (
         <>
           <Circle cx={12} cy={12} r={9} {...c} />
@@ -941,7 +938,7 @@ export function VaultHomeScreen() {
             {label: t('vault.receive'), icon: 'receive', onPress: () => setReceiveOpen(true)},
             {label: t('mobile.app.history'), icon: 'history', onPress: () => nav.navigate('Transactions')},
             // v1.0.3 vaults have no pending-changes surface.
-            ...(legacy ? [] : [{label: t('mobile.vault.pending_changes'), icon: 'pending', onPress: () => nav.navigate('PendingChanges')}] as const),
+            ...(legacy ? [] : [{label: t('mobile.vault.timelock_page'), icon: 'pending', onPress: () => nav.navigate('PendingChanges')}] as const),
           ] as const).map((a) => (
             <Pressable key={a.icon} style={styles.action} onPress={a.onPress}>
               <View style={styles.actionCircle}>
