@@ -7,7 +7,7 @@
  * Ported from web `activateByStablecoin`. The fee is priced from live gas + ETH/USD and SIGNED, so the
  * server accepts it within a band (see core/activation-fee).
  */
-import {parseAbi, type Address, type Hex} from 'viem';
+import {encodeFunctionData, parseAbi, type Address, type Hex} from 'viem';
 import type {Signer} from '@/wallet/signer';
 import {
   apiUrl,
@@ -15,7 +15,7 @@ import {
   publicClientFor,
   type Network,
 } from '@/core/chain';
-import {ACTIVATION_TYPES, ACTIVATION_TYPES_V2, PRICE_FEED_ABI} from '@/core/abi';
+import {ACTIVATION_TYPES, ACTIVATION_TYPES_V2, PRICE_FEED_ABI, VAULT_RISK_ABI} from '@/core/abi';
 import {generationConfig, isLegacy} from '@/core/vault-generation';
 import {activationFeeUnits, relayFeeUnits} from '@/core/activation-fee';
 // One copy of the ETH/USD feeds: the fee shown before signing and the fee actually signed must be
@@ -42,6 +42,25 @@ const SIGNED_ACTIVATION_OVERHEAD_GAS = BigInt(80_000);
 const ACTIVATE_ESTIMATE_ABI = parseAbi([
   'function activateVault(bool allowlistEnabled, bytes[] calls) returns (address vault)',
 ]);
+
+/**
+ * The risk settings a v1.0.0 vault on Sepolia starts with: a 10-minute timelock, a $10 daily send
+ * allowance and a $10 daily market-trade loss allowance. Each is a tightening of a fresh vault's
+ * zeros, so it applies at once rather than waiting out a timelock.
+ *
+ * Run AFTER the owner's own calls: activation always carries the operation that found the vault
+ * undeployed, and a first send above the cap would otherwise revert the whole activation.
+ */
+const initialRiskCalls = (network: Network): Hex[] =>
+  !isLegacy() && network === 'sepolia'
+    ? [
+        encodeFunctionData({
+          abi: VAULT_RISK_ABI,
+          functionName: 'updateRisk',
+          args: [{timelock: BigInt(600), sendDailyAllowance: BigInt(10), marketTradeDailyLossAllowance: BigInt(10)}],
+        }),
+      ]
+    : [];
 
 export async function activateVault(o: {
   account: Signer;
@@ -75,7 +94,7 @@ export async function activateVault(o: {
 
   // TODO(base): add the OP Stack L1 data fee for exact Base pricing (0 undercharges slightly there).
   const l1FeeWei = BigInt(0);
-  const calls = (o.calls ?? []) as Hex[];
+  const calls = [...((o.calls ?? []) as Hex[]), ...initialRiskCalls(o.network)];
   // A batch is priced from a live estimate of the owner's own entry point, as the server prices it.
   // The flat ACTIVATION_GAS covers a bare deploy only: signed under a send that costs more, it fell
   // below the server's floor and was refused `fee-too-low`.
