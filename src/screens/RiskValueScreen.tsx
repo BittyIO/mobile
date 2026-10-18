@@ -1,19 +1,15 @@
 import React, {useCallback, useState} from 'react';
 import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
-import {useFocusEffect, useRoute, type RouteProp} from '@react-navigation/native';
+import {useFocusEffect, useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '@/App';
-import {
-  getRiskConfig,
-  getLockLevel,
-  setRiskTimelock,
-  setSendDailyAllowance,
-  setMarketTradeDailyLossAllowance,
-  type RiskConfig,
-  type LockLevel,
-} from '@/vault/risk';
+import {getRiskConfig, getLockLevel, type RiskConfig, type LockLevel} from '@/vault/risk';
 import {OptionRow, SettingsGroup} from '@/components/SettingsRow';
 import {fmtRiskValue, fmtPending, RISK_TITLE} from '@/components/riskFormat';
-import {useVaultWrite} from '@/components/useVaultWrite';
+import {useRiskDraft} from '@/core/risk-draft';
+import {useWallet} from '@/wallet/store';
+import {useNetwork} from '@/core/network-store';
+import {ownerVaultAddress} from '@/vault/read';
+import {useAssetCatalog} from '@/core/asset-catalog';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 
@@ -32,9 +28,9 @@ const PRESETS = {
  * daily loss allowance).
  *
  * A pick-one list of presets with the value in force checked, and Custom for any other value, typed
- * in hours (timelock) or whole USD (the allowances; the send cap in stablecoin tokens on v1.0.3). Choosing writes at
- * once — through the Face-ID and fee confirm — rather than waiting on a Save: the choice IS the
- * action. A loosening does not move the check: it waits out the timelock, and says so under the list.
+ * in hours (timelock) or whole USD (the allowances; the send cap in stablecoin tokens on v1.0.3).
+ * Choosing signs nothing: it goes into the page's draft and back to Risk settings, which saves every
+ * changed field in one transaction. The check shows the draft value where there is one.
  */
 export function RiskValueScreen() {
   const {t} = useT();
@@ -46,7 +42,13 @@ export function RiskValueScreen() {
   const [customOpen, setCustomOpen] = useState(false);
   const [custom, setCustom] = useState('');
 
-  const {vault, network, stable, busy, ready, run, sheet} = useVaultWrite(() => load());
+  const nav = useNavigation();
+  const owner = useWallet((s) => s.address);
+  const network = useNetwork((s) => s.network);
+  const stable = useAssetCatalog(network).find((a) => a.kind === 'stable');
+  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const drafted = useRiskDraft((s) => s.changes[field]);
+  const setDraft = useRiskDraft((s) => s.set);
 
   const load = useCallback(() => {
     if (!vault) return;
@@ -57,23 +59,20 @@ export function RiskValueScreen() {
 
   const isTimelock = field === 'timelock';
   const legacy = risk?.hasLocks === false;
-  const current = risk ? risk[field] : null;
+  const inForce = risk ? risk[field] : null;
+  // What the page is set to: the unsaved pick where there is one, otherwise the value in force.
+  const current = drafted ?? inForce;
   const presets: readonly bigint[] = PRESETS[field];
   const isCustom = current != null && !presets.includes(current);
   // A lock freezes these too, so nothing can be picked rather than signed and refused on chain.
   const locked = lockLevel === 1 || lockLevel === 2;
-  const canPick = ready && !locked && risk != null;
+  const canPick = !locked && risk != null;
   const fmt = (v: bigint) => fmtRiskValue(field, v, risk, stable?.symbol, t);
-  const title = t(RISK_TITLE[field]);
 
-  const write = (key: string, value: bigint) => {
-    if (value === current) return;
-    const setter = {
-      timelock: setRiskTimelock,
-      sendDailyAllowance: setSendDailyAllowance,
-      marketTradeDailyLossAllowance: setMarketTradeDailyLossAllowance,
-    }[field];
-    run(key, title, (b) => setter({...b, value}));
+  // Picking the value in force again drops the field from the draft rather than saving a no-op.
+  const pick = (value: bigint) => {
+    setDraft(field, value === inForce ? undefined : value);
+    nav.goBack();
   };
 
   const customValue = (): bigint | null => {
@@ -110,11 +109,10 @@ export function RiskValueScreen() {
             key={String(v)}
             title={fmt(v)}
             checked={!customOpen && current === v}
-            busy={busy === `preset-${v}`}
             disabled={!canPick}
             onPress={() => {
               setCustomOpen(false);
-              write(`preset-${v}`, v);
+              pick(v);
             }}
           />
         ))}
@@ -143,14 +141,13 @@ export function RiskValueScreen() {
             <Text style={styles.unit}>{unit}</Text>
             <Pressable
               disabled={customOff}
-              onPress={() => parsed != null && write('custom', parsed)}
+              onPress={() => parsed != null && pick(parsed)}
               style={[styles.saveBtn, customOff && styles.saveOff]}>
-              <Text style={[styles.saveText, customOff && styles.saveTextOff]}>{busy === 'custom' ? '…' : t('vault.save')}</Text>
+              <Text style={[styles.saveText, customOff && styles.saveTextOff]}>{t('vault.done')}</Text>
             </Pressable>
           </View>
         ) : null}
       </SettingsGroup>
-      {sheet}
     </ScrollView>
   );
 }

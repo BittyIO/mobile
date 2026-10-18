@@ -114,17 +114,24 @@ export async function getLockLevel(vault: Address, network: Network): Promise<Lo
 
 export type RiskField = 'timelock' | 'sendDailyAllowance' | 'marketTradeDailyLossAllowance';
 
-/** Write a single risk field, leaving the others UNCHANGED. */
-async function writeRiskField(o: {
+/** New values for some risk fields; a field left out stays as it is. */
+export type RiskChanges = Partial<Record<RiskField, bigint>>;
+
+/**
+ * Write every changed risk field in ONE transaction — one Face ID, one fee — leaving the rest
+ * UNCHANGED. Tightenings apply at once and loosenings wait out the timelock, field by field, exactly
+ * as separate writes would; batching changes nothing on chain but the count.
+ */
+export async function updateRiskSettings(o: {
   account: Acct;
   vault: Address;
   network: Network;
-  field: RiskField;
-  value: bigint;
+  changes: RiskChanges;
   stableCoin: Address;
 }): Promise<Hex> {
+  const v = (f: RiskField) => o.changes[f] ?? UNCHANGED;
   if (isLegacy()) {
-    if (o.field === 'marketTradeDailyLossAllowance') throw new Error('v1.0.3 vaults have no market-trade allowance');
+    if (o.changes.marketTradeDailyLossAllowance !== undefined) throw new Error('v1.0.3 vaults have no market-trade allowance');
     const {hash} = await relayVaultWrite({
       account: o.account,
       vault: o.vault,
@@ -134,40 +141,32 @@ async function writeRiskField(o: {
       args: [
         {
           newPaymentProtection: UNCHANGED,
-          maxSendValue: o.field === 'sendDailyAllowance' ? o.value : UNCHANGED,
+          maxSendValue: v('sendDailyAllowance'),
           maxSendInterval: UNCHANGED,
-          changeTimelock: o.field === 'timelock' ? o.value : UNCHANGED,
+          changeTimelock: v('timelock'),
         },
       ],
       stableCoin: o.stableCoin,
     });
     return hash;
   }
-  const update = {
-    timelock: o.field === 'timelock' ? o.value : UNCHANGED,
-    sendDailyAllowance: o.field === 'sendDailyAllowance' ? o.value : UNCHANGED,
-    marketTradeDailyLossAllowance: o.field === 'marketTradeDailyLossAllowance' ? o.value : UNCHANGED,
-  };
   const {hash} = await relayVaultWrite({
     account: o.account,
     vault: o.vault,
     network: o.network,
     abi: VAULT_RISK_ABI,
     functionName: 'updateRisk',
-    args: [update],
+    args: [
+      {
+        timelock: v('timelock'),
+        sendDailyAllowance: v('sendDailyAllowance'),
+        marketTradeDailyLossAllowance: v('marketTradeDailyLossAllowance'),
+      },
+    ],
     stableCoin: o.stableCoin,
   });
   return hash;
 }
-
-type FieldArgs = {account: Acct; vault: Address; network: Network; value: bigint; stableCoin: Address};
-
-/** Delay (seconds) a loosening of any control must wait. Higher = safer, applies at once. */
-export const setRiskTimelock = (o: FieldArgs) => writeRiskField({...o, field: 'timelock'});
-/** Daily send ceiling in whole USD (0 = no cap). Lower = safer, applies at once. */
-export const setSendDailyAllowance = (o: FieldArgs) => writeRiskField({...o, field: 'sendDailyAllowance'});
-/** Daily market-trade loss ceiling in whole USD (0 = unprotected). v1.0.0 only. Lower = safer, applies at once. */
-export const setMarketTradeDailyLossAllowance = (o: FieldArgs) => writeRiskField({...o, field: 'marketTradeDailyLossAllowance'});
 
 type LockArgs = {account: Acct; vault: Address; network: Network; stableCoin: Address};
 

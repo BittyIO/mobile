@@ -11,11 +11,16 @@ const ACTIVATION_MARGIN_BPS = BigInt(2000);
 const BPS = BigInt(10000);
 const MICRO = BigInt(1_000_000);
 
-/** Round up to whole cents so the signed figure reads as money ($0.01, $1.30), never rounds to 0. */
+/**
+ * Round up to whole cents so the signed figure reads as money ($0.01, $1.30), never rounds to 0.
+ * Floored at one cent, as the server's copy is: on a near-free chain (Sepolia at a few wei) the exact
+ * cost is 0, and a signed $0 against the server's 1¢ quote was refused `fee-too-low`.
+ */
 function roundUpToCents(exact: bigint, decimals: number): bigint {
   if (decimals < 2) return exact;
   const cents = BigInt(10) ** BigInt(decimals - 2);
-  return ((exact + cents - BigInt(1)) / cents) * cents;
+  const rounded = ((exact + cents - BigInt(1)) / cents) * cents;
+  return rounded > BigInt(0) ? rounded : cents;
 }
 
 /** Cost of a relayed op in the stable coin's own units. `l1FeeWei` = OP Stack L1 data fee (0 on L1). */

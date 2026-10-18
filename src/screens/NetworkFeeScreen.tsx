@@ -1,6 +1,7 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {StableCoinAsGasCoins} from '@/components/StableCoinAsGasCoins';
+import {StableCoinAsGasLimits} from '@/components/StableCoinAsGasLimits';
 import {PickerSheet} from '@/components/AssetPicker';
 import {makeSettingsStyles} from '@/components/SettingsRow';
 import {TokenIcon} from '@/components/TokenIcon';
@@ -24,8 +25,8 @@ import {useT} from '@/i18n';
 /**
  * What the vault's network fees are paid WITH, and what it always keeps to pay them.
  *
- * Two sections, in the order the questions arrive: which stable coins the relayer may bill, then
- * the float that is held back so it can. `StableCoinAsGasCoins` carries the first entirely — its own
+ * Three sections, in the order the questions arrive: which stable coins the relayer may bill, the
+ * float that is held back so it can, then the most it may bill per operation and per 24 hours. `StableCoinAsGasCoins` carries the first entirely — its own
  * card, switches and footnote.
  *
  * The reserve is deliberately plain. Its value lives in the preferences file that is already open
@@ -147,6 +148,8 @@ export function NetworkFeeScreen() {
         </Pressable>
       </View>
       <Text style={styles.hint}>{t('mobile.settings.gas_reserve_hint')}</Text>
+
+      <StableCoinAsGasLimits />
 
       <PickerSheet
         visible={picking === 'coin'}

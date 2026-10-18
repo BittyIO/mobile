@@ -2,6 +2,9 @@ import type {MobileTable} from './index';
 
 export const settings: MobileTable = {
   en: {
+    gas_max_per_op: 'Max per operation',
+    gas_max_daily: 'Max per 24 hours',
+    gas_limits_hint: 'The most the network fee may take from the vault, for one operation and over a rolling 24 hours, in USD. Lowering applies at once; raising waits out the timelock.',
     rpc: 'RPC',
     rpc_default: 'Default',
     rpc_custom: 'Custom',
@@ -46,6 +49,9 @@ export const settings: MobileTable = {
     gas: 'Network fee',
   },
   zh: {
+    gas_max_per_op: '单笔上限',
+    gas_max_daily: '24 小时上限',
+    gas_limits_hint: '网络费从金库扣除的上限，按单笔操作和滚动 24 小时计算，单位美元。调低立即生效；调高需等待时间锁。',
     rpc: 'RPC',
     rpc_default: '默认',
     rpc_custom: '自定义',
