@@ -6,7 +6,7 @@ import Svg, {Circle, Path} from 'react-native-svg';
 import type {RootStackParamList} from '@/App';
 import {Sheet} from '@/components/Sheet';
 import {NetworkIcon} from '@/components/NetworkSwitcher';
-import {useNetwork, NETWORKS, networkLabel} from '@/core/network-store';
+import {useNetwork, useNetworks, networkLabel} from '@/core/network-store';
 import type {Network} from '@/core/chain';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
@@ -106,6 +106,7 @@ export function TradeMenu({symbol, stack}: {symbol: string | null; stack?: boole
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const network = useNetwork((s) => s.network);
   const setNetwork = useNetwork((s) => s.setNetwork);
+  const networks = useNetworks();
   const [open, setOpen] = useState(false);
 
   const close = () => setOpen(false);
@@ -172,10 +173,10 @@ export function TradeMenu({symbol, stack}: {symbol: string | null; stack?: boole
                 {/* A header's own choices, indented under it. Inside the same map so a row and the
                     things it governs cannot drift apart in the order they are listed. */}
                 {r.key === 'network'
-                  ? NETWORKS.map((n, j) => (
+                  ? networks.map((n, j) => (
                       <Pressable
                         key={n}
-                        style={({pressed}) => [styles.row, styles.chainRow, j === NETWORKS.length - 1 && styles.rowLast, pressed && styles.pressed]}
+                        style={({pressed}) => [styles.row, styles.chainRow, j === networks.length - 1 && styles.rowLast, pressed && styles.pressed]}
                         onPress={() => go(() => setNetwork(n as Network))}>
                         <NetworkIcon network={n} size={24} />
                         <Text style={styles.label}>{networkLabel(n, t)}</Text>

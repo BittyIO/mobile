@@ -9,7 +9,6 @@ import {useWallet} from '@/wallet/store';
 import {TabIcon, type TabName} from '@/components/TabIcon';
 import {NetworkSwitcher} from '@/components/NetworkSwitcher';
 import {useGuardProtocols} from '@/core/guard-catalog';
-import {useGuardAssets} from '@/core/guard-assets';
 import {useNetwork} from '@/core/network-store';
 import {useVaultGeneration} from '@/core/vault-generation';
 import {RISK_TITLE} from '@/components/riskFormat';
@@ -300,9 +299,6 @@ function Root() {
    * Here, and on every network change, which is the only other moment the answer changes.
    */
   useGuardProtocols(network);
-  // Same argument for the asset side: whether a pair can be MARKET traded is a bit on the guard's
-  // asset category, and the Trade sheet asks for it the moment it opens.
-  useGuardAssets(network);
 
   useEffect(() => {
     init();

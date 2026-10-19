@@ -77,6 +77,7 @@ export const ETH_USD_FEED: Partial<Record<Network, Address>> = {
   mainnet: '0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419',
   base: '0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70',
   sepolia: '0x694AA1769357215DE4FAC081bf1f309aDC325306',
+  arbitrum: '0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612',
 };
 
 export async function ethUsd(network: Network): Promise<number> {

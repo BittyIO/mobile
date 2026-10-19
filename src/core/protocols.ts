@@ -1,7 +1,7 @@
 import type {Address} from 'viem';
 import type {Network} from '@/core/chain';
 import {shortAddress} from '@/core/format';
-import {useVaultGeneration, type VaultGeneration} from '@/core/vault-generation';
+import {generationKey, useVaultGeneration, type VaultGeneration} from '@/core/vault-generation';
 import {currentGuardProtocols} from '@/core/guard-catalog';
 
 /**
@@ -32,7 +32,15 @@ const PROTOCOLS: Record<VaultGeneration, Record<Network, Record<string, Protocol
    * both guards; CoW is this generation's own (0x236b…, 1.0.0, partner fee to the Safe).
    */
   'v1.0.0': {
-    mainnet: {},
+    // Read off the mainnet guard 2026-10-19. The catalog API wins once it answers; this is the
+    // first frame and offline — without it Earn has no adapter to name and shows nothing.
+    mainnet: {
+      '0xbb51e4d055f213d0e38a103b9ba5943de2e83287': {name: 'Aave V3', category: 'lending'},
+      '0x8b2b9ae6dea163a382b02ff921fb3c3559769d10': {name: 'Uniswap Universal', category: 'amm'},
+      '0x350f13cdc7311713ee6dac05dd3b9fd624536b02': {name: 'CoW Swap', category: 'intent'},
+      '0x355b273974111508328155ccf65a7af434f24243': {name: 'Lido', category: 'staking'},
+      '0x093cedc958bf07eb0063e6299e5b547292cf9ad4': {name: 'Sky', category: 'staking'},
+    },
     // Registered on the Base guard 2026-10-18. Sky is the SkyV1EvmProtocol the old generation also
     // runs; the other three are this generation's own, with fees to the Safe.
     base: {
@@ -42,6 +50,13 @@ const PROTOCOLS: Record<VaultGeneration, Record<Network, Record<string, Protocol
       '0x646248f1ad34a4ef927726bd818c19107231322b': {name: 'CoW Swap', category: 'intent'},
     },
     robinhood: {},
+    // Registered on the Arbitrum guard 2026-10-19. Names only; routing reads the guard.
+    arbitrum: {
+      '0x7e97befd060124ed648d77901398f4051a1cf1ed': {name: 'Sky', category: 'staking'},
+      '0x5786f0ef83c4fc08ae372207707bb577e413c227': {name: 'Aave V3', category: 'lending'},
+      '0x2576d292401c03985e41737a09bce9f1214fb7f3': {name: 'Uniswap Universal', category: 'amm'},
+      '0x0936b90022eb22ae3329751573d22da26f1b1ad3': {name: 'CoW Swap', category: 'intent'},
+    },
     sepolia: {
       '0x9c01f9b6ed7bbd86f7a309a3414595608ab9d80d': {name: 'Aave V3', category: 'lending'},
       '0x9f6d7b2defcf45cb837560209099083ddf59840a': {name: 'Lido', category: 'staking'},
@@ -50,6 +65,8 @@ const PROTOCOLS: Record<VaultGeneration, Record<Network, Record<string, Protocol
     },
   },
   'v1.0.3': {
+    // The old generation's guard is not deployed on Arbitrum.
+    arbitrum: {},
     mainnet: {
       // The 1.0.3 AMM split, registered on the guard 2026-10-04. Listed for their NAMES, not for
       // routing: `ammAdapters` reads the guard, so what an order is sent
@@ -138,9 +155,33 @@ export const protocolDisplayName = (name: string) => DISPLAY_NAME[name] ?? name;
 // See {shortAddress}: one formatter for every address the app prints.
 const short = shortAddress;
 
-/** The vendored adapters of the generation the app is on. */
+// The server's config keys → the app's categories. `marketMaker` is dropped, as the guard reads drop 5.
+const SERVED_CATEGORY: Record<string, ProtocolCategory> = {
+  staking: 'staking',
+  lending: 'lending',
+  marketTrade: 'amm',
+  intent: 'intent',
+};
+// The server names adapters as displayed ("Sky V1"); the app keys its routes by the short name.
+const SHORT_NAME: Record<string, string> = Object.fromEntries(Object.entries(DISPLAY_NAME).map(([k, v]) => [v, k]));
+
+// Keyed by {generationKey}: each generation's guard has its own adapters.
+const served = new Map<string, Record<string, ProtocolInfo>>();
+
+/** The adapters the catalog API serves for a generation + network. See {loadCatalog}. */
+export function registerServedProtocols(key: string, rows: {address: string; category: string; name?: string}[]) {
+  const out: Record<string, ProtocolInfo> = {};
+  for (const r of rows) {
+    const category = SERVED_CATEGORY[r.category];
+    if (category && r.name) out[r.address.toLowerCase()] = {name: SHORT_NAME[r.name] ?? r.name, category};
+  }
+  // An empty answer (Arbitrum, before the server lists it) must not blank the vendored table.
+  if (Object.keys(out).length) served.set(key, out);
+}
+
+/** The server's adapters for the generation the app is on; the vendored table until it has answered. */
 const table = (network: Network): Record<string, ProtocolInfo> =>
-  PROTOCOLS[useVaultGeneration.getState().generation][network];
+  served.get(generationKey(network)) ?? PROTOCOLS[useVaultGeneration.getState().generation][network];
 
 /**
  * Every adapter the guard is running, newest first — or the vendored table when it has not

@@ -77,14 +77,13 @@ import {VAULT_DEFI_ABI} from '@/core/abi';
 import {fetchTrades, type MarketTrade} from '@/vault/market-trades';
 import {attemptTrade, reportFailedAttempt, useVaultAttempts} from '@/vault/attempts';
 import {adapterByName} from '@/core/protocols';
-import {ASSET_CATEGORIES, assetCategory, assetMeta, isAmmLiquid, isKnownAsset, underlyingOf, type AssetCategory} from '@/core/assets';
+import {ASSET_CATEGORIES, ammLiquidKnown, assetCategory, assetMeta, isAmmLiquid, isKnownAsset, underlyingOf, type AssetCategory} from '@/core/assets';
 import {fmtNum, fmtShort, displaySymbol, floor6, round6} from '@/core/format';
 import {formatUnits, parseUnits, type Address} from 'viem';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {useAssetPick} from '@/core/asset-pick';
-import {useGuardAssets} from '@/core/guard-assets';
 
 /**
  * What a market swap may fill from its quote before the router refuses it.
@@ -288,10 +287,9 @@ export function TradeScreen() {
     };
   }, [network]);
   const services = useMemo(() => currentServices(versions), [versions]);
+  // Also what `pairAmmLiquid` below is read from (each row carries its guard category), so this
+  // re-renders when the answer to "does this pair get a Market tab" lands.
   const assets = useAssetCatalog(network);
-  // Re-render when the guard's asset categories land: `pairAmmLiquid` below is read from them, and
-  // it decides whether this pair gets a Market tab at all.
-  useGuardAssets(network);
   const stables = useMemo(() => assets.filter((a) => a.kind === 'stable'), [assets]);
 
   // The tab has no params, so it starts from the pair last traded — reopening on a default while
@@ -2185,16 +2183,20 @@ export function TradeScreen() {
   // Limit and TWAP are CoW INTENT orders; a network with no intent adapter registered (Robinhood has
   // only the AMM) cannot place them, so those modes are not offered there.
   const intentable = intentAdapters(network).length > 0;
+  // Until the catalog has served guard categories, "not marketable" means "not known yet" — demoting
+  // the default Market mode to Limit then would stick after the answer turned out to be yes.
+  const ammKnown = ammLiquidKnown(network);
   // Keep the selected order type to one the network/pair actually supports: no AMM → no Market, no
   // intent adapter → no Limit/TWAP. If the current mode falls out of that set, drop to the first
   // that is still available.
   useEffect(() => {
+    if (!ammKnown) return;
     const avail: Mode[] = [
       ...(marketable ? (['Market'] as Mode[]) : []),
       ...(intentable ? (['Limit', 'TWAP'] as Mode[]) : []),
     ];
     if (avail.length && !avail.includes(mode)) setMode(avail[0]);
-  }, [marketable, intentable, mode]);
+  }, [marketable, intentable, mode, ammKnown]);
   // Market spends the vault balance and tops up from the positions by itself, so a named source has
   // no meaning there.
   useEffect(() => {

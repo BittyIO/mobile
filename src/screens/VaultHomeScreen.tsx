@@ -523,6 +523,11 @@ export function VaultHomeScreen() {
   useFocusEffect(
     useCallback(() => {
       if (bal.vault) getPendingChanges(bal.vault, network).then((p) => setPendingCount(p.length));
+      // The earned ledger, too: this tab mounts at launch and stays up, so a deposit recorded since
+      // (from Earn, say) never reached it, and its rows lacked the earned the Earn tab showed. No
+      // loading state of its own, so re-reading it on focus flashes nothing.
+      flows.refresh();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [bal.vault, network, legacy]),
   );
 
@@ -795,10 +800,11 @@ export function VaultHomeScreen() {
     setPulled(true);
     bal.refresh();
     pos.refresh();
+    flows.refresh();
     // Prices too: a pull that refreshed the balances but left last minute's prices behind moved
     // the amounts and not the values, which reads as a bug.
     setPriceNonce((n) => n + 1);
-  }, [bal, pos]);
+  }, [bal, pos, flows]);
   React.useEffect(() => {
     if (!anyLoading) setPulled(false);
   }, [anyLoading]);

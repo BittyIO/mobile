@@ -2,7 +2,7 @@ import React, {useState} from 'react';
 import {Image, Pressable, StyleSheet} from 'react-native';
 import {PickerSheet} from '@/components/AssetPicker';
 import {useT} from '@/i18n';
-import {useNetwork, NETWORKS, networkLabel} from '@/core/network-store';
+import {useNetwork, useNetworks, networkLabel} from '@/core/network-store';
 import Svg, {Circle, G, Path, Rect} from 'react-native-svg';
 import {useIsDark} from '@/theme';
 import type {Network} from '@/core/chain';
@@ -11,6 +11,7 @@ import type {Network} from '@/core/chain';
 const ICONS: Record<Exclude<Network, 'base' | 'robinhood'>, number> = {
   mainnet: require('@/assets/networks/ethereum.png'),
   sepolia: require('@/assets/networks/sepolia.png'),
+  arbitrum: require('@/assets/networks/arbitrum.png'),
 };
 
 const BASE_BLUE = '#0052FF';
@@ -58,6 +59,7 @@ export function NetworkSwitcher() {
   const network = useNetwork((s) => s.network);
   const setNetwork = useNetwork((s) => s.setNetwork);
   const [open, setOpen] = useState(false);
+  const networks = useNetworks();
 
   return (
     <>
@@ -70,7 +72,7 @@ export function NetworkSwitcher() {
       <PickerSheet
         visible={open}
         title={t('mobile.settings.choose_network')}
-        items={NETWORKS.map((n) => ({key: n, label: networkLabel(n, t), icon: <NetworkIcon network={n} size={30} />}))}
+        items={networks.map((n) => ({key: n, label: networkLabel(n, t), icon: <NetworkIcon network={n} size={30} />}))}
         selected={network}
         onSelect={(n) => setNetwork(n as Network)}
         onClose={() => setOpen(false)}

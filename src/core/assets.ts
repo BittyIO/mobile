@@ -37,6 +37,9 @@ export type Asset = {
   // Remote icon URL from the DB catalog (API). Bundled entries omit it and fall back to the local
   // by-symbol icon in TokenIcon. Present only on assets hydrated from /api/ethereum/assets.
   icon?: string;
+  // The asset's category bit field on the active generation's guard, served by the catalog API.
+  // Absent on bundled rows and when the server could not read the guard. See {isAmmLiquid}.
+  guardCategory?: number;
 };
 
 /**
@@ -117,92 +120,38 @@ export const ASSETS: Record<Network, Asset[]> = {
     {symbol: 'USDC', address: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', decimals: 6, kind: 'stable'},
     {symbol: 'USDT', address: '0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0', decimals: 6, kind: 'stable'},
   ],
-};
-
-/**
- * The assets the guard flags AMM-liquid (category bit 4), as of 2026-10-06.
- *
- * A SEED, not the answer. The live categories are read from the guard by {useGuardAssets} and win
- * the moment they land; this is what the first frame uses, so the Market tab is not missing from a
- * pair that has a pool while the read is in flight — and what an offline launch falls back to.
- *
- * Anything absent here is limit/TWAP only: no Uniswap pool prices it, and the vault's market swap
- * reverts without the bit. That used to be every Robinhood stock, which was wrong — the guard has
- * them all at category 6.
- */
-const AMM_LIQUID: Record<Network, string[]> = {
-  mainnet: [
-    '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',  // USDC
-    '0xdac17f958d2ee523a2206206994597c13d831ec7',  // USDT
-    '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2',  // WETH
-    '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599',  // WBTC
-    '0x68749665ff8d2d112fa859aa293f07a622782f38',  // XAUt
-    '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984',  // UNI
-    '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9',  // AAVE
-    '0x56072c95faa701256059aa122697b133aded9279',  // SKY
-    '0x514910771af9ca656af840dff83e8264ecf986ca',  // LINK
-    '0x57e114b691db790c35207b2e685d4a43181e6061',  // ENA
-  ],
-  base: [
-    '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913',  // USDC
-    '0xfde4c96c8593536e31f229ea8f37b2ada2699bb2',  // USDT
-    '0x4200000000000000000000000000000000000006',  // WETH
-    '0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf',  // cbBTC
-  ],
-  sepolia: [
-    '0x1c7d4b196cb0c7b01d743fbc6116a902379c7238',  // USDC
-    '0xaa8e23fb1079ea71e0a56f48a2aa51851d8433d0',  // USDT
-    '0x7b79995e5f793a07bc00c21412e50ecae098e7f9',  // WETH
-  ],
-  robinhood: [
-    '0x5fc5360d0400a0fd4f2af552add042d716f1d168',  // USDG
-    '0x0bd7d308f8e1639fab988df18a8011f41eacad73',  // WETH
-    '0xcec185eb182c47d1ba1efc84e6959e18cd620be4',  // cbBTC
-    '0xf177d86a28b520e3e396e4f3b96cd8e72d7dabd8',  // UNI
-    '0x117cc2133c37b721f49de2a7a74833232b3b4c0c',  // SPY
-    '0xc9a981fee1f9dec688bb123ccdecc63d0debfc4e',  // GLD
-    '0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec',  // NVDA
-    '0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea',  // SPCX
-    '0xc0d6457c16cc70d6790dd43521c899c87ce02f35',  // META
-    '0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3',  // GOOGL
-    '0xaf3d76f1834a1d425780943c99ea8a608f8a93f9',  // AAPL
-    '0xccee82fe024c36fa15e1005ede3e9e4787e23d09',  // HIMS
-    '0xec262a75e413fafd0df80480274532c79d42da09',  // MSTR
-    '0x322f0929c4625ed5bad873c95208d54e1c003b2d',  // TSLA
-    '0xe93237c50d904957cf27e7b1133b510c669c2e74',  // MSFT
-    '0x12f190a9f9d7d37a250758b26824b97ce941bf54',  // AMZN
-    '0xdf0992e440dd0be65bd8439b609d6d4366bf1cb5',  // CRCL
-    '0x4ea005168d7f09a7a0ba9d1def21a479950e44c2',  // COST
-    '0xc72b96e0e48ecd4dc75e1e45396e26300bc39681',  // INTC
+  // Arbitrum One: what the v1.0.0 guard registers (contracts guard/deployments/arbitrum.toml).
+  // USDC is Circle's native one, USDT is USDT0.
+  arbitrum: [
+    {symbol: 'WETH', address: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1', decimals: 18, kind: 'crypto'},
+    {symbol: 'WBTC', address: '0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f', decimals: 8, kind: 'crypto'},
+    {symbol: 'USDC', address: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', decimals: 6, kind: 'stable'},
+    {symbol: 'USDT', address: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9', decimals: 6, kind: 'stable'},
   ],
 };
-
-/**
- * Categories read from the guard, pushed in by {guard-assets} — which reads this module, so it
- * cannot be read from here.
- *
- * The list above is the boot answer and the offline one; this is the live one, and it is the same
- * bit field the vault enforces the swap against.
- */
-const liveCategory: Partial<Record<Network, Map<string, number>>> = {};
 
 /** Bit 4 of the guard's asset category: there is a pool behind this token. */
 const ASSET_AMM_LIQUID = 4;
 
-export function registerAssetCategories(network: Network, categories: Map<string, number>): void {
-  liveCategory[network] = categories;
-}
-
-/** Whether this asset can be market-traded on this network (it has AMM liquidity). */
+/**
+ * Whether this asset can be market-traded on this network (it has AMM liquidity).
+ *
+ * The answer is the guard's own category bit, which the catalog API reads off the guard of the
+ * active generation and serves on every row (`guardCategory`) — the vault enforces the swap
+ * against the same bit. There is no bundled list to fall back to: one was kept here and on the
+ * web and drifted from the guard twice. Before the catalog answers this is false; the Trade
+ * screen waits for {ammLiquidKnown} before it treats that as "no".
+ */
 export function isAmmLiquid(network: Network, symbolOrAddress: string): boolean {
   const a = knownAssets(network).find(
     (x) => x.symbol === symbolOrAddress || x.address.toLowerCase() === symbolOrAddress.toLowerCase(),
   );
-  if (!a) return false;
-  const addr = a.address.toLowerCase();
-  const live = liveCategory[network]?.get(addr);
-  if (live !== undefined) return (live & ASSET_AMM_LIQUID) !== 0;
-  return AMM_LIQUID[network].includes(addr);
+  return a?.guardCategory != null && (a.guardCategory & ASSET_AMM_LIQUID) !== 0;
+}
+
+/** Whether the catalog has delivered guard categories for this network yet. */
+export function ammLiquidKnown(network: Network): boolean {
+  return !!catalogued[network]?.some((a) => a.guardCategory != null);
 }
 
 // The app's one address formatter — see {shortAddress}. This used to be a shorter copy of it, so
@@ -238,6 +187,7 @@ export const RECEIPT_TOKENS: Record<Network, Record<string, {symbol: string; dec
     '0x1804bf30507dc2eb3bdebbbdd859991eaef6eeff': {symbol: 'aWBTC', decimals: 8, underlying: 'WBTC'},
   },
   robinhood: {},
+  arbitrum: {},
 };
 
 /** The asset a receipt token stands for, or null when the address is not one. */

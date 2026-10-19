@@ -4,6 +4,8 @@ import {isAddress} from 'viem';
 import {apiFetch, API_BASE} from '@/core/chain';
 import type {Network} from '@/core/chain';
 import type {Address} from 'viem';
+import {generationConfig, generationKey, useVaultGeneration} from '@/core/vault-generation';
+import {registerServedProtocols} from '@/core/protocols';
 
 /**
  * The asset catalog now lives in the DB and is served by the web app's /api/ethereum/assets. Mobile
@@ -28,9 +30,12 @@ type ApiItem = {
   icon?: string;
   /** Known to the vault, never offered to the user. See the filter in {fetchCatalog}. */
   hidden?: boolean;
+  /** The row's category on the guard of the generation asked for. See {isAmmLiquid}. */
+  guardCategory?: number;
 };
 
-// In-memory cache so screens don't refetch on every mount; the catalog changes rarely.
+// In-memory cache so screens don't refetch on every mount; the catalog changes rarely. Keyed by
+// generation AND network: the rows are the same, but each generation's guard answers `guardCategory`.
 const cache = new Map<string, Asset[]>();
 // One request per network at a time: eight screens call the hook and they all mount at once.
 const inflight = new Map<string, Promise<Asset[] | null>>();
@@ -81,26 +86,35 @@ function toAsset(it: ApiItem): Asset {
     category: assetCategory(it.category),
     tokenName: it.tokenName,
     icon: iconUrl(it.icon),
+    guardCategory: it.guardCategory,
   };
 }
 
 /** Fetch the catalog for a network; null if the host is unset or the request fails. */
 export async function fetchCatalog(network: Network): Promise<Asset[] | null> {
   if (!CATALOG_API_BASE) return null;
-  const running = inflight.get(network);
+  const key = generationKey(network);
+  const running = inflight.get(key);
   if (running) return running;
-  const task = loadCatalog(network).finally(() => inflight.delete(network));
-  inflight.set(network, task);
+  const task = loadCatalog(network, key).finally(() => inflight.delete(key));
+  inflight.set(key, task);
   return task;
 }
 
-async function loadCatalog(network: Network): Promise<Asset[] | null> {
+async function loadCatalog(network: Network, key: string): Promise<Asset[] | null> {
   try {
     const res = await apiFetch(
-      `${CATALOG_API_BASE}/api/ethereum/assets?network=${encodeURIComponent(network)}`,
+      `${CATALOG_API_BASE}/api/ethereum/assets?network=${encodeURIComponent(network)}` +
+        `&version=${encodeURIComponent(generationConfig().apiVersion)}`,
     );
     if (!res.ok) return null;
-    const j = (await res.json()) as {assets?: ApiItem[]; stableCoins?: ApiItem[]};
+    const j = (await res.json()) as {
+      assets?: ApiItem[];
+      stableCoins?: ApiItem[];
+      protocols?: {address: string; category: string; name?: string}[];
+    };
+    // Absent from a server older than the field; the vendored table stands in until it ships.
+    if (j.protocols) registerServedProtocols(key, j.protocols);
     /**
      * Two kinds of row the catalog carries and the user must never see.
      *
@@ -119,11 +133,17 @@ async function loadCatalog(network: Network): Promise<Asset[] | null> {
       .filter((it) => !it.hidden && !receipts[it.address.toLowerCase()])
       .map(toAsset);
     if (list.length === 0) return null;
-    const before = cache.get(network);
-    cache.set(network, list);
+    const before = cache.get(key);
+    cache.set(key, list);
     // So `assetMeta`/`isKnownAsset` can name a token this build does not bundle. See {knownAssets}.
-    registerCatalogAssets(network, list);
-    if (!before || before.length !== list.length || before.some((a, i) => a.address !== list[i].address)) {
+    // Only for the generation still active: a read that outlived a switch carries the other
+    // guard's categories.
+    if (key === generationKey(network)) registerCatalogAssets(network, list);
+    if (
+      !before ||
+      before.length !== list.length ||
+      before.some((a, i) => a.address !== list[i].address || a.guardCategory !== list[i].guardCategory)
+    ) {
       version++;
       for (const fn of listeners) fn();
     }
@@ -152,6 +172,7 @@ export function useAssetCatalog(network: Network): Asset[] {
   // list until the app was relaunched: its effect below only re-runs on a network switch, and its
   // own fetch had already resolved against the smaller list.
   const version = useCatalogVersion();
+  const generation = useVaultGeneration((s) => s.generation);
   const [list, setList] = useState<Asset[]>(() => currentCatalog(network));
   useEffect(() => {
     let live = true;
@@ -162,7 +183,7 @@ export function useAssetCatalog(network: Network): Asset[] {
     return () => {
       live = false;
     };
-  }, [network]);
+  }, [network, generation]);
   // Resync to the global catalog on a network switch and on every version bump (a fetch anywhere
   // found new rows). currentCatalog hands back a fresh merged list, so this reflects additions the
   // moment they land, in every mounted consumer at once.

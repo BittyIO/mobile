@@ -7,14 +7,14 @@
  * becomes a thin re-export. Keep the addresses in sync with the web config until then.
  */
 import {createPublicClient, http, fallback, type PublicClient} from 'viem';
-import {mainnet, base, sepolia} from 'viem/chains';
+import {mainnet, base, sepolia, arbitrum} from 'viem/chains';
 import {defineChain} from 'viem';
 import {MMKV} from 'react-native-mmkv';
 import {generationConfig} from '@/core/vault-generation';
 
 // Sepolia is the testnet — included so the app can be exercised end to end (activate, deposit, trade)
 // without real funds. "Ethereum" in the UI means Sepolia on a testnet build, mainnet on production.
-export type Network = 'mainnet' | 'base' | 'sepolia' | 'robinhood';
+export type Network = 'mainnet' | 'base' | 'sepolia' | 'robinhood' | 'arbitrum';
 
 // Robinhood Chain: an Arbitrum Orbit L2 (id 4663) with ETH as gas, built for tokenized stocks. Not in
 // viem's chain list, so defined here (mirrors web `lib/chains.ts`).
@@ -54,9 +54,14 @@ const RPC_URLS: Record<Network, string[]> = {
   ],
   // The chain's own endpoint is the only public one; it rate-limits bursts (see the web's fallback list).
   robinhood: ['https://rpc.mainnet.chain.robinhood.com'],
+  arbitrum: [
+    'https://arb1.arbitrum.io/rpc',
+    'https://arbitrum-one-rpc.publicnode.com',
+    'https://arbitrum.drpc.org',
+  ],
 };
 
-const VIEM_CHAIN = {mainnet, base, sepolia, robinhood} as const;
+const VIEM_CHAIN = {mainnet, base, sepolia, robinhood, arbitrum} as const;
 
 // EIP-712 domain chainId per network — the ForwardRequest is signed against this (see vault/relay.ts).
 export const CHAIN_ID: Record<Network, number> = {
@@ -64,6 +69,7 @@ export const CHAIN_ID: Record<Network, number> = {
   base: base.id,
   sepolia: sepolia.id,
   robinhood: robinhood.id,
+  arbitrum: arbitrum.id,
 };
 
 // Uniswap V3 QuoterV2 (official deployments) — prices a market order through the actual pool, so the
@@ -73,6 +79,7 @@ export const QUOTER_V2: Record<Network, `0x${string}`> = {
   base: '0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a',
   sepolia: '0xEd1f6473345F45b75F8179591dd5bA1888cf2FB3',
   robinhood: '0x33e885eD0Ec9bF04EcfB19341582aADCb4c8A9E7',
+  arbitrum: '0x61fFE014bA17989E743c5F6cB21bF9697530B21e',
 };
 
 /**
@@ -120,6 +127,7 @@ export const EXPLORER_TX: Record<Network, string> = {
   base: 'https://basescan.org/tx/',
   sepolia: 'https://sepolia.etherscan.io/tx/',
   robinhood: 'https://robinhoodchain.blockscout.com/tx/',
+  arbitrum: 'https://arbiscan.io/tx/',
 };
 
 // The existing Next.js API (data feeds: transfers, stake/supply flows, sync, …). The mobile app is a

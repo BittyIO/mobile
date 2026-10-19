@@ -228,7 +228,8 @@ export function EarnScreen() {
     if (!bal.vault) return;
     setPulled(true);
     pos.refresh();
-  }, [pos, bal.vault]);
+    flows.refresh();
+  }, [pos, flows, bal.vault]);
   useEffect(() => {
     if (!anyLoading) setPulled(false);
   }, [anyLoading]);
