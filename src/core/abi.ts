@@ -79,9 +79,14 @@ export const IMPLEMENTATION_VAULT = 1;
 
 /**
  * StableCoinAsGas config — which stable coins may pay the relay fee (empty = any guard-registered coin), plus
- * the daily budget + per-op cap. `disableStableCoinAsGas` turns relaying off entirely.
+ * the daily budget + per-op cap. `disableStableCoinAsGas` turns relaying off entirely. From v1.0.2 it is
+ * `*TokenAsGas`, and the vault's WETH ({gasWrappedAddress}) may pay too.
  */
 export const VAULT_STABLE_COIN_AS_GAS_ABI = parseAbi([
+  'function setTokenAsGas(address[] assets,uint64 dailyLimit,uint64 maxFeePerOp)',
+  'function disableTokenAsGas()',
+  'function tokenAsGasConfig() view returns (address[] assets,uint256 dailyLimit,uint256 maxFeePerOp)',
+  'function gasWrappedAddress() view returns (address)',
   'function setStableCoinAsGas(address[] stableCoins,uint64 dailyLimit,uint64 maxFeePerOp)',
   'function disableStableCoinAsGas()',
   'function stableCoinAsGasConfig() view returns (address[] stableCoins,uint256 dailyLimit,uint256 maxFeePerOp)',

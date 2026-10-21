@@ -16,6 +16,7 @@ import {API_BASE} from '@/core/chain';
 import {SettingsRow as Row, makeSettingsStyles} from '@/components/SettingsRow';
 import {useVaultPicker} from '@/components/useVaultPicker';
 import {useVaultVersionRow} from '@/components/useVaultVersionRow';
+import {useProtocolUpgradeRows} from '@/components/useProtocolUpgradeRows';
 import {PickerSheet} from '@/components/AssetPicker';
 import {GENERATIONS, VAULT_GENERATIONS, useVaultGeneration, type VaultGeneration} from '@/core/vault-generation';
 
@@ -63,6 +64,7 @@ export function SettingsScreen() {
   const {language, setLanguage} = useLanguage();
   const vaultPicker = useVaultPicker();
   const version = useVaultVersionRow();
+  const protocolUpgrades = useProtocolUpgradeRows();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const {t} = useT();
@@ -148,8 +150,22 @@ export function SettingsScreen() {
           right={version.confirming ? <ActivityIndicator color={c.subtext} size="small" /> : undefined}
           onPress={version.confirming ? undefined : version.onPress}
           chevron={version.upgradeable}
-          last
+          last={protocolUpgrades.rows.length === 0}
         />
+        {/* One row per adapter clone behind its lineage's newest build; none when all are current. */}
+        {protocolUpgrades.rows.map((r, i) => (
+          <Row
+            key={r.key}
+            icon="settings"
+            title={r.title}
+            value={r.value}
+            sub={r.confirming ? undefined : t('vault.upgrade_available')}
+            right={r.confirming ? <ActivityIndicator color={c.subtext} size="small" /> : undefined}
+            onPress={r.confirming ? undefined : r.onPress}
+            chevron={!r.confirming}
+            last={i === protocolUpgrades.rows.length - 1}
+          />
+        ))}
       </View>
 
       <View style={styles.group}>
@@ -195,6 +211,7 @@ export function SettingsScreen() {
       />
       {/* The confirmations for the two rows that write on their own (asset manager, upgrade). */}
       {version.sheet}
+      {protocolUpgrades.sheet}
       <PickerSheet
         visible={picker === 'appearance'}
         title={t('mobile.settings.appearance')}

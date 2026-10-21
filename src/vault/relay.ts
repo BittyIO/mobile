@@ -14,6 +14,8 @@ import type {Signer} from '@/wallet/signer';
 import {apiUrl, CHAIN_ID, publicClientFor, type Network} from '@/core/chain';
 import {FORWARDER_ABI, FORWARD_REQUEST_TYPES, VAULT_FWD_ABI, VAULT_MULTICALL_ABI} from '@/core/abi';
 import {isActivated, activateVault} from './activate';
+import {feeCoinOrder} from '@/core/prefs';
+import {knownAssets} from '@/core/assets';
 import {translate} from '@/i18n';
 import {useLanguage} from '@/core/language-store';
 
@@ -104,6 +106,17 @@ async function readForwarder(
  * `activationCalls` batch (deploy + init + op in one signed call); otherwise it's a signed ForwardRequest
  * to the relayer. Shared by {@link relayVaultWrite} and {@link relayVaultMulticall}.
  */
+/**
+ * The fee coin to ask the relayer for: the one the owner put first on the Network fee page, or the
+ * caller's own. Only a preference — the server tries it first and falls back to the vault's other
+ * fee coins — so a coin this vault cannot pay in (WETH on an older build) costs nothing.
+ */
+function feeHint(network: Network, vault: Address, fallback: Address): Address {
+  const first = feeCoinOrder(network, vault)[0]?.toUpperCase();
+  const asset = first ? knownAssets(network).find((a) => a.symbol.toUpperCase() === first) : undefined;
+  return (asset?.address as Address | undefined) ?? fallback;
+}
+
 async function relayEncoded(opts: {
   account: Signer;
   vault: Address;
@@ -117,8 +130,8 @@ async function relayEncoded(opts: {
 
   // Activate-and-call: a relayed write needs the vault's trustedForwarder, which only exists once the
   // vault is deployed. If this is the owner's FIRST on-chain action, the op(s) ride on activation as the
-  // `calls` batch, so deploy + init + the op all happen in one signed, gasless call. The relayer pays the
-  // activation fee FROM the vault's own stable coin, so the vault must already hold some.
+  // `calls` batch, so deploy + init + the op all happen in one signed, gasless call. The relayer takes
+  // the activation fee FROM the vault — its stable coin, or its ETH from v1.0.3 — so it must hold some.
   if (!(await isActivated(vault, network))) {
     let activationHash: Hex;
     try {
@@ -132,8 +145,8 @@ async function relayEncoded(opts: {
     } catch (e) {
       const detail = (e as Error)?.message ?? String(e);
       throw new Error(
-        'Your vault needs to be activated first; the network fee is paid from the stablecoin in the vault. ' +
-          'Send some USDC to your vault address (Overview → Receive), then try again.\n\n(' +
+        'Your vault needs to be activated first; the network fee is paid from the stablecoin or ETH in the vault. ' +
+          'Send some USDC or ETH to your vault address (Overview → Receive), then try again.\n\n(' +
           detail +
           ')',
       );
@@ -187,7 +200,7 @@ async function relayEncoded(opts: {
         data: opts.data,
         signature,
       },
-      stableCoinAddress: opts.stableCoin,
+      stableCoinAddress: feeHint(network, vault, opts.stableCoin),
     }),
   });
 

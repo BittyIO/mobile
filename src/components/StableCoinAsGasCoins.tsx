@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import {Animated, StyleSheet, Text, View} from 'react-native';
 import type {Address} from 'viem';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
@@ -16,14 +16,21 @@ import {showTx} from '@/components/Toast';
 import {useStyles, type Colors} from '@/theme';
 import {displaySymbol} from '@/core/format';
 import {useAssetCatalog} from '@/core/asset-catalog';
+import {inFeeCoinOrder, setFeeCoinOrder} from '@/core/prefs';
+import {useReorder} from '@/components/useReorder';
 
 /**
- * StableCoinAsGas config as one section card — which stable coins may pay the relay fee. Empty allowlist = any
+ * StableCoinAsGas config as one section card — which stable coins (and the vault's WETH, from v1.0.2) may pay the relay fee. Empty allowlist = any
  * coin (the default); turning them all off disables relaying. Mobile always relays (no wallet
  * fallback), so this is the only stablecoin-as-gas control it needs. Each change is itself a gasless, Face-ID-
  * gated write. Rendered inline on the Services page.
  */
-export function StableCoinAsGasCoins() {
+/**
+ * `onDragging` lets the page stop scrolling while a coin is in hand: the rows are long-press-and-drag
+ * to set the order of preference (see {feeCoinOrder}) — the first is the coin the relayer is asked
+ * to bill and the first to hold the fee reserve.
+ */
+export function StableCoinAsGasCoins({onDragging}: {onDragging: (active: boolean) => void}) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const getSigner = useWallet((s) => s.signer);
@@ -55,10 +62,25 @@ export function StableCoinAsGasCoins() {
     remaining: BigInt(STABLE_COIN_AS_GAS_MAX_DAILY) * BigInt(10) ** BigInt(18),
     usedToday: BigInt(0),
     configured: true,
+    weth: null,
   };
   const preActivation = activated === false;
   /** A config was actually read. Anything else — still loading, or unreadable — is not an answer. */
   const known = cfg !== 'loading' && cfg !== null;
+  // From v1.0.2 the vault's WETH pays too, and an empty allowlist covers it along with the stablecoins.
+  const listed = known && cfg.weth ? [...stablecoins, {address: cfg.weth, symbol: 'WETH'}] : stablecoins;
+  // The order is local and the owner's, so it can be set before activation, and re-read on a drop.
+  const [, setOrdered] = useState(0);
+  const coins = inFeeCoinOrder(network, vault, listed);
+  const drag = useReorder({
+    items: coins,
+    enabled: true,
+    onReorder: (next) => {
+      setFeeCoinOrder(network, vault, next.map((a) => a.symbol));
+      setOrdered((n) => n + 1);
+    },
+    onDragging,
+  });
 
   /**
    * Unknown is not "none".
@@ -78,7 +100,7 @@ export function StableCoinAsGasCoins() {
 
   const onToggle = async (coin: Address, on: boolean) => {
     if (!vault || cfg === 'loading' || cfg === null) return;
-    const allCoins = stablecoins.map((a) => a.address);
+    const allCoins = coins.map((a) => a.address);
     const current = cfg.stableCoins.length ? cfg.stableCoins : allCoins;
     const next = on
       ? [...current, coin]
@@ -95,7 +117,7 @@ export function StableCoinAsGasCoins() {
     if (next.length === 0) return;
 
     setBusy(coin);
-    const tx = showTx(`${displaySymbol(stablecoins.find((s) => s.address === coin)?.symbol ?? '')} · ${t('mobile.settings.gas_token')}`, network);
+    const tx = showTx(`${displaySymbol(coins.find((s) => s.address === coin)?.symbol ?? '')} · ${t('mobile.settings.gas_token')}`, network);
     try {
       const acct = await getSigner();
       const fee = stablecoins[0]?.address ?? coin;
@@ -124,13 +146,22 @@ export function StableCoinAsGasCoins() {
   // activates it with the defaults, and a switch cannot narrow a list nobody has seen yet.
   const locked = !known || preActivation || busy !== null;
 
-  const rows = stablecoins.length;
-  const onCount = stablecoins.filter((a) => allowed(a.address)).length;
+  const rows = coins.length;
+  const onCount = coins.filter((a) => allowed(a.address)).length;
   return (
     <View style={styles.wrap}>
       <View style={styles.group}>
-        {stablecoins.map((a, i) => (
-          <View key={a.address} style={[styles.row, i === 0 && styles.rowFirst, i === rows - 1 && styles.rowLast]}>
+        {coins.map((a, i) => (
+          <Animated.View
+            key={a.address}
+            {...drag.rowProps(i)}
+            style={[
+              styles.row,
+              i === 0 && styles.rowFirst,
+              i === rows - 1 && styles.rowLast,
+              drag.from === i && styles.lifted,
+              drag.rowProps(i).style,
+            ]}>
             <View style={styles.symRow}>
               <TokenIcon symbol={a.symbol} size={22} />
               <Text style={styles.sym}>{displaySymbol(a.symbol)}</Text>
@@ -149,7 +180,7 @@ export function StableCoinAsGasCoins() {
                 })
               }
             />
-          </View>
+          </Animated.View>
         ))}
       </View>
       {/* Said before the switch is reached for, not after it refuses. */}
@@ -184,4 +215,17 @@ const makeStyles = (c: Colors) =>
     symRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
     sym: {color: c.text, fontSize: 15, fontWeight: '600'},
     busy: {color: c.subtext, fontSize: 16},
+    // The coin in hand, as the watch lists lift theirs.
+    lifted: {
+      zIndex: 2,
+      elevation: 6,
+      marginHorizontal: -16,
+      paddingHorizontal: 16,
+      paddingRight: 26,
+      backgroundColor: c.cardAlt,
+      shadowColor: '#000',
+      shadowOpacity: 0.22,
+      shadowRadius: 10,
+      shadowOffset: {width: 0, height: 4},
+    },
   });

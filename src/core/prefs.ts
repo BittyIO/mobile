@@ -59,34 +59,43 @@ export function setPref(key: string, value: string): void {
  * enforces — nothing stops the same vault being emptied from the web, and nothing should.
  */
 const RESERVE_AMOUNT = 'fees.reserveAmount';
-const RESERVE_COIN = 'fees.reserveCoin';
+const FEE_COIN_ORDER = 'fees.coinOrder';
 
 /** What the reserve is unless the owner says otherwise, in whole dollars. */
 export const DEFAULT_GAS_RESERVE = 10;
-/** Chosen explicitly: hold nothing back. Distinct from unset, which means "decide for me". */
-export const RESERVE_NONE = 'none';
 
 const scoped = (base: string, network: string, vault: string | null | undefined) =>
   `${base}:${network}:${(vault ?? 'none').toLowerCase()}`;
 
 /**
- * WHICH stablecoin the reserve is held in: a symbol, {RESERVE_NONE}, or null for "not chosen".
+ * The owner's order of preference for fee coins, by symbol, as dragged on the Network fee page.
  *
- * It was a switch, which left the app to decide where the float lived: it held back the LAST
- * funded stablecoin, whichever that happened to be, so the coin being protected changed as
- * balances moved and the user could never be told which one it was. Naming it makes the setting
- * answerable — "ten dollars of USDC" — and lets the trade form say so.
- *
- * Null is not the same as none. Unset means the owner has never said, and {resolveFeeReserve}
- * picks one from what the vault actually holds; `none` is an answer and is obeyed. Resolving the
- * default needs balances, which this module has no business reading, so it stops at the stored
- * value.
+ * The first coin is the one the relayer is asked to bill and the first candidate to hold the
+ * reserve (see {resolveFeeReserve}); a coin missing from the list keeps its place after the named
+ * ones. Empty until the owner first drags.
  */
-export const gasReserveCoin = (network: string, vault: string | null | undefined): string | null =>
-  getPref(scoped(RESERVE_COIN, network, vault)) ?? null;
+export const feeCoinOrder = (network: string, vault: string | null | undefined): string[] =>
+  (getPref(scoped(FEE_COIN_ORDER, network, vault)) ?? '').split(',').filter(Boolean);
 
-export const setGasReserveCoin = (network: string, vault: string | null | undefined, sym: string): void =>
-  setPref(scoped(RESERVE_COIN, network, vault), sym);
+export const setFeeCoinOrder = (network: string, vault: string | null | undefined, symbols: string[]): void =>
+  setPref(scoped(FEE_COIN_ORDER, network, vault), symbols.join(','));
+
+/** `items` sorted by the saved order; anything it does not name keeps its relative place, after. */
+export function inFeeCoinOrder<T extends {symbol: string}>(
+  network: string,
+  vault: string | null | undefined,
+  items: T[],
+): T[] {
+  const order = feeCoinOrder(network, vault).map((s) => s.toUpperCase());
+  const rank = (sym: string) => {
+    const i = order.indexOf(sym.toUpperCase());
+    return i === -1 ? order.length : i;
+  };
+  return items
+    .map((item, i) => ({item, i}))
+    .sort((a, b) => rank(a.item.symbol) - rank(b.item.symbol) || a.i - b.i)
+    .map((x) => x.item);
+}
 
 export const gasReserveAmount = (network: string, vault: string | null | undefined): string =>
   getPref(scoped(RESERVE_AMOUNT, network, vault)) ?? String(DEFAULT_GAS_RESERVE);

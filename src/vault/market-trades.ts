@@ -15,8 +15,10 @@ import type {TransferRow, VaultAction} from './transactions';
 // adapter takes its 0.2% (a stablecoin sell's second out-leg). Each set also keeps the address that
 // held the role before, since earlier vaults, older adapter clones and past history still pay there.
 const FEE_SAFE = '0x5837c8f4963f694c59e53445c070acb266187bf1';
-export const BITTY_FEE_COLLECTORS = new Set([FEE_SAFE, '0x76dc42c2e0ef4fb02600430cb0d3a68d015c30aa']);
-export const ADAPTER_FEE_RECIPIENTS = new Set([FEE_SAFE, '0x12ee2de7bf086388b1d560eb95e7191edfab9823']);
+// The fee Safe's own vault: relay fees from vault v1.0.2, adapter fees from adapter v1.0.1.
+const FEE_VAULT = '0xf0e7f6998b362bd15cf819c7ebfcace8865feca0';
+export const BITTY_FEE_COLLECTORS = new Set([FEE_VAULT, FEE_SAFE, '0x76dc42c2e0ef4fb02600430cb0d3a68d015c30aa']);
+export const ADAPTER_FEE_RECIPIENTS = new Set([FEE_VAULT, FEE_SAFE, '0x12ee2de7bf086388b1d560eb95e7191edfab9823']);
 
 // Yield receipt tokens a stake mints to the vault (Sky sUSDS, Lido stETH) — a tx moving one is a
 // stake/unstake into Flexible Yield ("Earn"), never a swap.

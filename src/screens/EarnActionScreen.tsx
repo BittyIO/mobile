@@ -18,7 +18,7 @@ import Svg, {Path} from 'react-native-svg';
 import {TokenIcon} from '@/components/TokenIcon';
 import {PickerSheet, type PickerItem} from '@/components/AssetPicker';
 import {adapterByName} from '@/core/protocols';
-import {resolveFeeReserve, reserveHeld} from '@/vault/stableCoinAsGas';
+import {FEE_WETH, resolveFeeReserve, reserveHeld, useWethFeeCoin} from '@/vault/stableCoinAsGas';
 import type {RootStackParamList} from '@/App';
 import {FormSheet, FORM_SHEET_BODY} from '@/components/FormSheet';
 import {AvailableLine} from '@/components/AvailableLine';
@@ -85,6 +85,7 @@ export function EarnActionScreen() {
   const targetSymbol = specific ? route?.asset.symbol ?? params.symbol ?? 'token' : coin;
   const feeCoin = selected?.address ?? targetAsset; // relay fee always paid in a stable coin
   const bal = useVaultBalances(network);
+  const weth = useWethFeeCoin(network, bal.vault);
   /**
    * The float the relayer bills against, held back from a DEPOSIT as the order sheet holds it back
    * from a trade.
@@ -101,10 +102,13 @@ export function EarnActionScreen() {
   const reserve = resolveFeeReserve({
     network,
     vault: bal.vault,
-    heldStables: stablecoins.map((a) => ({
-      symbol: a.symbol,
-      amount: Number(balanceOfSymbol(bal.balances, a.symbol) || 0),
-    })),
+    heldStables: [
+      ...stablecoins.map((a) => ({
+        symbol: a.symbol,
+        amount: Number(balanceOfSymbol(bal.balances, a.symbol) || 0),
+      })),
+      ...(weth ? [{symbol: FEE_WETH, amount: Number(balanceOfSymbol(bal.balances, FEE_WETH) || 0), usd: weth.usd}] : []),
+    ],
     spendSymbol: isDeposit ? targetSymbol : undefined,
   });
   const freeBal = isDeposit ? floor6(Number(balanceOfSymbol(bal.balances, targetSymbol) || 0)) : 0;

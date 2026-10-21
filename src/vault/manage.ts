@@ -12,6 +12,7 @@ import {
   GUARD_IMPL_ABI,
   ERC1967_IMPL_SLOT,
   IMPLEMENTATION_VAULT,
+  VAULT_STABLE_COIN_AS_GAS_ABI,
 } from '@/core/abi';
 import {relayVaultWrite} from './relay';
 
@@ -163,17 +164,38 @@ export async function vaultImplVersion(vault: Address, network: Network): Promis
   }
 }
 
+/** Vaults known to answer `tokenAsGasConfig`. Only the yes is kept: an upgrade never goes back. */
+const tokenAsGasVaults = new Set<string>();
+
 /**
- * The stablecoin relay-fee entry points: `*Gasless` on the v1.0.3 generation, renamed
- * `*StableCoinAsGas` on v1.0.0. By generation, not by version number — v1.0.0 reports a LOWER
- * version than v1.0.3.
+ * The relay-fee entry points: `*Gasless` on the v1.0.3 generation, renamed `*StableCoinAsGas` on
+ * v1.0.0, then `*TokenAsGas` from v1.0.2, when the vault's WETH may pay too. The first split is by
+ * generation, not by version number — v1.0.0 reports a LOWER version than v1.0.3. The second is
+ * asked of the vault itself, because both shapes live in this generation until each vault upgrades.
  */
-export function stableCoinAsGasFunctionNames():
+export async function stableCoinAsGasFunctionNames(
+  vault: Address,
+  network: Network,
+): Promise<
   | {set: 'setGasless'; disable: 'disableGasless'; config: 'gaslessConfig'}
-  | {set: 'setStableCoinAsGas'; disable: 'disableStableCoinAsGas'; config: 'stableCoinAsGasConfig'} {
-  return isLegacy()
-    ? {set: 'setGasless', disable: 'disableGasless', config: 'gaslessConfig'}
-    : {set: 'setStableCoinAsGas', disable: 'disableStableCoinAsGas', config: 'stableCoinAsGasConfig'};
+  | {set: 'setStableCoinAsGas'; disable: 'disableStableCoinAsGas'; config: 'stableCoinAsGasConfig'}
+  | {set: 'setTokenAsGas'; disable: 'disableTokenAsGas'; config: 'tokenAsGasConfig'}
+> {
+  if (isLegacy()) return {set: 'setGasless', disable: 'disableGasless', config: 'gaslessConfig'};
+  const key = `${network}:${vault.toLowerCase()}`;
+  if (!tokenAsGasVaults.has(key)) {
+    try {
+      await publicClientFor(network).readContract({
+        address: vault,
+        abi: VAULT_STABLE_COIN_AS_GAS_ABI,
+        functionName: 'tokenAsGasConfig',
+      });
+      tokenAsGasVaults.add(key);
+    } catch {
+      return {set: 'setStableCoinAsGas', disable: 'disableStableCoinAsGas', config: 'stableCoinAsGasConfig'};
+    }
+  }
+  return {set: 'setTokenAsGas', disable: 'disableTokenAsGas', config: 'tokenAsGasConfig'};
 }
 
 export type VaultUpgrade = {

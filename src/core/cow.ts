@@ -5,8 +5,8 @@
  * order is POSTed to the CoW orderbook. Nothing on-chain, no gas — it simply settles or expires
  * against the vault's live balance.
  */
-import {keccak256, stringToHex, type AbiParameter} from 'viem';
-import {CHAIN_ID, type Network} from '@/core/chain';
+import {keccak256, parseAbi, stringToHex, type AbiParameter, type Address} from 'viem';
+import {CHAIN_ID, publicClientFor, type Network} from '@/core/chain';
 import {isLegacy} from '@/core/vault-generation';
 
 // GPv2Settlement — the EIP-712 verifying contract for CoW orders. Same address on every chain.
@@ -99,24 +99,60 @@ export const TWAP_TUPLE: AbiParameter = {
 // The fee-bearing appData a limit order carries — byte-identical to the contract's APP_DATA document,
 // so keccak256(fullAppData) == the intent clone's APP_DATA(). Registering it lets solvers resolve the
 // 0.2% partner fee; the contract requires exactly this appData, so the fee can't be stripped.
-// The recipient is part of those bytes, so it follows the vault generation: v1.0.0's intent protocol
-// pays the fee Safe, while v1.0.3's was built with the earlier recipient and only accepts that one.
-const feeRecipient = () =>
-  isLegacy() ? '0x12EE2de7BF086388B1D560eb95e7191Edfab9823' : '0x5837C8F4963F694C59e53445C070acb266187bF1';
-export function buildLimitAppData(): {hash: `0x${string}`; fullAppData: string} {
+// The recipient is part of those bytes and differs by adapter build, so it is read from the vault's own
+// clone ({cowFeeRecipient}) rather than assumed: v1.0.3's adapter pays the earlier recipient, the 1.0.0
+// adapter the fee Safe, and 1.0.1 the fee Safe's vault — and a vault may sit on any of them.
+const LEGACY_RECIPIENT = '0x12EE2de7BF086388B1D560eb95e7191Edfab9823';
+const FEE_SAFE = '0x5837C8F4963F694C59e53445C070acb266187bF1';
+const FEE_VAULT = '0xF0E7f6998B362BD15CF819C7EBfcaCe8865FECA0';
+const defaultRecipient = () => (isLegacy() ? LEGACY_RECIPIENT : FEE_SAFE);
+
+const COW_FEE_ABI = parseAbi([
+  'function getClone(address protocol) view returns (address)',
+  'function PARTNER_FEE_RECIPIENT() view returns (address)',
+]);
+
+/**
+ * The partner-fee recipient the vault's CoW clone requires — the one its code was built with. Read
+ * after {prepareIntent} has made the clone; before that (or on an RPC failure) the generation's
+ * recipient is the best guess, and a wrong one fails as an unauthorised order rather than silently.
+ */
+export async function cowFeeRecipient(network: Network, vault: Address, intentProtocol: Address): Promise<string> {
+  try {
+    const client = publicClientFor(network);
+    const clone = await client.readContract({address: vault, abi: COW_FEE_ABI, functionName: 'getClone', args: [intentProtocol]});
+    const at = /^0x0+$/.test(clone) ? intentProtocol : clone;
+    return await client.readContract({address: at, abi: COW_FEE_ABI, functionName: 'PARTNER_FEE_RECIPIENT'});
+  } catch {
+    return defaultRecipient();
+  }
+}
+
+export function buildLimitAppData(recipient: string = defaultRecipient()): {hash: `0x${string}`; fullAppData: string} {
   const fullAppData =
     '{"appCode":"BittyVault",' +
-    `"metadata":{"partnerFee":{"bps":20,"recipient":"${feeRecipient()}"}},` +
+    `"metadata":{"partnerFee":{"bps":20,"recipient":"${recipient}"}},` +
     '"version":"1.3.0"}';
   return {hash: keccak256(stringToHex(fullAppData)), fullAppData};
 }
 
+/**
+ * Every plain limit-order appData any adapter build uses, lower-cased. A TWAP part carries a salted one,
+ * so this is how history tells the two apart whichever adapter placed the order.
+ */
+export const LIMIT_APP_DATA_HASHES = new Set(
+  [LEGACY_RECIPIENT, FEE_SAFE, FEE_VAULT].map((r) => buildLimitAppData(r).hash.toLowerCase()),
+);
+
 // A TWAP's appData is salted by its start time (the on-chain block timestamp), carried in an
 // "environment" field — byte-identical to the contract's twapFullAppData(salt) or hashes won't match.
-export function buildTwapAppData(salt: bigint): {hash: `0x${string}`; fullAppData: string} {
+export function buildTwapAppData(
+  salt: bigint,
+  recipient: string = defaultRecipient(),
+): {hash: `0x${string}`; fullAppData: string} {
   const fullAppData =
     `{"appCode":"BittyVault","environment":"${salt.toString()}",` +
-    `"metadata":{"partnerFee":{"bps":20,"recipient":"${feeRecipient()}"}},` +
+    `"metadata":{"partnerFee":{"bps":20,"recipient":"${recipient}"}},` +
     '"version":"1.3.0"}';
   return {hash: keccak256(stringToHex(fullAppData)), fullAppData};
 }

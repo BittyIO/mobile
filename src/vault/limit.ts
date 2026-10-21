@@ -11,7 +11,7 @@
 import {encodeAbiParameters, parseAbi, parseUnits, type Address, type Hex} from 'viem';
 import type {Signer} from '@/wallet/signer';
 import {apiFetch, CHAIN_ID, publicClientFor, type Network} from '@/core/chain';
-import {BALANCE_ERC20, COW_PARTNER_FEE_BPS, GPV2_SETTLEMENT, KIND_BUY, KIND_SELL, ORDER_712_TYPES, ORDER_TUPLE, buildLimitAppData, cowApiBase, cowSupported} from '@/core/cow';
+import {BALANCE_ERC20, COW_PARTNER_FEE_BPS, GPV2_SETTLEMENT, KIND_BUY, KIND_SELL, LIMIT_APP_DATA_HASHES, ORDER_712_TYPES, ORDER_TUPLE, buildLimitAppData, cowApiBase, cowFeeRecipient, cowSupported} from '@/core/cow';
 import {VAULT_INTENT_ABI} from '@/core/abi';
 import {assetMeta} from '@/core/assets';
 import {relayVaultWrite, relayVaultMulticall, type VaultCall} from './relay';
@@ -50,6 +50,8 @@ export async function placeLimitOrder(o: {
   account: Signer;
   vault: Address;
   network: Network;
+  /** The CoW adapter; the vault's clone of it decides which fee recipient the appData must name. */
+  intentProtocol: Address;
   sellToken: Address;
   buyToken: Address;
   sellAmount: string;
@@ -61,7 +63,7 @@ export async function placeLimitOrder(o: {
   const sellDec = assetMeta(o.network, o.sellToken).decimals;
   const buyDec = assetMeta(o.network, o.buyToken).decimals;
   const validTo = Math.floor(Date.now() / 1000) + o.validSeconds;
-  const {hash: appData, fullAppData} = buildLimitAppData();
+  const {hash: appData, fullAppData} = buildLimitAppData(await cowFeeRecipient(o.network, o.vault, o.intentProtocol));
 
   // Fee adjust for the 0.2% partner fee: a sell discounts the min received; a buy grosses up the max spent.
   let sellAmount = parseUnits(o.sellAmount, sellDec);
@@ -332,14 +334,13 @@ export async function fetchSettlements(vault: Address, network: Network): Promis
     if (!tradesRes.ok) return out;
     const trades = (await tradesRes.json()) as {orderUid: string; txHash?: string}[];
     if (!Array.isArray(trades)) return out;
-    const limitAppData = buildLimitAppData().hash.toLowerCase();
     const appDataByUid = new Map(orders.map((o) => [o.uid.toLowerCase(), (o.appData ?? '').toLowerCase()]));
     for (const tr of trades) {
       if (!tr.txHash) continue;
       const appData = appDataByUid.get(tr.orderUid.toLowerCase());
       // A TWAP part carries a salted appData; anything else that is not the standard one is treated
       // as a plain limit order.
-      out.set(tr.txHash.toLowerCase(), {orderUid: tr.orderUid, twap: !!appData && appData !== limitAppData});
+      out.set(tr.txHash.toLowerCase(), {orderUid: tr.orderUid, twap: !!appData && !LIMIT_APP_DATA_HASHES.has(appData)});
     }
   } catch {
     // Best effort: the history still shows the fill, just as a generic trade.

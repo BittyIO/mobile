@@ -27,7 +27,7 @@ import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {displaySymbol, fmtNum, fmtShort} from '@/core/format';
 import {quoteRelayFeeUsd, relayGasFor} from '@/vault/fee-quote';
-import {reserveHeld, resolveFeeReserve} from '@/vault/stableCoinAsGas';
+import {FEE_WETH, reserveHeld, resolveFeeReserve, useWethFeeCoin} from '@/vault/stableCoinAsGas';
 
 import {useAssetCatalog} from '@/core/asset-catalog';
 
@@ -128,6 +128,7 @@ export function SendScreen() {
   const vault = owner ? ownerVaultAddress(owner, network) : null;
 
   const bal = useVaultBalances(network);
+  const weth = useWethFeeCoin(network, vault);
   const pos = useVaultPositions(vault, network);
 
   const [recipient, setRecipient] = useState<Recipient>({to: '', lines: [newLine(first)]});
@@ -178,9 +179,12 @@ export function SendScreen() {
     resolveFeeReserve({
       network,
       vault: bal.vault,
-      heldStables: assets
-        .filter((a) => a.kind === 'stable')
-        .map((a) => ({symbol: a.symbol, amount: Number(balanceOfSymbol(bal.balances, a.symbol))})),
+      heldStables: [
+        ...assets
+          .filter((a) => a.kind === 'stable')
+          .map((a) => ({symbol: a.symbol, amount: Number(balanceOfSymbol(bal.balances, a.symbol))})),
+        ...(weth ? [{symbol: FEE_WETH, amount: Number(balanceOfSymbol(bal.balances, FEE_WETH) || 0), usd: weth.usd}] : []),
+      ],
       spendSymbol: sym,
     }).keep;
   const sourceLabel = (source: Source) =>

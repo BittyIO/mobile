@@ -17,6 +17,7 @@ import {
   TWAP_TUPLE,
   buildTwapAppData,
   cowApiBase,
+  cowFeeRecipient,
 } from '@/core/cow';
 import {VAULT_INTENT_ABI} from '@/core/abi';
 import {assetMeta} from '@/core/assets';
@@ -32,6 +33,7 @@ export async function placeTwap(o: {
   account: Signer;
   vault: Address;
   network: Network;
+  intentProtocol: Address; // the CoW adapter; its clone decides the fee recipient
   sellToken: Address;
   buyToken: Address;
   totalSell: string; // human
@@ -41,7 +43,8 @@ export async function placeTwap(o: {
 }): Promise<number> {
   const chainId = CHAIN_ID[o.network];
   const startTime = Math.floor(Date.now() / 1000);
-  const {hash: appData, fullAppData} = buildTwapAppData(BigInt(startTime));
+  const recipient = await cowFeeRecipient(o.network, o.vault, o.intentProtocol);
+  const {hash: appData, fullAppData} = buildTwapAppData(BigInt(startTime), recipient);
 
   const sellDec = assetMeta(o.network, o.sellToken).decimals;
   const buyDec = assetMeta(o.network, o.buyToken).decimals;

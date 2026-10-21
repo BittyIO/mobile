@@ -32,12 +32,12 @@ import {useVaultBalances} from '@/vault/useVaultBalances';
 import {useVaultPositions} from '@/vault/useVaultPositions';
 import {positionToken} from '@/vault/position-token';
 import {susdsRate} from '@/vault/yielding';
-import {buildLimitAppData} from '@/core/cow';
+import {LIMIT_APP_DATA_HASHES} from '@/core/cow';
 import {usePrices} from '@/vault/usePrices';
 import {getFlag, setFlag, getPref, setPref, SHOW_OTHER_ORDERS, LAST_PAIR} from '@/core/prefs';
 import {usdValue, fmtUsd} from '@/core/prices';
 import {ownerVaultAddress, balanceOfSymbol} from '@/vault/read';
-import {resolveFeeReserve, reserveHeld} from '@/vault/stableCoinAsGas';
+import {FEE_WETH, resolveFeeReserve, reserveHeld, useWethFeeCoin} from '@/vault/stableCoinAsGas';
 import {FINISHED_WINDOWS, finishedSince, setSlippageBps, slippageBps, useFinishedWindow, type FinishedWindow} from '@/core/prefs';
 import {relayGasFor} from '@/vault/fee-quote';
 import {intentPrepCalls, needsRelayerApproval} from '@/vault/limit';
@@ -680,6 +680,7 @@ export function TradeScreen() {
   const [cancelAt, setCancelAt] = useState<Map<string, number>>(() => new Map());
 
   const balances = useVaultBalances(network);
+  const weth = useWethFeeCoin(network, balances.vault);
   const positions = useVaultPositions(balances.vault, network);
 
   /**
@@ -823,7 +824,10 @@ export function TradeScreen() {
   const reserve = resolveFeeReserve({
     network,
     vault: balances.vault,
-    heldStables: stables.map((a) => ({symbol: a.symbol, amount: Number(balanceOfSymbol(balances.balances, a.symbol))})),
+    heldStables: [
+      ...stables.map((a) => ({symbol: a.symbol, amount: Number(balanceOfSymbol(balances.balances, a.symbol))})),
+      ...(weth ? [{symbol: FEE_WETH, amount: Number(balanceOfSymbol(balances.balances, FEE_WETH) || 0), usd: weth.usd}] : []),
+    ],
     spendSymbol: spendSym,
   });
   const feeReserve = reserve.keep;
@@ -1097,8 +1101,6 @@ export function TradeScreen() {
       live = false;
     };
   }, [network]);
-  // A TWAP part carries a salted appData; a limit order carries the fixed one.
-  const limitAppData = useMemo(() => buildLimitAppData().hash.toLowerCase(), []);
 
   /**
    * The TWAP schedules, by appData.
@@ -1760,10 +1762,10 @@ export function TradeScreen() {
         }
         const minRecv = recvNum.toFixed(Math.min(recvAsset.decimals, 8));
         if (mode === 'Limit') {
-          await placeLimitOrder({account: acct, vault, network, sellToken: payToken, buyToken, sellAmount: payAmount, buyAmount: minRecv, kind: 'sell', validSeconds: validSec});
+          await placeLimitOrder({account: acct, vault, network, intentProtocol: intent, sellToken: payToken, buyToken, sellAmount: payAmount, buyAmount: minRecv, kind: 'sell', validSeconds: validSec});
         } else {
           const n = Math.max(1, parseInt(parts || '1', 10));
-          await placeTwap({account: acct, vault, network, sellToken: payToken, buyToken, totalSell: payAmount, totalMinBuy: minRecv, parts: n, partDuration: Math.max(60, Math.floor(validSec / n))});
+          await placeTwap({account: acct, vault, network, intentProtocol: intent, sellToken: payToken, buyToken, totalSell: payAmount, totalMinBuy: minRecv, parts: n, partDuration: Math.max(60, Math.floor(validSec / n))});
         }
         /**
          * Done, with no hash to wait on.
@@ -2759,7 +2761,8 @@ export function TradeScreen() {
       const sellSym = legSym(o.sellToken, sellM.symbol);
       const buySym = legSym(o.buyToken, buyM.symbol);
       const fromPosition = !!underlyingOf(network, o.sellToken);
-      const isTwap = !!o.appData && o.appData.toLowerCase() !== limitAppData;
+      // A TWAP part carries a salted appData; a limit order one of the fixed ones.
+      const isTwap = !!o.appData && !LIMIT_APP_DATA_HASHES.has(o.appData.toLowerCase());
       // Price quoted in the stable leg when there is one, else base-per-quote by side.
       // A savings share or an aToken counts as its underlying here: an order selling sUSDS
       // for CRCL is a USDC-priced buy, and pricing it per share would be meaningless.

@@ -45,7 +45,15 @@ const PENDING_KIND: Record<Field, PendingChange['kind']> = {maxFeePerOp: 'maxFee
  * under its row with the moment it lands. Each change is a gasless, Face-ID-gated write that keeps
  * the fee-coin list as it is.
  */
-export function StableCoinAsGasLimits() {
+export function StableCoinAsGasLimits({
+  leading,
+}: {
+  /**
+   * A row drawn first in the same card — the page's fee reserve, which is a local setting and so
+   * stays editable before activation, unlike the two ceilings — with its footnote ahead of theirs.
+   */
+  leading?: {title: string; value: string; hint: string; onPress: () => void};
+}) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const getSigner = useWallet((s) => s.signer);
@@ -124,10 +132,24 @@ export function StableCoinAsGasLimits() {
   return (
     <View style={styles.wrap}>
       <View style={styles.group}>
+        {leading ? (
+          <Pressable style={[styles.row, styles.rowDivider]} onPress={leading.onPress}>
+            <View style={styles.titleCol}>
+              <Text style={styles.rowTitle}>{leading.title}</Text>
+            </View>
+            <View style={styles.amount}>
+              <Text style={styles.rowValue}>{leading.value}</Text>
+              <Text style={styles.chev}>›</Text>
+            </View>
+          </Pressable>
+        ) : null}
         {row('maxFeePerOp', false)}
         {row('dailyLimit', true)}
       </View>
-      <Text style={styles.hint}>{t('mobile.settings.gas_limits_hint')}</Text>
+      <Text style={styles.hint}>
+        {leading ? `${leading.hint} ` : ''}
+        {t('mobile.settings.gas_limits_hint')}
+      </Text>
       <PickerSheet
         visible={picking !== null}
         title={picking ? t(TITLE[picking]) : ''}

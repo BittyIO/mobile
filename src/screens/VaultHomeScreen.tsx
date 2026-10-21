@@ -1,7 +1,7 @@
 import {useHeaderHeight} from '@react-navigation/elements';
 import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
-import React, {useCallback, useMemo, useRef, useState} from 'react';
-import {ActivityIndicator, Animated, PanResponder, Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View, type GestureResponderEvent} from 'react-native';
+import React, {useCallback, useMemo, useState} from 'react';
+import {ActivityIndicator, Animated, Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import Svg, {Circle, Line, Path} from 'react-native-svg';
@@ -14,6 +14,8 @@ import {Sheet} from '@/components/Sheet';
 import {PortfolioPie, type PieSlice} from '@/components/PortfolioPie';
 import {useNetwork, networkLabel} from '@/core/network-store';
 import {useVaultBalances} from '@/vault/useVaultBalances';
+import {useSyncFeeReserve} from '@/vault/stableCoinAsGas';
+import {useReorder} from '@/components/useReorder';
 import {useVaultPositions} from '@/vault/useVaultPositions';
 import {useFlows} from '@/vault/useFlows';
 import {earnedRaw} from '@/vault/flows';
@@ -162,160 +164,13 @@ function AssetList({
   const styles = useStyles(makeStyles);
   const c = useColors();
 
-  /**
-   * Long press and drag to reorder.
-   *
-   * Row heights differ — an open row is taller than a closed one — so the drop target is worked
-   * out from measured heights rather than assuming they match. The row in hand is lifted and
-   * follows the finger; the rows it passes slide out of its way by exactly its height, so the gap
-   * that opens is the one it will land in.
-   */
-  const [heights, setHeights] = useState<number[]>([]);
-  const [from, setFrom] = useState<number | null>(null);
-  const [to, setTo] = useState(0);
-  const dy = useRef(new Animated.Value(0)).current;
-  // Read inside the responder, which is created once and would otherwise see the first render.
-  //
-  // `onReorder` has to live here too, not just the data. It is rebuilt every render around the
-  // CURRENT network, so the copy the responder captured on mount writes to whichever network was
-  // showing when the Overview first mounted — which is why a drag appeared to work on Ethereum
-  // and do nothing anywhere else: every other network's order was being saved under Ethereum's key.
-  const live = useRef({rows, heights, from: null as number | null, to: 0, onReorder});
-  live.current = {...live.current, rows, heights, onReorder};
-
-  const measure = (i: number, h: number) =>
-    setHeights((prev) => (prev[i] === h ? prev : Object.assign([...prev], {[i]: h})));
-
-  /** Which slot the dragged row's own centre now sits over. */
-  const slotFor = (offset: number) => {
-    const {heights: hs, from: f} = live.current;
-    if (f == null) return 0;
-    const own = hs[f] ?? 0;
-    let target = f;
-    let travelled = 0;
-    if (offset > 0) {
-      for (let i = f + 1; i < hs.length; i++) {
-        travelled += hs[i] ?? own;
-        if (offset > travelled - (hs[i] ?? own) / 2) target = i;
-        else break;
-      }
-    } else {
-      for (let i = f - 1; i >= 0; i--) {
-        travelled += hs[i] ?? own;
-        if (-offset > travelled - (hs[i] ?? own) / 2) target = i;
-        else break;
-      }
-    }
-    return target;
-  };
-
-  const responder = useRef(
-    PanResponder.create({
-      // Only a long press starts this. A plain touch belongs to the row's own targets.
-      onStartShouldSetPanResponder: () => false,
-      // CAPTURE, not the bubbling variant. The row's own Pressable holds the responder from the
-      // moment the finger lands, and a bubbling claim asks it to hand over — which it does not do
-      // reliably once it has fired its long press. Asking on the way DOWN the tree takes the
-      // gesture before the Pressable sees the move at all. The start handler stays false, so a
-      // plain tap still belongs to the row.
-      onMoveShouldSetPanResponderCapture: () => live.current.from != null,
-      onMoveShouldSetPanResponder: () => live.current.from != null,
-      // Nothing takes the gesture back mid-drag — not the page, not the row's own Pressable.
-      onPanResponderTerminationRequest: () => false,
-      onShouldBlockNativeResponder: () => true,
-      onPanResponderMove: (_e: unknown, g: {dy: number}) => {
-        dy.setValue(g.dy);
-        const next = slotFor(g.dy);
-        if (next !== live.current.to) {
-          live.current.to = next;
-          setTo(next);
-        }
-      },
-      onPanResponderRelease: () => finish(),
-      onPanResponderTerminate: () => finish(),
-    }),
-  ).current;
-
-  const finish = () => {
-    const {rows: rs, from: f, to: target, onReorder: save} = live.current;
-    if (f != null && target !== f) {
-      const next = [...rs];
-      next.splice(target, 0, next.splice(f, 1)[0]);
-      save(next.map((r) => r.symbol));
-    }
-    cancelHold();
-    live.current.from = null;
-    setFrom(null);
-    dy.setValue(0);
-    onDragging(false);
-  };
-
-  /**
-   * Arm the drag on a long hold, timed from the touch itself.
-   *
-   * Pressable's own onLongPress cancels the moment the finger drifts, which on a scrolling list is
-   * most holds. A timer started by the raw touch survives that, and the press handlers underneath
-   * are left alone so a tap still does what it did.
-   *
-   * It survives drift, so it has to be told what drift means. The window was a fifth of a second
-   * and ignored the finger entirely, and the first fifth of a second of a pull-to-refresh is a
-   * finger resting on a row: the row came up, {onDragging} froze the scroll, and pulling the list
-   * down to refresh reordered it instead. So the window is now the platform's own long press, and
-   * travel inside it says the gesture was a scroll all along. The slop is wide enough for a hand
-   * that is not quite still and far short of a scroll.
-   */
-  const HOLD_MS = 500;
-  const HOLD_SLOP = 12;
-  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const holdFrom = useRef<{x: number; y: number} | null>(null);
-  const armHold = (i: number, e: GestureResponderEvent) => {
-    holdFrom.current = {x: e.nativeEvent.pageX, y: e.nativeEvent.pageY};
-    holdTimer.current = setTimeout(() => begin(i), HOLD_MS);
-  };
-  /**
-   * The finger moved before the hold matured, so it was scrolling. Abandons the hold.
-   *
-   * Once a row IS in hand this is the drag itself and must be left alone — the PanResponder owns
-   * the gesture from that point and the finger is meant to travel.
-   */
-  const holdDrift = (e: GestureResponderEvent) => {
-    const at = holdFrom.current;
-    if (!at || live.current.from != null) return;
-    const {pageX, pageY} = e.nativeEvent;
-    if (Math.abs(pageX - at.x) > HOLD_SLOP || Math.abs(pageY - at.y) > HOLD_SLOP) cancelHold();
-  };
-  const cancelHold = () => {
-    if (holdTimer.current) clearTimeout(holdTimer.current);
-    holdTimer.current = null;
-    holdFrom.current = null;
-  };
-  /**
-   * The finger left. Cancels a hold that never matured, and puts down a row that was lifted but
-   * never moved — without this it stays picked up for ever, because the drag responder only ends
-   * a gesture it actually took.
-   */
-  const endTouch = () => {
-    cancelHold();
-    if (live.current.from != null) finish();
-  };
-
-  const begin = (i: number) => {
-    live.current.from = i;
-    live.current.to = i;
-    setFrom(i);
-    setTo(i);
-    dy.setValue(0);
-    onDragging(true);
-  };
-
-  /** How far a row that is not the one in hand has to step aside. */
-  const shiftFor = (i: number) => {
-    if (from == null || i === from) return 0;
-    const own = heights[from] ?? 0;
-    if (from < to && i > from && i <= to) return -own;
-    if (from > to && i >= to && i < from) return own;
-    return 0;
-  };
+  // Long press and drag to reorder — see {useReorder}.
+  const drag = useReorder({
+    items: rows,
+    enabled: reorder,
+    onReorder: (next) => onReorder(next.map((r) => r.symbol)),
+    onDragging,
+  });
 
   return (
     <View style={styles.listCard}>
@@ -328,39 +183,15 @@ function AssetList({
       ) : (
         <View style={styles.list}>
           {rows.map((r, i) => {
-            const held = from === i;
+            const props = drag.rowProps(i);
             return (
-              <Animated.View
-                key={r.address}
-                onLayout={(e) => measure(i, e.nativeEvent.layout.height)}
-                style={[
-                  held && styles.lifted,
-                  {transform: [{translateY: held ? dy : shiftFor(i)}]},
-                ]}
-                // Attached to every row of a list that CAN be reordered, always. Adding them only
-                // once a row is held meant the view joined the responder negotiation after the
-                // touch had already started, and the move was never offered to it — which is why
-                // nothing moved. A list that cannot be reordered attaches none of them, so a hold
-                // on it is just a long press on the row and the page keeps scrolling under it.
-                {...(reorder
-                  ? {
-                      onTouchStart: (e: GestureResponderEvent) => armHold(i, e),
-                      onTouchMove: holdDrift,
-                      onTouchEnd: endTouch,
-                      onTouchCancel: endTouch,
-                      ...responder.panHandlers,
-                    }
-                  : {})}>
+              <Animated.View key={r.address} {...props} style={[drag.from === i && styles.lifted, props.style]}>
                 <AssetRow
                   row={r}
                   first={i === 0}
                   hidden={hidden}
                   onTrade={onTrade(r)}
-                  // Gated by the same drift check as the timer above. Pressable keeps its long
-                  // press alive while the finger stays inside a generously padded press rect, so
-                  // on its own it would fire part-way through a slow pull and pick the row up
-                  // after `holdDrift` had already decided the gesture was a scroll.
-                  onHold={reorder ? () => holdFrom.current && begin(i) : undefined}
+                  onHold={drag.onHold(i)}
                   markets={markets}
                   stat={stats.get(r.symbol)}
                 />
@@ -547,6 +378,8 @@ export function VaultHomeScreen() {
   const {height: screenHeight} = useWindowDimensions();
 
   const catalog = useAssetCatalog(network);
+  // The keeper sweeps auto-yield around this vault's fee float; this tab is up whenever the app is.
+  useSyncFeeReserve(network, bal.vault, bal.balances, catalog);
   // Priced from the catalog the rows actually render, so an asset that exists only in the live
   // catalog — every Ondo stock on mainnet — is no longer left without a price.
   const catalogSymbols = useMemo(() => catalog.map((a) => a.symbol), [catalog]);
