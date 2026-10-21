@@ -18,6 +18,7 @@ import {feeCoinOrder} from '@/core/prefs';
 import {knownAssets} from '@/core/assets';
 import {translate} from '@/i18n';
 import {useLanguage} from '@/core/language-store';
+import {SafeSignaturePending} from './safe';
 
 /** One vault call, unencoded — used to compose a multicall. */
 export type VaultCall = {abi: Abi; functionName: string; args?: readonly unknown[]};
@@ -69,7 +70,8 @@ async function innerGasFor(client: PublicClient, from: Address, vault: Address, 
     return INNER_GAS_MIN;
   }
 }
-// Signed and submitted seconds apart — only has to survive the round trip.
+// Signed and submitted seconds apart — only has to survive the round trip. A signer whose signature
+// takes longer to collect (a multi-owner Safe) says how long, and gets that instead.
 const DEADLINE_SECONDS = 600;
 
 export type RelayResult = {hash: Hex};
@@ -143,6 +145,8 @@ async function relayEncoded(opts: {
         calls: opts.activationCalls, // the requested operation(s), executed during the vault's init
       }));
     } catch (e) {
+      // Not a failure: the activation is waiting for the Safe's co-owners, and finishes from there.
+      if (e instanceof SafeSignaturePending) throw e;
       const detail = (e as Error)?.message ?? String(e);
       throw new Error(
         'Your vault needs to be activated first; the network fee is paid from the stablecoin or ETH in the vault. ' +
@@ -164,7 +168,7 @@ async function relayEncoded(opts: {
     args: [account.address, vault],
   })) as bigint;
 
-  const deadline = Math.floor(Date.now() / 1000) + DEADLINE_SECONDS;
+  const deadline = Math.floor(Date.now() / 1000) + (account.approvalWindowSeconds ?? DEADLINE_SECONDS);
   const innerGas = await innerGasFor(client, account.address, vault, opts.data);
 
   const signature = await account.signTypedData({
@@ -187,20 +191,29 @@ async function relayEncoded(opts: {
     },
   });
 
-  const res = await fetch(apiUrl('/api/ethereum/vaults/relay', network), {
+  return submitForwardRequest({
+    network,
+    request: {from: account.address, to: vault, value: '0', gas: innerGas.toString(), deadline, data: opts.data, signature},
+    stableCoin: opts.stableCoin,
+  });
+}
+
+/**
+ * Hand a signed ForwardRequest to the relayer. Split from {relayEncoded} so a request whose
+ * signature was collected later — a multi-owner Safe's (see ./safe-finish) — is submitted the same
+ * way, with the same fee coin preference and the same refusal messages.
+ */
+export async function submitForwardRequest(o: {
+  network: Network;
+  request: {from: Address; to: Address; value: string; gas: string; deadline: number; data: Hex; signature: Hex};
+  stableCoin: Address;
+}): Promise<RelayResult> {
+  const res = await fetch(apiUrl('/api/ethereum/vaults/relay', o.network), {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
-      request: {
-        from: account.address,
-        to: vault,
-        value: '0',
-        gas: innerGas.toString(),
-        deadline,
-        data: opts.data,
-        signature,
-      },
-      stableCoinAddress: feeHint(network, vault, opts.stableCoin),
+      request: o.request,
+      stableCoinAddress: feeHint(o.network, o.request.to, o.stableCoin),
     }),
   });
 

@@ -11,7 +11,11 @@ import {MMKV} from 'react-native-mmkv';
 import type {HDAccount} from 'viem/accounts';
 import type {Signer} from './signer';
 import * as keyring from './keyring';
-import {useVaults} from '@/core/vault-store';
+import {keyIndexOf, useVaults} from '@/core/vault-store';
+import {useNetwork} from '@/core/network-store';
+import {fetchSafe, safeSigner} from '@/vault/safe';
+import {translate} from '@/i18n';
+import {useLanguage} from '@/core/language-store';
 
 const cache = new MMKV();
 const ADDRESS_KEY = 'address';
@@ -56,20 +60,41 @@ interface WalletState {
   selectVault: (index: number) => void;
 }
 
+/** The vault in front, if the list has it. */
+const activeVault = () => {
+  const {vaults, activeIndex} = useVaults.getState();
+  return vaults.find((v) => v.index === activeIndex);
+};
+
+/**
+ * The vault owner's address for the vault in front, given the key just derived for it: that key's
+ * address — or, for a vault owned by a Safe, the Safe, which the key is merely one owner of.
+ */
+const ownerFor = (account: HDAccount): `0x${string}` => activeVault()?.safe ?? account.address;
+
 /**
  * Cache the address of the vault in front, and record it against that vault.
  *
  * The locked UI needs "who am I" without a prompt, and switching vaults needs the next owner's
  * address without one either — so every address this app derives is kept, and the key is not.
+ * A Safe vault's owner is the Safe and was recorded when it was added; the key derived for it is a
+ * co-owner's and must not overwrite that.
  */
 function remember(account: HDAccount) {
-  cache.set(ADDRESS_KEY, account.address);
+  cache.set(ADDRESS_KEY, ownerFor(account));
+  if (activeVault()?.safe) return;
   const {activeIndex, setOwner} = useVaults.getState();
   setOwner(activeIndex, account.address);
 }
 
-/** The BIP-44 index of the vault in front. Every derivation goes through this. */
-const active = () => useVaults.getState().activeIndex;
+/**
+ * The BIP-44 index whose key signs for the vault in front. Every derivation goes through this: the
+ * vault's own index, or for a Safe vault the index of this device's key among the Safe's owners.
+ */
+const active = () => {
+  const v = activeVault();
+  return v ? keyIndexOf(v) : useVaults.getState().activeIndex;
+};
 
 export const useWallet = create<WalletState>((set) => ({
   status: 'unknown',
@@ -93,7 +118,7 @@ export const useWallet = create<WalletState>((set) => ({
     const account = await keyring.unlock(active());
     if (account) {
       remember(account);
-      set({account, address: account.address, status: 'unlocked', unlocked: true});
+      set({account, address: ownerFor(account), status: 'unlocked', unlocked: true});
     }
   },
 
@@ -109,7 +134,18 @@ export const useWallet = create<WalletState>((set) => ({
     // The ACTIVE index, not index 0: a write must be signed by the owner of the vault on screen.
     const account = await keyring.unlock(active());
     if (!account) throw new Error('Unlock cancelled');
-    return account;
+    const safe = activeVault()?.safe;
+    if (!safe) return account;
+    // A Safe vault signs as the Safe. Its owners and threshold are read now, for this operation:
+    // they can change on chain at any time, and a key that has been removed must not sign.
+    const network = useNetwork.getState().network;
+    const info = await fetchSafe(network, safe);
+    const t = (key: string, params?: Record<string, string | number>) => translate(useLanguage.getState().language, key, params);
+    if (!info.supported) throw new Error(t('mobile.safe.unsupported', {problems: info.problems.join(', ')}));
+    if (!info.owners.some((o) => o.toLowerCase() === account.address.toLowerCase())) {
+      throw new Error(t('mobile.safe.not_owner', {address: account.address}));
+    }
+    return safeSigner({device: account, safe, network, threshold: info.threshold});
   },
 
   /**
