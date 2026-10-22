@@ -55,39 +55,38 @@ export function FeePayerSection() {
 
   return (
     <View style={styles.wrap}>
+      {/* One card: the two choices, and with the owner paying, the address to fund and what is in
+          it right under the choice that needs them. */}
       <SettingsGroup label={t('mobile.fees.paid_by')}>
         <OptionRow
           title={t('mobile.fees.payer_vault')}
-          sub={t('mobile.fees.payer_vault_sub')}
           checked={payer === 'vault'}
           onPress={() => setFeePayer(network, vault, 'vault')}
         />
         <OptionRow
           title={t('mobile.fees.payer_owner')}
-          sub={t('mobile.fees.payer_owner_sub')}
           checked={payer === 'owner'}
           onPress={() => setFeePayer(network, vault, 'owner')}
-          last
+          last={payer !== 'owner'}
         />
+        {payer === 'owner' ? (
+          <>
+            <Pressable style={[styles.row, styles.rowDivider]} onPress={() => setQr(true)} accessibilityRole="button">
+              {/* The whole 42 characters, shrunk to one line: this is the address someone checks
+                  against the other side of a transfer. */}
+              <Text style={styles.addr} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                {owner}
+              </Text>
+            </Pressable>
+            <View style={styles.row}>
+              <Text style={styles.rowTitle}>{t('mobile.fees.balance')}</Text>
+              <Text style={styles.rowValue}>
+                {balance == null ? '…' : <><Amount v={formatEth(balance)} color={c.subtext} /> ETH</>}
+              </Text>
+            </View>
+          </>
+        ) : null}
       </SettingsGroup>
-
-      {payer === 'owner' ? (
-        <SettingsGroup footer={t('mobile.fees.owner_footer', {network: label})}>
-          <Pressable style={[styles.row, styles.rowDivider]} onPress={() => setQr(true)} accessibilityRole="button">
-            {/* The whole 42 characters, shrunk to one line: this is the address someone checks
-                against the other side of a transfer. */}
-            <Text style={styles.addr} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-              {owner}
-            </Text>
-          </Pressable>
-          <View style={styles.row}>
-            <Text style={styles.rowTitle}>{t('mobile.fees.balance')}</Text>
-            <Text style={styles.rowValue}>
-              {balance == null ? '…' : <><Amount v={formatEth(balance)} color={c.subtext} /> ETH</>}
-            </Text>
-          </View>
-        </SettingsGroup>
-      ) : null}
 
       <ReceiveDialog
         visible={qr}
