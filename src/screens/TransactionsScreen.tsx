@@ -28,6 +28,7 @@ import {currentCatalog} from '@/core/asset-catalog';
 import {openLink} from '@/core/open-link';
 import {attemptTrade, isFailure, useVaultAttempts, wasSent, type Attempt} from '@/vault/attempts';
 import {formatEth} from '@/vault/direct';
+import {feeHistory, useUpgradeVersions, type OpDetails} from '@/vault/tx-details';
 
 const fmtAmt = (v: string | null): string => fmtNum(Number(v ?? '0'));
 const fmtN = fmtNum;
@@ -81,6 +82,8 @@ function classify(
   orders: Map<string, CowOrder> | undefined,
   /** Joins the two halves of a trade title the way the language writes them. See {joinWords}. */
   words: (...parts: (string | false | null | undefined)[]) => string,
+  /** What the history around it says this transaction changed — see vault/tx-details. */
+  opDetails?: OpDetails,
 ): OpView {
   // The gasless relay fee leg (paid to Bitty's fee collector) — shown on its own line, not as a transfer.
   // A market trade pays the same Safe twice: the adapter's 0.2% during the swap, then the relay fee
@@ -168,7 +171,7 @@ function classify(
     }
   }
 
-  const described = describeActions(op.actions, network, t, orders);
+  const described = describeActions(op.actions, network, t, orders, opDetails);
   /**
    * The tab a row lands on.
    *
@@ -264,11 +267,13 @@ function Op({
   explorer,
   network,
   orders,
+  details,
 }: {
   op: Operation;
   explorer: string;
   network: Network;
   orders?: Map<string, CowOrder>;
+  details?: OpDetails;
 }) {
   const {t, language, words} = useT();
   const styles = useStyles(makeStyles);
@@ -276,7 +281,7 @@ function Op({
   // The row subscribes for itself. This is the classify call the list actually RENDERS from — the
   // one in the screen above only decides which tabs exist — so without it a flip of the switch
   // left every line on screen as it was.
-  const v = classify(op, network, t, orders, words);
+  const v = classify(op, network, t, orders, words, details);
   return (
     <Pressable style={styles.op} onPress={() => openLink(explorer + op.txHash, 'Etherscan')}>
       {v.parts.map((part, i) => (
@@ -480,6 +485,19 @@ export function TransactionsScreen() {
    * Not filtered by the tabs: a failure moved nothing, so {classify} has no category to put it in,
    * and a row that answers no question must not be hidden by one.
    */
+  /**
+   * What a settings row changed beyond its own call: the fee-coin setting before it, from the next
+   * older one in this history, and an upgrade's versions either side, from the chain.
+   */
+  const feePrev = React.useMemo(() => feeHistory(ops), [ops]);
+  const upgrades = useUpgradeVersions(network, vault, ops);
+  const detailsOf = (op: Operation): OpDetails | undefined => {
+    const h = op.txHash.toLowerCase();
+    const v = upgrades.get(h);
+    if (!feePrev.has(h) && !v) return undefined;
+    return {feePrev: feePrev.get(h), versionFrom: v?.from, versionTo: v?.to};
+  };
+
   const {attempts} = useVaultAttempts(vault, network, loading ? 0 : 1);
   const failures = React.useMemo(() => attempts.filter(isFailure), [attempts]);
 
@@ -574,7 +592,7 @@ export function TransactionsScreen() {
       ) : (
         feed.map((row) =>
           row.op ? (
-            <Op key={row.key} op={row.op} explorer={explorer} network={network} orders={orders} />
+            <Op key={row.key} op={row.op} explorer={explorer} network={network} orders={orders} details={detailsOf(row.op)} />
           ) : (
             <FailedOp key={row.key} tx={row.tx!} explorer={explorer} network={network} />
           ),
