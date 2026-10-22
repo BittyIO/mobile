@@ -1,2 +1,3 @@
 "CFBundleDisplayName" = "Bitty Coffre";
 "CFBundleName" = "Bitty Coffre";
+"NSFaceIDUsageDescription" = "Déverrouillez votre Bitty Coffre et approuvez chaque signature avec Face ID.";

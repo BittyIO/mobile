@@ -113,7 +113,7 @@ export function OnboardingScreen() {
           <>
             <View style={styles.hero}>
               <Image source={require('@/assets/logo.png')} style={styles.logo} resizeMode="contain" />
-              <Text style={styles.title}>Bitty Vault</Text>
+              <Text style={styles.title}>{t('mobile.app.name')}</Text>
               <Text style={styles.tagline}>{t('mobile.payments.onboarding_tagline')}</Text>
             </View>
             <View style={styles.actions}>

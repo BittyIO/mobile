@@ -242,7 +242,7 @@ function MainTabs() {
           below — `title` does that — so only the header differs. */}
       <Tab.Screen
         name="Overview"
-        options={{title: t('mobile.app.overview'), headerTitle: () => <Text style={styles.headerTitle}>Bitty Vault</Text>}}
+        options={{title: t('mobile.app.overview'), headerTitle: () => <Text style={styles.headerTitle}>{t('mobile.app.name')}</Text>}}
         component={VaultHomeScreen}
       />
       <Tab.Screen name="Earn" options={{title: t('mobile.app.earn')}} getComponent={() => require('@/screens/EarnScreen').EarnScreen} />

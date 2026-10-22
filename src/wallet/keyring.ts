@@ -11,6 +11,8 @@ import * as Keychain from 'react-native-keychain';
 import {generateMnemonic, mnemonicToAccount, english, type HDAccount} from 'viem/accounts';
 import {validateMnemonic} from '@scure/bip39';
 import {wordlist} from '@scure/bip39/wordlists/english';
+import {translate} from '@/i18n';
+import {useLanguage} from '@/core/language-store';
 
 const SERVICE = 'io.bitty.vault.mnemonic';
 
@@ -65,7 +67,7 @@ async function readSecret(prompt: string): Promise<string | null> {
  * Index 0 is the wallet that has always existed and keeps the default path.
  */
 export async function unlock(index = 0): Promise<HDAccount | null> {
-  const m = await readSecret('Unlock Bitty Vault');
+  const m = await readSecret(translate(useLanguage.getState().language, 'mobile.app.unlock_prompt'));
   return m ? mnemonicToAccount(m, {accountIndex: index}) : null;
 }
 

@@ -1,2 +1,3 @@
 "CFBundleDisplayName" = "Bitty วอลต์";
 "CFBundleName" = "Bitty วอลต์";
+"NSFaceIDUsageDescription" = "ปลดล็อก Bitty วอลต์ของคุณและอนุมัติทุกลายเซ็นด้วย Face ID";
