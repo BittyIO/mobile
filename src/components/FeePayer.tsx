@@ -1,10 +1,9 @@
 import React, {useEffect, useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {OptionRow, SettingsGroup, makeSettingsStyles} from '@/components/SettingsRow';
+import {SettingsGroup, makeSettingsStyles} from '@/components/SettingsRow';
 import {ReceiveDialog} from '@/components/ReceiveDialog';
 import {Amount} from '@/components/Amount';
 import {networkLabel, useNetwork} from '@/core/network-store';
-import {setFeePayer, type FeePayer} from '@/core/fee-payer-store';
 import {useActiveFeePayer} from '@/vault/useFeePayer';
 import {formatEth, ownerEthBalance} from '@/vault/direct';
 import {useT} from '@/i18n';
@@ -12,27 +11,6 @@ import {useColors, useStyles, type Colors} from '@/theme';
 
 /** How often the owner balance is re-read while the page is open — long enough to see ETH arrive. */
 const BALANCE_POLL_MS = 15_000;
-
-/**
- * The first card of each Network fee page: whether THIS way is the one that pays. Choosing it is a
- * local setting — no write, no prompt — and the way that is not chosen keeps its own settings.
- */
-export function UseForFeesRow({payer}: {payer: FeePayer}) {
-  const {t} = useT();
-  const network = useNetwork((s) => s.network);
-  const {vault, payer: current} = useActiveFeePayer(network);
-  if (!vault) return null;
-  return (
-    <SettingsGroup>
-      <OptionRow
-        title={t('mobile.fees.use_for_fees')}
-        checked={current === payer}
-        onPress={() => setFeePayer(network, vault, payer)}
-        last
-      />
-    </SettingsGroup>
-  );
-}
 
 /**
  * The owner wallet that pays, when the owner pays: a row with its address — tap for the QR, with

@@ -5,7 +5,6 @@ import type {MobileTable} from './index';
 // write the other way when the chosen way cannot.
 export const fees: MobileTable = {
   en: {
-    use_for_fees: 'Use for network fees',
     advanced: 'Advanced settings',
     payer_vault: 'Pay from vault',
     payer_owner: 'Pay from owner wallet',
@@ -21,7 +20,6 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Pay with owner ETH',
   },
   zh: {
-    use_for_fees: '用于支付网络手续费',
     advanced: '高级设置',
     payer_vault: '从金库支付',
     payer_owner: '从所有者钱包支付',
@@ -36,7 +34,6 @@ export const fees: MobileTable = {
     fallback_owner_button: '用所有者的 ETH 支付',
   },
   'zh-TW': {
-    use_for_fees: '用於支付網路手續費',
     advanced: '進階設定',
     payer_vault: '從金庫支付',
     payer_owner: '從擁有者錢包支付',
@@ -51,7 +48,6 @@ export const fees: MobileTable = {
     fallback_owner_button: '用擁有者的 ETH 支付',
   },
   ja: {
-    use_for_fees: 'ネットワーク手数料に使う',
     advanced: '詳細設定',
     payer_vault: 'ボールトから支払う',
     payer_owner: 'オーナーウォレットから支払う',
@@ -66,7 +62,6 @@ export const fees: MobileTable = {
     fallback_owner_button: 'オーナーの ETH で払う',
   },
   ko: {
-    use_for_fees: '네트워크 수수료에 사용',
     advanced: '고급 설정',
     payer_vault: '볼트에서 지불',
     payer_owner: '소유자 지갑에서 지불',
@@ -81,7 +76,6 @@ export const fees: MobileTable = {
     fallback_owner_button: '소유자 ETH로 지불',
   },
   fr: {
-    use_for_fees: 'Utiliser pour les frais de réseau',
     advanced: 'Paramètres avancés',
     payer_vault: 'Payer depuis le coffre',
     payer_owner: 'Payer depuis le portefeuille propriétaire',
@@ -97,7 +91,6 @@ export const fees: MobileTable = {
     fallback_owner_button: "Payer avec l'ETH du propriétaire",
   },
   es: {
-    use_for_fees: 'Usar para comisiones de red',
     advanced: 'Configuración avanzada',
     payer_vault: 'Pagar desde la bóveda',
     payer_owner: 'Pagar desde la cartera propietaria',
@@ -113,7 +106,6 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Pagar con ETH del propietario',
   },
   de: {
-    use_for_fees: 'Für Netzwerkgebühren verwenden',
     advanced: 'Erweiterte Einstellungen',
     payer_vault: 'Aus dem Tresor zahlen',
     payer_owner: 'Aus der Eigentümer-Wallet zahlen',
@@ -129,7 +121,6 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Mit Eigentümer-ETH zahlen',
   },
   'pt-BR': {
-    use_for_fees: 'Usar para taxas de rede',
     advanced: 'Configurações avançadas',
     payer_vault: 'Pagar pelo cofre',
     payer_owner: 'Pagar pela carteira proprietária',
@@ -145,7 +136,6 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Pagar com ETH do proprietário',
   },
   hi: {
-    use_for_fees: 'नेटवर्क शुल्क के लिए उपयोग करें',
     advanced: 'उन्नत सेटिंग्स',
     payer_vault: 'वॉल्ट से भुगतान',
     payer_owner: 'ओनर वॉलेट से भुगतान',
@@ -160,7 +150,6 @@ export const fees: MobileTable = {
     fallback_owner_button: 'ओनर के ETH से भुगतान',
   },
   tr: {
-    use_for_fees: 'Ağ ücretleri için kullan',
     advanced: 'Gelişmiş ayarlar',
     payer_vault: 'Kasadan öde',
     payer_owner: 'Sahip cüzdanından öde',
@@ -175,7 +164,6 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Sahip ETH’si ile öde',
   },
   ru: {
-    use_for_fees: 'Использовать для сетевых комиссий',
     advanced: 'Расширенные настройки',
     payer_vault: 'Платить из хранилища',
     payer_owner: 'Платить с кошелька владельца',
@@ -190,7 +178,6 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Оплатить ETH владельца',
   },
   id: {
-    use_for_fees: 'Gunakan untuk biaya jaringan',
     advanced: 'Pengaturan lanjutan',
     payer_vault: 'Bayar dari brankas',
     payer_owner: 'Bayar dari dompet pemilik',
@@ -205,7 +192,6 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Bayar dengan ETH pemilik',
   },
   vi: {
-    use_for_fees: 'Dùng để trả phí mạng',
     advanced: 'Cài đặt nâng cao',
     payer_vault: 'Trả từ két',
     payer_owner: 'Trả từ ví chủ sở hữu',
@@ -220,7 +206,6 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Trả bằng ETH của chủ sở hữu',
   },
   th: {
-    use_for_fees: 'ใช้จ่ายค่าธรรมเนียมเครือข่าย',
     advanced: 'การตั้งค่าขั้นสูง',
     payer_vault: 'จ่ายจากวอลต์',
     payer_owner: 'จ่ายจากกระเป๋าเจ้าของ',

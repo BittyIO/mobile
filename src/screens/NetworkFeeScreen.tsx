@@ -5,7 +5,7 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
 import {makeSettingsStyles} from '@/components/SettingsRow';
 import {VaultFeeSettings} from '@/components/VaultFeeSettings';
-import {UseForFeesRow, OwnerWalletCard} from '@/components/FeePayer';
+import {OwnerWalletCard} from '@/components/FeePayer';
 import {useNetwork} from '@/core/network-store';
 import {useActiveFeePayer} from '@/vault/useFeePayer';
 import {setFeePayer, type FeePayer} from '@/core/fee-payer-store';
@@ -76,28 +76,22 @@ export function NetworkFeeScreen() {
   );
 }
 
-/** Network fee › Pay from vault: use it, and the vault's fee coins, reserve and caps. */
+/** Network fee › Pay from vault: the vault's fee coins, reserve and caps. Chosen on the page before. */
 export function NetworkFeeVaultScreen() {
   const styles = useStyles(makeStyles);
   const [dragging, setDragging] = useState(false);
   return (
     <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical scrollEnabled={!dragging} contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
-      <View style={styles.first}>
-        <UseForFeesRow payer="vault" />
-      </View>
       <VaultFeeSettings onDragging={setDragging} />
     </ScrollView>
   );
 }
 
-/** Network fee › Pay from owner wallet: use it, and the address to fund with what is in it. */
+/** Network fee › Pay from owner wallet: the address to fund, and what is in it. Chosen on the page before. */
 export function NetworkFeeOwnerScreen() {
   const styles = useStyles(makeStyles);
   return (
     <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
-      <View style={styles.first}>
-        <UseForFeesRow payer="owner" />
-      </View>
       <OwnerWalletCard />
     </ScrollView>
   );
@@ -111,8 +105,6 @@ const makeStyles = (c: Colors) =>
     // space BETWEEN sections is set on the cards that start one, so the two kinds of distance stay
     // distinguishable.
     body: {padding: 16, gap: 8, paddingBottom: 32},
-    // The same distance as between the vault page's later sections (VaultFeeSettings `second`).
-    first: {marginBottom: 20},
     // A way to pay: the title and its check choose it; everything to their right opens its settings.
     wayRow: {flexDirection: 'row', alignItems: 'stretch'},
     wayPick: {flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 15, paddingLeft: 16, paddingRight: 12, flexShrink: 1},
