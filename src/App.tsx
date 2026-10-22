@@ -88,7 +88,10 @@ export type RootStackParamList = {
   Browser: {url: string; title?: string};
   /** What relay fees are billed in, and the float the app will not spend below. */
   NetworkFee: undefined;
-  /** Network fee › Advanced settings: the relayer's per-operation and 24-hour caps. */
+  /** Network fee › Pay from vault / Pay from owner wallet: each way's own settings. */
+  NetworkFeeVault: undefined;
+  NetworkFeeOwner: undefined;
+  /** Network fee › Pay from vault › Advanced settings: the relayer's per-operation and 24-hour caps. */
   NetworkFeeLimits: undefined;
   /** Settings › RPC: the owner's own node for on-chain reads. */
   AutoYield: undefined;
@@ -433,6 +436,16 @@ function Root() {
           name="NetworkFee"
           getComponent={() => require('@/screens/NetworkFeeScreen').NetworkFeeScreen}
           options={{title: t('mobile.settings.network_fee')}}
+        />
+        <Stack.Screen
+          name="NetworkFeeVault"
+          getComponent={() => require('@/screens/NetworkFeeScreen').NetworkFeeVaultScreen}
+          options={{title: t('mobile.fees.payer_vault')}}
+        />
+        <Stack.Screen
+          name="NetworkFeeOwner"
+          getComponent={() => require('@/screens/NetworkFeeScreen').NetworkFeeOwnerScreen}
+          options={{title: t('mobile.fees.payer_owner')}}
         />
         <Stack.Screen
           name="NetworkFeeLimits"
