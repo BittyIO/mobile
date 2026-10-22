@@ -21,6 +21,7 @@ export type SettingsIconName =
   | 'timelock'
   | 'autoYield'
   | 'delegation'
+  | 'ownership'
   | 'stableCoinAsGas'
   | 'dailyLimit'
   | 'perTx'
@@ -55,6 +56,8 @@ const TINT: Record<SettingsIconName, string> = {
   timelock: '#5856D6',
   autoYield: '#34C759',
   delegation: '#0E85FF',
+  // Handing the vault to another key: its own colour, so it never reads as the asset manager.
+  ownership: '#FF2D55',
   stableCoinAsGas: '#AF52DE',
   dailyLimit: '#FF9500',
   perTx: '#5856D6',
@@ -139,6 +142,9 @@ export function SettingsIcon({name, size = 29}: {name: SettingsIconName; size?: 
             <Path d="M7 11V7a5 5 0 0 1 10 0v4" {...c} />
             <Path d="M12 16.5c-1-1.1-1.8-1.6-2.6-1.6a1.6 1.6 0 0 0 0 3.2c.8 0 1.6-.5 2.6-1.6s1.8-1.6 2.6-1.6a1.6 1.6 0 0 1 0 3.2c-.8 0-1.6-.5-2.6-1.6z" {...c} strokeWidth={1.5} />
           </>
+        ) : name === 'ownership' ? (
+          // lucide ArrowRightLeft: one owner out, another in.
+          <Path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4" {...c} />
         ) : name === 'eth' ? (
           // Ether's diamond: the native coin the Legacy ETH row wraps.
           <>

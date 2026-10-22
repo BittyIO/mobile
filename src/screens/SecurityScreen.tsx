@@ -85,7 +85,7 @@ export function SecurityScreen() {
         />
         {/* v1.0.0 only — the handover waits out the timelock, which v1.0.3 does not queue it behind. */}
         {hasLocks ? (
-          <SettingsRow icon="delegation" title={t('mobile.vault.transfer_ownership')} onPress={() => nav.navigate('VaultTransferOwnership')} last />
+          <SettingsRow icon="ownership" title={t('mobile.vault.transfer_ownership')} onPress={() => nav.navigate('VaultTransferOwnership')} last />
         ) : null}
       </SettingsGroup>
     </ScrollView>
