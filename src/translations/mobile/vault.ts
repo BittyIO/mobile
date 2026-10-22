@@ -89,8 +89,7 @@ export const vault: MobileTable = {
     forever_lock: 'Lock forever',
     forever_lock_hint: 'The same freeze with no way back, for anyone, ever. For a key that is gone for good.',
     forever_lock_escape_title: 'Pay out to',
-    forever_lock_no_escape:
-      'Add a whitelisted address first. After a forever lock, money can only leave to one, and none can be paid right now — a new address has to wait out the timelock before it counts.',
+    forever_lock_no_escape: 'Add a whitelisted address outside this vault first. After a forever lock, money can only leave to one, so it has to be an address that can be paid now. The vault\'s own address doesn\'t count, and a new address has to wait out the timelock first.',
     forever_lock_confirm:
       'This locks the vault for ever. No key — including yours — can ever loosen it again. Money will only move to destinations already vetted. There is no way back.',
     lock_emergency_state: 'Settings are frozen. Money can only go to addresses already on your whitelist. You can unlock it with this key.',
@@ -242,8 +241,7 @@ export const vault: MobileTable = {
     forever_lock: '永久锁定',
     forever_lock_hint: '同样冻结，但任何人都永远无法撤销。用于彻底丢失的密钥。',
     forever_lock_escape_title: '提款至',
-    forever_lock_no_escape:
-      '请先添加白名单地址。永久锁定后，资金只能转往白名单地址，而目前没有可立即付款的地址——新地址需等待时间锁结束后才能使用。',
+    forever_lock_no_escape: '请先添加一个本金库以外的白名单地址。永久锁定后，资金只能转到白名单地址，所以它必须是现在就能收款的地址。金库自己的地址不算，新地址也要先等过时间锁。',
     forever_lock_confirm:
       '这将永久锁定金库。任何私钥（包括你自己的）都永远无法再放宽设置。资金只能流向已核准的地址。没有任何回头路。',
     lock_emergency_state: '设置已冻结。资金只能转到白名单中已有的地址。可以用此密钥解锁。',
@@ -327,8 +325,7 @@ export const vault: MobileTable = {
     forever_lock: '永久鎖定',
     forever_lock_hint: '同樣凍結，但任何人都永遠無法撤銷。用於徹底遺失的金鑰。',
     forever_lock_escape_title: '提款至',
-    forever_lock_no_escape:
-      '請先新增白名單地址。永久鎖定後，資金只能轉往白名單地址，而目前沒有可立即付款的地址——新地址需等待時間鎖結束後才能使用。',
+    forever_lock_no_escape: '請先新增一個本金庫以外的白名單地址。永久鎖定後，資金只能轉到白名單地址，所以它必須是現在就能收款的地址。金庫自己的地址不算，新地址也要先等過時間鎖。',
     forever_lock_confirm: '這會永久鎖定金庫。任何金鑰（包括你的）都無法再放寬設定。資金只能轉往已審核的目的地。此操作無法撤銷。',
     lock_emergency_state: '設定已凍結。資金只能轉到白名單中已有的地址。可以用此金鑰解鎖。',
     lock_forever_state: '設定永遠無法再變更。資金只能轉到白名單中已有的地址。',
@@ -440,8 +437,7 @@ export const vault: MobileTable = {
     forever_lock: '永久ロック',
     forever_lock_hint: '同じ凍結ですが、誰にも二度と解除できません。完全に失ったキーのためのものです。',
     forever_lock_escape_title: '払い出し先',
-    forever_lock_no_escape:
-      '先にホワイトリストのアドレスを追加してください。永久ロック後、資金はホワイトリストのアドレスにしか送れませんが、今すぐ支払えるアドレスがありません。新しいアドレスはタイムロックが過ぎるまで使えません。',
+    forever_lock_no_escape: 'まずこのボールト以外のホワイトリストアドレスを追加してください。永久ロック後、資金はホワイトリストのアドレスにしか送れないため、今すぐ送金できるアドレスが必要です。ボールト自身のアドレスは対象外で、新しいアドレスはタイムロックを待つ必要があります。',
     forever_lock_confirm: 'ボールトを永久にロックします。あなたの鍵を含め、どの鍵でも設定を緩めることは二度とできません。資金は確認済みの送金先にのみ移動します。元に戻す方法はありません。',
     lock_emergency_state: '設定は凍結されています。資金はホワイトリストにある既存のアドレスにのみ送れます。このキーでロックを解除できます。',
     lock_forever_state: '設定は二度と変更できません。資金はホワイトリストにある既存のアドレスにのみ送れます。',
@@ -551,8 +547,7 @@ export const vault: MobileTable = {
     forever_lock: '영구 잠금',
     forever_lock_hint: '같은 동결이지만 누구도 영원히 되돌릴 수 없습니다. 완전히 잃어버린 키를 위한 것입니다.',
     forever_lock_escape_title: '출금 대상',
-    forever_lock_no_escape:
-      '먼저 화이트리스트 주소를 추가하세요. 영구 잠금 후에는 화이트리스트 주소로만 자금을 보낼 수 있는데, 지금 바로 지급할 수 있는 주소가 없습니다. 새 주소는 타임락이 지나야 사용할 수 있습니다.',
+    forever_lock_no_escape: '먼저 이 볼트가 아닌 화이트리스트 주소를 추가하세요. 영구 잠금 후에는 자금을 화이트리스트 주소로만 보낼 수 있으므로 지금 바로 송금할 수 있는 주소여야 합니다. 볼트 자체 주소는 해당하지 않으며, 새 주소는 먼저 타임락을 기다려야 합니다.',
     forever_lock_confirm: '볼트를 영구히 잠급니다. 당신의 키를 포함해 어떤 키로도 다시는 설정을 완화할 수 없습니다. 자금은 이미 검증된 대상에게만 이동합니다. 되돌릴 방법이 없습니다.',
     lock_emergency_state: '설정이 동결되었습니다. 자금은 화이트리스트에 이미 있는 주소로만 보낼 수 있습니다. 이 키로 잠금을 해제할 수 있습니다.',
     lock_forever_state: '설정을 다시는 변경할 수 없습니다. 자금은 화이트리스트에 이미 있는 주소로만 보낼 수 있습니다.',
@@ -661,8 +656,7 @@ export const vault: MobileTable = {
     forever_lock: 'Verrouiller pour toujours',
     forever_lock_hint: 'Le même gel, sans retour possible, pour personne, jamais. Pour une clé perdue pour de bon.',
     forever_lock_escape_title: 'Verser à',
-    forever_lock_no_escape:
-      'Ajoutez d\'abord une adresse en liste blanche. Après un verrouillage définitif, l\'argent ne peut partir que vers l\'une d\'elles, et aucune n\'est payable pour l\'instant — une nouvelle adresse doit attendre la fin du délai.',
+    forever_lock_no_escape: 'Ajoutez d’abord une adresse de la liste blanche autre que ce coffre. Après un verrouillage définitif, l’argent ne peut partir que vers elle : elle doit pouvoir être payée dès maintenant. L’adresse du coffre lui-même ne compte pas, et une nouvelle adresse doit d’abord attendre la fin du délai.',
     forever_lock_confirm: 'Cela verrouille le coffre pour toujours. Aucune clé — y compris la vôtre — ne pourra plus jamais l’assouplir. Les fonds n’iront qu’aux destinations déjà vérifiées. Il n’y a aucun retour possible.',
     lock_emergency_state: 'Les réglages sont gelés. L’argent ne peut aller qu’aux adresses déjà sur votre liste blanche. Vous pouvez le déverrouiller avec cette clé.',
     lock_forever_state: 'Les réglages ne pourront plus jamais changer. L’argent ne peut aller qu’aux adresses déjà sur votre liste blanche.',
@@ -773,8 +767,7 @@ export const vault: MobileTable = {
     forever_lock: 'Bloquear para siempre',
     forever_lock_hint: 'El mismo congelamiento, sin vuelta atrás, para nadie, nunca. Para una clave perdida para siempre.',
     forever_lock_escape_title: 'Pagar a',
-    forever_lock_no_escape:
-      'Primero añade una dirección a la lista blanca. Tras un bloqueo permanente, el dinero solo puede salir hacia una de ellas y ahora mismo ninguna se puede pagar: una dirección nueva debe esperar el bloqueo temporal.',
+    forever_lock_no_escape: 'Primero añade a la lista blanca una dirección que no sea esta bóveda. Tras un bloqueo permanente, el dinero solo puede salir hacia ella, así que debe poder recibir pagos ya. La dirección de la propia bóveda no cuenta, y una dirección nueva debe esperar primero el bloqueo temporal.',
     forever_lock_confirm: 'Esto bloquea la bóveda para siempre. Ninguna clave —incluida la tuya— podrá volver a relajarla. El dinero solo irá a destinos ya verificados. No hay vuelta atrás.',
     lock_emergency_state: 'Los ajustes están congelados. El dinero solo puede ir a direcciones que ya están en tu lista blanca. Puedes desbloquearla con esta clave.',
     lock_forever_state: 'Los ajustes no podrán volver a cambiar nunca. El dinero solo puede ir a direcciones que ya están en tu lista blanca.',
@@ -885,8 +878,7 @@ export const vault: MobileTable = {
     forever_lock: 'Für immer sperren',
     forever_lock_hint: 'Dieselbe Sperre ohne Weg zurück, für niemanden, niemals. Für einen Schlüssel, der endgültig verloren ist.',
     forever_lock_escape_title: 'Auszahlen an',
-    forever_lock_no_escape:
-      'Füge zuerst eine Whitelist-Adresse hinzu. Nach einer dauerhaften Sperre kann Geld nur noch an eine solche gehen, und gerade kann keine bezahlt werden – eine neue Adresse muss erst die Wartezeit abwarten.',
+    forever_lock_no_escape: 'Füge zuerst eine Whitelist-Adresse außerhalb dieses Tresors hinzu. Nach einer dauerhaften Sperre kann Geld nur noch an sie gehen, daher muss sie jetzt schon bezahlt werden können. Die eigene Adresse des Tresors zählt nicht, und eine neue Adresse muss zuerst die Wartezeit abwarten.',
     forever_lock_confirm: 'Damit wird der Tresor für immer gesperrt. Kein Schlüssel – auch deiner nicht – kann ihn je wieder lockern. Geld geht nur noch an bereits geprüfte Ziele. Es gibt keinen Weg zurück.',
     lock_emergency_state: 'Einstellungen sind eingefroren. Geld kann nur an Adressen gehen, die schon auf deiner Whitelist stehen. Du kannst ihn mit diesem Schlüssel entsperren.',
     lock_forever_state: 'Einstellungen können nie wieder geändert werden. Geld kann nur an Adressen gehen, die schon auf deiner Whitelist stehen.',
@@ -997,8 +989,7 @@ export const vault: MobileTable = {
     forever_lock: 'Bloquear para sempre',
     forever_lock_hint: 'O mesmo congelamento, sem volta, para ninguém, nunca. Para uma chave perdida de vez.',
     forever_lock_escape_title: 'Pagar para',
-    forever_lock_no_escape:
-      'Adicione primeiro um endereço à lista de permissões. Após um bloqueio permanente, o dinheiro só pode sair para um deles, e nenhum pode ser pago agora — um endereço novo precisa aguardar o timelock.',
+    forever_lock_no_escape: 'Primeiro adicione à lista de permissões um endereço que não seja este cofre. Depois de um bloqueio permanente, o dinheiro só pode sair para ele, então precisa poder receber pagamentos já. O endereço do próprio cofre não conta, e um endereço novo precisa esperar o timelock primeiro.',
     forever_lock_confirm: 'Isso bloqueia o cofre para sempre. Nenhuma chave — nem a sua — poderá afrouxá-lo de novo. O dinheiro só irá para destinos já verificados. Não há volta.',
     lock_emergency_state: 'As configurações estão congeladas. O dinheiro só pode ir para endereços que já estão na sua lista de permissões. Você pode desbloqueá-lo com esta chave.',
     lock_forever_state: 'As configurações nunca mais poderão mudar. O dinheiro só pode ir para endereços que já estão na sua lista de permissões.',
@@ -1106,8 +1097,7 @@ export const vault: MobileTable = {
     forever_lock: 'Kalıcı kilit',
     forever_lock_hint: 'Aynı dondurma, ama kimse için asla geri dönüş yok. Tamamen kaybedilmiş bir anahtar için.',
     forever_lock_escape_title: 'Ödeme adresi',
-    forever_lock_no_escape:
-      'Önce beyaz listeye bir adres ekleyin. Kalıcı kilitten sonra para yalnızca bu adreslerden birine gidebilir ve şu anda hiçbirine ödeme yapılamıyor — yeni bir adresin zaman kilidini beklemesi gerekir.',
+    forever_lock_no_escape: 'Önce bu kasa dışında bir beyaz liste adresi ekleyin. Kalıcı kilitten sonra para yalnızca ona gidebilir, bu yüzden şimdi ödeme alabilen bir adres olmalı. Kasanın kendi adresi sayılmaz ve yeni bir adres önce zaman kilidini beklemelidir.',
     forever_lock_confirm: 'Bu, kasayı kalıcı olarak kilitler. Seninki dahil hiçbir anahtar onu bir daha gevşetemez. Para yalnızca önceden onaylanmış hedeflere gider. Geri dönüşü yoktur.',
     lock_emergency_state: 'Ayarlar donduruldu. Para yalnızca beyaz listenizde zaten olan adreslere gidebilir. Bu anahtarla kilidi açabilirsiniz.',
     lock_forever_state: 'Ayarlar bir daha asla değişemez. Para yalnızca beyaz listenizde zaten olan adreslere gidebilir.',
@@ -1215,8 +1205,7 @@ export const vault: MobileTable = {
     forever_lock: 'Заблокировать навсегда',
     forever_lock_hint: 'Та же заморозка без пути назад — ни для кого и никогда. Для ключа, потерянного навсегда.',
     forever_lock_escape_title: 'Выплатить на',
-    forever_lock_no_escape:
-      'Сначала добавьте адрес в белый список. После вечной блокировки деньги можно вывести только на такой адрес, а сейчас ни на один из них платить нельзя — новый адрес должен выждать таймлок.',
+    forever_lock_no_escape: 'Сначала добавьте в белый список адрес, отличный от этого хранилища. После вечной блокировки деньги смогут уходить только на него, поэтому на него должно быть можно платить уже сейчас. Собственный адрес хранилища не подходит, а новый адрес сначала должен выждать таймлок.',
     forever_lock_confirm: 'Хранилище будет заблокировано навсегда. Ни один ключ — включая ваш — больше не сможет ослабить настройки. Средства пойдут только по уже проверенным адресам. Пути назад нет.',
     lock_emergency_state: 'Настройки заморожены. Деньги можно отправлять только на адреса, уже внесённые в белый список. Разблокировать можно этим ключом.',
     lock_forever_state: 'Настройки больше никогда не изменятся. Деньги можно отправлять только на адреса, уже внесённые в белый список.',
@@ -1324,8 +1313,7 @@ export const vault: MobileTable = {
     forever_lock: 'Kunci selamanya',
     forever_lock_hint: 'Pembekuan yang sama tanpa jalan kembali, bagi siapa pun, selamanya. Untuk kunci yang hilang selamanya.',
     forever_lock_escape_title: 'Bayarkan ke',
-    forever_lock_no_escape:
-      'Tambahkan alamat daftar putih dulu. Setelah kunci permanen, dana hanya bisa keluar ke salah satunya, dan saat ini belum ada yang bisa dibayar — alamat baru harus menunggu timelock selesai.',
+    forever_lock_no_escape: 'Tambahkan dulu alamat daftar putih selain brankas ini. Setelah dikunci selamanya, uang hanya bisa keluar ke sana, jadi alamat itu harus sudah bisa dibayar sekarang. Alamat brankas itu sendiri tidak dihitung, dan alamat baru harus menunggu timelock dulu.',
     forever_lock_confirm: 'Ini mengunci vault selamanya. Tidak ada kunci — termasuk milik Anda — yang bisa melonggarkannya lagi. Dana hanya akan ke tujuan yang sudah diverifikasi. Tidak ada jalan kembali.',
     lock_emergency_state: 'Pengaturan dibekukan. Uang hanya bisa dikirim ke alamat yang sudah ada di daftar putih. Anda bisa membukanya dengan kunci ini.',
     lock_forever_state: 'Pengaturan tidak akan pernah bisa diubah lagi. Uang hanya bisa dikirim ke alamat yang sudah ada di daftar putih.',
@@ -1433,8 +1421,7 @@ export const vault: MobileTable = {
     forever_lock: 'Khóa vĩnh viễn',
     forever_lock_hint: 'Cùng một sự đóng băng nhưng không có đường lui, với bất kỳ ai, mãi mãi. Dành cho khóa đã mất hẳn.',
     forever_lock_escape_title: 'Thanh toán tới',
-    forever_lock_no_escape:
-      'Hãy thêm một địa chỉ vào danh sách trắng trước. Sau khi khóa vĩnh viễn, tiền chỉ có thể rút về một trong số đó, và hiện chưa có địa chỉ nào trả được ngay — địa chỉ mới phải chờ hết thời gian khóa.',
+    forever_lock_no_escape: 'Hãy thêm trước một địa chỉ danh sách trắng không phải két này. Sau khi khóa vĩnh viễn, tiền chỉ có thể rời đi tới đó, nên nó phải nhận được tiền ngay bây giờ. Địa chỉ của chính két không được tính, và địa chỉ mới phải chờ hết thời gian khóa trước.',
     forever_lock_confirm: 'Thao tác này khóa vault vĩnh viễn. Không khóa nào — kể cả của bạn — có thể nới lỏng lại. Tiền chỉ được chuyển tới các địa chỉ đã duyệt. Không có cách quay lại.',
     lock_emergency_state: 'Cài đặt bị đóng băng. Tiền chỉ có thể gửi tới các địa chỉ đã có trong danh sách trắng. Bạn có thể mở khóa bằng khóa này.',
     lock_forever_state: 'Cài đặt không bao giờ có thể thay đổi nữa. Tiền chỉ có thể gửi tới các địa chỉ đã có trong danh sách trắng.',
@@ -1542,8 +1529,7 @@ export const vault: MobileTable = {
     forever_lock: 'ล็อกถาวร',
     forever_lock_hint: 'การแช่แข็งแบบเดียวกันแต่ไม่มีทางกลับ สำหรับทุกคน ตลอดไป สำหรับกุญแจที่หายไปอย่างถาวร',
     forever_lock_escape_title: 'จ่ายออกไปยัง',
-    forever_lock_no_escape:
-      'โปรดเพิ่มที่อยู่ในไวท์ลิสต์ก่อน หลังล็อกถาวร เงินจะออกได้เฉพาะไปยังที่อยู่เหล่านั้น และตอนนี้ยังไม่มีที่อยู่ใดจ่ายได้ทันที — ที่อยู่ใหม่ต้องรอจนครบไทม์ล็อกก่อน',
+    forever_lock_no_escape: 'เพิ่มที่อยู่ในไวต์ลิสต์ที่ไม่ใช่วอลต์นี้ก่อน หลังล็อกถาวร เงินจะออกได้เฉพาะไปยังที่อยู่นั้น จึงต้องเป็นที่อยู่ที่รับเงินได้ตอนนี้ ที่อยู่ของวอลต์เองไม่นับ และที่อยู่ใหม่ต้องรอไทม์ล็อกก่อน',
     forever_lock_confirm: 'การดำเนินการนี้จะล็อกวอลต์ถาวร ไม่มีคีย์ใด รวมถึงของคุณ ที่จะผ่อนคลายการตั้งค่าได้อีก เงินจะโอนได้เฉพาะไปยังปลายทางที่ตรวจสอบแล้ว ไม่มีทางย้อนกลับ',
     lock_emergency_state: 'การตั้งค่าถูกแช่แข็ง เงินส่งได้เฉพาะไปยังที่อยู่ที่อยู่ในไวต์ลิสต์แล้วเท่านั้น คุณปลดล็อกได้ด้วยกุญแจนี้',
     lock_forever_state: 'การตั้งค่าจะเปลี่ยนไม่ได้อีกเลย เงินส่งได้เฉพาะไปยังที่อยู่ที่อยู่ในไวต์ลิสต์แล้วเท่านั้น',
@@ -1651,8 +1637,7 @@ export const vault: MobileTable = {
     forever_lock: 'हमेशा के लिए लॉक',
     forever_lock_hint: 'वही रोक, पर किसी के लिए भी कभी वापसी नहीं। हमेशा के लिए खोई कुंजी के लिए।',
     forever_lock_escape_title: 'भुगतान यहाँ करें',
-    forever_lock_no_escape:
-      'पहले एक व्हाइटलिस्ट पता जोड़ें। स्थायी लॉक के बाद पैसा केवल उन्हीं पतों पर जा सकता है, और अभी किसी को भुगतान नहीं किया जा सकता — नए पते को टाइमलॉक पूरा होने तक इंतज़ार करना होगा।',
+    forever_lock_no_escape: 'पहले इस वॉल्ट के अलावा कोई व्हाइटलिस्ट पता जोड़ें। हमेशा के लिए लॉक के बाद पैसा केवल उसी पर जा सकता है, इसलिए वह पता अभी भुगतान योग्य होना चाहिए। वॉल्ट का अपना पता नहीं गिना जाता, और नए पते को पहले टाइमलॉक पूरा करना होता है।',
     forever_lock_confirm: 'यह वॉल्ट को हमेशा के लिए लॉक कर देता है। आपकी की सहित कोई भी की इसे फिर कभी ढीला नहीं कर सकती। पैसा केवल पहले से जाँचे गए गंतव्यों तक जाएगा। वापसी का कोई रास्ता नहीं है।',
     lock_emergency_state: 'सेटिंग्स रुकी हुई हैं। पैसा केवल आपकी व्हाइटलिस्ट में पहले से मौजूद पतों पर जा सकता है। आप इसे इसी कुंजी से अनलॉक कर सकते हैं।',
     lock_forever_state: 'सेटिंग्स फिर कभी नहीं बदल सकतीं। पैसा केवल आपकी व्हाइटलिस्ट में पहले से मौजूद पतों पर जा सकता है।',
