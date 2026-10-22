@@ -1,5 +1,5 @@
 import React, {useCallback, useState} from 'react';
-import {ScrollView, StyleSheet} from 'react-native';
+import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
@@ -10,7 +10,8 @@ import {useNetwork} from '@/core/network-store';
 import {ownerVaultAddress} from '@/vault/read';
 import type {LockAction} from '@/screens/VaultLockActionScreen';
 import {useT} from '@/i18n';
-import {useStyles, type Colors} from '@/theme';
+import {useColors, useStyles, type Colors} from '@/theme';
+import {LOCK_ICON, LOCK_TITLE, lockColor} from '@/core/lock-status';
 
 /**
  * Vault lock (Security › Vault lock) — the vault's lock status on top, then only the moves open from
@@ -40,10 +41,15 @@ export function VaultLockScreen() {
     }, [vault, network]),
   );
 
+  const c = useColors();
+  // The state as a chip in its own colour, as on the Security page that leads here.
   const status =
-    lockLevel == null
-      ? undefined
-      : t(lockLevel === 2 ? 'mobile.vault.locked_forever' : lockLevel === 1 ? 'mobile.vault.locked_emergency' : 'mobile.vault.unlocked');
+    lockLevel == null ? undefined : (
+      <View style={[styles.chip, {borderColor: lockColor(lockLevel, c)}]}>
+        <View style={[styles.chipDot, {backgroundColor: lockColor(lockLevel, c)}]} />
+        <Text style={styles.chipText}>{t(LOCK_TITLE[lockLevel])}</Text>
+      </View>
+    );
   const statusHint =
     lockLevel === 2 ? 'mobile.vault.lock_forever_state' : lockLevel === 1 ? 'mobile.vault.lock_emergency_state' : 'mobile.vault.vault_lock_hint';
 
@@ -64,14 +70,15 @@ export function VaultLockScreen() {
       style={styles.container}
       contentContainerStyle={styles.body}>
       <SettingsGroup footer={lockLevel == null ? undefined : t(statusHint)}>
-        <SettingsRow icon="lock" title={t('vault.status')} value={status} chevron={false} last />
+        <SettingsRow icon={LOCK_ICON[lockLevel ?? 0]} title={t('vault.status')} right={status} chevron={false} last />
       </SettingsGroup>
       {actions.length > 0 ? (
         <SettingsGroup>
           {actions.map((a, i) => (
             <SettingsRow
               key={a.action}
-              icon={a.action === 'unlock' ? 'security' : 'lock'}
+              // Each action wears the icon of the state it leads to.
+              icon={LOCK_ICON[a.action === 'unlock' ? 0 : a.action === 'emergency' ? 1 : 2]}
               title={t(a.title)}
               sub={t(a.hint)}
               onPress={() => nav.navigate('VaultLockAction', {action: a.action})}
@@ -88,4 +95,7 @@ const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: {flex: 1, backgroundColor: c.bg},
     body: {flexGrow: 1, padding: 16, gap: 20},
+    chip: {flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3},
+    chipDot: {width: 8, height: 8, borderRadius: 4},
+    chipText: {color: c.text, fontSize: 12, fontWeight: '600'},
   });

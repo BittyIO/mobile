@@ -12,11 +12,12 @@ import {SAFETY_TITLE, levelOf, safetyColor, valuesInForce, type SafetyLevelOrCus
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {ownerVaultAddress} from '@/vault/read';
+import {LOCK_ICON, LOCK_TITLE, lockColor} from '@/core/lock-status';
 
 /**
  * Security — three groups of rows, each opening what it names: Safety settings (the timelock and the
  * two daily allowances, with the vault's safety level beside it on v1.0.0+); the allow list and the asset manager;
- * Vault lock (emergency / forever lock), the recovery phrase and Transfer ownership. The writes live on
+ * Lock status (temporarily / forever locked), the recovery phrase and Transfer ownership. The writes live on
  * the pages the rows open.
  *
  * Vault lock is left out on v1.0.3, which has no locks.
@@ -54,10 +55,14 @@ export function SecurityScreen() {
       </View>
     );
 
-  const lockValue =
-    lockLevel == null
-      ? undefined
-      : t(lockLevel === 2 ? 'mobile.vault.locked_forever' : lockLevel === 1 ? 'mobile.vault.locked_emergency' : 'mobile.vault.unlocked');
+  // The lock state answers the Lock status row, as a chip in its own colour like the level above.
+  const lockChip =
+    lockLevel == null ? undefined : (
+      <View style={[styles.chip, {borderColor: lockColor(lockLevel, c)}]}>
+        <View style={[styles.chipDot, {backgroundColor: lockColor(lockLevel, c)}]} />
+        <Text style={styles.chipText}>{t(LOCK_TITLE[lockLevel])}</Text>
+      </View>
+    );
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
@@ -83,7 +88,7 @@ export function SecurityScreen() {
       <SettingsGroup>
         {/* v1.0.0 only — v1.0.3 has no locks. */}
         {hasLocks ? (
-          <SettingsRow icon="lock" title={t('mobile.vault.vault_lock')} value={lockValue} onPress={() => nav.navigate('VaultLock')} />
+          <SettingsRow icon={LOCK_ICON[lockLevel ?? 0]} title={t('mobile.vault.vault_lock')} right={lockChip} onPress={() => nav.navigate('VaultLock')} />
         ) : null}
         <SettingsRow
           icon="recovery"
