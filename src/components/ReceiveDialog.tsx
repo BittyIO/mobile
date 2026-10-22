@@ -63,8 +63,9 @@ export function ReceiveDialog({
           </Text>
           {vault ? (
             <View style={styles.actions}>
-              <Pressable style={styles.btn} onPress={copy}>
-                <Text style={styles.btnText}>{copied ? t('common.copied') : t('common.copy')}</Text>
+              {/* Green while "Copied" shows, so it reads as done at a glance, not only by its word. */}
+              <Pressable style={[styles.btn, copied && styles.btnCopied]} onPress={copy}>
+                <Text style={[styles.btnText, copied && styles.btnTextCopied]}>{copied ? t('common.copied') : t('common.copy')}</Text>
               </Pressable>
               <Pressable style={styles.btn} onPress={share}>
                 <Text style={styles.btnText}>{t('mobile.home.share_address')}</Text>
@@ -90,4 +91,6 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   actions: {flexDirection: 'row', alignSelf: 'stretch', gap: 10},
   btn: {flex: 1, height: 44, borderRadius: 22, backgroundColor: c.buttonSecondary, alignItems: 'center', justifyContent: 'center'},
   btnText: {color: c.text, fontSize: 15, fontWeight: '600'},
+  btnCopied: {backgroundColor: c.success},
+  btnTextCopied: {color: c.onAccent},
 });
