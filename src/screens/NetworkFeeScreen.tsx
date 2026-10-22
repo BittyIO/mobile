@@ -8,7 +8,7 @@ import {VaultFeeSettings} from '@/components/VaultFeeSettings';
 import {UseForFeesRow, OwnerWalletCard} from '@/components/FeePayer';
 import {useNetwork} from '@/core/network-store';
 import {useActiveFeePayer} from '@/vault/useFeePayer';
-import type {FeePayer} from '@/core/fee-payer-store';
+import {setFeePayer, type FeePayer} from '@/core/fee-payer-store';
 import {useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 
@@ -29,7 +29,7 @@ export function NetworkFeeScreen() {
   const styles = useStyles(makeStyles);
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const network = useNetwork((s) => s.network);
-  const {payer, canChoose} = useActiveFeePayer(network);
+  const {payer, canChoose, vault} = useActiveFeePayer(network);
   // The page holds still while a fee coin is being dragged, as the Overview does for its lists.
   const [dragging, setDragging] = useState(false);
 
@@ -41,14 +41,30 @@ export function NetworkFeeScreen() {
     );
   }
 
+  /**
+   * One way to pay, as two targets: the row itself chooses it — the common thing to do here, so it
+   * gets the whole width — and the chevron at the end, behind a hairline, opens its settings.
+   */
   const way = (p: FeePayer, title: string, route: 'NetworkFeeVault' | 'NetworkFeeOwner', last?: boolean) => (
-    <Pressable style={[styles.row, !last && styles.rowDivider]} onPress={() => nav.navigate(route)}>
-      <Text style={styles.rowTitle}>{title}</Text>
-      <View style={styles.rowRight}>
-        {payer === p ? <Text style={styles.check}>✓</Text> : null}
+    <View style={[styles.wayRow, !last && styles.rowDivider]}>
+      <Pressable
+        style={({pressed}) => [styles.wayPick, pressed && styles.pressed]}
+        onPress={() => vault && setFeePayer(network, vault, p)}
+        accessibilityRole="radio"
+        accessibilityState={{checked: payer === p}}>
+        <Text style={styles.rowTitle}>{title}</Text>
+        {/* Always laid out, shown only when chosen, so the row keeps its height (see OptionRow). */}
+        <Text style={[styles.check, payer !== p && styles.checkHidden]}>✓</Text>
+      </Pressable>
+      <Pressable
+        style={({pressed}) => [styles.wayMore, pressed && styles.pressed]}
+        onPress={() => nav.navigate(route)}
+        hitSlop={{top: 8, bottom: 8}}
+        accessibilityRole="button"
+        accessibilityLabel={`${title} · ${t('vault.settings')}`}>
         <Text style={styles.chev}>›</Text>
-      </View>
-    </Pressable>
+      </Pressable>
+    </View>
   );
 
   return (
@@ -98,4 +114,15 @@ const makeStyles = (c: Colors) =>
     body: {padding: 16, gap: 8, paddingBottom: 32},
     // The same distance as between the vault page's later sections (VaultFeeSettings `second`).
     first: {marginBottom: 20},
+    // A way to pay: the choosing part takes the row, the settings chevron sits apart at the end.
+    wayRow: {flexDirection: 'row', alignItems: 'stretch'},
+    wayPick: {flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 15, paddingLeft: 16, paddingRight: 12, gap: 12},
+    wayMore: {
+      width: 52,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderLeftWidth: StyleSheet.hairlineWidth,
+      borderLeftColor: c.border,
+    },
+    pressed: {opacity: 0.6},
   });
