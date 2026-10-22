@@ -57,7 +57,7 @@
 		<string>coinbase</string>
 	</array>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Unlock your Bitty wallet and approve each signature with Face ID.</string>
+	<string>Unlock your Bitty Vault and approve each signature with Face ID.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string></string>
 	<key>RCTNewArchEnabled</key>

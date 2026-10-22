@@ -1,2 +1,3 @@
 "CFBundleDisplayName" = "Bitty 金庫";
 "CFBundleName" = "Bitty 金庫";
+"NSFaceIDUsageDescription" = "使用 Face ID 解鎖你的 Bitty 金庫並確認每一次簽名。";

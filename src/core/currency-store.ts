@@ -1,17 +1,15 @@
 import {create} from 'zustand';
 import {MMKV} from 'react-native-mmkv';
 import {API_BASE} from '@/core/chain';
-import {useLanguage, type Language} from '@/core/language-store';
 
-// The DISPLAY currency — what fiat figures are printed in, chosen in Settings or defaulted from
-// the language. It converts at the last moment, for display only: every price in the system stays
-// a dollar figure (Chainlink, pools, CoinGecko all quote USD), and nothing that signs, quotes or
-// submits ever passes through it. A missing rate therefore degrades to showing dollars, never to
-// a wrong number.
+// The DISPLAY currency — what fiat figures are printed in, chosen in Settings, US dollars until
+// then. It is NOT tied to the language: someone reading the app in Chinese may well think in
+// dollars, and switching language must never change the figures under them.
 //
-// One currency per app language rather than a currency catalog: the set exists because someone
-// reading the app in Thai thinks in baht, so it is the languages that define it. English maps to
-// the dollar everything is already in.
+// It converts at the last moment, for display only: every price in the system stays a dollar
+// figure (Chainlink, pools, CoinGecko all quote USD), and nothing that signs, quotes or submits
+// ever passes through it. A missing rate therefore degrades to showing dollars, never to a wrong
+// number.
 
 export type Currency =
   | 'USD' | 'CNY' | 'TWD' | 'JPY' | 'KRW' | 'EUR'
@@ -78,25 +76,6 @@ export const CURRENCY_SYMBOL: Record<Currency, string> = {
   MXN: '$',
 };
 
-/** What someone reading in this language most likely prices their life in. */
-const DEFAULT_BY_LANGUAGE: Record<Language, Currency> = {
-  en: 'USD',
-  zh: 'CNY',
-  'zh-TW': 'TWD',
-  ja: 'JPY',
-  ko: 'KRW',
-  fr: 'EUR',
-  es: 'EUR',
-  de: 'EUR',
-  'pt-BR': 'BRL',
-  hi: 'INR',
-  tr: 'TRY',
-  ru: 'RUB',
-  id: 'IDR',
-  vi: 'VND',
-  th: 'THB',
-};
-
 const store = new MMKV({id: 'bitty.currency'});
 const KEY = 'currency';
 const RATES_KEY = 'rates';
@@ -114,7 +93,7 @@ function storedRates(): FxTable {
 }
 
 type CurrencyState = {
-  /** The explicit choice, or null to follow the language. */
+  /** The explicit choice, or null for US dollars. */
   chosen: Currency | null;
   /** USD → fiat multipliers, served by /api/fx and kept across launches. */
   fx: FxTable;
@@ -157,10 +136,9 @@ export async function refreshFx(): Promise<void> {
 // Warm the table on startup; nothing waits on it — figures render in USD until it lands.
 void refreshFx();
 
-/** The currency in force: the explicit choice, else the language's own. */
+/** The currency in force: the explicit choice, else US dollars. */
 export function displayCurrency(): Currency {
-  const {chosen} = useCurrency.getState();
-  return chosen ?? DEFAULT_BY_LANGUAGE[useLanguage.getState().language] ?? 'USD';
+  return useCurrency.getState().chosen ?? 'USD';
 }
 
 /**
@@ -179,7 +157,5 @@ export function displayFx(): {currency: Currency; rate: number} {
 
 /** The display currency, as a subscription — for screens that show or pick it. */
 export function useDisplayCurrency(): Currency {
-  const chosen = useCurrency((s) => s.chosen);
-  const language = useLanguage((s) => s.language);
-  return chosen ?? DEFAULT_BY_LANGUAGE[language] ?? 'USD';
+  return useCurrency((s) => s.chosen) ?? 'USD';
 }
