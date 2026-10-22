@@ -9,11 +9,14 @@
  * Failure surfaces as a thrown error the UI shows — a declined signature or relay means the op can't
  * proceed and the user is told why.
  */
+import {Alert} from 'react-native';
 import {encodeFunctionData, type Abi, type Address, type Hex, type PublicClient} from 'viem';
 import type {Signer} from '@/wallet/signer';
 import {apiUrl, CHAIN_ID, publicClientFor, type Network} from '@/core/chain';
 import {FORWARDER_ABI, FORWARD_REQUEST_TYPES, VAULT_FWD_ABI, VAULT_MULTICALL_ABI} from '@/core/abi';
-import {isActivated, activateVault} from './activate';
+import {isActivated, activateVault, activateVaultDirect} from './activate';
+import {OwnerGasShort, ownerEthBalance, sendFromOwner} from './direct';
+import {feePayerFor, type FeePayer} from '@/core/fee-payer-store';
 import {feeCoinOrder} from '@/core/prefs';
 import {knownAssets} from '@/core/assets';
 import {translate} from '@/i18n';
@@ -119,14 +122,92 @@ function feeHint(network: Network, vault: Address, fallback: Address): Address {
   return (asset?.address as Address | undefined) ?? fallback;
 }
 
-async function relayEncoded(opts: {
+type EncodedWrite = {
   account: Signer;
   vault: Address;
   network: Network;
   data: Hex; // what the forwarder calls on the vault
   activationCalls: readonly Hex[]; // what runs during init if the vault isn't activated yet
   stableCoin: Address;
-}): Promise<RelayResult> {
+  /** Who pays the network fee for THIS write, over the vault's setting: a fallback the user accepted. */
+  payer?: FeePayer;
+};
+
+/**
+ * The vault refused to pay the relayer — no fee coin it can charge, its budget spent, relaying off.
+ * Nothing was sent. The one class of relay failure the owner's own ETH can get past.
+ */
+export class VaultFeeRefused extends Error {}
+
+/** Only a key can send its own transactions; a Safe's vault always pays through the relayer. */
+const ownerCanPay = (account: Signer) => !!account.signTransaction && !account.isContract;
+
+/**
+ * Ask whether to pay this one write the other way, now that the chosen way cannot. Never switched
+ * without asking: the two ways spend from two different places, and the setting stays as it is.
+ */
+function offerOtherPayer(title: string, message: string, accept: string): Promise<boolean> {
+  const t = (key: string) => translate(useLanguage.getState().language, key);
+  return new Promise((resolve) =>
+    Alert.alert(title, message, [
+      {text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false)},
+      {text: accept, onPress: () => resolve(true)},
+    ], {cancelable: true, onDismiss: () => resolve(false)}),
+  );
+}
+
+/**
+ * One vault write, paid the way the vault is set to pay — or, if that way cannot, the other way,
+ * when the user says so. See core/fee-payer-store.
+ */
+async function relayEncoded(opts: EncodedWrite): Promise<RelayResult> {
+  const t = (key: string) => translate(useLanguage.getState().language, key);
+  const {account, network, vault} = opts;
+  const payer = opts.payer ?? (ownerCanPay(account) ? feePayerFor(network, vault) : 'vault');
+  const asked = opts.payer !== undefined;
+
+  if (payer === 'owner') {
+    try {
+      return await viaOwner(opts);
+    } catch (e) {
+      if (!asked && e instanceof OwnerGasShort && (await offerOtherPayer(t('mobile.fees.fallback_vault_title'), e.message, t('mobile.fees.fallback_vault_button')))) {
+        return relayEncoded({...opts, payer: 'vault'});
+      }
+      throw e;
+    }
+  }
+  try {
+    return await viaRelayer(opts);
+  } catch (e) {
+    if (
+      !asked &&
+      e instanceof VaultFeeRefused &&
+      ownerCanPay(account) &&
+      (await ownerEthBalance(network, account.address).catch(() => BigInt(0))) > BigInt(0) &&
+      (await offerOtherPayer(t('mobile.fees.fallback_owner_title'), e.message, t('mobile.fees.fallback_owner_button')))
+    ) {
+      return relayEncoded({...opts, payer: 'owner'});
+    }
+    throw e;
+  }
+}
+
+/**
+ * The owner pays: the same calldata, sent straight to the vault from the owner key. On a vault not
+ * activated yet the operation rides on the factory's plain `activateVault`, as it rides on the
+ * signed activation through the relayer.
+ */
+async function viaOwner(opts: EncodedWrite): Promise<RelayResult> {
+  const {account, vault, network} = opts;
+  if (!(await isActivated(vault, network))) {
+    const {hash} = await activateVaultDirect({account, network, allowlistEnabled: false, calls: opts.activationCalls});
+    await publicClientFor(network).waitForTransactionReceipt({hash});
+    return {hash};
+  }
+  return sendFromOwner({account, network, to: vault, data: opts.data});
+}
+
+async function viaRelayer(opts: EncodedWrite): Promise<RelayResult> {
   const {account, vault, network} = opts;
   const client = publicClientFor(network);
 
@@ -148,7 +229,7 @@ async function relayEncoded(opts: {
       // Not a failure: the activation is waiting for the Safe's co-owners, and finishes from there.
       if (e instanceof SafeSignaturePending) throw e;
       const detail = (e as Error)?.message ?? String(e);
-      throw new Error(
+      throw new VaultFeeRefused(
         'Your vault needs to be activated first; the network fee is paid from the stablecoin or ETH in the vault. ' +
           'Send some USDC or ETH to your vault address (Overview → Receive), then try again.\n\n(' +
           detail +
@@ -222,8 +303,12 @@ export async function submitForwardRequest(o: {
     | null;
 
   if (json?.ok && json.hash) return {hash: json.hash};
-  throw new Error(relayError(json, res.status));
+  const message = relayError(json, res.status);
+  throw FEE_REFUSALS.has(json?.reason ?? '') ? new VaultFeeRefused(message) : new Error(message);
 }
+
+/** The relayer's reasons that mean the vault could not pay — not that the operation itself fails. */
+const FEE_REFUSALS = new Set(['fee-leg-failed', 'insufficient-liquid-balance', 'budget-exhausted', 'stable-coin-as-gas-off']);
 
 /**
  * The relayer's machine-readable reason, turned into something a person can act on.

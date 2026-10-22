@@ -1,5 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {ScrollView, StyleSheet, View} from 'react-native';
+import {FeePayerSection} from '@/components/FeePayerSection';
 import {StableCoinAsGasCoins} from '@/components/StableCoinAsGasCoins';
 import {StableCoinAsGasLimits} from '@/components/StableCoinAsGasLimits';
 import {PickerSheet} from '@/components/AssetPicker';
@@ -14,9 +15,14 @@ import {useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 
 /**
- * What the vault's network fees are paid WITH, and what it always keeps to pay them.
+ * Who pays the vault's network fees, what the vault pays them WITH, and what it always keeps to pay
+ * them.
  *
- * Two sections. First, which coins the relayer may bill, in the owner's order of preference —
+ * Who pays comes first (`FeePayerSection`): the vault, through the relayer, or the owner wallet,
+ * from this phone. The fee-coin sections below stay either way — they are what the relayer bills
+ * when the owner wallet is short and the user lets the vault pay that one.
+ *
+ * Then two sections. First, which coins the relayer may bill, in the owner's order of preference —
  * long-press and drag to reorder; the first is asked for first and holds the reserve.
  * `StableCoinAsGasCoins` carries it entirely. Second, what is kept and what may be taken: the
  * reserve amount, then the most the relayer may bill per operation and per 24 hours.
@@ -87,6 +93,7 @@ export function NetworkFeeScreen() {
       contentInsetAdjustmentBehavior="automatic"
       style={styles.container}
       contentContainerStyle={styles.body}>
+      <FeePayerSection />
       <View>
         <StableCoinAsGasCoins onDragging={setDragging} />
       </View>

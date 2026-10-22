@@ -5,17 +5,26 @@ import QRCode from 'react-native-qrcode-svg';
 import {useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 
-/** Receive dialog — the vault address as a QR + copyable text, like the web deposit dialog. */
+/**
+ * Receive dialog — the vault address as a QR + copyable text, like the web deposit dialog.
+ *
+ * `title` and `sub` say whose address it is when it is not the vault's — the owner wallet that pays
+ * network fees (Network fee page) uses the same dialog under its own name.
+ */
 export function ReceiveDialog({
   visible,
   onClose,
   vault,
   networkLabel,
+  title,
+  sub,
 }: {
   visible: boolean;
   onClose: () => void;
   vault: string | null;
   networkLabel: string;
+  title?: string;
+  sub?: string;
 }) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
@@ -40,8 +49,8 @@ export function ReceiveDialog({
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={styles.card} onPress={() => {}}>
-          <Text style={styles.title}>{t('vault.receive')}</Text>
-          <Text style={styles.sub}>{t('mobile.home.your_vault_on', {network: networkLabel})}</Text>
+          <Text style={styles.title}>{title ?? t('vault.receive')}</Text>
+          <Text style={styles.sub}>{sub ?? t('mobile.home.your_vault_on', {network: networkLabel})}</Text>
           {vault ? (
             <View style={styles.qrWrap}>
               <QRCode value={vault} size={200} backgroundColor="white" />
