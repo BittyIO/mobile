@@ -78,8 +78,8 @@ export function SettingsScreen() {
   const [picker, setPicker] = useState<'language' | 'currency' | 'appearance' | 'generation' | null>(null);
   const generation = useVaultGeneration((s) => s.generation);
   const setGeneration = useVaultGeneration((s) => s.setGeneration);
-  // The currency in force (explicit choice, else the language's default) and the setter. Choosing
-  // a language keeps currency in step automatically until the user picks one by hand.
+  // The currency in force (explicit choice, else US dollars) and the setter. Independent of the
+  // language: changing one never changes the other.
   const currency = useDisplayCurrency();
   const setCurrency = useCurrency((s) => s.setCurrency);
   // Which coins may pay the relay fee is one short list of switches, so it is a sheet rather than a
