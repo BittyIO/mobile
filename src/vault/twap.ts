@@ -14,10 +14,14 @@ import {
   KIND_SELL,
   ORDER_TUPLE,
   TWAP_712_TYPES,
+  TWAP_712_TYPES_BOUND,
+  cowAdapterFor,
+  twapBindsVault,
   TWAP_TUPLE,
   buildTwapAppData,
   cowApiBase,
   cowFeeRecipient,
+  orderSignerSig,
 } from '@/core/cow';
 import {VAULT_INTENT_ABI} from '@/core/abi';
 import {assetMeta} from '@/core/assets';
@@ -54,7 +58,7 @@ export async function placeTwap(o: {
   let buyAmountPerPart = parseUnits(o.totalMinBuy, buyDec) / partsBig;
   buyAmountPerPart = buyAmountPerPart - (buyAmountPerPart * FEE_BPS) / BigInt(10000);
 
-  const twap = {
+  const twap: TwapParams = {
     sellToken: o.sellToken,
     buyToken: o.buyToken,
     sellAmountPerPart,
@@ -64,31 +68,70 @@ export async function placeTwap(o: {
     numParts: partsBig,
   };
 
-  // ONE signature authorizes every part.
-  const managerSig = await o.account.signTypedData({
-    domain: {name: 'Gnosis Protocol', version: 'v2', chainId, verifyingContract: GPV2_SETTLEMENT},
-    types: TWAP_712_TYPES,
-    primaryType: 'TwapOrder',
-    message: twap,
-  });
-
-  const base = cowApiBase(o.network);
-  await fetch(`${base}/app_data/${appData}`, {
+  // Register the fee document first (idempotent): every part's order names it, and for a
+  // multi-owner Safe the schedule is posted by whichever owner's signature completes it, later.
+  await fetch(`${cowApiBase(o.network)}/app_data/${appData}`, {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({fullAppData}),
   }).catch(() => {});
 
-  // Part 0: eip1271 payload = abi.encode(order, twap, partIndex=0, managerSig).
-  const validTo = startTime + 1 * o.partDuration;
+  // ONE signature authorizes every part, in the form this vault's adapter hashes: bound to the vault
+  // on the newer builds, bare on the older (core/cow twapBindsVault). A Safe owner's may first have
+  // to be completed by co-owners (vault/safe SafeSignaturePending).
+  const domain = {name: 'Gnosis Protocol', version: 'v2', chainId, verifyingContract: GPV2_SETTLEMENT} as const;
+  const bound = await twapBindsVault(o.network, await cowAdapterFor(o.network, o.vault, o.intentProtocol));
+  const managerSig = bound
+    ? await o.account.signTypedData({domain, types: TWAP_712_TYPES_BOUND, primaryType: 'TwapOrder', message: {vault: o.vault, ...twap}})
+    : await o.account.signTypedData({domain, types: TWAP_712_TYPES, primaryType: 'TwapOrder', message: twap});
+
+  return postTwapSchedule({network: o.network, vault: o.vault, twap, appData, signerSig: orderSignerSig(o.account, managerSig)});
+}
+
+/** A TWAP schedule as signed: every part is these amounts, one part per `partDuration`. */
+export type TwapParams = {
+  sellToken: Address;
+  buyToken: Address;
+  sellAmountPerPart: bigint;
+  buyAmountPerPart: bigint;
+  startTime: bigint;
+  partDuration: bigint;
+  numParts: bigint;
+};
+
+/**
+ * Post a signed schedule's current part to CoW and register the schedule so the server posts the
+ * rest. `signerSig` is the owner's schedule signature as the clone reads it (core/cow
+ * `orderSignerSig`). Split from {placeTwap} so a schedule whose Safe signature was collected later
+ * is posted the same way.
+ *
+ * The part posted is the one whose slot is open NOW — part 0 when posted at once. A schedule
+ * finished by co-owners later than that has already lost the slots that closed meanwhile: a part's
+ * order expires with its slot, and posting one that has would only be refused. Returns the parts
+ * still to run.
+ */
+export async function postTwapSchedule(o: {
+  network: Network;
+  vault: Address;
+  twap: TwapParams;
+  appData: Hex;
+  signerSig: Hex;
+}): Promise<number> {
+  const {twap} = o;
+  const now = BigInt(Math.floor(Date.now() / 1000));
+  const part = now <= twap.startTime ? BigInt(0) : (now - twap.startTime) / twap.partDuration;
+  if (part >= twap.numParts) throw new Error('The schedule has ended; every part\'s time has passed.');
+
+  // Part `part`: eip1271 payload = abi.encode(order, twap, partIndex, managerSig).
+  const validTo = Number(twap.startTime + (part + BigInt(1)) * twap.partDuration);
   const order = {
-    sellToken: o.sellToken,
-    buyToken: o.buyToken,
+    sellToken: twap.sellToken,
+    buyToken: twap.buyToken,
     receiver: o.vault,
-    sellAmount: sellAmountPerPart,
-    buyAmount: buyAmountPerPart,
+    sellAmount: twap.sellAmountPerPart,
+    buyAmount: twap.buyAmountPerPart,
     validTo,
-    appData,
+    appData: o.appData,
     feeAmount: BigInt(0),
     kind: KIND_SELL,
     partiallyFillable: false,
@@ -97,20 +140,20 @@ export async function placeTwap(o: {
   };
   const payload = encodeAbiParameters(
     [ORDER_TUPLE, TWAP_TUPLE, {type: 'uint256'}, {type: 'bytes'}],
-    [order, twap, BigInt(0), managerSig],
+    [order, twap, part, o.signerSig],
   );
 
-  const res = await fetch(`${base}/orders`, {
+  const res = await fetch(`${cowApiBase(o.network)}/orders`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
-      sellToken: o.sellToken,
-      buyToken: o.buyToken,
+      sellToken: twap.sellToken,
+      buyToken: twap.buyToken,
       receiver: o.vault,
-      sellAmount: sellAmountPerPart.toString(),
-      buyAmount: buyAmountPerPart.toString(),
+      sellAmount: twap.sellAmountPerPart.toString(),
+      buyAmount: twap.buyAmountPerPart.toString(),
       validTo,
-      appData,
+      appData: o.appData,
       feeAmount: '0',
       kind: 'sell',
       partiallyFillable: false,
@@ -121,29 +164,29 @@ export async function placeTwap(o: {
       buyTokenBalance: 'erc20',
     }),
   });
-  if (!res.ok) throw new Error(`CoW rejected part 0: ${await res.text()}`);
+  if (!res.ok) throw new Error(`CoW rejected part ${part}: ${await res.text()}`);
 
-  // Persist the schedule + the single signature so the server cron posts parts 1..N-1.
+  // Persist the schedule + the single signature so the server cron posts the parts after this one.
   await fetch(apiUrl('/api/ethereum/vaults/twap', o.network), {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
       vaultAddress: o.vault,
       side: 'sell',
-      sellToken: o.sellToken,
-      buyToken: o.buyToken,
-      sellAmountPerPart: sellAmountPerPart.toString(),
-      buyAmountMinPerPart: buyAmountPerPart.toString(),
-      startTime,
-      partDuration: o.partDuration,
+      sellToken: twap.sellToken,
+      buyToken: twap.buyToken,
+      sellAmountPerPart: twap.sellAmountPerPart.toString(),
+      buyAmountMinPerPart: twap.buyAmountPerPart.toString(),
+      startTime: Number(twap.startTime),
+      partDuration: Number(twap.partDuration),
       span: 0,
-      parts: o.parts,
-      appData,
-      signature: managerSig,
+      parts: Number(twap.numParts),
+      appData: o.appData,
+      signature: o.signerSig,
     }),
   }).catch(() => {});
 
-  return o.parts;
+  return Number(twap.numParts - part);
 }
 
 export type TwapSchedule = {

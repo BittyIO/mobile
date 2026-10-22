@@ -95,7 +95,10 @@ async function activationCoin(network: Network, vault: Address, stableCoin: Addr
   return eth + wrapped > BigInt(0) ? {coin: born.weth, weth: true} : {coin: stableCoin, weth: false};
 }
 
-/** How long a v1.0.0 activation signature stays spendable — the same window a relayed write gets. */
+/**
+ * How long a v1.0.0 activation signature stays spendable — the same window a relayed write gets, or
+ * the signer's own when its signature takes longer to collect (a multi-owner Safe).
+ */
 const ACTIVATION_DEADLINE_SECONDS = 600;
 
 const DECIMALS_ABI = parseAbi(['function decimals() view returns (uint8)']);
@@ -175,7 +178,7 @@ export async function activateVault(o: {
   } as const;
   // v1.0.3 signs the flag as `allowlistEnabled` with no expiry; v1.0.0 renames it and adds `deadline`.
   const legacy = isLegacy();
-  const deadline = BigInt(Math.floor(Date.now() / 1000) + ACTIVATION_DEADLINE_SECONDS);
+  const deadline = BigInt(Math.floor(Date.now() / 1000) + (o.account.approvalWindowSeconds ?? ACTIVATION_DEADLINE_SECONDS));
   const signature = legacy
     ? await o.account.signTypedData({
         domain,
@@ -203,20 +206,49 @@ export async function activateVault(o: {
         },
       });
 
+  const {hash} = await submitActivation({
+    network: o.network,
+    factory,
+    owner: o.account.address,
+    stableCoin: coin,
+    feeAmount,
+    allowlistEnabled: o.allowlistEnabled,
+    calls,
+    // Signed only on v1.0.0, where the factory refuses the activation after it.
+    deadline: legacy ? undefined : deadline,
+    signature,
+  });
+  return {hash, vault, feeAmount};
+}
+
+/**
+ * Hand a signed activation to the relayer. Split from {activateVault} so an activation whose
+ * signature was collected later — a multi-owner Safe's (see ./safe-finish) — goes the same way.
+ */
+export async function submitActivation(o: {
+  network: Network;
+  factory: Address;
+  owner: Address;
+  stableCoin: Address;
+  feeAmount: bigint;
+  allowlistEnabled: boolean;
+  calls: readonly Hex[];
+  deadline?: bigint;
+  signature: Hex;
+}): Promise<{hash: Hex; vault: Address}> {
   const res = await fetch(apiUrl('/api/ethereum/vaults/activate', o.network), {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
-      owner: o.account.address,
-      stableCoinAddress: coin,
-      feeAmount: feeAmount.toString(),
-      signature,
+      owner: o.owner,
+      stableCoinAddress: o.stableCoin,
+      feeAmount: o.feeAmount.toString(),
+      signature: o.signature,
       version: generationConfig().apiVersion,
-      factory,
+      factory: o.factory,
       allowlistEnabled: o.allowlistEnabled,
-      calls,
-      // Signed only on v1.0.0, where the factory refuses the activation after it.
-      ...(legacy ? {} : {deadline: deadline.toString()}),
+      calls: o.calls,
+      ...(o.deadline === undefined ? {} : {deadline: o.deadline.toString()}),
     }),
   });
 
@@ -224,8 +256,6 @@ export async function activateVault(o: {
     | {ok?: boolean; hash?: Hex; vault?: Address; reason?: string; error?: string}
     | null;
 
-  if (json?.ok && json.hash && json.vault) {
-    return {hash: json.hash, vault: json.vault, feeAmount};
-  }
+  if (json?.ok && json.hash && json.vault) return {hash: json.hash, vault: json.vault};
   throw new Error(json?.reason ?? json?.error ?? `Activation failed (${res.status})`);
 }

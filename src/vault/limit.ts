@@ -11,7 +11,7 @@
 import {encodeAbiParameters, parseAbi, parseUnits, type Address, type Hex} from 'viem';
 import type {Signer} from '@/wallet/signer';
 import {apiFetch, CHAIN_ID, publicClientFor, type Network} from '@/core/chain';
-import {BALANCE_ERC20, COW_PARTNER_FEE_BPS, GPV2_SETTLEMENT, KIND_BUY, KIND_SELL, LIMIT_APP_DATA_HASHES, ORDER_712_TYPES, ORDER_TUPLE, buildLimitAppData, cowApiBase, cowFeeRecipient, cowSupported} from '@/core/cow';
+import {BALANCE_ERC20, COW_PARTNER_FEE_BPS, GPV2_SETTLEMENT, KIND_BUY, KIND_SELL, LIMIT_APP_DATA_HASHES, ORDER_712_TYPES, ORDER_TUPLE, buildLimitAppData, cowApiBase, cowFeeRecipient, cowSupported, orderSignerSig} from '@/core/cow';
 import {VAULT_INTENT_ABI} from '@/core/abi';
 import {assetMeta} from '@/core/assets';
 import {relayVaultWrite, relayVaultMulticall, type VaultCall} from './relay';
@@ -71,51 +71,8 @@ export async function placeLimitOrder(o: {
   if (o.kind === 'sell') buyAmount = buyAmount - (buyAmount * FEE_BPS) / BigInt(10000);
   else sellAmount = sellAmount + (sellAmount * FEE_BPS) / BigInt(10000);
 
-  // 1. Manager (owner) signs the order — exactly as an EOA signs its own CoW order.
-  const managerSig = await o.account.signTypedData({
-    domain: {name: 'Gnosis Protocol', version: 'v2', chainId, verifyingContract: GPV2_SETTLEMENT},
-    types: ORDER_712_TYPES,
-    primaryType: 'Order',
-    message: {
-      sellToken: o.sellToken,
-      buyToken: o.buyToken,
-      receiver: o.vault,
-      sellAmount,
-      buyAmount,
-      validTo,
-      appData,
-      feeAmount: BigInt(0),
-      kind: o.kind,
-      partiallyFillable: false,
-      sellTokenBalance: 'erc20',
-      buyTokenBalance: 'erc20',
-    },
-  });
-
-  // 2. eip1271 payload = abi.encode(GPv2Order (bytes32 kind/balance), managerSig, appDataSalt=0).
-  const signature = encodeAbiParameters(
-    [ORDER_TUPLE, {type: 'bytes'}, {type: 'uint256'}],
-    [
-      {
-        sellToken: o.sellToken,
-        buyToken: o.buyToken,
-        receiver: o.vault,
-        sellAmount,
-        buyAmount,
-        validTo,
-        appData,
-        feeAmount: BigInt(0),
-        kind: o.kind === 'sell' ? KIND_SELL : KIND_BUY,
-        partiallyFillable: false,
-        sellTokenBalance: BALANCE_ERC20,
-        buyTokenBalance: BALANCE_ERC20,
-      },
-      managerSig,
-      BigInt(0),
-    ],
-  );
-
-  // 3. Register the fee document (idempotent), then post the order.
+  // Register the fee document first (idempotent): CoW needs it to resolve the fee whoever posts the
+  // order, and for a multi-owner Safe that is whichever owner's signature completes it, later.
   const base = cowApiBase(o.network);
   await fetch(`${base}/app_data/${appData}`, {
     method: 'PUT',
@@ -123,23 +80,84 @@ export async function placeLimitOrder(o: {
     body: JSON.stringify({fullAppData}),
   }).catch(() => {});
 
-  const res = await fetch(`${base}/orders`, {
+  const order: LimitOrderFields = {
+    sellToken: o.sellToken,
+    buyToken: o.buyToken,
+    receiver: o.vault,
+    sellAmount,
+    buyAmount,
+    validTo,
+    appData,
+    kind: o.kind,
+  };
+
+  // 1. Manager (owner) signs the order — exactly as an EOA signs its own CoW order. A Safe owner's
+  // signature may first have to be completed by co-owners (vault/safe SafeSignaturePending).
+  const managerSig = await o.account.signTypedData({
+    domain: {name: 'Gnosis Protocol', version: 'v2', chainId, verifyingContract: GPV2_SETTLEMENT},
+    types: ORDER_712_TYPES,
+    primaryType: 'Order',
+    message: {...order, feeAmount: BigInt(0), partiallyFillable: false, sellTokenBalance: 'erc20', buyTokenBalance: 'erc20'},
+  });
+
+  return postLimitOrder({network: o.network, order, signerSig: orderSignerSig(o.account, managerSig)});
+}
+
+/** The fields of a vault limit order that vary; the rest are fixed (fill-or-kill, ERC-20, no fee). */
+export type LimitOrderFields = {
+  sellToken: Address;
+  buyToken: Address;
+  receiver: Address; // the vault
+  sellAmount: bigint;
+  buyAmount: bigint;
+  validTo: number;
+  appData: Hex;
+  kind: 'sell' | 'buy';
+};
+
+/**
+ * Wrap an order's signature in the eip1271 payload the vault's intent clone verifies and post it to
+ * CoW. `signerSig` is the owner's signature as the clone reads it (core/cow `orderSignerSig`).
+ * Split from {placeLimitOrder} so an order whose Safe signature was collected later is posted the
+ * same way. Returns the CoW order UID.
+ */
+export async function postLimitOrder(o: {network: Network; order: LimitOrderFields; signerSig: Hex}): Promise<string> {
+  const {order} = o;
+  // 2. eip1271 payload = abi.encode(GPv2Order (bytes32 kind/balance), managerSig, appDataSalt=0).
+  const signature = encodeAbiParameters(
+    [ORDER_TUPLE, {type: 'bytes'}, {type: 'uint256'}],
+    [
+      {
+        ...order,
+        feeAmount: BigInt(0),
+        kind: order.kind === 'sell' ? KIND_SELL : KIND_BUY,
+        partiallyFillable: false,
+        sellTokenBalance: BALANCE_ERC20,
+        buyTokenBalance: BALANCE_ERC20,
+      },
+      o.signerSig,
+      BigInt(0),
+    ],
+  );
+
+  // 3. Post the order.
+  const res = await fetch(`${cowApiBase(o.network)}/orders`, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
-      sellToken: o.sellToken,
-      buyToken: o.buyToken,
-      receiver: o.vault,
-      sellAmount: sellAmount.toString(),
-      buyAmount: buyAmount.toString(),
-      validTo,
-      appData,
+      sellToken: order.sellToken,
+      buyToken: order.buyToken,
+      receiver: order.receiver,
+      sellAmount: order.sellAmount.toString(),
+      buyAmount: order.buyAmount.toString(),
+      validTo: order.validTo,
+      appData: order.appData,
       feeAmount: '0',
-      kind: o.kind,
+      kind: order.kind,
       partiallyFillable: false,
       signingScheme: 'eip1271',
       signature,
-      from: o.vault,
+      from: order.receiver,
       sellTokenBalance: 'erc20',
       buyTokenBalance: 'erc20',
     }),

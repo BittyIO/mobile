@@ -15,6 +15,7 @@ import {useAppearance, APPEARANCES, useColors, useStyles, type Colors} from '@/t
 import {API_BASE} from '@/core/chain';
 import {SettingsRow as Row, makeSettingsStyles} from '@/components/SettingsRow';
 import {useVaultPicker} from '@/components/useVaultPicker';
+import {useVaults} from '@/core/vault-store';
 import {useVaultVersionRow} from '@/components/useVaultVersionRow';
 import {PickerSheet} from '@/components/AssetPicker';
 import {GENERATIONS, VAULT_GENERATIONS, useVaultGeneration, type VaultGeneration} from '@/core/vault-generation';
@@ -62,6 +63,7 @@ export function SettingsScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const {language, setLanguage} = useLanguage();
   const vaultPicker = useVaultPicker();
+  const isSafeVault = useVaults((st) => !!st.vaults.find((v) => v.index === st.activeIndex)?.safe);
   const version = useVaultVersionRow();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
@@ -114,6 +116,10 @@ export function SettingsScreen() {
             lived in the header for a while, where it was permanently on screen for a control
             almost nobody touches; this is where someone goes LOOKING for it. */}
         <Row icon="vault" title={t('mobile.settings.choose_vault')} value={vaultPicker.value} onPress={vaultPicker.open} />
+        {/* Only for a vault owned by a Safe: where its owners co-sign what one of them started. */}
+        {isSafeVault ? (
+          <Row icon="security" title={t('mobile.safe.approvals')} sub={t('mobile.safe.approvals_sub')} onPress={() => nav.navigate('SafeApprovals')} />
+        ) : null}
         {/* One row for the whole subject: which coins a fee may be billed to, and the float
             that is never spent. They were two rows opening two sheets, and each left the
             other's question hanging. */}

@@ -15,6 +15,11 @@ import {MMKV} from 'react-native-mmkv';
  * Owner addresses are cached here as well, which is what keeps switching free: deriving one needs
  * the mnemonic and therefore Face ID, so it is done once when the vault is added and read from
  * here every time after.
+ *
+ * A vault can also be owned by a Safe. Its owner is then the Safe's address — the factory salts on
+ * that, so the vault is the Safe's, at the same address any owner of the Safe computes — and the
+ * key on this device is just one of the Safe's owners, at `signerIndex` of the same phrase. Nothing
+ * else about it is stored: the Safe's owners and threshold are read from the chain when signing.
  */
 const store = new MMKV({id: 'bitty.vaults'});
 const KEY = 'vaults';
@@ -27,6 +32,15 @@ export type VaultRef = {
   name: string;
   /** The owner address at that index, cached so a switch costs no biometric prompt. */
   owner: `0x${string}` | null;
+  /**
+   * Set when the vault is owned by a Safe: the Safe's address, which is then also `owner`. The
+   * index is this entry's own id and never derives a key.
+   */
+  safe?: `0x${string}`;
+  /** For a Safe vault, the BIP-44 index of this device's key that is an owner of the Safe. */
+  signerIndex?: number;
+  /** That key's address, cached like `owner` so the approvals screen can tell what it signed. */
+  signer?: `0x${string}`;
 };
 
 function load(): VaultRef[] {
@@ -51,6 +65,11 @@ type State = {
   select: (index: number) => void;
   /** Append the next index. The caller supplies the owner it just derived. */
   add: (owner: `0x${string}`) => number;
+  /**
+   * Append a vault owned by `safe`, signed for by this device's key at `signerIndex`. Its index is
+   * a fresh id, like any other vault's. Adding a Safe that is already here selects that one instead.
+   */
+  addSafe: (safe: `0x${string}`, signerIndex: number, signer: `0x${string}`) => number;
 };
 
 export const useVaults = create<State>((set, get) => ({
@@ -82,7 +101,22 @@ export const useVaults = create<State>((set, get) => ({
     set({vaults, activeIndex: next});
     return next;
   },
+
+  addSafe: (safe, signerIndex, signer) => {
+    const existing = get().vaults.find((v) => v.safe?.toLowerCase() === safe.toLowerCase());
+    const index = existing?.index ?? Math.max(...get().vaults.map((v) => v.index)) + 1;
+    const vaults = existing
+      ? get().vaults.map((v) => (v.index === index ? {...v, signerIndex, signer} : v))
+      : [...get().vaults, {index, name: '', owner: safe, safe, signerIndex, signer}];
+    store.set(KEY, JSON.stringify(vaults));
+    store.set(ACTIVE, index);
+    set({vaults, activeIndex: index});
+    return index;
+  },
 }));
+
+/** The BIP-44 index whose key signs for a vault: its own, or for a Safe vault the co-owner key's. */
+export const keyIndexOf = (v: VaultRef): number => (v.safe ? (v.signerIndex ?? 0) : v.index);
 
 /** The label to show: what the user named it, or "Vault {n}" counting from one. */
 export function vaultLabel(v: VaultRef, fallback: (n: number) => string): string {

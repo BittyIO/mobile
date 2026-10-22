@@ -13,6 +13,7 @@ import {home} from './home';
 import {trade} from './trade';
 import {earn} from './earn';
 import {actions} from './actions';
+import {safe} from './safe';
 
 export const MOBILE_STRINGS: Record<string, MobileTable> = {
   settings,
@@ -23,4 +24,5 @@ export const MOBILE_STRINGS: Record<string, MobileTable> = {
   trade,
   earn,
   actions,
+  safe,
 };
