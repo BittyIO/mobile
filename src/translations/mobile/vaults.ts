@@ -3,6 +3,9 @@ import type {MobileTable} from './index';
 // Settings › Vaults: the vault list, the vaults found for this device's keys, and removing one.
 export const vaults: MobileTable = {
   en: {
+    accept: 'Accept',
+    accept_title: 'Accept ownership',
+    pending_note: 'Handed to you. Accept to take ownership.',
     title: 'Vaults',
     tag_safe: 'Safe',
     tag_received: 'Received',
@@ -15,6 +18,9 @@ export const vaults: MobileTable = {
     remove: 'Remove',
   },
   zh: {
+    accept: '接受',
+    accept_title: '接受所有权',
+    pending_note: '已转给你，接受后即归你所有。',
     title: '金库',
     tag_safe: 'Safe',
     tag_received: '已接收',
@@ -27,6 +33,9 @@ export const vaults: MobileTable = {
     remove: '移除',
   },
   'zh-TW': {
+    accept: '接受',
+    accept_title: '接受所有權',
+    pending_note: '已轉給你，接受後即歸你所有。',
     title: '金庫',
     tag_safe: 'Safe',
     tag_received: '已接收',
@@ -39,6 +48,9 @@ export const vaults: MobileTable = {
     remove: '移除',
   },
   ja: {
+    accept: '受け入れる',
+    accept_title: '所有権を受け入れる',
+    pending_note: 'あなたに譲渡されました。受け入れると所有者になります。',
     title: 'ボールト',
     tag_safe: 'Safe',
     tag_received: '受け取り済み',
@@ -51,6 +63,9 @@ export const vaults: MobileTable = {
     remove: '削除',
   },
   ko: {
+    accept: '수락',
+    accept_title: '소유권 수락',
+    pending_note: '당신에게 이전되었습니다. 수락하면 소유자가 됩니다.',
     title: '볼트',
     tag_safe: 'Safe',
     tag_received: '받음',
@@ -63,6 +78,9 @@ export const vaults: MobileTable = {
     remove: '제거',
   },
   fr: {
+    accept: 'Accepter',
+    accept_title: 'Accepter la propriété',
+    pending_note: 'Vous a été transféré. Acceptez pour en devenir propriétaire.',
     title: 'Coffres',
     tag_safe: 'Safe',
     tag_received: 'Reçu',
@@ -75,6 +93,9 @@ export const vaults: MobileTable = {
     remove: 'Retirer',
   },
   es: {
+    accept: 'Aceptar',
+    accept_title: 'Aceptar la propiedad',
+    pending_note: 'Te la han transferido. Acepta para ser su propietario.',
     title: 'Bóvedas',
     tag_safe: 'Safe',
     tag_received: 'Recibida',
@@ -87,6 +108,9 @@ export const vaults: MobileTable = {
     remove: 'Quitar',
   },
   de: {
+    accept: 'Annehmen',
+    accept_title: 'Eigentum annehmen',
+    pending_note: 'An dich übertragen. Nimm an, um Eigentümer zu werden.',
     title: 'Tresore',
     tag_safe: 'Safe',
     tag_received: 'Erhalten',
@@ -99,6 +123,9 @@ export const vaults: MobileTable = {
     remove: 'Entfernen',
   },
   'pt-BR': {
+    accept: 'Aceitar',
+    accept_title: 'Aceitar a propriedade',
+    pending_note: 'Foi transferido para você. Aceite para se tornar o dono.',
     title: 'Cofres',
     tag_safe: 'Safe',
     tag_received: 'Recebido',
@@ -111,6 +138,9 @@ export const vaults: MobileTable = {
     remove: 'Remover',
   },
   hi: {
+    accept: 'स्वीकार करें',
+    accept_title: 'स्वामित्व स्वीकार करें',
+    pending_note: 'आपको सौंपा गया है। स्वामी बनने के लिए स्वीकार करें।',
     title: 'वॉल्ट',
     tag_safe: 'Safe',
     tag_received: 'प्राप्त',
@@ -123,6 +153,9 @@ export const vaults: MobileTable = {
     remove: 'हटाएँ',
   },
   tr: {
+    accept: 'Kabul et',
+    accept_title: 'Sahipliği kabul et',
+    pending_note: 'Size devredildi. Sahibi olmak için kabul edin.',
     title: 'Kasalar',
     tag_safe: 'Safe',
     tag_received: 'Alındı',
@@ -135,6 +168,9 @@ export const vaults: MobileTable = {
     remove: 'Kaldır',
   },
   ru: {
+    accept: 'Принять',
+    accept_title: 'Принять владение',
+    pending_note: 'Передано вам. Примите, чтобы стать владельцем.',
     title: 'Хранилища',
     tag_safe: 'Safe',
     tag_received: 'Получено',
@@ -147,6 +183,9 @@ export const vaults: MobileTable = {
     remove: 'Убрать',
   },
   id: {
+    accept: 'Terima',
+    accept_title: 'Terima kepemilikan',
+    pending_note: 'Dialihkan kepada Anda. Terima untuk menjadi pemiliknya.',
     title: 'Brankas',
     tag_safe: 'Safe',
     tag_received: 'Diterima',
@@ -159,6 +198,9 @@ export const vaults: MobileTable = {
     remove: 'Hapus',
   },
   vi: {
+    accept: 'Chấp nhận',
+    accept_title: 'Chấp nhận quyền sở hữu',
+    pending_note: 'Đã được chuyển cho bạn. Chấp nhận để trở thành chủ sở hữu.',
     title: 'Két',
     tag_safe: 'Safe',
     tag_received: 'Đã nhận',
@@ -171,6 +213,9 @@ export const vaults: MobileTable = {
     remove: 'Gỡ',
   },
   th: {
+    accept: 'ยอมรับ',
+    accept_title: 'ยอมรับความเป็นเจ้าของ',
+    pending_note: 'ถูกโอนมาให้คุณ ยอมรับเพื่อเป็นเจ้าของ',
     title: 'วอลต์',
     tag_safe: 'Safe',
     tag_received: 'ได้รับมา',

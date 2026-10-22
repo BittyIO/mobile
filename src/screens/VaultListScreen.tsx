@@ -11,6 +11,11 @@ import {useWallet} from '@/wallet/store';
 import * as keyring from '@/wallet/keyring';
 import {fetchSafe, SafeApiError} from '@/vault/safe';
 import {useVaultDirectory, type FoundVault} from '@/vault/owned-vaults';
+import {acceptOwnership} from '@/vault/ownership';
+import {relayGasFor} from '@/vault/fee-quote';
+import {useAssetCatalog} from '@/core/asset-catalog';
+import {useConfirmAction} from '@/components/ConfirmAction';
+import {showTx} from '@/components/Toast';
 import {SettingsGroup, makeSettingsStyles} from '@/components/SettingsRow';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
@@ -51,6 +56,8 @@ export function VaultListScreen() {
   const [safeOpen, setSafeOpen] = useState(false);
   const [safeDraft, setSafeDraft] = useState('');
   const [safeError, setSafeError] = useState<string | null>(null);
+  const stable = useAssetCatalog(network).find((a) => a.kind === 'stable')?.address;
+  const {ask, sheet} = useConfirmAction();
 
   const label = (n: number) => t('mobile.app.vault_n', {n});
   const commit = () => {
@@ -93,6 +100,30 @@ export function VaultListScreen() {
       setBusy(false);
     }
   };
+
+  /**
+   * Take a vault handed to one of this device's keys and not yet accepted — the second step of the
+   * two-step handover the vaults deployed today use — then list it and choose it. Signed by THAT
+   * key, which need not be the key of the vault in front.
+   */
+  const onAccept = (f: FoundVault) =>
+    ask({
+      title: t('mobile.vaults.accept_title'),
+      message: f.vault,
+      gas: relayGasFor({}),
+      run: async () => {
+        if (!stable) return;
+        const tx = showTx(t('mobile.vaults.accept_title'), network);
+        try {
+          const account = await keyring.unlock(f.key.index);
+          if (!account) return tx.done();
+          tx.success(await acceptOwnership({account, vault: f.vault, network, stableCoin: stable}));
+          onAddFound(f);
+        } catch (e) {
+          tx.error(String((e as Error)?.message ?? e));
+        }
+      },
+    });
 
   /** Put a vault this device's key owns by transfer on the list, on this chain, and choose it. */
   const onAddFound = (f: FoundVault) => {
@@ -220,9 +251,11 @@ export function VaultListScreen() {
             <View key={f.vault} style={[styles.vaultRow, i < found.length - 1 && styles.rowDivider]}>
               <View style={styles.vaultText}>
                 <Text style={styles.addr}>{f.vault}</Text>
+                {/* Handed to this key and waiting for it to accept: it is not this key's until then. */}
+                {f.pending ? <Text style={styles.goneText}>{t('mobile.vaults.pending_note')}</Text> : null}
               </View>
-              <Pressable onPress={() => onAddFound(f)} hitSlop={8} accessibilityRole="button">
-                <Text style={styles.link}>{t('mobile.vaults.add')}</Text>
+              <Pressable onPress={() => (f.pending ? onAccept(f) : onAddFound(f))} hitSlop={8} accessibilityRole="button">
+                <Text style={styles.link}>{t(f.pending ? 'mobile.vaults.accept' : 'mobile.vaults.add')}</Text>
               </Pressable>
             </View>
           ))}
@@ -260,6 +293,7 @@ export function VaultListScreen() {
           </View>
         ) : null}
       </SettingsGroup>
+      {sheet}
     </ScrollView>
   );
 }

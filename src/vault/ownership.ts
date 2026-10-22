@@ -16,6 +16,15 @@ export async function transferOwnership(o: Base & {newOwner: Address}): Promise<
   return hash;
 }
 
+/**
+ * Take a vault handed to this key: the second step of the two-step handover the vaults deployed
+ * today use. Signed by the RECEIVING key — `account` is that key, and `vault` is not its own.
+ */
+export async function acceptOwnership(o: Base): Promise<Hex> {
+  const {hash} = await relayVaultWrite({...o, abi: VAULT_OWNERSHIP_ABI, functionName: 'acceptOwnership', args: []});
+  return hash;
+}
+
 /** Call off a handover still waiting out the timelock. */
 export async function cancelOwnershipTransfer(o: Base): Promise<Hex> {
   const {hash} = await relayVaultWrite({...o, abi: VAULT_OWNERSHIP_ABI, functionName: 'cancelOwnershipTransfer', args: []});

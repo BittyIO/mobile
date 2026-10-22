@@ -17,15 +17,18 @@ import {vaultAddressOf} from '@/core/active-vault';
 
 const OWNER_ABI = parseAbi(['function owner() view returns (address)']);
 
-/** The vaults `owner` owns on `network`, as the server knows them. Empty when it cannot say. */
-export async function fetchOwnedVaults(network: Network, owner: Address): Promise<Address[]> {
+/**
+ * On `network`, the vaults `owner` owns, and those handed to it that it has yet to accept (the
+ * two-step handover of the vaults deployed today), as the server knows them. Empty when it cannot say.
+ */
+export async function fetchOwnedVaults(network: Network, owner: Address): Promise<{owned: Address[]; pending: Address[]}> {
   try {
     const res = await apiFetch(apiUrl(`/api/ethereum/vaults/owned-by/${owner}`, network));
-    if (!res.ok) return [];
-    const json = (await res.json()) as {vaults?: string[]};
-    return (json.vaults ?? []).map((v) => getAddress(v));
+    if (!res.ok) return {owned: [], pending: []};
+    const json = (await res.json()) as {vaults?: string[]; pending?: string[]};
+    return {owned: (json.vaults ?? []).map((v) => getAddress(v)), pending: (json.pending ?? []).map((v) => getAddress(v))};
   } catch {
-    return [];
+    return {owned: [], pending: []};
   }
 }
 
@@ -54,7 +57,8 @@ export function deviceKeys(vaults: VaultRef[]): DeviceKey[] {
   return [...out.values()];
 }
 
-export type FoundVault = {vault: Address; key: DeviceKey};
+/** A vault for one of this device's keys that is not on the list: owned, or waiting to be accepted. */
+export type FoundVault = {vault: Address; key: DeviceKey; pending: boolean};
 
 /**
  * On `network`: the vaults this device's keys own that are not on the list yet, and the list's
@@ -74,9 +78,11 @@ export function useVaultDirectory(network: Network, vaults: VaultRef[], refreshK
       const lists = await Promise.all(keys.map((k) => fetchOwnedVaults(network, k.address)));
       const add: FoundVault[] = [];
       keys.forEach((k, i) => {
-        for (const vault of lists[i]) {
-          if (listed.has(vault.toLowerCase()) || add.some((f) => f.vault.toLowerCase() === vault.toLowerCase())) continue;
-          add.push({vault, key: k});
+        for (const [vaults_, pending] of [[lists[i].owned, false], [lists[i].pending, true]] as const) {
+          for (const vault of vaults_) {
+            if (listed.has(vault.toLowerCase()) || add.some((f) => f.vault.toLowerCase() === vault.toLowerCase())) continue;
+            add.push({vault, key: k, pending});
+          }
         }
       });
       // Whose each listed vault is now. A Safe vault answers to the Safe, every other to its key.
