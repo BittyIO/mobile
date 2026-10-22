@@ -68,7 +68,7 @@ export function LockScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.center}>
         <Image source={require('@/assets/logo.png')} style={styles.logo} resizeMode="contain" />
-        <Text style={styles.title}>Bitty</Text>
+        <Text style={styles.title}>Bitty Vault</Text>
       </View>
       <View style={styles.actions}>
         {!risk.ok && (
