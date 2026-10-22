@@ -11,7 +11,6 @@ import {cancelOwnershipTransfer, transferOwnership} from '@/vault/ownership';
 import {Button} from '@/components/Button';
 import {PendingRow} from '@/components/PendingRow';
 import {SettingsGroup, SettingsRow} from '@/components/SettingsRow';
-import {fmtDuration} from '@/components/riskFormat';
 import {useVaultWrite} from '@/components/useVaultWrite';
 import {useWallet} from '@/wallet/store';
 import {useT} from '@/i18n';
@@ -20,10 +19,9 @@ import {useColors, useStyles, type Colors} from '@/theme';
 /**
  * Security › Transfer ownership (v1.0.0) — hand the vault to another key.
  *
- * What it does and what it costs the owner come first, with the wait spelled out: the handover is
- * queued behind the vault's risk timelock, like every other loosening, and can be called off until
- * it has run. Then who owns the vault now, and either the handover waiting out the timelock (with
- * its ring and Cancel) or the address field that starts one.
+ * Who owns the vault now, then either the handover waiting out the vault's risk timelock (with its
+ * ring and Cancel — it is queued like every other loosening and can be called off until it has run)
+ * or the address field that starts one. What the handover means is said once, in the confirm.
  */
 export function TransferOwnershipScreen() {
   const {t} = useT();
@@ -102,21 +100,8 @@ export function TransferOwnershipScreen() {
       contentContainerStyle={styles.body}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} tintColor={c.text} colors={[c.accent]} />}>
       <Pressable accessible={false} onPress={Keyboard.dismiss} style={styles.section}>
-        {/* What this is, the wait, and what the new owner needs — before anything can be typed. */}
-        <View style={styles.explain}>
-          <Text style={styles.p}>{t('mobile.vault.transfer_ownership_desc')}</Text>
-          {timelock != null ? (
-            <Text style={styles.p}>
-              {timelock > 0n
-                ? t('mobile.vault.transfer_ownership_wait', {time: fmtDuration(timelock, t)})
-                : t('mobile.vault.transfer_ownership_now')}
-            </Text>
-          ) : null}
-          <Text style={styles.p}>{t('mobile.vault.transfer_ownership_address_note')}</Text>
-        </View>
-
         <SettingsGroup>
-          <SettingsRow icon="delegation" title={t('mobile.vault.current_owner')} value={owner ? shortAddress(owner) : undefined} chevron={false} last />
+          <SettingsRow icon="ownership" title={t('mobile.vault.current_owner')} value={owner ? shortAddress(owner) : undefined} chevron={false} last />
         </SettingsGroup>
 
         {pending ? (
@@ -162,8 +147,6 @@ const makeStyles = (c: Colors) =>
     container: {flex: 1, backgroundColor: c.bg},
     body: {flexGrow: 1, padding: 16, gap: 20},
     section: {flex: 1, gap: 16},
-    explain: {gap: 10, paddingHorizontal: 4},
-    p: {color: c.subtext, fontSize: 14, lineHeight: 20},
     group: {backgroundColor: c.card, borderRadius: 20, overflow: 'hidden'},
     input: {minHeight: 52, paddingHorizontal: 16, paddingVertical: 14, color: c.text, fontSize: 15},
     inputBad: {color: c.danger},

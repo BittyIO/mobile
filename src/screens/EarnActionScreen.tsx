@@ -11,7 +11,7 @@ import {useEndCaret} from '@/components/useEndCaret';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {useVaultBalances} from '@/vault/useVaultBalances';
-import {ownerVaultAddress, balanceOfSymbol} from '@/vault/read';
+import {balanceOfSymbol} from '@/vault/read';
 import {depositFromSources, depositToProtocol, withdrawFromProtocol} from '@/vault/actions';
 import {parseUnits} from 'viem';
 import {Sheet} from '@/components/Sheet';
@@ -30,6 +30,7 @@ import {useColors, useStyles, type Colors} from '@/theme';
 import {displaySymbol, fmtNum, fmtShort, floor6, round6} from '@/core/format';
 import {useT} from '@/i18n';
 import {useAssetCatalog} from '@/core/asset-catalog';
+import {activeVaultAddress} from '@/core/active-vault';
 
 /**
  * Deposit / Withdraw. `route.params.mode` picks the action. When protocol+asset are passed (a
@@ -276,7 +277,7 @@ export function EarnActionScreen() {
       // Formatted, not the raw field: see the Trade screen's `payLeg`.
       tx = showTx(`${title} · ${fmtShort(Number(amount))} ${displaySymbol(targetSymbol)}`, network);
       nav.goBack();
-      const vault = ownerVaultAddress(owner, network);
+      const vault = activeVaultAddress(network)!;
       const withdrawals = multi ? planWithdrawals() : [];
       const h = withdrawals.length
         ? await depositFromSources({

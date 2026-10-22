@@ -14,8 +14,7 @@ import Svg, {Circle, Path, Rect} from 'react-native-svg';
 import {useAppearance, APPEARANCES, useColors, useStyles, type Colors} from '@/theme';
 import {API_BASE} from '@/core/chain';
 import {SettingsRow as Row, makeSettingsStyles} from '@/components/SettingsRow';
-import {useVaultPicker} from '@/components/useVaultPicker';
-import {useVaults} from '@/core/vault-store';
+import {useVaults, vaultLabel} from '@/core/vault-store';
 import {useVaultVersionRow} from '@/components/useVaultVersionRow';
 import {PickerSheet} from '@/components/AssetPicker';
 import {GENERATIONS, VAULT_GENERATIONS, useVaultGeneration, type VaultGeneration} from '@/core/vault-generation';
@@ -62,7 +61,9 @@ function AppearanceIcon({name, color}: {name: string; color: string}) {
 export function SettingsScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const {language, setLanguage} = useLanguage();
-  const vaultPicker = useVaultPicker();
+  // The vault in front, named as the Vaults page names it.
+  const currentVault = useVaults((s) => s.vaults.find((v) => v.index === s.activeIndex) ?? s.vaults[0]);
+  const currentVaultLabel = currentVault ? vaultLabel(currentVault, (n) => t('mobile.app.vault_n', {n})) : '';
   const isSafeVault = useVaults((st) => !!st.vaults.find((v) => v.index === st.activeIndex)?.safe);
   const version = useVaultVersionRow();
   const headerHeight = useHeaderHeight();
@@ -115,7 +116,7 @@ export function SettingsScreen() {
         {/* First, because which vault you are looking at decides what every row below means. It
             lived in the header for a while, where it was permanently on screen for a control
             almost nobody touches; this is where someone goes LOOKING for it. */}
-        <Row icon="vault" title={t('mobile.settings.choose_vault')} value={vaultPicker.value} onPress={vaultPicker.open} />
+        <Row icon="vault" title={t('mobile.settings.choose_vault')} value={currentVaultLabel} onPress={() => nav.navigate('VaultList')} />
         {/* Only for a vault owned by a Safe: where its owners co-sign what one of them started. */}
         {isSafeVault ? (
           <Row icon="security" title={t('mobile.safe.approvals')} sub={t('mobile.safe.approvals_sub')} onPress={() => nav.navigate('SafeApprovals')} />
@@ -170,7 +171,6 @@ export function SettingsScreen() {
         <Row icon="privacy" title={t('mobile.settings.privacy_policy')} onPress={() => openLink(`${API_BASE}/content/privacy-policy`, t('mobile.settings.privacy_policy'))} last />
       </View>
 
-      {vaultPicker.sheet}
       <PickerSheet
         visible={picker === 'language'}
         title={t('mobile.settings.language')}

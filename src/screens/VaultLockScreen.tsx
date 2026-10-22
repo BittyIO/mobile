@@ -7,10 +7,11 @@ import {getLockLevel, type LockLevel} from '@/vault/risk';
 import {SettingsRow, SettingsGroup} from '@/components/SettingsRow';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
-import {ownerVaultAddress} from '@/vault/read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 import type {LockAction} from '@/screens/VaultLockActionScreen';
 import {useT} from '@/i18n';
 import {useStyles, type Colors} from '@/theme';
+import {LOCK_ICON, LOCK_TITLE} from '@/core/lock-status';
 
 /**
  * Vault lock (Security › Vault lock) — the vault's lock status on top, then only the moves open from
@@ -29,7 +30,7 @@ export function VaultLockScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
   // null while the read is out: nothing is offered until the level is known, because offering
   // "Emergency lock" to a vault that is already locked is a choice that can only fail.
   const [lockLevel, setLockLevel] = useState<LockLevel | null>(null);
@@ -40,10 +41,7 @@ export function VaultLockScreen() {
     }, [vault, network]),
   );
 
-  const status =
-    lockLevel == null
-      ? undefined
-      : t(lockLevel === 2 ? 'mobile.vault.locked_forever' : lockLevel === 1 ? 'mobile.vault.locked_emergency' : 'mobile.vault.unlocked');
+  const status = lockLevel == null ? undefined : t(LOCK_TITLE[lockLevel]);
   const statusHint =
     lockLevel === 2 ? 'mobile.vault.lock_forever_state' : lockLevel === 1 ? 'mobile.vault.lock_emergency_state' : 'mobile.vault.vault_lock_hint';
 
@@ -64,14 +62,15 @@ export function VaultLockScreen() {
       style={styles.container}
       contentContainerStyle={styles.body}>
       <SettingsGroup footer={lockLevel == null ? undefined : t(statusHint)}>
-        <SettingsRow icon="lock" title={t('vault.status')} value={status} chevron={false} last />
+        <SettingsRow icon={LOCK_ICON[lockLevel ?? 0]} title={t('vault.status')} value={status} chevron={false} last />
       </SettingsGroup>
       {actions.length > 0 ? (
         <SettingsGroup>
           {actions.map((a, i) => (
             <SettingsRow
               key={a.action}
-              icon={a.action === 'unlock' ? 'security' : 'lock'}
+              // Each action wears the icon of the state it leads to.
+              icon={LOCK_ICON[a.action === 'unlock' ? 0 : a.action === 'emergency' ? 1 : 2]}
               title={t(a.title)}
               sub={t(a.hint)}
               onPress={() => nav.navigate('VaultLockAction', {action: a.action})}

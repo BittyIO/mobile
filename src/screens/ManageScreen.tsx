@@ -2,7 +2,7 @@ import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
-import {ownerVaultAddress} from '@/vault/read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 import {isAllowlistEnabled, allowedSet, updateAsset, updateProtocol, setAllowlistEnabled, vaultImplVersion} from '@/vault/manage';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {TokenIcon} from '@/components/TokenIcon';
@@ -66,7 +66,7 @@ export function ManageScreen() {
   const network = useNetwork((s) => s.network);
   const assets = useAssetCatalog(network);
   const stable = assets.find((a) => a.kind === 'stable');
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
   const versions = useAdapterVersions();
 
   // The services come from the server version catalog (the single source shared with the web), not

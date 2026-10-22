@@ -11,7 +11,8 @@ import {useFavoriteSet} from '@/core/favorites-store';
 import {displaySymbol, fmtShort} from '@/core/format';
 import {usdValue} from '@/core/prices';
 import {useNetwork} from '@/core/network-store';
-import {balanceOfSymbol, ownerVaultAddress} from '@/vault/read';
+import {balanceOfSymbol} from '@/vault/read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {usePrices} from '@/vault/usePrices';
 import {useVaultPositions} from '@/vault/useVaultPositions';
@@ -40,7 +41,7 @@ export function SelectAssetScreen() {
 
   const network = useNetwork((s) => s.network);
   const owner = useWallet((s) => s.address);
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
   const catalog = useAssetCatalog(network);
   const balances = useVaultBalances(network);
   const positions = useVaultPositions(vault, network);

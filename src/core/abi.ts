@@ -49,6 +49,8 @@ export const VAULT_OWNERSHIP_ABI = parseAbi([
   'function owner() view returns (address)',
   'function transferOwnership(address newOwner)',
   'function cancelOwnershipTransfer()',
+  // The vaults deployed today hand over in two steps (OpenZeppelin Ownable2Step): the receiver accepts.
+  'function acceptOwnership()',
 ]);
 
 /**

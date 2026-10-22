@@ -11,7 +11,7 @@ import {useNetwork} from '@/core/network-store';
 import {gasReserveAmount, setGasReserveAmount} from '@/core/prefs';
 import {useWallet} from '@/wallet/store';
 import {useSyncFeeReserve} from '@/vault/stableCoinAsGas';
-import {ownerVaultAddress} from '@/vault/read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
@@ -56,7 +56,7 @@ export function VaultFeeSettings({onDragging}: {onDragging: (active: boolean) =>
   // The reserve belongs to THIS vault on THIS chain. Predicted locally from the owner, as everywhere
   // else — no RPC, so the right setting is on screen from the first frame rather than after a read.
   const owner = useWallet((s) => s.address);
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
   const key = `${network}:${vault ?? ''}`;
 
   const [amount, setAmount] = useState(() => gasReserveAmount(network, vault));

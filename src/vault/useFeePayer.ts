@@ -2,7 +2,7 @@ import type {Address} from 'viem';
 import {useWallet} from '@/wallet/store';
 import {useVaults} from '@/core/vault-store';
 import {useFeePayer, type FeePayer} from '@/core/fee-payer-store';
-import {ownerVaultAddress} from './read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 import type {Network} from '@/core/chain';
 
 /**
@@ -20,7 +20,7 @@ export function useActiveFeePayer(network: Network): {
 } {
   const owner = useWallet((s) => s.address);
   const isSafe = useVaults((s) => !!s.vaults.find((v) => v.index === s.activeIndex)?.safe);
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
   const chosen = useFeePayer(network, vault);
   return {owner, vault, payer: isSafe ? 'vault' : chosen, canChoose: !isSafe && !!owner};
 }

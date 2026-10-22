@@ -8,7 +8,7 @@ import {fmtRiskValue, fmtPending, riskHintKey} from '@/components/riskFormat';
 import {useRiskDraft} from '@/core/risk-draft';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
-import {ownerVaultAddress} from '@/vault/read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
@@ -54,7 +54,7 @@ export function RiskValueScreen() {
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
   const stable = useAssetCatalog(network).find((a) => a.kind === 'stable');
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
   const drafted = useRiskDraft((s) => s.changes[field]);
   const setDraft = useRiskDraft((s) => s.set);
 

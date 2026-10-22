@@ -3,7 +3,7 @@ import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {zeroAddress, type Address} from 'viem';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
-import {ownerVaultAddress} from '@/vault/read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 import {getAutoYields, setAutoYield} from '@/vault/autoyield';
 import {triggerAutoYield} from '@/vault/risk';
 import {assetMeta} from '@/core/assets';
@@ -30,7 +30,7 @@ export function AutoYieldScreen() {
   const assets = useAssetCatalog(network);
   const yields = yieldAdapters(network);
   const stable = assets.find((a) => a.kind === 'stable');
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
 
   const [routes, setRoutes] = useState<Map<string, Address>>(new Map());
   const [busy, setBusy] = useState<string | null>(null);

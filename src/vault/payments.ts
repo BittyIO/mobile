@@ -282,6 +282,10 @@ export async function fetchEscapeIds(
   network: Network,
   book: WhitelistedRecipient[],
 ): Promise<string[]> {
+  // Never the vault itself: after a forever lock money can only leave to the escape, and an escape
+  // back into the vault leaves it nowhere to go — the contract refuses it (requireEscape), so it was
+  // offered here, picked by default, and then failed on confirm.
+  book = book.filter((b) => b.recipientAddress.toLowerCase() !== vault.toLowerCase());
   if (isLegacy() || book.length === 0) return [];
   if (book.every((b) => b.status !== undefined)) {
     return book

@@ -3,7 +3,7 @@ import {Animated, Pressable, StyleSheet, Text, View} from 'react-native';
 import type {Address} from 'viem';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
-import {ownerVaultAddress} from '@/vault/read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 import {isActivated} from '@/vault/activate';
 import {getStableCoinAsGasConfig, setStableCoinAsGasCoins, STABLE_COIN_AS_GAS_MAX_DAILY, STABLE_COIN_AS_GAS_MAX_PER_OP, type StableCoinAsGasConfig} from '@/vault/stableCoinAsGas';
 
@@ -47,7 +47,7 @@ export function StableCoinAsGasCoins({
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
   const stablecoins = useAssetCatalog(network).filter((a) => a.kind === 'stable');
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
 
   const [cfg, setCfg] = useState<StableCoinAsGasConfig | null | 'loading'>('loading');
   // Deployed yet? A counterfactual vault has no config to read: it shows the defaults it will start

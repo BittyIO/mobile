@@ -14,10 +14,14 @@ export type SettingsIconName =
   | 'security'
   | 'recovery'
   | 'lock'
+  | 'lockOpen'
+  | 'lockTemp'
+  | 'lockForever'
   | 'eth'
   | 'timelock'
   | 'autoYield'
   | 'delegation'
+  | 'ownership'
   | 'stableCoinAsGas'
   | 'dailyLimit'
   | 'perTx'
@@ -43,10 +47,17 @@ const TINT: Record<SettingsIconName, string> = {
   security: '#34C759',
   recovery: '#FF9500',
   lock: '#FF3B30',
+  // The three lock states, in the colours the status chip uses for them: open and normal, locked
+  // for now, locked for good.
+  lockOpen: '#34C759',
+  lockTemp: '#FF9500',
+  lockForever: '#FF3B30',
   eth: '#627EEA',
   timelock: '#5856D6',
   autoYield: '#34C759',
   delegation: '#0E85FF',
+  // Handing the vault to another key: its own colour, so it never reads as the asset manager.
+  ownership: '#FF2D55',
   stableCoinAsGas: '#AF52DE',
   dailyLimit: '#FF9500',
   perTx: '#5856D6',
@@ -110,6 +121,24 @@ export function SettingsIcon({name, size = 29}: {name: SettingsIconName; size?: 
             <Rect x={3} y={11} width={18} height={11} rx={2} {...c} />
             <Path d="M7 11V7a5 5 0 0 1 10 0v4" {...c} />
           </>
+        ) : name === 'lockOpen' ? (
+          // lucide LockOpen: the shackle lifted off one side.
+          <>
+            <Rect x={3} y={11} width={18} height={11} rx={2} {...c} />
+            <Path d="M7 11V7a5 5 0 0 1 9.9-1" {...c} />
+          </>
+        ) : name === 'lockTemp' ? (
+          // A closed lock: locked, for now — this key can open it again.
+          <>
+            <Rect x={3} y={11} width={18} height={11} rx={2} {...c} />
+            <Path d="M7 11V7a5 5 0 0 1 10 0v4" {...c} />
+          </>
+        ) : name === 'lockForever' ? (
+          // lucide Infinity: no lock at all, because there is no key that opens it — forever.
+          <Path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 0 0 0-8c-2 0-4 1.33-6 4Z" {...c} />
+        ) : name === 'ownership' ? (
+          // lucide ArrowRightLeft: one owner out, another in.
+          <Path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4" {...c} />
         ) : name === 'eth' ? (
           // Ether's diamond: the native coin the Legacy ETH row wraps.
           <>

@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {Alert, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
-import {useFocusEffect, useNavigation, usePreventRemove} from '@react-navigation/native';
+import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {useFocusEffect, useNavigation} from '@react-navigation/native';
+import {useDiscardGuard} from '@/components/DiscardGuard';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
 import {getLockLevel, getRiskConfig, updateRiskSettings, type LockLevel, type RiskConfig, type RiskField} from '@/vault/risk';
@@ -23,7 +24,7 @@ import {
 } from '@/core/safety-levels';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
-import {ownerVaultAddress} from '@/vault/read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {isLegacy} from '@/core/vault-generation';
 import {useT} from '@/i18n';
@@ -56,7 +57,7 @@ export function RiskSettingsScreen() {
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
   const symbol = useAssetCatalog(network).find((a) => a.kind === 'stable')?.symbol;
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
   const [risk, setRisk] = useState<RiskConfig | null>(null);
   const [lockLevel, setLockLevel] = useState<LockLevel | null>(null);
   const [customOpen, setCustomOpen] = useState(false);
@@ -80,15 +81,9 @@ export function RiskSettingsScreen() {
   // A draft belongs to one visit: whatever way the page goes, it does not survive it.
   useEffect(() => clearDraft, [clearDraft]);
 
-  // Leaving with changes unsaved asks first, whether by the back button or the swipe. usePreventRemove
-  // rather than a bare beforeRemove listener: on the native stack only the hook stops the native back
-  // button and swipe up front, where the listener heard of the pop after the page had already gone.
-  usePreventRemove(dirty && !busy, ({data}) =>
-    Alert.alert(t('mobile.vault.discard_title'), t('mobile.vault.discard_msg'), [
-      {text: t('mobile.vault.keep_editing'), style: 'cancel'},
-      {text: t('mobile.vault.discard'), style: 'destructive', onPress: () => nav.dispatch(data.action)},
-    ]),
-  );
+  // Leaving with changes unsaved asks first, by the back button or the swipe — and before the page
+  // goes, not after it has slid off and come back (see DiscardGuard).
+  const {edge} = useDiscardGuard(dirty && !busy, clearDraft);
 
   // Re-read on focus — the value pages write, and the new value has to show on the way back — and
   // tick once a second while in view, for the countdowns.
@@ -132,16 +127,19 @@ export function RiskSettingsScreen() {
 
   if (legacy) {
     return (
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        alwaysBounceVertical
-        contentInsetAdjustmentBehavior="automatic"
-        style={styles.container}
-        contentContainerStyle={styles.body}>
-        {numberRows(false)}
-        {saveButton}
-        {sheet}
-      </ScrollView>
+      <View style={styles.fill}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          alwaysBounceVertical
+          contentInsetAdjustmentBehavior="automatic"
+          style={styles.container}
+          contentContainerStyle={styles.body}>
+          {numberRows(false)}
+          {saveButton}
+          {sheet}
+        </ScrollView>
+        {edge}
+      </View>
     );
   }
 
@@ -231,41 +229,45 @@ export function RiskSettingsScreen() {
       : undefined;
 
   return (
-    <ScrollView
-      showsVerticalScrollIndicator={false}
-      alwaysBounceVertical
-      contentInsetAdjustmentBehavior="automatic"
-      style={styles.container}
-      contentContainerStyle={styles.body}>
-      {/* First the choice; the three numbers below follow it, and editing one makes it Custom. */}
-      <SettingsGroup label={t('mobile.vault.safety_level')} footer={locked ? t('mobile.vault.safety_locked') : waitingNote}>
-        {SAFETY_LEVELS.map((l) => levelRow(l.id, () => pick(l.id), false))}
-        {levelRow('custom', () => !locked && setCustomOpen(true), true)}
-      </SettingsGroup>
+    <View style={styles.fill}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        alwaysBounceVertical
+        contentInsetAdjustmentBehavior="automatic"
+        style={styles.container}
+        contentContainerStyle={styles.body}>
+        {/* First the choice; the three numbers below follow it, and editing one makes it Custom. */}
+        <SettingsGroup label={t('mobile.vault.safety_level')} footer={locked ? t('mobile.vault.safety_locked') : waitingNote}>
+          {SAFETY_LEVELS.map((l) => levelRow(l.id, () => pick(l.id), false))}
+          {levelRow('custom', () => !locked && setCustomOpen(true), true)}
+        </SettingsGroup>
 
-      <SettingsGroup label={t('mobile.vault.safety_parameters')} footer={preview}>
-        {RISK_FIELDS.map((f, i) => (
-          <SettingsRow
-            key={f}
-            icon={ICON[f]}
-            title={t(RISK_TITLE[f])}
-            value={picked ? fmt(f, picked[f]) : undefined}
-            sub={sub(f)}
-            // Only Custom is edited by hand; a preset level's numbers are shown, not offered.
-            onPress={editable ? () => nav.navigate('VaultRiskValue', {field: f}) : undefined}
-            chevron={editable}
-            last={i === RISK_FIELDS.length - 1}
-          />
-        ))}
-      </SettingsGroup>
-      {saveButton}
-      {sheet}
-    </ScrollView>
+        <SettingsGroup label={t('mobile.vault.safety_parameters')} footer={preview}>
+          {RISK_FIELDS.map((f, i) => (
+            <SettingsRow
+              key={f}
+              icon={ICON[f]}
+              title={t(RISK_TITLE[f])}
+              value={picked ? fmt(f, picked[f]) : undefined}
+              sub={sub(f)}
+              // Only Custom is edited by hand; a preset level's numbers are shown, not offered.
+              onPress={editable ? () => nav.navigate('VaultRiskValue', {field: f}) : undefined}
+              chevron={editable}
+              last={i === RISK_FIELDS.length - 1}
+            />
+          ))}
+        </SettingsGroup>
+        {saveButton}
+        {sheet}
+      </ScrollView>
+      {edge}
+    </View>
   );
 }
 
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
+    fill: {flex: 1},
     container: {flex: 1, backgroundColor: c.bg},
     body: {flexGrow: 1, padding: 16, gap: 24},
     levelRow: {flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 52, paddingHorizontal: 16},

@@ -30,7 +30,7 @@ import {
   type OrderBucket,
   type TwapGroup,
 } from '@/vault/order-view';
-import {ownerVaultAddress} from '@/vault/read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 import {fetchTwapSchedules, type TwapSchedule} from '@/vault/twap';
 import {useWallet} from '@/wallet/store';
 import {useColors, useStyles, type Colors} from '@/theme';
@@ -100,7 +100,7 @@ export function OrderHistoryScreen() {
   const styles = useStyles(makeStyles);
   const network = useNetwork((s) => s.network);
   const owner = useWallet((s) => s.address);
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
   const catalog = useAssetCatalog(network);
   const stables = useMemo(() => catalog.filter((a) => a.kind === 'stable'), [catalog]);
 

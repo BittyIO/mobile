@@ -19,7 +19,8 @@ import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {useVaultPositions} from '@/vault/useVaultPositions';
-import {ownerVaultAddress, balanceOfSymbol} from '@/vault/read';
+import {balanceOfSymbol} from '@/vault/read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 import {sendWithWhitelist} from '@/vault/payments';
 import type {Position} from '@/vault/positions';
 
@@ -125,7 +126,7 @@ export function SendScreen() {
   const assets = useAssetCatalog(network);
   const stable = assets.find((a) => a.kind === 'stable');
   const first = assets[0]?.symbol ?? 'USDC';
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
 
   const bal = useVaultBalances(network);
   const weth = useWethFeeCoin(network, vault);

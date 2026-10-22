@@ -5,9 +5,11 @@
  * nothing but their gas fee, are the point.
  */
 import type {Network} from '@/core/chain';
-import {assetMeta} from '@/core/assets';
+import {assetMeta, underlyingOf} from '@/core/assets';
 import {protocolDisplayName, protocolMeta} from '@/core/protocols';
-import {displaySymbol, fmtNum} from '@/core/format';
+import {displaySymbol, fmtNum, shortAddress} from '@/core/format';
+import {recipientName, useRecipientNames} from '@/core/recipient-names';
+import {feeConfigOf, type FeeConfig, type OpDetails} from './tx-details';
 import {formatUnits, type Address} from 'viem';
 import type {CowOrder} from '@/vault/limit';
 import type {TransferRow} from '@/vault/transactions';
@@ -150,6 +152,44 @@ const ACTION_CATEGORY: Record<string, ActionCategory> = {
  * `deposit` and `withdraw` are one pair of vault functions covering both Earn routes, so which
  * kind it is comes from the protocol's own category: Aave is lending, Sky and Lido are yielding.
  */
+/** One deposit into or withdrawal from a yield or lending position, as the call asked for it. */
+export type DefiMove = {kind: 'stake' | 'supply'; out: boolean; protocol: string; asset: string; amount: bigint};
+
+/**
+ * Every deposit and withdrawal a transaction's calls made, in order — a move from Flexible Yield to
+ * Flexible Lend is one withdraw and one deposit, and each is its own line in the history. The
+ * asset is the underlying (USDC, WETH), never the position's receipt token.
+ */
+export function defiMovesFromActions(actions: VaultAction[] | undefined, network: Network): DefiMove[] {
+  const out: DefiMove[] = [];
+  const kindOf = (protocol: string) => (protocolMeta(network, protocol).category === 'lending' ? 'supply' : 'stake');
+  for (const a of actions ?? []) {
+    if (a.name === 'deposit' || a.name === 'withdraw') {
+      const protocol = String(a.args.depositProtocol ?? a.args.withdrawProtocol ?? a.args.protocol ?? '');
+      const asset = String(a.args.assetAddress ?? '');
+      if (!protocol || !asset) continue;
+      out.push({kind: kindOf(protocol), out: a.name === 'deposit', protocol, asset, amount: BigInt(String(a.args.amount ?? '0'))});
+    } else if (a.name === 'withdraws') {
+      const ps = list(a.args.protocols), as = list(a.args.assets), ns = list(a.args.amounts);
+      ps.forEach((protocol, i) => as[i] && out.push({kind: kindOf(protocol), out: false, protocol, asset: as[i], amount: BigInt(ns[i] ?? '0')}));
+    }
+  }
+  return out;
+}
+
+/**
+ * A leg in a position's receipt token, told as the asset it stands for: an aToken is its underlying
+ * one to one, and sUSDS is worth `rate` USDC (vault/yielding `susdsRate`). The address is kept, so
+ * the history still knows it for what it is; only what is shown changes.
+ */
+export function asUnderlying(l: TransferRow, network: Network, rates?: Map<string, number>): TransferRow {
+  const u = l.assetAddress ? underlyingOf(network, l.assetAddress) : null;
+  if (!u) return l;
+  const rate = rates?.get(String(l.assetAddress).toLowerCase()) ?? 1;
+  const n = Number(l.amount ?? '0');
+  return {...l, assetSymbol: u, amount: Number.isFinite(n) ? String(n * rate) : l.amount};
+}
+
 export function defiMoveFromActions(
   actions: VaultAction[] | undefined,
   network: Network,
@@ -199,11 +239,40 @@ function riskLines(raw: string | string[] | undefined, t: T): string[] {
   }
 }
 
+/**
+ * What a fee-coin call changed: each coin turned on or off against the setting before it, and each
+ * cap that moved. With nothing earlier in the history to compare against, the setting as it now is.
+ * An empty list is not "no coins" — it is any coin the guard registers.
+ */
+function feeLines(cfg: FeeConfig, prev: FeeConfig | null | undefined, network: Network, t: T): string[] {
+  const k = (key: string, params?: Record<string, string | number>) => t(`mobile.actions.${key}`, params);
+  const sym = (a: string) => displaySymbol(assetMeta(network, a).symbol);
+  const out: string[] = [];
+  if (prev && prev.assets.length > 0 && cfg.assets.length > 0) {
+    for (const a of cfg.assets) if (!prev.assets.includes(a)) out.push(k('fee_coin_on', {token: sym(a)}));
+    for (const a of prev.assets) if (!cfg.assets.includes(a)) out.push(k('fee_coin_off', {token: sym(a)}));
+  } else if (!prev || prev.assets.length !== cfg.assets.length) {
+    out.push(cfg.assets.length ? k('fee_coins', {tokens: cfg.assets.map(sym).join(', ')}) : k('fee_coins_any'));
+  }
+  const cap = (label: string, from: string | undefined, to: string) => {
+    if (!to) return;
+    if (from === undefined) out.push(`${t(label)}: $${to}`);
+    else if (from !== to) out.push(`${t(label)}: $${from} → $${to}`);
+  };
+  cap('mobile.settings.gas_max_per_op', prev?.maxFeePerOp, cfg.maxFeePerOp);
+  cap('mobile.settings.gas_max_daily', prev?.dailyLimit, cfg.dailyLimit);
+  return out;
+}
+
+const isZeroAddr = (a: string) => /^0x0{40}$/i.test(a);
+
 export function describeActions(
   actions: VaultAction[] | undefined,
   network: Network,
   t: T,
   orders: Map<string, CowOrder> | undefined,
+  /** What the history around this transaction says it changed — see vault/tx-details. */
+  details?: OpDetails,
 ): string[] {
   if (!actions?.length) return [];
   // A deposit or withdrawal names the protocol it went through. This used to be behind the
@@ -212,11 +281,29 @@ export function describeActions(
   const token = (a: string) => displaySymbol(assetMeta(network, a).symbol);
   const proto = (a: string) => protocolDisplayName(protocolMeta(network, a).name);
   const k = (key: string, params?: Record<string, string | number>) => t(`mobile.actions.${key}`, params);
+  // An address as the history shows it: the name this device gave it, if any, and its short form.
+  const names = useRecipientNames.getState().names;
+  const addr = (a: string) => {
+    const named = recipientName(names, network, a);
+    return named ? `${named} (${shortAddress(a)})` : shortAddress(a);
+  };
+  const versions = () =>
+    details?.versionTo
+      ? [details.versionFrom ? k('version_change', {from: details.versionFrom, to: details.versionTo}) : k('version_to', {to: details.versionTo})]
+      : [];
   const out: string[] = [];
   // Approving a token for limit trading registers the intent adapter in the same transaction the
   // first time; the approval is the story, so that adapter's "enable service" line is dropped.
   const approvedIntents = new Set(
     actions.filter((x) => x.name === 'approveIntentRelayer').map((x) => String(x.args.intent).toLowerCase()),
+  );
+  // An adapter upgrade is sent with the allow-list swap that goes with it (add the new address, drop
+  // the old one) in the same multicall. The upgrade's own lines already say which address went and
+  // which came, so the swap must not say it again.
+  const upgraded = new Set(
+    actions
+      .filter((x) => x.name === 'upgradeProtocol')
+      .flatMap((x) => [String(x.args.protocol).toLowerCase(), String(x.args.newImplementation).toLowerCase()]),
   );
   for (const a of actions) {
     const g = a.args;
@@ -231,9 +318,14 @@ export function describeActions(
       case 'withdraw':
         out.push(k('withdraw_from', {name: proto(String(g.withdrawProtocol ?? g.protocol))}));
         break;
-      case 'approveIntentRelayer':
-        out.push(k('approve_intent', {token: token(String(g.token))}));
+      // A position's receipt token is named as the asset it holds: enabling limit trading on a
+      // Flexible Lend WETH is "WETH", not "aWETH".
+      case 'approveIntentRelayer': {
+        const tk = String(g.token);
+        const u = underlyingOf(network, tk);
+        out.push(k('approve_intent', {token: u ? displaySymbol(u) : token(tk)}));
         break;
+      }
       case 'cancelIntentOrders':
       case 'cancelIntentOrder': {
         // One line per cancelled order, with what the order was when the orderbook still knows it.
@@ -246,15 +338,23 @@ export function describeActions(
         break;
       }
       case 'updateProtocols':
-        for (const p of list(g.add)) if (!approvedIntents.has(p.toLowerCase())) out.push(k('enable_service', {name: proto(p)}));
-        for (const p of list(g.remove)) out.push(k('disable_service', {name: proto(p)}));
+        for (const p of list(g.add))
+          if (!approvedIntents.has(p.toLowerCase()) && !upgraded.has(p.toLowerCase())) out.push(k('enable_service', {name: proto(p)}));
+        for (const p of list(g.remove)) if (!upgraded.has(p.toLowerCase())) out.push(k('disable_service', {name: proto(p)}));
         break;
       case 'updateAssets':
         for (const p of list(g.add)) out.push(k('asset_added', {name: token(p)}));
         for (const p of list(g.remove)) out.push(k('asset_removed', {name: token(p)}));
         break;
+      // The adapter the vault used is replaced by the newer one of its lineage: say which, and the
+      // versions either side.
       case 'upgradeProtocol':
-        out.push(k('upgrade_protocol', {name: proto(String(g.protocol))}));
+        out.push(
+          k('upgrade_protocol', {name: proto(String(g.protocol))}),
+          ...versions(),
+          k('address_disabled', {address: shortAddress(String(g.protocol))}),
+          k('address_enabled', {address: shortAddress(String(g.newImplementation))}),
+        );
         break;
       /**
        * The vault's own implementation.
@@ -264,10 +364,40 @@ export function describeActions(
        * reads as a network fee, the one thing it is not.
        */
       case 'upgrade':
-        out.push(k('upgrade_vault'));
+        out.push(k('upgrade_vault'), ...versions());
         break;
-      case 'setAssetManager':
-        out.push(k('asset_manager_set'));
+      case 'setAssetManager': {
+        const m = String(g.assetManager ?? '');
+        if (!m || isZeroAddr(m)) {
+          out.push(k('asset_manager_removed'));
+          break;
+        }
+        out.push(k('asset_manager_to', {address: addr(m)}));
+        // 0 = no end date.
+        const until = Number(g.expiresAt ?? 0);
+        if (until > 0) out.push(k('asset_manager_until', {date: new Date(until * 1000).toLocaleString()}));
+        break;
+      }
+      case 'useBittyAllowList':
+        out.push(k(String(g.use) === 'true' ? 'allowlist_on' : 'allowlist_off'));
+        break;
+      case 'transferOwnership':
+        out.push(k('ownership_to', {address: addr(String(g.newOwner))}));
+        break;
+      case 'cancelOwnershipTransfer':
+        out.push(k('ownership_cancelled'));
+        break;
+      case 'settleOwnershipTransfer':
+        out.push(k('ownership_settled'));
+        break;
+      case 'emergencyLock':
+        out.push(k('lock_emergency'));
+        break;
+      case 'unlock':
+        out.push(k('lock_unlock'));
+        break;
+      case 'foreverLock':
+        out.push(k('lock_forever'));
         break;
       case 'clearDelegates':
         out.push(k('delegates_cleared'));
@@ -296,9 +426,12 @@ export function describeActions(
         break;
       case 'setGasless':
       case 'setStableCoinAsGas':
-      case 'setTokenAsGas':
+      case 'setTokenAsGas': {
         out.push(k('stable_coin_as_gas_set'));
+        const cfg = feeConfigOf([a]);
+        if (cfg) out.push(...feeLines(cfg, details?.feePrev, network, t));
         break;
+      }
       case 'disableGasless':
       case 'disableStableCoinAsGas':
       case 'disableTokenAsGas':
@@ -339,10 +472,12 @@ export function describeActions(
         out.push(k('scheduled_paid'));
         break;
       case 'addWhitelistedRecipient':
-        out.push(k('recipient_added'));
+      case 'sendAndAddWhitelistedRecipient':
+      case 'batchSendAndAddWhitelistedRecipient':
+        out.push(k('recipient_added'), addr(String(g.recipient)));
         break;
       case 'removeWhitelistedRecipients':
-        out.push(k('recipient_removed'));
+        out.push(k('recipient_removed'), ...list(g.ids).map((id) => k('recipient_id', {id})));
         break;
       case 'proposeSend':
         out.push(k('send_proposed'));

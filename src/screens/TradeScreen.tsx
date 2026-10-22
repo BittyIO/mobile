@@ -36,7 +36,7 @@ import {LIMIT_APP_DATA_HASHES} from '@/core/cow';
 import {usePrices} from '@/vault/usePrices';
 import {getFlag, setFlag, getPref, setPref, SHOW_OTHER_ORDERS, LAST_PAIR} from '@/core/prefs';
 import {usdValue, fmtUsd} from '@/core/prices';
-import {ownerVaultAddress, balanceOfSymbol} from '@/vault/read';
+import {balanceOfSymbol} from '@/vault/read';
 import {FEE_WETH, resolveFeeReserve, reserveHeld, useWethFeeCoin} from '@/vault/stableCoinAsGas';
 import {FINISHED_WINDOWS, finishedSince, setSlippageBps, slippageBps, useFinishedWindow, type FinishedWindow} from '@/core/prefs';
 import {relayGasFor} from '@/vault/fee-quote';
@@ -84,6 +84,7 @@ import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {useAssetPick} from '@/core/asset-pick';
+import {activeVaultAddress} from '@/core/active-vault';
 
 /**
  * What a market swap may fill from its quote before the router refuses it.
@@ -996,7 +997,7 @@ export function TradeScreen() {
       return;
     }
     let live = true;
-    const vault = ownerVaultAddress(owner, network);
+    const vault = activeVaultAddress(network)!;
     (async () => {
       const approve = await needsRelayerApproval({vault, network, intentProtocol: intent, token: payTokenAddr});
       const calls = await intentPrepCalls({
@@ -1112,7 +1113,7 @@ export function TradeScreen() {
 
   const refreshOrders = () => {
     if (!owner) return;
-    const vault = ownerVaultAddress(owner, network);
+    const vault = activeVaultAddress(network)!;
     fetchRecentOrders(vault, network).then(setOrders).catch(() => setOrders([]));
     // Completed market swaps leave no order record — they're recovered from the vault's transfer
     // feed, which is also where a CoW fill's timestamp comes from.
@@ -1651,7 +1652,7 @@ export function TradeScreen() {
     setSheetSide(null);
     try {
       const acct = await getSigner();
-      const vault = ownerVaultAddress(owner, network);
+      const vault = activeVaultAddress(network)!;
       // You always sell the PAY leg for the RECEIVE leg: sell base→quote, buy quote→base. Exact-in.
       const recvAsset = (paysBase ? quoteAsset : base);
       // Nothing was sent, so the header's spinner has to come down with it.
@@ -1799,7 +1800,7 @@ export function TradeScreen() {
         const raw = (amt: number, dec: number) =>
           parseUnits(round6(Math.max(0, amt)).toFixed(dec) as `${number}`, dec);
         void reportFailedAttempt({
-          vault: ownerVaultAddress(owner, network),
+          vault: activeVaultAddress(network)!,
           network,
           signer: owner,
           reason: msg,
@@ -1823,7 +1824,7 @@ export function TradeScreen() {
     const tx = showTx(t('mobile.actions.cancel_intent'), network);
     try {
       const acct = await getSigner();
-      tx.success(await cancelLimitOrders({account: acct, vault: ownerVaultAddress(owner, network), network, intentProtocol: intent, uids: [o.uid as `0x${string}`], stableCoin: pickFeeCoin()}));
+      tx.success(await cancelLimitOrders({account: acct, vault: activeVaultAddress(network)!, network, intentProtocol: intent, uids: [o.uid as `0x${string}`], stableCoin: pickFeeCoin()}));
       markCancelled([o.uid]);
     } catch (e) {
       tx.error(String((e as Error)?.message ?? e));
@@ -1839,7 +1840,7 @@ export function TradeScreen() {
     const tx = showTx(t('mobile.actions.cancel_intents', {count: uids.length}), network);
     try {
       const acct = await getSigner();
-      tx.success(await cancelLimitOrders({account: acct, vault: ownerVaultAddress(owner, network), network, intentProtocol: intent, uids: uids as `0x${string}`[], stableCoin: pickFeeCoin()}));
+      tx.success(await cancelLimitOrders({account: acct, vault: activeVaultAddress(network)!, network, intentProtocol: intent, uids: uids as `0x${string}`[], stableCoin: pickFeeCoin()}));
       markCancelled(uids);
     } catch (e) {
       tx.error(String((e as Error)?.message ?? e));
@@ -2051,7 +2052,7 @@ export function TradeScreen() {
       const acct = await getSigner();
       await cancelTwap({
         account: acct,
-        vault: ownerVaultAddress(owner, network),
+        vault: activeVaultAddress(network)!,
         network,
         intentProtocol: intent,
         appData: g.appData,
