@@ -57,7 +57,7 @@ export function FeePayerSection() {
     <View style={styles.wrap}>
       {/* One card: the two choices, and with the owner paying, the address to fund and what is in
           it right under the choice that needs them. */}
-      <SettingsGroup label={t('mobile.fees.paid_by')}>
+      <SettingsGroup>
         <OptionRow
           title={t('mobile.fees.payer_vault')}
           checked={payer === 'vault'}
