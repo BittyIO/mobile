@@ -259,6 +259,14 @@ export function describeActions(
   const approvedIntents = new Set(
     actions.filter((x) => x.name === 'approveIntentRelayer').map((x) => String(x.args.intent).toLowerCase()),
   );
+  // An adapter upgrade is sent with the allow-list swap that goes with it (add the new address, drop
+  // the old one) in the same multicall. The upgrade's own lines already say which address went and
+  // which came, so the swap must not say it again.
+  const upgraded = new Set(
+    actions
+      .filter((x) => x.name === 'upgradeProtocol')
+      .flatMap((x) => [String(x.args.protocol).toLowerCase(), String(x.args.newImplementation).toLowerCase()]),
+  );
   for (const a of actions) {
     const g = a.args;
     switch (a.name) {
@@ -287,8 +295,9 @@ export function describeActions(
         break;
       }
       case 'updateProtocols':
-        for (const p of list(g.add)) if (!approvedIntents.has(p.toLowerCase())) out.push(k('enable_service', {name: proto(p)}));
-        for (const p of list(g.remove)) out.push(k('disable_service', {name: proto(p)}));
+        for (const p of list(g.add))
+          if (!approvedIntents.has(p.toLowerCase()) && !upgraded.has(p.toLowerCase())) out.push(k('enable_service', {name: proto(p)}));
+        for (const p of list(g.remove)) if (!upgraded.has(p.toLowerCase())) out.push(k('disable_service', {name: proto(p)}));
         break;
       case 'updateAssets':
         for (const p of list(g.add)) out.push(k('asset_added', {name: token(p)}));
