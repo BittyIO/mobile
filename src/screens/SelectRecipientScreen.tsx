@@ -8,7 +8,7 @@ import type {RootStackParamList} from '@/App';
 import {useVaults} from '@/core/vault-store';
 import {useNetwork} from '@/core/network-store';
 import {useWallet} from '@/wallet/store';
-import {ownerVaultAddress} from '@/vault/read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 import {fetchWhitelist, removeWhitelisted, type WhitelistedRecipient} from '@/vault/payments';
 import {WHITELIST_STATUS} from '@/core/abi';
 import {getRiskConfig, type RiskConfig} from '@/vault/risk';
@@ -22,6 +22,7 @@ import {useRecipientNames, recipientName} from '@/core/recipient-names';
 import {useRecipientPick} from '@/core/recipient-pick';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
+import {vaultAddressOf} from '@/core/active-vault';
 
 /**
  * Who to pay, as its own page, in two groups: the whitelisted address book, each entry under its
@@ -39,7 +40,7 @@ export function SelectRecipientScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const network = useNetwork((s) => s.network);
   const owner = useWallet((s) => s.address);
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
   const vaults = useVaults((s) => s.vaults);
   const activeIndex = useVaults((s) => s.activeIndex);
 
@@ -99,12 +100,14 @@ export function SelectRecipientScreen() {
   const mine = useMemo(
     () =>
       vaults
-        .filter((v) => v.index !== activeIndex && v.owner)
+        .filter((v) => v.index !== activeIndex)
         .map((v) => ({
           index: v.index,
           name: v.name || t('mobile.app.vault_n', {n: v.index + 1}),
-          address: ownerVaultAddress(v.owner as `0x${string}`, network),
-        })),
+          // Received vaults exist on one chain only; elsewhere this is null and the row is left out.
+          address: vaultAddressOf(v, network),
+        }))
+        .filter((v): v is typeof v & {address: `0x${string}`} => v.address !== null),
     [vaults, activeIndex, network, t],
   );
 

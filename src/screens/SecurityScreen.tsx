@@ -11,7 +11,7 @@ import {getLockLevel, getRiskConfig, type LockLevel} from '@/vault/risk';
 import {SAFETY_TITLE, levelOf, valuesInForce, type SafetyLevelOrCustom} from '@/core/safety-levels';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
-import {ownerVaultAddress} from '@/vault/read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 import {LOCK_ICON, LOCK_TITLE} from '@/core/lock-status';
 
 /**
@@ -29,7 +29,7 @@ export function SecurityScreen() {
   const hasLocks = useVaultGeneration((s) => s.generation) !== 'v1.0.3';
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
 
   // The lock state answers the Vault lock row. Re-read on focus: the row's own page changes it.
   const [lockLevel, setLockLevel] = useState<LockLevel | null>(null);

@@ -24,7 +24,7 @@ import {
 } from '@/core/safety-levels';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
-import {ownerVaultAddress} from '@/vault/read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {isLegacy} from '@/core/vault-generation';
 import {useT} from '@/i18n';
@@ -57,7 +57,7 @@ export function RiskSettingsScreen() {
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
   const symbol = useAssetCatalog(network).find((a) => a.kind === 'stable')?.symbol;
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
   const [risk, setRisk] = useState<RiskConfig | null>(null);
   const [lockLevel, setLockLevel] = useState<LockLevel | null>(null);
   const [customOpen, setCustomOpen] = useState(false);

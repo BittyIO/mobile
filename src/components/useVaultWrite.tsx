@@ -3,7 +3,7 @@ import type {Address} from 'viem';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import type {Network} from '@/core/chain';
-import {ownerVaultAddress} from '@/vault/read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {showTx} from '@/components/Toast';
 import {useConfirmAction} from '@/components/ConfirmAction';
@@ -27,7 +27,7 @@ export function useVaultWrite(onDone?: () => void) {
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
   const stable = useAssetCatalog(network).find((a) => a.kind === 'stable');
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
   const [busy, setBusy] = useState<string | null>(null);
   const {ask, sheet} = useConfirmAction();
 

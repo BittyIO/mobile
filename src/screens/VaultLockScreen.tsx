@@ -7,7 +7,7 @@ import {getLockLevel, type LockLevel} from '@/vault/risk';
 import {SettingsRow, SettingsGroup} from '@/components/SettingsRow';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
-import {ownerVaultAddress} from '@/vault/read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 import type {LockAction} from '@/screens/VaultLockActionScreen';
 import {useT} from '@/i18n';
 import {useStyles, type Colors} from '@/theme';
@@ -30,7 +30,7 @@ export function VaultLockScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
   // null while the read is out: nothing is offered until the level is known, because offering
   // "Emergency lock" to a vault that is already locked is a choice that can only fail.
   const [lockLevel, setLockLevel] = useState<LockLevel | null>(null);

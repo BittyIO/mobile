@@ -2,7 +2,7 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import type {Network} from '@/core/chain';
-import {ownerVaultAddress} from '@/vault/read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 
 import {checkVaultUpgrade, upgradeVault, type VaultUpgrade} from '@/vault/manage';
 import {
@@ -47,7 +47,7 @@ export function useVaultVersionRow(): {
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
   const stable = useAssetCatalog(network).find((a) => a.kind === 'stable');
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
 
   const [up, setUp] = useState<VaultUpgrade | null>(null);
   // The network the upgrade was started on: a switch mid-await must not spin the other network's row.

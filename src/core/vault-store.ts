@@ -41,6 +41,16 @@ export type VaultRef = {
   signerIndex?: number;
   /** That key's address, cached like `owner` so the approvals screen can tell what it signed. */
   signer?: `0x${string}`;
+  /**
+   * Set for a vault this device's key RECEIVED by an ownership transfer: the vault's own address.
+   *
+   * Every other vault sits at the address the factory derives from its owner, so it is computed
+   * and never stored. A received one does not: it keeps the address its first owner's key derived,
+   * on the one chain the transfer happened on. Its key is `signerIndex` (and `owner`/`signer`).
+   */
+  vault?: `0x${string}`;
+  /** The chain a received vault is on. It does not exist at that address anywhere else. */
+  network?: string;
 };
 
 function load(): VaultRef[] {
@@ -70,6 +80,13 @@ type State = {
    * a fresh id, like any other vault's. Adding a Safe that is already here selects that one instead.
    */
   addSafe: (safe: `0x${string}`, signerIndex: number, signer: `0x${string}`) => number;
+  /**
+   * Append a vault this device's key at `signerIndex` owns by transfer, at `vault` on `network`.
+   * Adding one already listed only refreshes its key. Returns its index; does not select it.
+   */
+  addReceived: (vault: `0x${string}`, network: string, signerIndex: number, owner: `0x${string}`) => number;
+  /** Take a vault off this device's list. Nothing changes on chain. The last one stays. */
+  remove: (index: number) => void;
 };
 
 export const useVaults = create<State>((set, get) => ({
@@ -113,10 +130,34 @@ export const useVaults = create<State>((set, get) => ({
     set({vaults, activeIndex: index});
     return index;
   },
+
+  addReceived: (vault, network, signerIndex, owner) => {
+    const same = (v: VaultRef) => v.vault?.toLowerCase() === vault.toLowerCase() && v.network === network;
+    const existing = get().vaults.find(same);
+    const index = existing?.index ?? Math.max(...get().vaults.map((v) => v.index)) + 1;
+    const vaults = existing
+      ? get().vaults.map((v) => (v.index === index ? {...v, signerIndex, signer: owner, owner} : v))
+      : [...get().vaults, {index, name: '', owner, vault, network, signerIndex, signer: owner}];
+    store.set(KEY, JSON.stringify(vaults));
+    set({vaults});
+    return index;
+  },
+
+  remove: (index) => {
+    const vaults = get().vaults.filter((v) => v.index !== index);
+    if (vaults.length === 0) return;
+    store.set(KEY, JSON.stringify(vaults));
+    const activeIndex = get().activeIndex === index ? vaults[0].index : get().activeIndex;
+    store.set(ACTIVE, activeIndex);
+    set({vaults, activeIndex});
+  },
 }));
 
-/** The BIP-44 index whose key signs for a vault: its own, or for a Safe vault the co-owner key's. */
-export const keyIndexOf = (v: VaultRef): number => (v.safe ? (v.signerIndex ?? 0) : v.index);
+/**
+ * The BIP-44 index whose key signs for a vault: its own, or — for a Safe vault, or one received by
+ * transfer — the key's that owns it on this device.
+ */
+export const keyIndexOf = (v: VaultRef): number => (v.safe || v.vault ? (v.signerIndex ?? 0) : v.index);
 
 /** The label to show: what the user named it, or "Vault {n}" counting from one. */
 export function vaultLabel(v: VaultRef, fallback: (n: number) => string): string {

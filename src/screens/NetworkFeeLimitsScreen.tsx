@@ -3,7 +3,7 @@ import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useDiscardGuard} from '@/components/DiscardGuard';
 import {useNetwork} from '@/core/network-store';
 import {useWallet} from '@/wallet/store';
-import {ownerVaultAddress} from '@/vault/read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 import {isActivated} from '@/vault/activate';
 import {getPendingChanges, type PendingChange} from '@/vault/risk';
 import {
@@ -54,7 +54,7 @@ export function NetworkFeeLimitsScreen() {
   const styles = useStyles(makeStyles);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
 
   const [cfg, setCfg] = useState<StableCoinAsGasConfig | null>(null);
   const [activated, setActivated] = useState<boolean | null>(null);

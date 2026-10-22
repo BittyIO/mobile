@@ -6,11 +6,11 @@ import {useVaults, vaultLabel} from '@/core/vault-store';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {getAddress, isAddress} from 'viem';
-import {ownerVaultAddress} from '@/vault/read';
 import {fetchSafe, SafeApiError} from '@/vault/safe';
 import * as keyring from '@/wallet/keyring';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
+import {vaultAddressOf} from '@/core/active-vault';
 
 /**
  * Choose, rename, or add a vault.
@@ -37,15 +37,6 @@ export function useVaultPicker() {
   const addVault = useVaults((s) => s.add);
   const selectVault = useWallet((s) => s.selectVault);
   const network = useNetwork((s) => s.network);
-  /**
-   * The vault's own address, not its owner's.
-   *
-   * What is stored is the owner, because that is what the next derivation needs, but the
-   * address a user recognises — the one they send to, the one on the explorer — is the
-   * vault the factory puts at keccak256(owner). It differs per network, since each has
-   * its own factory, so it is computed here rather than cached with the owner.
-   */
-  const vaultOf = (owner: `0x${string}` | null) => (owner ? ownerVaultAddress(owner, network) : null);
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<number | null>(null);
@@ -191,7 +182,7 @@ export function useVaultPicker() {
                   )}
                   <Text style={styles.sub}>
                     {v.safe ? 'Safe · ' : ''}
-                    {vaultOf(v.owner) ?? t('mobile.settings.vault_unlock_first')}
+                    {vaultAddressOf(v, network) ?? t('mobile.settings.vault_unlock_first')}
                   </Text>
                 </View>
                 {on ? (

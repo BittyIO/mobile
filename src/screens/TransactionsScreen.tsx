@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
-import {ownerVaultAddress} from '@/vault/read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 import {useVaultTransactions} from '@/vault/useVaultTransactions';
 import type {Operation, TransferRow} from '@/vault/transactions';
 import {TokenIcon} from '@/components/TokenIcon';
@@ -449,7 +449,7 @@ export function TransactionsScreen() {
   const styles = useStyles(makeStyles);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
   const {ops, loading, error, refresh} = useVaultTransactions(vault, network);
   // The vault's CoW orders by uid, so a cancellation can say which order it cancelled.
   const [orders, setOrders] = React.useState<Map<string, CowOrder>>(() => new Map());

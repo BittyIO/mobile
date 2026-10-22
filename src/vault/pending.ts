@@ -14,8 +14,7 @@
 import {create} from 'zustand';
 import {MMKV} from 'react-native-mmkv';
 import {publicClientFor, type Network} from '@/core/chain';
-import {ownerVaultAddress} from '@/vault/read';
-import {useWallet} from '@/wallet/store';
+import {activeVaultAddress} from '@/core/active-vault';
 
 /**
  * `dropped` is a transaction the chain will never include: the relayer's nonce was consumed by a
@@ -125,8 +124,7 @@ export const usePending = create<State>((set, get) => ({
      * would eventually get wrong. Read at RECORD time, so switching vaults afterwards cannot
      * change whose a record is.
      */
-    const owner = useWallet.getState().address;
-    const vault = owner ? ownerVaultAddress(owner, tx.network).toLowerCase() : undefined;
+    const vault = activeVaultAddress(tx.network)?.toLowerCase();
     const next = [
       {...tx, vault: tx.vault ?? vault, submittedAt: Date.now(), status: 'pending' as const},
       ...get().txs.filter((t) => t.hash !== tx.hash),

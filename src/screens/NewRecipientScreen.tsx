@@ -7,7 +7,7 @@ import type {RootStackParamList} from '@/App';
 import {isPayableAddress, isTokenAddress, useAssetCatalog} from '@/core/asset-catalog';
 import {useNetwork} from '@/core/network-store';
 import {useWallet} from '@/wallet/store';
-import {ownerVaultAddress} from '@/vault/read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 import {getRiskConfig, type RiskConfig} from '@/vault/risk';
 import {fmtAllowance, fmtDuration} from '@/components/riskFormat';
 import {useRecipientNames} from '@/core/recipient-names';
@@ -30,7 +30,7 @@ export function NewRecipientScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const network = useNetwork((s) => s.network);
   const owner = useWallet((s) => s.address);
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
   const symbol = useAssetCatalog(network).find((a) => a.kind === 'stable')?.symbol;
   const setPicked = useRecipientPick((st) => st.set);
   const setName = useRecipientNames((st) => st.setName);

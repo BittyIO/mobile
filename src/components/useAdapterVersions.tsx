@@ -2,7 +2,7 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {useVaultGeneration} from '@/core/vault-generation';
-import {ownerVaultAddress} from '@/vault/read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 import {adapterStatuses, formatVersion, upgradeAdapter, type AdapterStatus} from '@/vault/upgrade-adapter';
 import {protocolDisplayName} from '@/core/protocols';
 import {useT} from '@/i18n';
@@ -40,7 +40,7 @@ export function useAdapterVersions(): {
   const network = useNetwork((s) => s.network);
   const generation = useVaultGeneration((s) => s.generation);
   const stable = useAssetCatalog(network).find((a) => a.kind === 'stable');
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
 
   const [statuses, setStatuses] = useState<AdapterStatus[]>([]);
   // Cleared first and guarded, as on the version row: a switch never shows the last network's

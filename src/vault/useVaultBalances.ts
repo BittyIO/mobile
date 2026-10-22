@@ -6,7 +6,8 @@ import type {Network} from '@/core/chain';
 import {useWallet} from '@/wallet/store';
 import {catalogVersionNow, fetchCatalog, useCatalogVersion} from '@/core/asset-catalog';
 import {usePending} from '@/vault/pending';
-import {ownerVaultAddress, readVaultBalances, type VaultBalances} from './read';
+import {readVaultBalances, type VaultBalances} from './read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 
 type State = {
   vault: Address | null;
@@ -127,7 +128,7 @@ usePending.subscribe((s) => {
  */
 export function useVaultBalances(network: Network): State {
   const owner = useWallet((s) => s.address);
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
   const key = vault ? keyFor(network, vault) : '';
   const entry = useStore((s) => (key ? s.byKey[key] : undefined));
   const catalogVersion = useCatalogVersion();

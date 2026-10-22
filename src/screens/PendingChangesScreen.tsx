@@ -14,7 +14,7 @@ import {PERM_ROWS} from '@/components/useAssetManagerRow';
 import {Sheet} from '@/components/Sheet';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
-import {ownerVaultAddress} from '@/vault/read';
+import {useActiveVaultAddress} from '@/core/active-vault';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 
@@ -73,7 +73,7 @@ export function PendingChangesScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const vault = useActiveVaultAddress(network);
   const [items, setItems] = useState<PendingChange[] | null>(null);
   const [timelock, setTimelock] = useState(0);
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
