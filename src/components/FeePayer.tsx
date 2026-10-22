@@ -35,8 +35,8 @@ export function UseForFeesRow({payer}: {payer: FeePayer}) {
 }
 
 /**
- * The owner wallet that pays, when the owner pays: its address across the row — tap for the QR,
- * with copy and share — and under it what is in it.
+ * The owner wallet that pays, when the owner pays: a row with its address — tap for the QR, with
+ * copy and share — and a row with what is in it.
  *
  * Nothing here moves ETH: the owner tops the address up however they like — a send from the vault,
  * another wallet, an exchange withdrawal — which is why the address is the whole of it.
@@ -73,17 +73,17 @@ export function OwnerWalletCard() {
       <SettingsGroup>
         {/* The whole 42 characters, shrunk to fit: this is the address someone checks against the
             other side of a transfer. */}
-        <Pressable style={[styles.row, styles.ownerRow]} onPress={() => setQr(true)} accessibilityRole="button">
+        <Pressable style={[styles.row, styles.rowDivider]} onPress={() => setQr(true)} accessibilityRole="button">
           <Text style={styles.addr} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
             {owner}
           </Text>
-          <View style={styles.balance}>
-            <Text style={styles.rowSub}>{t('mobile.fees.balance')}</Text>
-            <Text style={styles.rowValue}>
-              {balance == null ? '…' : <><Amount v={formatEth(balance)} color={c.subtext} /> ETH</>}
-            </Text>
-          </View>
         </Pressable>
+        <View style={styles.row}>
+          <Text style={styles.rowTitle}>{t('mobile.fees.balance')}</Text>
+          <Text style={styles.rowValue}>
+            {balance == null ? '…' : <><Amount v={formatEth(balance)} color={c.subtext} /> ETH</>}
+          </Text>
+        </View>
       </SettingsGroup>
       <ReceiveDialog
         visible={qr}
@@ -100,8 +100,5 @@ export function OwnerWalletCard() {
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     ...makeSettingsStyles(c),
-    // Stacked rather than side by side: the address gets the full width, the balance its own line.
-    ownerRow: {flexDirection: 'column', alignItems: 'stretch', gap: 8},
-    addr: {color: c.text, fontSize: 13, fontFamily: 'Menlo'},
-    balance: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
+    addr: {flex: 1, color: c.text, fontSize: 13, fontFamily: 'Menlo'},
   });
