@@ -5,7 +5,7 @@
  * nothing but their gas fee, are the point.
  */
 import type {Network} from '@/core/chain';
-import {assetMeta} from '@/core/assets';
+import {assetMeta, underlyingOf} from '@/core/assets';
 import {protocolDisplayName, protocolMeta} from '@/core/protocols';
 import {displaySymbol, fmtNum, shortAddress} from '@/core/format';
 import {recipientName, useRecipientNames} from '@/core/recipient-names';
@@ -152,6 +152,44 @@ const ACTION_CATEGORY: Record<string, ActionCategory> = {
  * `deposit` and `withdraw` are one pair of vault functions covering both Earn routes, so which
  * kind it is comes from the protocol's own category: Aave is lending, Sky and Lido are yielding.
  */
+/** One deposit into or withdrawal from a yield or lending position, as the call asked for it. */
+export type DefiMove = {kind: 'stake' | 'supply'; out: boolean; protocol: string; asset: string; amount: bigint};
+
+/**
+ * Every deposit and withdrawal a transaction's calls made, in order — a move from Flexible Yield to
+ * Flexible Lend is one withdraw and one deposit, and each is its own line in the history. The
+ * asset is the underlying (USDC, WETH), never the position's receipt token.
+ */
+export function defiMovesFromActions(actions: VaultAction[] | undefined, network: Network): DefiMove[] {
+  const out: DefiMove[] = [];
+  const kindOf = (protocol: string) => (protocolMeta(network, protocol).category === 'lending' ? 'supply' : 'stake');
+  for (const a of actions ?? []) {
+    if (a.name === 'deposit' || a.name === 'withdraw') {
+      const protocol = String(a.args.depositProtocol ?? a.args.withdrawProtocol ?? a.args.protocol ?? '');
+      const asset = String(a.args.assetAddress ?? '');
+      if (!protocol || !asset) continue;
+      out.push({kind: kindOf(protocol), out: a.name === 'deposit', protocol, asset, amount: BigInt(String(a.args.amount ?? '0'))});
+    } else if (a.name === 'withdraws') {
+      const ps = list(a.args.protocols), as = list(a.args.assets), ns = list(a.args.amounts);
+      ps.forEach((protocol, i) => as[i] && out.push({kind: kindOf(protocol), out: false, protocol, asset: as[i], amount: BigInt(ns[i] ?? '0')}));
+    }
+  }
+  return out;
+}
+
+/**
+ * A leg in a position's receipt token, told as the asset it stands for: an aToken is its underlying
+ * one to one, and sUSDS is worth `rate` USDC (vault/yielding `susdsRate`). The address is kept, so
+ * the history still knows it for what it is; only what is shown changes.
+ */
+export function asUnderlying(l: TransferRow, network: Network, rates?: Map<string, number>): TransferRow {
+  const u = l.assetAddress ? underlyingOf(network, l.assetAddress) : null;
+  if (!u) return l;
+  const rate = rates?.get(String(l.assetAddress).toLowerCase()) ?? 1;
+  const n = Number(l.amount ?? '0');
+  return {...l, assetSymbol: u, amount: Number.isFinite(n) ? String(n * rate) : l.amount};
+}
+
 export function defiMoveFromActions(
   actions: VaultAction[] | undefined,
   network: Network,
@@ -280,9 +318,14 @@ export function describeActions(
       case 'withdraw':
         out.push(k('withdraw_from', {name: proto(String(g.withdrawProtocol ?? g.protocol))}));
         break;
-      case 'approveIntentRelayer':
-        out.push(k('approve_intent', {token: token(String(g.token))}));
+      // A position's receipt token is named as the asset it holds: enabling limit trading on a
+      // Flexible Lend WETH is "WETH", not "aWETH".
+      case 'approveIntentRelayer': {
+        const tk = String(g.token);
+        const u = underlyingOf(network, tk);
+        out.push(k('approve_intent', {token: u ? displaySymbol(u) : token(tk)}));
         break;
+      }
       case 'cancelIntentOrders':
       case 'cancelIntentOrder': {
         // One line per cancelled order, with what the order was when the orderbook still knows it.

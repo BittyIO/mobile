@@ -21,13 +21,16 @@ import {fmtNum, fmtShort, displaySymbol, shortAddress} from '@/core/format';
 import {EXPLORER_TX, type Network} from '@/core/chain';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
-import {categoryForActions, defiMoveFromActions, describeActions, swapFromActions} from '@/vault/tx-actions';
+import {asUnderlying, categoryForActions, defiMoveFromActions, defiMovesFromActions, describeActions, swapFromActions} from '@/vault/tx-actions';
 import {GPV2_SETTLEMENT, fetchRecentOrders, type CowOrder} from '@/vault/limit';
 
 import {currentCatalog} from '@/core/asset-catalog';
 import {openLink} from '@/core/open-link';
 import {attemptTrade, isFailure, useVaultAttempts, wasSent, type Attempt} from '@/vault/attempts';
 import {formatEth} from '@/vault/direct';
+import {formatUnits} from 'viem';
+import {assetMeta, RECEIPT_TOKENS} from '@/core/assets';
+import {susdsRate} from '@/vault/yielding';
 import {feeHistory, useUpgradeVersions, type OpDetails} from '@/vault/tx-details';
 
 const fmtAmt = (v: string | null): string => fmtNum(Number(v ?? '0'));
@@ -75,7 +78,7 @@ type OpView = {
 type T = (key: string, params?: Record<string, string | number>) => string;
 
 /** Turn a raw tx's legs into readable, typed parts — the same categories the web history shows. */
-function classify(
+export function classify(
   op: Operation,
   network: Network,
   t: T,
@@ -84,13 +87,18 @@ function classify(
   words: (...parts: (string | false | null | undefined)[]) => string,
   /** What the history around it says this transaction changed — see vault/tx-details. */
   opDetails?: OpDetails,
+  /** USDC per receipt token where it is not one to one (sUSDS), by lowercase address. */
+  rates?: Map<string, number>,
 ): OpView {
+  // A position's receipt token is never shown as itself: an aWETH or sUSDS leg is told as the WETH
+  // or USDC it stands for, at its rate. The address stays, so it is still recognised below.
+  const legs = op.legs.map((l) => asUnderlying(l, network, rates));
   // The gasless relay fee leg (paid to Bitty's fee collector) — shown on its own line, not as a transfer.
   // A market trade pays the same Safe twice: the adapter's 0.2% during the swap, then the relay fee
   // after it. The feed lists a transaction's legs newest log first, so the first match is the relay
   // fee — ponytail: relies on that order (the feed carries no logIndex); match by amount if it changes.
-  const fee = op.legs.find((l) => l.direction === 'out' && BITTY_FEE_COLLECTORS.has(lc(l.counterparty))) ?? null;
-  const core = op.legs.filter((l) => l !== fee);
+  const fee = legs.find((l) => l.direction === 'out' && BITTY_FEE_COLLECTORS.has(lc(l.counterparty))) ?? null;
+  const core = legs.filter((l) => l !== fee);
 
   const swapLegs = splitMarketSwap(core);
   const swapSet = new Set(swapLegs);
@@ -140,7 +148,44 @@ function classify(
   // Yield/lend ops are recognized by a receipt token (sUSDS/stETH, aTokens) OR the underlying protocol
   // contract as counterparty (covers testnet receipt tokens we don't enumerate). The principal is the
   // non-receipt side; its direction (leaving the vault = deposit, arriving = withdraw) types it.
-  if (rest.length > 0) {
+  /**
+   * Deposits and withdrawals, one part EACH, from the calls themselves. A move from Flexible Yield
+   * to Flexible Lend is a withdraw and a deposit in one transaction, and it used to come out as one
+   * "Withdraw" with both legs under it. Each part takes the leg that matches it (same asset and
+   * direction), or the call's own amount when the feed has none; the receipt-token side is never
+   * shown. Whatever legs are left are classified as before.
+   */
+  const moves = swap ? [] : defiMovesFromActions(op.actions, network);
+  if (moves.length > 0) {
+    const used = new Set<TransferRow>();
+    for (const m of moves) {
+      const dir = m.out ? 'out' : 'in';
+      const leg = rest.find((l) => !used.has(l) && !isReceiptToken(l.assetAddress) && lc(l.assetAddress) === lc(m.asset) && l.direction === dir);
+      if (leg) used.add(leg);
+      const meta = assetMeta(network, m.asset);
+      const shown: TransferRow = leg ?? {
+        txHash: op.txHash,
+        direction: dir,
+        counterparty: null,
+        amount: formatUnits(m.amount, meta.decimals),
+        assetSymbol: meta.symbol,
+        assetAddress: m.asset,
+        category: 'erc20',
+        blockNum: op.blockNum,
+        timestamp: op.timestamp,
+      };
+      if (m.kind === 'stake') kinds.stake = true;
+      else kinds.supply = true;
+      parts.push({
+        title: t(m.kind === 'stake' ? (m.out ? 'vault.deposit_to_earn' : 'vault.withdraw_from_earn') : m.out ? 'vault.supply_to_flexible_lend' : 'vault.withdraw_from_flexible_lend'),
+        swap: null,
+        legs: [shown],
+      });
+    }
+    rest = rest.filter((l) => !used.has(l) && !isReceiptToken(l.assetAddress));
+  }
+
+  if (rest.length > 0 && moves.length === 0) {
     // What the CALL says, where there is a call. The receipt side of an Earn move is often
     // invisible — the indexer tracks no aTokens, so an Aave supply shows one outgoing leg and
     // nothing coming back, which the transfer rules below read as money sent to a stranger.
@@ -268,12 +313,14 @@ function Op({
   network,
   orders,
   details,
+  rates,
 }: {
   op: Operation;
   explorer: string;
   network: Network;
   orders?: Map<string, CowOrder>;
   details?: OpDetails;
+  rates?: Map<string, number>;
 }) {
   const {t, language, words} = useT();
   const styles = useStyles(makeStyles);
@@ -281,7 +328,7 @@ function Op({
   // The row subscribes for itself. This is the classify call the list actually RENDERS from — the
   // one in the screen above only decides which tabs exist — so without it a flip of the switch
   // left every line on screen as it was.
-  const v = classify(op, network, t, orders, words, details);
+  const v = classify(op, network, t, orders, words, details, rates);
   return (
     <Pressable style={styles.op} onPress={() => openLink(explorer + op.txHash, 'Etherscan')}>
       {v.parts.map((part, i) => (
@@ -490,6 +537,20 @@ export function TransactionsScreen() {
    * older one in this history, and an upgrade's versions either side, from the chain.
    */
   const feePrev = React.useMemo(() => feeHistory(ops), [ops]);
+  /**
+   * What one sUSDS is worth in USDC on this chain, so a row that moved it can say so in USDC. Read
+   * once per chain; aTokens need no rate (one to one with their underlying).
+   */
+  const [rates, setRates] = React.useState<Map<string, number>>(() => new Map());
+  React.useEffect(() => {
+    let live = true;
+    const susds = Object.entries(RECEIPT_TOKENS[network]).find(([, r]) => r.symbol === 'sUSDS')?.[0];
+    if (!susds) return;
+    susdsRate(network).then((r) => live && setRates(new Map([[susds, r]])));
+    return () => {
+      live = false;
+    };
+  }, [network]);
   const upgrades = useUpgradeVersions(network, vault, ops);
   const detailsOf = (op: Operation): OpDetails | undefined => {
     const h = op.txHash.toLowerCase();
@@ -514,8 +575,8 @@ export function TransactionsScreen() {
 
   // One tab per category that has entries, as on the web.
   const views = React.useMemo(
-    () => new Map(ops.map((op) => [op.txHash, classify(op, network, t, orders, words)])),
-    [ops, network, t, orders, words],
+    () => new Map(ops.map((op) => [op.txHash, classify(op, network, t, orders, words, undefined, rates)])),
+    [ops, network, t, orders, words, rates],
   );
   const tabs: {key: Category | 'all'; label: string}[] = [
     {key: 'all', label: t('vault.all')},
@@ -592,7 +653,7 @@ export function TransactionsScreen() {
       ) : (
         feed.map((row) =>
           row.op ? (
-            <Op key={row.key} op={row.op} explorer={explorer} network={network} orders={orders} details={detailsOf(row.op)} />
+            <Op key={row.key} op={row.op} explorer={explorer} network={network} orders={orders} details={detailsOf(row.op)} rates={rates} />
           ) : (
             <FailedOp key={row.key} tx={row.tx!} explorer={explorer} network={network} />
           ),
