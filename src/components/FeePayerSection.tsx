@@ -71,15 +71,15 @@ export function FeePayerSection() {
         />
         {payer === 'owner' ? (
           <>
-            {/* One row: the address to fund on the left — tap for its QR — and what is in it on the
-                right. The whole 42 characters, shrunk to fit: this is the address someone checks
-                against the other side of a transfer. */}
-            <Pressable style={styles.row} onPress={() => setQr(true)} accessibilityRole="button">
-              <Text style={styles.addr} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+            {/* One row: the address to fund across the whole width — tap for its QR — and under it
+                what is in it. The whole 42 characters, shrunk to fit: this is the address someone
+                checks against the other side of a transfer. */}
+            <Pressable style={[styles.row, styles.ownerRow]} onPress={() => setQr(true)} accessibilityRole="button">
+              <Text style={styles.addr} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
                 {owner}
               </Text>
               <View style={styles.balance}>
-                <Text style={styles.balanceLabel}>{t('mobile.fees.balance')}</Text>
+                <Text style={styles.rowSub}>{t('mobile.fees.balance')}</Text>
                 <Text style={styles.rowValue}>
                   {balance == null ? '…' : <><Amount v={formatEth(balance)} color={c.subtext} /> ETH</>}
                 </Text>
@@ -105,7 +105,8 @@ const makeStyles = (c: Colors) =>
   StyleSheet.create({
     ...makeSettingsStyles(c),
     wrap: {gap: 20, marginBottom: 20},
-    addr: {flex: 1, color: c.text, fontSize: 13, fontFamily: 'Menlo'},
-    balance: {alignItems: 'flex-end', gap: 2},
-    balanceLabel: {color: c.subtext, fontSize: 11},
+    // Stacked rather than side by side: the address gets the full width, the balance its own line.
+    ownerRow: {flexDirection: 'column', alignItems: 'stretch', gap: 8},
+    addr: {color: c.text, fontSize: 13, fontFamily: 'Menlo'},
+    balance: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
   });
