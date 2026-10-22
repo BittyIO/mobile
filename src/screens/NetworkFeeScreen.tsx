@@ -8,6 +8,7 @@ import {VaultFeeSettings} from '@/components/VaultFeeSettings';
 import {OwnerWalletCard} from '@/components/FeePayer';
 import {useNetwork} from '@/core/network-store';
 import {useActiveFeePayer} from '@/vault/useFeePayer';
+import {useFeeReadiness} from '@/vault/useFeeReadiness';
 import {setFeePayer, type FeePayer} from '@/core/fee-payer-store';
 import {useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
@@ -30,12 +31,17 @@ export function NetworkFeeScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const network = useNetwork((s) => s.network);
   const {payer, canChoose, vault} = useActiveFeePayer(network);
+  // Whether each way can pay right now: said under it, before a transaction fails for it.
+  const ready = useFeeReadiness(network);
+  const warning = (p: FeePayer) =>
+    (p === 'vault' ? ready.vault : ready.owner) === false ? t(p === 'vault' ? 'mobile.fees.vault_empty' : 'mobile.fees.owner_empty') : null;
   // The page holds still while a fee coin is being dragged, as the Overview does for its lists.
   const [dragging, setDragging] = useState(false);
 
   if (!canChoose) {
     return (
       <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical scrollEnabled={!dragging} contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
+        {warning('vault') ? <Text style={[styles.warn, styles.warnAlone]}>{warning('vault')}</Text> : null}
         <VaultFeeSettings onDragging={setDragging} />
       </ScrollView>
     );
@@ -55,9 +61,12 @@ export function NetworkFeeScreen() {
         onPress={() => vault && setFeePayer(network, vault, p)}
         accessibilityRole="radio"
         accessibilityState={{checked: payer === p}}>
-        <Text style={styles.rowTitle}>{title}</Text>
-        {/* Always laid out, shown only when chosen, so the row keeps its height (see OptionRow). */}
-        <Text style={[styles.check, payer !== p && styles.checkHidden]}>✓</Text>
+        <View style={styles.titleLine}>
+          <Text style={styles.rowTitle}>{title}</Text>
+          {/* Always laid out, shown only when chosen, so the row keeps its height (see OptionRow). */}
+          <Text style={[styles.check, payer !== p && styles.checkHidden]}>✓</Text>
+        </View>
+        {warning(p) ? <Text style={styles.warn}>{warning(p)}</Text> : null}
       </Pressable>
       <Pressable
         style={({pressed}) => [styles.wayMore, pressed && styles.pressed]}
@@ -110,7 +119,11 @@ const makeStyles = (c: Colors) =>
     body: {padding: 16, gap: 8, paddingBottom: 32},
     // A way to pay: the row chooses it; only the chevron's own square at the end opens its settings.
     wayRow: {flexDirection: 'row', alignItems: 'stretch'},
-    wayPick: {flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 15, paddingLeft: 16},
+    wayPick: {flex: 1, justifyContent: 'center', gap: 4, paddingVertical: 15, paddingLeft: 16},
+    titleLine: {flexDirection: 'row', alignItems: 'center', gap: 8},
+    // A way that cannot pay right now, said under it in the warning colour.
+    warn: {color: c.warning, fontSize: 12, lineHeight: 16},
+    warnAlone: {paddingHorizontal: 4},
     wayMore: {width: 56, alignItems: 'center', justifyContent: 'center'},
     pressed: {opacity: 0.6},
   });
