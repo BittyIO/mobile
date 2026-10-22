@@ -116,7 +116,7 @@ export function TransferOwnershipScreen() {
         </View>
 
         <SettingsGroup>
-          <SettingsRow icon="delegation" title={t('mobile.vault.current_owner')} value={owner ? shortAddress(owner) : undefined} chevron={false} last />
+          <SettingsRow icon="ownership" title={t('mobile.vault.current_owner')} value={owner ? shortAddress(owner) : undefined} chevron={false} last />
         </SettingsGroup>
 
         {pending ? (
