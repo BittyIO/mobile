@@ -10,6 +10,7 @@ import {protocolDisplayName, protocolMeta} from '@/core/protocols';
 import {displaySymbol, fmtNum, shortAddress} from '@/core/format';
 import {recipientName, useRecipientNames} from '@/core/recipient-names';
 import {feeConfigOf, type FeeConfig, type OpDetails} from './tx-details';
+import {susdsRateCached} from './yielding';
 import {formatUnits, type Address} from 'viem';
 import type {CowOrder} from '@/vault/limit';
 import type {TransferRow} from '@/vault/transactions';
@@ -26,8 +27,10 @@ const list = (v: string | string[] | undefined): string[] => (Array.isArray(v) ?
 export function describeOrder(o: CowOrder, network: Network): string {
   const sell = assetMeta(network, o.sellToken as `0x${string}`);
   const buy = assetMeta(network, o.buyToken as `0x${string}`);
-  const amt = (raw: string, dec: number) => fmtNum(Number(formatUnits(BigInt(raw), dec)));
-  return `${amt(o.sellAmount, sell.decimals)} ${displaySymbol(sell.symbol)} → ${amt(o.buyAmount, buy.decimals)} ${displaySymbol(buy.symbol)}`;
+  // An order paid from a position sells its receipt token: told as the asset it holds, at its rate.
+  const rate = (sym: string) => (sym.toUpperCase() === 'SUSDS' ? susdsRateCached(network) : 1);
+  const amt = (raw: string, dec: number, sym: string) => fmtNum(Number(formatUnits(BigInt(raw), dec)) * rate(sym));
+  return `${amt(o.sellAmount, sell.decimals, sell.symbol)} ${displaySymbol(sell.symbol)} → ${amt(o.buyAmount, buy.decimals, buy.symbol)} ${displaySymbol(buy.symbol)}`;
 }
 
 /**

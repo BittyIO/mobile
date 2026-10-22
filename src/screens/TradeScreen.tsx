@@ -3661,7 +3661,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   checkboxTick: {color: c.text, fontSize: 10, fontWeight: '700'},
   othersText: {color: c.subtext, fontSize: 12},
   cancelAllRow: {alignItems: 'flex-end', paddingVertical: 6},
-  cancelAllText: {color: c.subtext, fontSize: 12, fontWeight: '600', textDecorationLine: 'underline'},
+  cancelAllText: {color: c.subtext, fontSize: 12, fontWeight: '600'},
   empty: {color: c.subtext, fontSize: 13, textAlign: 'center', paddingTop: 10},
   // The orders pager steps OUT of the card's 16 and each page puts it back, so a row's divider can
   // reach the card's edges without reaching into the page beside it. See the pager's own note.

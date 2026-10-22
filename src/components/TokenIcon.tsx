@@ -105,8 +105,10 @@ export function TokenIcon({symbol, size = 28, uri}: {symbol: string; size?: numb
   useCatalogVersion();
   const [remoteFailed, setRemoteFailed] = useState(false);
   const dim = {width: size, height: size, borderRadius: size / 2};
-  // WETH shows as ETH (see displaySymbol): same icon.
-  const src = ICONS[symbol] ?? (symbol.toUpperCase() === 'ETH' || symbol.toUpperCase() === 'WETH' ? ICONS.ETH : undefined);
+  // WETH shows as ETH, and a position's receipt token as the asset it stands for (see
+  // displaySymbol): the same icon.
+  const shown = displaySymbol(symbol);
+  const src = ICONS[symbol] ?? ICONS[shown] ?? (shown.toUpperCase() === 'ETH' ? ICONS.ETH : undefined);
   if (src) return <Image source={src} style={dim} resizeMode="contain" />;
   const remote = uri ?? catalogIcon(network, symbol);
   // A 404, a host that is down, or a format the decoder refuses: fall through to the badge rather

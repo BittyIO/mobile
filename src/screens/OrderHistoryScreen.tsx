@@ -6,7 +6,8 @@ import {TokenIcon} from '@/components/TokenIcon';
 import {PickerList} from '@/components/AssetPicker';
 import {Sheet} from '@/components/Sheet';
 import {OrderRow, OrderDetailLines, fmtPrice, type OrderValue} from '@/components/OrderRow';
-import {assetMeta, isKnownAsset, underlyingOf} from '@/core/assets';
+import {assetMeta, isKnownAsset, RECEIPT_TOKENS, underlyingOf} from '@/core/assets';
+import {susdsRate} from '@/vault/yielding';
 import {displaySymbol, fmtShort} from '@/core/format';
 import {useNetwork} from '@/core/network-store';
 import {useRoute, type RouteProp} from '@react-navigation/native';
@@ -103,6 +104,17 @@ export function OrderHistoryScreen() {
   const vault = useActiveVaultAddress(network);
   const catalog = useAssetCatalog(network);
   const stables = useMemo(() => catalog.filter((a) => a.kind === 'stable'), [catalog]);
+  /** USDC per receipt token where it is not one to one (sUSDS), by lowercase address. */
+  const [rates, setRates] = useState<Map<string, number>>(() => new Map());
+  useEffect(() => {
+    let live = true;
+    const susds = Object.entries(RECEIPT_TOKENS[network]).find(([, r]) => r.symbol === 'sUSDS')?.[0];
+    if (!susds) return;
+    susdsRate(network).then((r) => live && setRates(new Map([[susds, r]])));
+    return () => {
+      live = false;
+    };
+  }, [network]);
 
   // One nonce drives every feed on this page, the attempts included, so a pull refreshes all of
   // them together rather than leaving one list a read behind the others.
@@ -391,7 +403,22 @@ export function OrderHistoryScreen() {
     {key: 'twap', label: t('vault.twap')},
   ];
 
-  const isStable = (addr: string) => stables.some((st) => st.address.toLowerCase() === addr.toLowerCase());
+  /**
+   * An order's token as the row shows it. An order paid from a position sells the position's
+   * receipt token — an aWETH, an sUSDS — and the row names the asset it stands for instead, at its
+   * rate: an aToken one to one, sUSDS at its USDC rate. Every figure below goes through `rate`, so
+   * the amounts and the price are in the asset the user holds.
+   */
+  const shownAs = (addr: string): {symbol: string; decimals: number; rate: number} => {
+    const m = assetMeta(network, addr as Address);
+    const u = underlyingOf(network, addr);
+    return u ? {symbol: u, decimals: m.decimals, rate: rates.get(addr.toLowerCase()) ?? 1} : {...m, rate: 1};
+  };
+  // A position's receipt token is as stable as what it stands for: an order selling sUSDS is a buy.
+  const isStable = (addr: string) => {
+    const under = underlyingOf(network, addr);
+    return stables.some((st) => (under ? st.symbol === under : st.address.toLowerCase() === addr.toLowerCase()));
+  };
   const sideWord = (buy: boolean) => t(buy ? 'mobile.trade.buy_short' : 'mobile.trade.sell_short');
 
   /** The badge, the one-line summary, the right-hand mark and the details, per kind. */
@@ -493,12 +520,12 @@ export function OrderHistoryScreen() {
       );
     }
     const o = e.kind === 'twap' ? e.group.rep : e.order;
-    const sellM = assetMeta(network, o.sellToken as Address);
-    const buyM = assetMeta(network, o.buyToken as Address);
+    const sellM = shownAs(o.sellToken);
+    const buyM = shownAs(o.buyToken);
     const buy = isStable(o.sellToken);
     const mult = e.kind === 'twap' ? e.group.total : 1;
-    const sell = Number(formatUnits(BigInt(o.sellAmount), sellM.decimals)) * mult;
-    const recv = Number(formatUnits(BigInt(o.buyAmount), buyM.decimals)) * mult;
+    const sell = Number(formatUnits(BigInt(o.sellAmount), sellM.decimals)) * sellM.rate * mult;
+    const recv = Number(formatUnits(BigInt(o.buyAmount), buyM.decimals)) * buyM.rate * mult;
     const st = e.kind === 'twap' ? null : statusPill(effectiveStatus(o));
     /** Fully filled — a partial one has paid SOME of the figure these lines print, not all of it. */
     const done = st?.key === 'vault.fulfilled';
@@ -517,7 +544,7 @@ export function OrderHistoryScreen() {
           BigInt((which === 'sell' ? pt.executedSellAmount : pt.executedBuyAmount) ?? '0'),
           (which === 'sell' ? sellM : buyM).decimals,
         ),
-      );
+      ) * (which === 'sell' ? sellM : buyM).rate;
     const settledBase = parts.reduce((n, pt) => n + exec(pt, buy ? 'buy' : 'sell'), 0);
     const settledQuote = parts.reduce((n, pt) => n + exec(pt, buy ? 'sell' : 'buy'), 0);
     const over = e.kind === 'twap' && e.group.bucket === 'finished';
@@ -537,8 +564,8 @@ export function OrderHistoryScreen() {
           ? fmtPrice(settledQuote / settledBase)
           : null
         : (() => {
-            const es = Number(formatUnits(BigInt(o.executedSellAmount ?? '0'), sellM.decimals));
-            const eb = Number(formatUnits(BigInt(o.executedBuyAmount ?? '0'), buyM.decimals));
+            const es = Number(formatUnits(BigInt(o.executedSellAmount ?? '0'), sellM.decimals)) * sellM.rate;
+            const eb = Number(formatUnits(BigInt(o.executedBuyAmount ?? '0'), buyM.decimals)) * buyM.rate;
             return es > 0 && eb > 0 ? fmtPrice(buy ? es / eb : eb / es) : null;
           })();
     const avg = executed ?? limitPx;

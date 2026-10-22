@@ -45,8 +45,24 @@ export type Yielding = {
 export const hasYieldingUsdc = (network: Network): boolean => !!SUSDS[network];
 
 /** Read the vault's sUSDS balance + its USDC rate, or null if unavailable / zero balance. */
+/** The last rate {susdsRate} read per chain, for code that cannot wait for one. */
+const lastRate: Partial<Record<Network, number>> = {};
+
+/**
+ * USDC per 1 sUSDS on this chain as last read, or 1 before any read — for a label drawn now (a
+ * history line, a confirm). Any screen showing positions reads the rate, so it is rarely the
+ * default; it moves by a fraction of a percent a month.
+ */
+export const susdsRateCached = (network: Network): number => lastRate[network] ?? 1;
+
 /** USDC per 1 sUSDS on this chain (the Sky Savings Rate accumulator), or 1 when it cannot be read. */
 export async function susdsRate(network: Network): Promise<number> {
+  const r = await readSusdsRate(network);
+  lastRate[network] = r;
+  return r;
+}
+
+async function readSusdsRate(network: Network): Promise<number> {
   const address = SUSDS[network];
   if (!address) return 1;
   try {

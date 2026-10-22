@@ -92,9 +92,27 @@ export function fmtTiny(abs: number): string {
  * WETH reads as ETH everywhere a symbol is displayed, as on the web. Matching, lookups and contract
  * calls keep the real symbol; only rendering goes through here.
  */
+/**
+ * The yield and lending positions' receipt tokens, by the asset each stands for. The app never
+ * names one: a Flexible Lend WETH is "ETH" and a Flexible Yield USDC is "USDC" wherever it shows —
+ * an order paid from the position, its cancellation, a history line — because that is what the
+ * user holds and what it is worth (aTokens one to one, sUSDS at its USDC rate; amounts are scaled
+ * where they are read, see vault/yielding `susdsRateCached`).
+ */
+const RECEIPT_UNDERLYING: Record<string, string> = {
+  SUSDS: 'USDC',
+  STETH: 'ETH',
+  AWETH: 'ETH',
+  AUSDC: 'USDC',
+  AUSDT: 'USDT',
+  AWBTC: 'WBTC',
+  ACBBTC: 'cbBTC',
+};
+
 export function displaySymbol(symbol: string | null | undefined): string {
   const s = symbol ?? '';
-  return s.toUpperCase() === 'WETH' ? 'ETH' : s;
+  const up = s.toUpperCase();
+  return up === 'WETH' ? 'ETH' : (RECEIPT_UNDERLYING[up] ?? s);
 }
 
 /**
