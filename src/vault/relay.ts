@@ -16,7 +16,6 @@ import {apiUrl, CHAIN_ID, publicClientFor, type Network} from '@/core/chain';
 import {FORWARDER_ABI, FORWARD_REQUEST_TYPES, VAULT_FWD_ABI, VAULT_MULTICALL_ABI} from '@/core/abi';
 import {isActivated, activateVault, activateVaultDirect} from './activate';
 import {OwnerGasShort, ownerEthBalance, sendFromOwner} from './direct';
-import {recordOwnerTx} from './owner-tx-history';
 import {feePayerFor, type FeePayer} from '@/core/fee-payer-store';
 import {feeCoinOrder} from '@/core/prefs';
 import {knownAssets} from '@/core/assets';
@@ -200,17 +199,12 @@ async function relayEncoded(opts: EncodedWrite): Promise<RelayResult> {
  */
 async function viaOwner(opts: EncodedWrite): Promise<RelayResult> {
   const {account, vault, network} = opts;
-  // Noted the moment it is broadcast: the history reads its fee from the receipt, and lists it
-  // when the server's token-transfer feed does not (see ./owner-tx-history).
   if (!(await isActivated(vault, network))) {
     const {hash} = await activateVaultDirect({account, network, allowlistEnabled: false, calls: opts.activationCalls});
-    recordOwnerTx(network, vault, hash);
     await publicClientFor(network).waitForTransactionReceipt({hash});
     return {hash};
   }
-  const sent = await sendFromOwner({account, network, to: vault, data: opts.data});
-  recordOwnerTx(network, vault, sent.hash);
-  return sent;
+  return sendFromOwner({account, network, to: vault, data: opts.data});
 }
 
 async function viaRelayer(opts: EncodedWrite): Promise<RelayResult> {
