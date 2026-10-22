@@ -253,7 +253,9 @@ function OwnerFee({fee}: {fee: bigint}) {
   return (
     <>
       <GasIcon color={c.subtext} size={12} />
-      <Text style={styles.fee}>−{formatEth(fee)} ETH</Text>
+      <Text style={styles.fee}>
+        −<Amount v={formatEth(fee)} size={12} color={c.subtext} /> ETH
+      </Text>
     </>
   );
 }

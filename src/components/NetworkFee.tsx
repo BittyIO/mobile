@@ -4,6 +4,7 @@ import {GasIcon} from '@/components/GasIcon';
 import {useNetwork} from '@/core/network-store';
 import {quoteOwnerFeeWei, quoteRelayFeeUsd, TYPICAL_RELAY_GAS} from '@/vault/fee-quote';
 import {formatEth} from '@/vault/direct';
+import {Amount} from '@/components/Amount';
 import {useActiveFeePayer} from '@/vault/useFeePayer';
 import {useColors, useStyles, type Colors} from '@/theme';
 
@@ -63,7 +64,9 @@ function OwnerFee({gas}: {gas: bigint}) {
   return (
     <View style={styles.row}>
       <GasIcon color={c.subtext} />
-      <Text style={styles.line}>{formatEth(wei)} ETH</Text>
+      <Text style={styles.line}>
+        <Amount v={formatEth(wei)} size={12} color={c.subtext} /> ETH
+      </Text>
     </View>
   );
 }

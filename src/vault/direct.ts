@@ -16,6 +16,7 @@ import type {Signer} from '@/wallet/signer';
 import {CHAIN_ID, publicClientFor, type Network} from '@/core/chain';
 import {translate} from '@/i18n';
 import {useLanguage} from '@/core/language-store';
+import {fmtNum} from '@/core/format';
 
 export type OwnerTxPlan = {
   gas: bigint;
@@ -28,14 +29,12 @@ export type OwnerTxPlan = {
 };
 
 /**
- * ETH, short: enough digits to tell two fees apart, never an exponent. An L2 transaction costs a
- * few millionths of an ETH, and "0.00" would say it is free when it is not.
+ * ETH in the app's own amount format (core/format `fmtNum`), so a fee reads like every balance:
+ * an L2 transaction's few millionths of an ETH as "0.0₅287", its zeros counted in a subscript
+ * rather than spelled out. Draw it through components/Amount to drop the subscript below the line.
  */
 export function formatEth(wei: bigint): string {
-  const n = Number(formatEther(wei));
-  if (n === 0) return '0';
-  const digits = Math.min(18, Math.max(0, -Math.floor(Math.log10(n))) + 2);
-  return n.toFixed(digits).replace(/\.?0+$/, '');
+  return fmtNum(Number(formatEther(wei)));
 }
 
 /** The owner wallet cannot cover this transaction. Thrown before anything is signed. */

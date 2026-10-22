@@ -2,12 +2,13 @@ import React, {useEffect, useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {OptionRow, SettingsGroup, makeSettingsStyles} from '@/components/SettingsRow';
 import {ReceiveDialog} from '@/components/ReceiveDialog';
+import {Amount} from '@/components/Amount';
 import {networkLabel, useNetwork} from '@/core/network-store';
 import {setFeePayer} from '@/core/fee-payer-store';
 import {useActiveFeePayer} from '@/vault/useFeePayer';
 import {formatEth, ownerEthBalance} from '@/vault/direct';
 import {useT} from '@/i18n';
-import {useStyles, type Colors} from '@/theme';
+import {useColors, useStyles, type Colors} from '@/theme';
 
 /** How often the owner balance is re-read while the page is open — long enough to see ETH arrive. */
 const BALANCE_POLL_MS = 15_000;
@@ -27,6 +28,7 @@ const BALANCE_POLL_MS = 15_000;
 export function FeePayerSection() {
   const {t} = useT();
   const styles = useStyles(makeStyles);
+  const c = useColors();
   const network = useNetwork((s) => s.network);
   const {owner, vault, payer, canChoose} = useActiveFeePayer(network);
   const [balance, setBalance] = useState<bigint | null>(null);
@@ -80,7 +82,9 @@ export function FeePayerSection() {
           </Pressable>
           <View style={styles.row}>
             <Text style={styles.rowTitle}>{t('mobile.fees.balance')}</Text>
-            <Text style={styles.rowValue}>{balance == null ? '…' : `${formatEth(balance)} ETH`}</Text>
+            <Text style={styles.rowValue}>
+              {balance == null ? '…' : <><Amount v={formatEth(balance)} color={c.subtext} /> ETH</>}
+            </Text>
           </View>
         </SettingsGroup>
       ) : null}
