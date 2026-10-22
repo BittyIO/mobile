@@ -42,8 +42,9 @@ export function NetworkFeeScreen() {
   }
 
   /**
-   * One way to pay, as two targets: the title — with its check right after it — chooses it, and the
-   * rest of the row to the right, chevron included, opens its settings.
+   * One way to pay, as two targets: the row chooses it — title, its check right after it, and the
+   * space beyond — and only the chevron at the far end opens its settings. Choosing is what this
+   * page is for, so it gets nearly all of the row; a tap anywhere but the end must not navigate.
    */
   const way = (p: FeePayer, title: string, route: 'NetworkFeeVault' | 'NetworkFeeOwner', last?: boolean) => (
     <View style={[styles.wayRow, !last && styles.rowDivider]}>
@@ -105,9 +106,9 @@ const makeStyles = (c: Colors) =>
     // space BETWEEN sections is set on the cards that start one, so the two kinds of distance stay
     // distinguishable.
     body: {padding: 16, gap: 8, paddingBottom: 32},
-    // A way to pay: the title and its check choose it; everything to their right opens its settings.
+    // A way to pay: the row chooses it; only the chevron's own square at the end opens its settings.
     wayRow: {flexDirection: 'row', alignItems: 'stretch'},
-    wayPick: {flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 15, paddingLeft: 16, paddingRight: 12, flexShrink: 1},
-    wayMore: {flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 16, minWidth: 52},
+    wayPick: {flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 15, paddingLeft: 16},
+    wayMore: {width: 56, alignItems: 'center', justifyContent: 'center'},
     pressed: {opacity: 0.6},
   });
