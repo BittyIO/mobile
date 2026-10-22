@@ -56,7 +56,7 @@ export function SecurityScreen() {
       {/* The safety numbers lead: the delay and the caps every other control is measured against. */}
       <SettingsGroup>
         <SettingsRow
-          icon="dailyLimit"
+          icon="security"
           title={t('mobile.vault.risk_settings')}
           value={levelValue}
           onPress={() => nav.navigate('VaultRiskSettings')}
