@@ -42,8 +42,8 @@ export function NetworkFeeScreen() {
   }
 
   /**
-   * One way to pay, as two targets: the row itself chooses it — the common thing to do here, so it
-   * gets the whole width — and the chevron at the end, behind a hairline, opens its settings.
+   * One way to pay, as two targets: the title — with its check right after it — chooses it, and the
+   * rest of the row to the right, chevron included, opens its settings.
    */
   const way = (p: FeePayer, title: string, route: 'NetworkFeeVault' | 'NetworkFeeOwner', last?: boolean) => (
     <View style={[styles.wayRow, !last && styles.rowDivider]}>
@@ -59,7 +59,6 @@ export function NetworkFeeScreen() {
       <Pressable
         style={({pressed}) => [styles.wayMore, pressed && styles.pressed]}
         onPress={() => nav.navigate(route)}
-        hitSlop={{top: 8, bottom: 8}}
         accessibilityRole="button"
         accessibilityLabel={`${title} · ${t('vault.settings')}`}>
         <Text style={styles.chev}>›</Text>
@@ -114,15 +113,9 @@ const makeStyles = (c: Colors) =>
     body: {padding: 16, gap: 8, paddingBottom: 32},
     // The same distance as between the vault page's later sections (VaultFeeSettings `second`).
     first: {marginBottom: 20},
-    // A way to pay: the choosing part takes the row, the settings chevron sits apart at the end.
+    // A way to pay: the title and its check choose it; everything to their right opens its settings.
     wayRow: {flexDirection: 'row', alignItems: 'stretch'},
-    wayPick: {flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 15, paddingLeft: 16, paddingRight: 12, gap: 12},
-    wayMore: {
-      width: 52,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderLeftWidth: StyleSheet.hairlineWidth,
-      borderLeftColor: c.border,
-    },
+    wayPick: {flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 15, paddingLeft: 16, paddingRight: 12, flexShrink: 1},
+    wayMore: {flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 16, minWidth: 52},
     pressed: {opacity: 0.6},
   });
