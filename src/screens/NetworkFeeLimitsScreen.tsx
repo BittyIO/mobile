@@ -1,6 +1,6 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {Alert, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
-import {useNavigation, usePreventRemove} from '@react-navigation/native';
+import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {useDiscardGuard} from '@/components/DiscardGuard';
 import {useNetwork} from '@/core/network-store';
 import {useWallet} from '@/wallet/store';
 import {ownerVaultAddress} from '@/vault/read';
@@ -52,7 +52,6 @@ const PENDING_KIND: Record<Field, PendingChange['kind']> = {maxFeePerOp: 'maxFee
 export function NetworkFeeLimitsScreen() {
   const {t} = useT();
   const styles = useStyles(makeStyles);
-  const nav = useNavigation();
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
   const vault = owner ? ownerVaultAddress(owner, network) : null;
@@ -84,13 +83,8 @@ export function NetworkFeeLimitsScreen() {
   const dirty = FIELDS.some((f) => draft[f] !== undefined && draft[f] !== current(f));
   const locked = !cfg || preActivation || busy !== null;
 
-  // Leaving with changes unsaved asks first, by the back button or the swipe. See RiskSettingsScreen.
-  usePreventRemove(dirty && !busy, ({data}) =>
-    Alert.alert(t('mobile.vault.discard_title'), t('mobile.vault.discard_msg'), [
-      {text: t('mobile.vault.keep_editing'), style: 'cancel'},
-      {text: t('mobile.vault.discard'), style: 'destructive', onPress: () => nav.dispatch(data.action)},
-    ]),
-  );
+  // Leaving with changes unsaved asks first, by the back button or the swipe — before the page goes.
+  const {edge} = useDiscardGuard(dirty && !busy, () => setDraft({}));
 
   const save = () => {
     if (!cfg) return;
@@ -133,29 +127,33 @@ export function NetworkFeeLimitsScreen() {
   };
 
   return (
-    <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
-      <View style={styles.group}>{FIELDS.map((f, i) => row(f, i === FIELDS.length - 1))}</View>
-      <Button title={t('vault.save')} onPress={save} loading={busy === 'save'} disabled={!dirty || !ready || locked} />
-      <PickerSheet
-        visible={picking !== null}
-        title={picking ? t(TITLE[picking]) : ''}
-        items={(picking ? CHOICES[picking] : []).map((n) => ({key: String(n), label: `$${n}`}))}
-        selected={picking && value(picking) != null ? String(value(picking)) : undefined}
-        onSelect={(k) => {
-          const f = picking;
-          setPicking(null);
-          if (f) setDraft((d) => ({...d, [f]: Number(k)}));
-        }}
-        onClose={() => setPicking(null)}
-      />
-      {sheet}
-    </ScrollView>
+    <View style={styles.fill}>
+      <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
+        <View style={styles.group}>{FIELDS.map((f, i) => row(f, i === FIELDS.length - 1))}</View>
+        <Button title={t('vault.save')} onPress={save} loading={busy === 'save'} disabled={!dirty || !ready || locked} />
+        <PickerSheet
+          visible={picking !== null}
+          title={picking ? t(TITLE[picking]) : ''}
+          items={(picking ? CHOICES[picking] : []).map((n) => ({key: String(n), label: `$${n}`}))}
+          selected={picking && value(picking) != null ? String(value(picking)) : undefined}
+          onSelect={(k) => {
+            const f = picking;
+            setPicking(null);
+            if (f) setDraft((d) => ({...d, [f]: Number(k)}));
+          }}
+          onClose={() => setPicking(null)}
+        />
+        {sheet}
+      </ScrollView>
+      {edge}
+    </View>
   );
 }
 
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     ...makeSettingsStyles(c),
+    fill: {flex: 1},
     container: {flex: 1, backgroundColor: c.bg},
     body: {padding: 16, gap: 20, paddingBottom: 32},
     titleCol: {flex: 1, gap: 2},
