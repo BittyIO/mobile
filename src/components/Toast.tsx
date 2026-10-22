@@ -9,6 +9,7 @@ import {trackTx, usePending} from '@/vault/pending';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 import {openLink} from '@/core/open-link';
+import {titleOwnerTx} from '@/vault/owner-tx-history';
 
 export type ToastKind = 'pending' | 'success' | 'error';
 
@@ -93,6 +94,9 @@ export function showTx(
       // The hash goes in first so the explorer link is there for the whole wait, which is when
       // somebody actually wants it.
       trackTx(hash, network, title);
+      // An owner-paid transaction is named in the history by these words when the server's feed
+      // does not list it; a relayed one was never noted, and this does nothing for it.
+      titleOwnerTx(hash, title);
       useToasts.getState().update(id, {kind: 'pending', hash});
       /**
        * Settlement comes from the pending store, which is already watching every tracked hash —

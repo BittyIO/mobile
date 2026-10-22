@@ -27,6 +27,8 @@ import {GPV2_SETTLEMENT, fetchRecentOrders, type CowOrder} from '@/vault/limit';
 import {currentCatalog} from '@/core/asset-catalog';
 import {openLink} from '@/core/open-link';
 import {attemptTrade, isFailure, useVaultAttempts, wasSent, type Attempt} from '@/vault/attempts';
+import {ownerTxNotes, useOwnerGas, type OwnerTxNote, type TxGas} from '@/vault/owner-tx-history';
+import {formatEth} from '@/vault/direct';
 
 const fmtAmt = (v: string | null): string => fmtNum(Number(v ?? '0'));
 const fmtN = fmtNum;
@@ -244,7 +246,32 @@ function Leg({r, counterparty}: {r: TransferRow; counterparty?: Part['counterpar
   );
 }
 
-function Op({op, explorer, network, orders}: {op: Operation; explorer: string; network: Network; orders?: Map<string, CowOrder>}) {
+/** The ETH the owner wallet paid in gas, drawn where a relayed row draws the relay fee. */
+function OwnerFee({fee}: {fee: bigint}) {
+  const styles = useStyles(makeStyles);
+  const c = useColors();
+  return (
+    <>
+      <GasIcon color={c.subtext} size={12} />
+      <Text style={styles.fee}>−{formatEth(fee)} ETH</Text>
+    </>
+  );
+}
+
+function Op({
+  op,
+  explorer,
+  network,
+  orders,
+  ownerGas,
+}: {
+  op: Operation;
+  explorer: string;
+  network: Network;
+  orders?: Map<string, CowOrder>;
+  /** Set when the owner wallet sent this one and paid its gas — see vault/owner-tx-history. */
+  ownerGas?: TxGas;
+}) {
   const {t, language, words} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
@@ -301,7 +328,37 @@ function Op({op, explorer, network, orders}: {op: Operation; explorer: string; n
                 −<Amount v={fmtAmt(v.fee.amount)} /> {displaySymbol(v.fee.assetSymbol)}
               </Text>
             </>
+          ) : ownerGas ? (
+            <OwnerFee fee={ownerGas.fee} />
           ) : null}
+        </View>
+        <Text style={styles.link}>{t('mobile.home.view')} ↗</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+/**
+ * A transaction the owner wallet sent that the history feed does not list.
+ *
+ * The feed is built from token transfers, and an owner-paid change that moves no token has none —
+ * relayed, the same change was listed only because of its fee leg. So it is drawn from this
+ * device's note of what it sent, named with the words its toast used, with the gas it cost.
+ */
+function OwnerOnlyOp({note, gas, explorer}: {note: OwnerTxNote; gas: TxGas; explorer: string}) {
+  const {t, language} = useT();
+  const styles = useStyles(makeStyles);
+  return (
+    <Pressable style={styles.op} onPress={() => openLink(explorer + note.hash, 'Etherscan')}>
+      <View style={styles.opHeader}>
+        <Text style={styles.title}>{note.title ?? t('mobile.home.transaction')}</Text>
+      </View>
+      {/* Reverted on chain: the gas was still spent, which is the one thing this row has to say. */}
+      {!gas.ok ? <Text style={styles.failed}>{t('vault.tx_failed')}</Text> : null}
+      <View style={styles.footer}>
+        <View style={styles.meta}>
+          <Text style={styles.date}>{fmtDate(new Date(note.at).toISOString(), language)}</Text>
+          <OwnerFee fee={gas.fee} />
         </View>
         <Text style={styles.link}>{t('mobile.home.view')} ↗</Text>
       </View>
@@ -454,6 +511,28 @@ export function TransactionsScreen() {
   const failures = React.useMemo(() => attempts.filter(isFailure), [attempts]);
 
   /**
+   * Gas the OWNER paid, read from receipts: a row the relayer did not bill carries no fee leg, and
+   * when the owner wallet sent it the fee is ETH that left that wallet instead. Only those rows are
+   * looked up, plus this device's notes of what it sent from the owner key — the ones the feed has
+   * no row for at all. See vault/owner-tx-history.
+   */
+  const notes = React.useMemo(
+    () => (vault ? ownerTxNotes(network, vault) : []),
+    // Re-read with each load, so a write sent since the page opened is picked up by the next pull.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [vault, network, ops],
+  );
+  const opHashes = React.useMemo(() => new Set(ops.map((op) => op.txHash.toLowerCase())), [ops]);
+  const unbilled = React.useMemo(
+    () => [
+      ...ops.filter((op) => !op.settlement && !classify(op, network, t, undefined, words).fee).map((op) => op.txHash),
+      ...notes.filter((n) => !opHashes.has(n.hash.toLowerCase())).map((n) => n.hash),
+    ],
+    [ops, notes, opHashes, network, t, words],
+  );
+  const ownerGas = useOwnerGas(network, owner, unbilled);
+
+  /**
    * No "Confirming" tab.
    *
    * It listed the writes this device had sent and was waiting on, which is now the toast's job —
@@ -508,12 +587,17 @@ export function TransactionsScreen() {
    */
   const feed = React.useMemo(() => {
     const at = (op: Operation) => (op.timestamp ? Date.parse(op.timestamp) : op.blockNum);
-    const rows: {key: string; at: number; op?: Operation; tx?: Attempt}[] = [
+    const rows: {key: string; at: number; op?: Operation; tx?: Attempt; note?: OwnerTxNote}[] = [
       ...shown.map((op) => ({key: op.txHash, at: at(op), op})),
       ...failures.map((tx) => ({key: `relay-${tx.id}`, at: tx.at * 1000, tx})),
+      // Unfiltered by the tabs, like the failures: nothing classifies a row the feed never had.
+      // Drawn once mined — the toast follows it until then.
+      ...notes
+        .filter((n) => !opHashes.has(n.hash.toLowerCase()) && ownerGas.has(n.hash.toLowerCase()))
+        .map((note) => ({key: `owner-${note.hash}`, at: note.at, note})),
     ];
     return rows.sort((a, b) => b.at - a.at);
-  }, [shown, failures]);
+  }, [shown, failures, notes, opHashes, ownerGas]);
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic"
@@ -544,7 +628,9 @@ export function TransactionsScreen() {
       ) : (
         feed.map((row) =>
           row.op ? (
-            <Op key={row.key} op={row.op} explorer={explorer} network={network} orders={orders} />
+            <Op key={row.key} op={row.op} explorer={explorer} network={network} orders={orders} ownerGas={ownerGas.get(row.op.txHash.toLowerCase())} />
+          ) : row.note ? (
+            <OwnerOnlyOp key={row.key} note={row.note} gas={ownerGas.get(row.note.hash.toLowerCase())!} explorer={explorer} />
           ) : (
             <FailedOp key={row.key} tx={row.tx!} explorer={explorer} network={network} />
           ),
