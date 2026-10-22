@@ -17,9 +17,15 @@ import {publicClientFor, type Network} from '@/core/chain';
 const SUSDS: Partial<Record<Network, Address>> = {
   mainnet: '0xa3931d71877C0E7a3148CB7Eb4463524FEc27fbD',
   base: '0x5875eEE11Cf8398102FdAd704C9E96607675467a',
+  arbitrum: '0xdDb46999F8891663a8F2828d25298f70416d7610',
 };
-// Base's SSR oracle (PSM3 rate provider) — getSUSDSData() returns (ssr, chi, rho); chi is the rate.
-const BASE_RATE_ORACLE = '0x65d946e533748A998B1f0E430803e39A6388f7a1' as const;
+// L2 sUSDS is a bridged token, not the ERC-4626 vault, so its rate comes from the PSM3's rate
+// provider — getSUSDSData() returns (ssr, chi, rho); chi is the rate. Arbitrum's is the one its
+// PSM3 (0x2B05…7266) names.
+const RATE_ORACLE: Partial<Record<Network, Address>> = {
+  base: '0x65d946e533748A998B1f0E430803e39A6388f7a1',
+  arbitrum: '0xEE2816c1E1eed14d444552654Ed3027abC033A36',
+};
 
 const ERC4626_ABI = parseAbi([
   'function balanceOf(address) view returns (uint256)',
@@ -45,8 +51,8 @@ export async function susdsRate(network: Network): Promise<number> {
   if (!address) return 1;
   try {
     const client = publicClientFor(network);
-    if (network === 'base') {
-      const data = (await client.readContract({address: BASE_RATE_ORACLE, abi: SUSDS_DATA_ABI, functionName: 'getSUSDSData'})) as readonly bigint[];
+    if (RATE_ORACLE[network]) {
+      const data = (await client.readContract({address: RATE_ORACLE[network]!, abi: SUSDS_DATA_ABI, functionName: 'getSUSDSData'})) as readonly bigint[];
       const rate = Number(data[1]) / 1e27;
       return Number.isFinite(rate) && rate > 0 ? rate : 1;
     }
@@ -67,9 +73,9 @@ export async function fetchYielding(vault: Address, network: Network): Promise<Y
     if (raw <= BigInt(0)) return null;
 
     let rate: number;
-    if (network === 'base') {
+    if (RATE_ORACLE[network]) {
       // chi is the assets-per-share accumulator (RAY-scaled): USDS per sUSDS = chi / 1e27.
-      const data = (await client.readContract({address: BASE_RATE_ORACLE, abi: SUSDS_DATA_ABI, functionName: 'getSUSDSData'})) as readonly bigint[];
+      const data = (await client.readContract({address: RATE_ORACLE[network]!, abi: SUSDS_DATA_ABI, functionName: 'getSUSDSData'})) as readonly bigint[];
       rate = Number(data[1]) / 1e27;
     } else {
       const perShare = (await client.readContract({address, abi: ERC4626_ABI, functionName: 'convertToAssets', args: [BigInt(1e18)]})) as bigint;

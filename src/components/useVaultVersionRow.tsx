@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
+import type {Network} from '@/core/chain';
 import {ownerVaultAddress} from '@/vault/read';
 
 import {checkVaultUpgrade, upgradeVault, type VaultUpgrade} from '@/vault/manage';
@@ -49,15 +50,24 @@ export function useVaultVersionRow(): {
   const vault = owner ? ownerVaultAddress(owner, network) : null;
 
   const [up, setUp] = useState<VaultUpgrade | null>(null);
-  const [busy, setBusy] = useState(false);
+  // The network the upgrade was started on: a switch mid-await must not spin the other network's row.
+  const [busy, setBusy] = useState<Network | null>(null);
   // The server version catalog, for the upgrade target's release note ("What's new").
   const [catalog, setCatalog] = useState<VaultVersionsCatalog | null>(null);
   useEffect(() => {
     fetchVaultVersions(network).then(setCatalog);
   }, [network]);
 
+  // Cleared first and guarded, so a switch never shows the last network's version — or lets its
+  // late answer land on the new one.
   const load = useCallback(() => {
-    if (vault) checkVaultUpgrade(vault, network).then(setUp);
+    setUp(null);
+    if (!vault) return;
+    let live = true;
+    checkVaultUpgrade(vault, network).then((u) => live && setUp(u));
+    return () => {
+      live = false;
+    };
   }, [vault, network]);
   useEffect(load, [load]);
 
@@ -70,9 +80,11 @@ export function useVaultVersionRow(): {
    * the same upgrade twice. The pending store already follows every relayed transaction to its
    * receipt, so the row follows that instead of guessing.
    */
-  const [submitted, setSubmitted] = useState<string | null>(null);
+  // With its network: the row of every OTHER network has nothing in flight, and showed this one's
+  // spinner after a switch until the upgrade was mined.
+  const [submitted, setSubmitted] = useState<{hash: string; network: Network} | null>(null);
   const pending = usePending((s) => s.txs);
-  const inFlight = submitted != null && pending.some((x) => x.hash === submitted && x.status === 'pending');
+  const inFlight = submitted != null && pending.some((x) => x.hash === submitted.hash && x.status === 'pending');
   // Once it lands, read the implementation again — the row has been showing the old one.
   useEffect(() => {
     if (submitted && !inFlight) {
@@ -80,13 +92,13 @@ export function useVaultVersionRow(): {
       load();
     }
   }, [submitted, inFlight, load]);
-  const working = busy || inFlight;
+  const working = busy === network || (inFlight && submitted?.network === network);
 
   const {ask, sheet} = useConfirmAction();
 
   const doUpgrade = async () => {
     if (!vault || !stable || !up?.latest) return;
-    setBusy(true);
+    setBusy(network);
     const tx = showTx(`${t('vault.upgrade_action')} · ${up.latestVersion ?? ''}`.trim(), network);
     try {
       const acct = await getSigner();
@@ -94,12 +106,12 @@ export function useVaultVersionRow(): {
       tx.success(hash);
       // Remembered so the row can stay in its confirming state: `upgradeVault` resolves when the
       // RELAYER accepted the transaction, which is before it is mined.
-      setSubmitted(hash);
+      setSubmitted({hash, network});
       load();
     } catch (e) {
       tx.error(String((e as Error)?.message ?? e));
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 

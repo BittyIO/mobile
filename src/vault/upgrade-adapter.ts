@@ -11,7 +11,7 @@
 import {encodeFunctionData, parseAbi, type Address, type Hex} from 'viem';
 import {publicClientFor, type Network} from '@/core/chain';
 import {ADAPTER_ABI, VAULT_UPGRADE_ABI} from '@/core/abi';
-import {protocolMeta} from '@/core/protocols';
+import {isNamedProtocol, protocolMeta} from '@/core/protocols';
 import {generationConfig} from '@/core/vault-generation';
 import {relayVaultWrite} from './relay';
 
@@ -38,7 +38,14 @@ const GUARD_LIST_ABI = parseAbi([
   'function getDeprecatedProtocols() view returns (address[])',
 ]);
 
-export async function checkAdapterUpgrades(vault: Address, network: Network): Promise<AdapterUpgrade[]> {
+/**
+ * One entry per adapter lineage the guard knows: the version the vault runs (its clone's, or the
+ * newest live build when it has no clone yet), every address of the lineage — so a row can find
+ * itself whichever of them it names, a deprecated one included — and the upgrade, when behind.
+ */
+export type AdapterStatus = {addresses: string[]; version: bigint; upgrade: AdapterUpgrade | null};
+
+export async function adapterStatuses(vault: Address, network: Network): Promise<AdapterStatus[]> {
   const client = publicClientFor(network);
   const guard = generationConfig().guard;
   const [live, deprecated] = await Promise.all([
@@ -72,38 +79,48 @@ export async function checkAdapterUpgrades(vault: Address, network: Network): Pr
     });
   });
 
-  // One entry per clone (several candidates of a lineage resolve to the same one), keyed under the
-  // first candidate that found it.
-  const clones = new Map<string, Info>();
-  for (const info of infos) if (info.clone && !clones.has(info.clone)) clones.set(info.clone, info);
-  if (clones.size === 0) return [];
+  // Every lineage the guard knows, with the clone the vault holds for it (several candidates of a
+  // lineage resolve to the same one).
+  const lineages = new Map<string, Info[]>();
+  for (const info of infos) lineages.set(info.lineage, [...(lineages.get(info.lineage) ?? []), info]);
+  const groups = [...lineages.values()];
+  const cloneOf = (g: Info[]) => g.find((x) => x.clone)?.clone ?? null;
+  const withClone = groups.filter(cloneOf);
+  const cloneVersions = withClone.length
+    ? await client.multicall({
+        contracts: withClone.map((g) => ({address: cloneOf(g) as Address, abi: ADAPTER_ABI, functionName: 'protocolVersion' as const})),
+        allowFailure: true,
+      })
+    : [];
 
-  const cloneVersions = await client.multicall({
-    contracts: [...clones.keys()].map((c) => ({address: c as Address, abi: ADAPTER_ABI, functionName: 'protocolVersion' as const})),
-    allowFailure: true,
-  });
-
-  const out: AdapterUpgrade[] = [];
-  [...clones.entries()].forEach(([clone, first], i) => {
-    const cv = cloneVersions[i];
-    if (cv.status !== 'success') return;
-    const current = cv.result as bigint;
-    // Keyed under the adapter the clone runs today where the guard still lists it, so the allowlist
-    // swap below drops THAT address rather than leaving it registered beside the new one.
-    const key = infos.find((x) => x.clone === clone && x.version === current) ?? first;
-    const latest = infos
-      .filter((x) => x.lineage === key.lineage && liveSet.has(x.address))
+  return groups.flatMap((group): AdapterStatus[] => {
+    const latest = group
+      .filter((x) => liveSet.has(x.address))
       .reduce<Info | null>((a, b) => (!a || b.version > a.version ? b : a), null);
-    if (!latest || latest.version <= current) return;
-    out.push({
-      name: protocolMeta(network, latest.address).name,
-      oldProtocol: key.address,
-      newImpl: latest.address,
-      currentVersion: current,
-      latestVersion: latest.version,
-    });
+    const cv = withClone.includes(group) ? cloneVersions[withClone.indexOf(group)] : null;
+    const current = cv?.status === 'success' ? (cv.result as bigint) : null;
+    const addresses = group.map((x) => x.address.toLowerCase());
+    // No clone yet: the vault runs nothing, and its first use clones the newest live build.
+    if (current == null) return latest ? [{addresses, version: latest.version, upgrade: null}] : [];
+    if (!latest || latest.version <= current) return [{addresses, version: current, upgrade: null}];
+    // Keyed under the adapter the clone runs today where the guard still lists it, so the allowlist
+    // swap drops THAT address rather than leaving it registered beside the new one.
+    const key = group.find((x) => x.version === current) ?? group.find((x) => x.clone)!;
+    return [
+      {
+        addresses,
+        version: current,
+        upgrade: {
+          // The new build is often one no table has named yet; the one it replaces is.
+          name: [latest.address, key.address].map((a) => protocolMeta(network, a).name).find(isNamedProtocol) ?? protocolMeta(network, latest.address).name,
+          oldProtocol: key.address,
+          newImpl: latest.address,
+          currentVersion: current,
+          latestVersion: latest.version,
+        },
+      },
+    ];
   });
-  return out;
 }
 
 /**

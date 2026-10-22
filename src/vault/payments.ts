@@ -7,7 +7,7 @@
  */
 import {maxUint256, parseUnits, zeroAddress, type Address, type Hex} from 'viem';
 import type {Signer} from '@/wallet/signer';
-import {apiFetch, apiUrl, customRpc, publicClientFor, type Network} from '@/core/chain';
+import {apiFetch, apiUrl, publicClientFor, type Network} from '@/core/chain';
 import {VAULT_PAYMENTS_ABI, VAULT_PAYMENTS_V103_ABI, VAULT_RISK_ABI, WHITELIST_STATUS} from '@/core/abi';
 import {isLegacy} from '@/core/vault-generation';
 import {assetMeta} from '@/core/assets';
@@ -255,9 +255,7 @@ export async function fetchWhitelist(vault: Address, network: Network): Promise<
           removeAt: Number(e.removeAt),
         }));
     } catch {
-      // With the owner's own RPC set, the server's list is exactly the source they chose not to
-      // trust; otherwise fall through to it.
-      if (customRpc(network)) return [];
+      // Fall through to the server's list.
     }
   }
   try {

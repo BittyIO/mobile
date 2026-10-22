@@ -139,7 +139,6 @@ const fmtN = fmtNum;
 /** Trim to token-sized precision, so a split never carries float noise into a withdrawal. */
 /** The Buy / Sell bar's own height: 14 of top padding, a 50pt button, 18 of bottom padding. */
 const BAR_HEIGHT = 82;
-const fmtAmt = (raw: string, decimals: number): string => fmtShort(Number(formatUnits(BigInt(raw), decimals)));
 // Short amount for the quote box's Min received. Like fmtShort (which truncates, so a floor is never
 // overstated), but a sub-0.01 value shows 3 significant digits instead of fmtShort's 7-decimal tail.
 const fmtQuote = (n: number): string =>
@@ -1457,25 +1456,25 @@ export function TradeScreen() {
    * Three rows and nothing to scroll, so a sheet is right here — it was the long asset lists that
    * could not live in one, and those are a page now. See {SelectAssetScreen}.
    */
-  const pickerItems = (
+  /**
+   * The limit/TWAP sources, drawn with the market sheet's rows — tick, quick percentages, an amount
+   * typed in place — but the tick picks ONE: a CoW order sells a single token, so it can be pointed
+   * at the free balance or at one position, never both. Each row's ceiling is {spendableFrom}.
+   */
+  const rateTag = (apy: number | null) => (apy != null ? ` · ${t('mobile.earn.apy_rate', {rate: apy.toFixed(2)})}` : '');
+  const limitSources = (
     [
-      // A market order already reaches the positions on its own (it withdraws and swaps in one
-      // transaction), so naming one there would be a choice without a difference. The rows are
-      // for limit and TWAP, where the source decides what the order can actually spend.
-      {key: 'free', label: displaySymbol(spendSym), sub: `${t('vault.balance')} · ${fmtNum(spendableFrom('free', freeNum))}`},
+      {key: 'free', label: displaySymbol(spendSym), held: freeNum, rate: ''},
       // A position's row carries its rate, as the Earn rows do: leaving an order funded from
       // one open costs nothing, and what it keeps paying while it waits is the reason why.
-      ...(mode !== 'Market' && instant.sky
-        ? [{key: 'yield', label: `${displaySymbol(spendSym)} ${t('vault.yielding')}`, sub: `${fmtNum(spendableFrom('yield', instant.sky.amount))} ${displaySymbol(spendSym)}${skyApy != null ? ` · ${t('mobile.earn.apy_rate', {rate: skyApy.toFixed(2)})}` : ''}`}]
-        : []),
-      ...(mode !== 'Market' && instant.aave
-        ? [{key: 'lend', label: `${displaySymbol(spendSym)} ${t('vault.lending')}`, sub: `${fmtNum(spendableFrom('lend', instant.aave.amount))} ${displaySymbol(spendSym)}${aaveApy != null ? ` · ${t('mobile.earn.apy_rate', {rate: aaveApy.toFixed(2)})}` : ''}`}]
-        : []),
-      // The part of this coin the order may not touch, listed last and inert — see {reserveRow},
-      // which the market sheet draws from too.
-      ...(reserveRow ? [{key: 'reserve', ...reserveRow, disabled: true}] : []),
-    ] as {key: string; label: string; sub: string; disabled?: boolean}[]
-  ).map((o) => ({...o, icon: <TokenIcon symbol={spendSym} size={30} />}));
+      ...(instant.sky ? [{key: 'yield', label: `${displaySymbol(spendSym)} ${t('vault.yielding')}`, held: instant.sky.amount, rate: rateTag(skyApy)}] : []),
+      ...(instant.aave ? [{key: 'lend', label: `${displaySymbol(spendSym)} ${t('vault.lending')}`, held: instant.aave.amount, rate: rateTag(aaveApy)}] : []),
+    ] as {key: 'free' | 'yield' | 'lend'; label: string; held: number; rate: string}[]
+  ).map((r) => {
+    const cap = spendableFrom(r.key, r.held);
+    const sub = r.key === 'free' ? `${t('vault.balance')} · ${fmtNum(cap)}` : `${fmtNum(cap)} ${displaySymbol(spendSym)}${r.rate}`;
+    return {...r, cap, sub};
+  });
 
   // Plain (no thousands separators, so Number() round-trips) price string for the input default.
   const priceToInput = (p: number) => (p >= 1000 ? p.toFixed(0) : p >= 1 ? p.toFixed(2) : p.toPrecision(4));
@@ -1779,7 +1778,9 @@ export function TradeScreen() {
         tx.success();
       }
       setStatus('done');
+      // CoW indexes a new order a moment after accepting it; look again so it lands in Open.
       refreshOrders();
+      for (const ms of [2000, 6000]) setTimeout(refreshOrders, ms);
     } catch (e) {
       const msg = String((e as Error)?.message ?? e);
       tx.error(msg);
@@ -1872,7 +1873,20 @@ export function TradeScreen() {
    */
   const pairSettled = balances.balances != null || balances.error != null;
   const pairSet = new Set([base?.address.toLowerCase(), quoteAsset?.address.toLowerCase()]);
-  const inPair = (o: CowOrder): boolean => pairSet.has(o.sellToken.toLowerCase()) && pairSet.has(o.buyToken.toLowerCase());
+  // An order funded from a position sells the position's token (sUSDS, aUSDC), which stands for
+  // the pair's stablecoin — matched through its underlying, or the order vanished from Open.
+  const pairToken = (a: string): boolean =>
+    pairSet.has(a.toLowerCase()) || [baseSym, quoteSym].includes(underlyingOf(network, a) ?? '');
+  const inPair = (o: CowOrder): boolean => pairToken(o.sellToken) && pairToken(o.buyToken);
+  // A savings share or an aToken counts as its underlying: an order selling sUSDS for CRCL is a
+  // USDC-priced buy, limit or TWAP, and pricing it per share would be meaningless.
+  // A leg held as a receipt token reads, and prices, as its underlying: what the user typed and
+  // what the order is worth. sUSDS converts at the savings rate; an aToken is one-for-one.
+  const legRate = (addr: string) => (assetMeta(network, addr).symbol === 'sUSDS' ? shareRate : 1);
+  const stableLike = (addr: string) => {
+    const under = underlyingOf(network, addr);
+    return stables.some((st) => (under ? st.symbol === under : st.address.toLowerCase() === addr.toLowerCase()));
+  };
   const marketInPair = (m: MarketTrade): boolean => pairSet.has(m.sold.address.toLowerCase()) && pairSet.has(m.bought.address.toLowerCase());
 
   /**
@@ -1960,14 +1974,19 @@ export function TradeScreen() {
    */
   const twapFacts = (g: TwapGroup) => {
     const o = g.rep;
-    const sellM = assetMeta(network, o.sellToken as Address);
-    const buyM = assetMeta(network, o.buyToken as Address);
-    const sellStable = stables.some((st) => st.address.toLowerCase() === o.sellToken.toLowerCase());
-    const buyStable = stables.some((st) => st.address.toLowerCase() === o.buyToken.toLowerCase());
+    // Named and sized as the underlying when a leg is a receipt token, as the limit rows are.
+    const legMeta = (addr: string) => {
+      const m = assetMeta(network, addr as Address);
+      return {...m, symbol: underlyingOf(network, addr) ?? m.symbol};
+    };
+    const sellM = legMeta(o.sellToken);
+    const buyM = legMeta(o.buyToken);
+    const sellStable = stableLike(o.sellToken);
+    const buyStable = stableLike(o.buyToken);
     // The SCHEDULE's size, not the part's: one part is a tenth of what the user asked for, and a
     // row claiming to be the order has to state the order's own amounts.
-    const partSell = Number(formatUnits(BigInt(o.sellAmount), sellM.decimals));
-    const partBuy = Number(formatUnits(BigInt(o.buyAmount), buyM.decimals));
+    const partSell = Number(formatUnits(BigInt(o.sellAmount), sellM.decimals)) * legRate(o.sellToken);
+    const partBuy = Number(formatUnits(BigInt(o.buyAmount), buyM.decimals)) * legRate(o.buyToken);
     /**
      * The limit price the schedule was placed at.
      *
@@ -2477,17 +2496,20 @@ export function TradeScreen() {
               order and opens the quick percentages and a field to take less. A market swap
               withdraws and trades in one transaction, so a position is a source like any other —
               its only cost is the yield it stops earning, which is why the rate is on the row.
-              Limit and TWAP orders keep the plain source list: they settle later and can only be
-              pointed at ONE place. */}
-          {mode === 'Market' ? (
-            <Sheet
+              Limit and TWAP orders get the same rows, but the tick picks ONE source: they settle
+              later and sell a single token. See {limitSources}. */}
+          <Sheet
               visible={picker === 'source'}
               title={t('vault.asset')}
               onClose={() => setPicker(null)}
+              // Ticks and amounts apply as they are made, so closing confirms: "Done", not ✕.
+              done
               // Taller than a plain picker: three rows, each with a keypad target and a row of
               // fractions, and the keyboard has to leave something to read.
               height={Math.round(screenHeight * 0.8)}>
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                {mode === 'Market' ? (
+                  <>
                 {/* Labelled exactly as the limit sheet labels the same three things, so the two
                     read as one list with a tick added. */}
                 {([
@@ -2523,6 +2545,34 @@ export function TradeScreen() {
                     />
                   ) : null,
                 )}
+                  </>
+                ) : (
+                  limitSources.map((r) => (
+                    <FundRow
+                      key={r.key}
+                      label={r.label}
+                      sub={r.sub}
+                      symbol={spendSym}
+                      cap={r.cap}
+                      on={spendSource === r.key}
+                      amount={spendSource === r.key ? amount : ''}
+                      // Ticking moves the order onto this source with all of it; unticking a
+                      // position falls back to the free balance, which is always the default.
+                      onToggle={() => {
+                        const on = spendSource !== r.key;
+                        setSpendSource(on ? r.key : 'free');
+                        applyPay(on ? String(r.cap) : '');
+                      }}
+                      onAmount={(v) => {
+                        setSpendSource(r.key);
+                        applyPay(v);
+                      }}
+                      onCommit={() => {
+                        if (!(Number(amount) > 0) && r.key !== 'free') setSpendSource('free');
+                      }}
+                    />
+                  ))
+                )}
                 {/* The same row the limit sheet's list ends on, in this sheet's own language: a
                     FundRow that cannot be ticked. See {reserveRow}. */}
                 {reserveRow ? (
@@ -2541,16 +2591,6 @@ export function TradeScreen() {
                 ) : null}
               </ScrollView>
             </Sheet>
-          ) : (
-            <PickerSheet
-              visible={picker === 'source'}
-              title={t('vault.asset')}
-              items={pickerItems}
-              selected={spendSource}
-              onSelect={(key) => setSpendSource(key as 'free' | 'yield' | 'lend')}
-              onClose={() => setPicker(null)}
-            />
-          )}
           {/* Inside the order like the source picker above: a sheet presented from outside
               it would open behind the one the user is looking at. */}
           <PickerSheet
@@ -2751,10 +2791,7 @@ export function TradeScreen() {
       const sp = statusPill(es);
       const sellM = assetMeta(network, o.sellToken as Address);
       const buyM = assetMeta(network, o.buyToken as Address);
-      // A leg held as a receipt token reads, and prices, as its underlying: what the user
-      // typed and what the order is worth. sUSDS converts at the savings rate; an aToken is
-      // one-for-one.
-      const legRate = (addr: string) => (assetMeta(network, addr).symbol === 'sUSDS' ? shareRate : 1);
+      // Receipt-token legs read as their underlying — see {legRate}.
       const legSym = (addr: string, fallback: string) => underlyingOf(network, addr) ?? fallback;
       const sellNum = Number(formatUnits(BigInt(o.sellAmount), sellM.decimals)) * legRate(o.sellToken);
       const buyNum = Number(formatUnits(BigInt(o.buyAmount), buyM.decimals)) * legRate(o.buyToken);
@@ -2763,13 +2800,7 @@ export function TradeScreen() {
       const fromPosition = !!underlyingOf(network, o.sellToken);
       // A TWAP part carries a salted appData; a limit order one of the fixed ones.
       const isTwap = !!o.appData && !LIMIT_APP_DATA_HASHES.has(o.appData.toLowerCase());
-      // Price quoted in the stable leg when there is one, else base-per-quote by side.
-      // A savings share or an aToken counts as its underlying here: an order selling sUSDS
-      // for CRCL is a USDC-priced buy, and pricing it per share would be meaningless.
-      const stableLike = (addr: string) => {
-        const under = underlyingOf(network, addr);
-        return stables.some((s) => (under ? s.symbol === under : s.address.toLowerCase() === addr.toLowerCase()));
-      };
+      // Price quoted in the stable leg when there is one, else base-per-quote by side. See {stableLike}.
       const sellIsStable = stableLike(o.sellToken);
       const buyIsStable = stableLike(o.buyToken);
       const px0 =
@@ -2878,8 +2909,8 @@ export function TradeScreen() {
            */
           lines={[
             isBuy
-              ? [t('vault.pay'), {amount: fmtAmt(o.sellAmount, sellM.decimals), symbol: sellM.symbol}]
-              : [t('vault.receive'), {amount: fmtAmt(o.buyAmount, buyM.decimals), symbol: buyM.symbol}],
+              ? [t('vault.pay'), {amount: fmtShort(sellNum), symbol: sellSym}]
+              : [t('vault.receive'), {amount: fmtShort(buyNum), symbol: buySym}],
 
           ]}
           expanded={isExp}

@@ -1,7 +1,7 @@
 /**
  * Live yield APY per protocol/asset — ported from web `use-protocol-apy`.
  *  - Aave (lending): the supply rate per asset from the Pool Data Provider (`getReserveData.liquidityRate`).
- *  - Sky (staking): the Sky Savings Rate — `ssr()` on mainnet, `getSUSDSData()` on Base. One rate for all
+ *  - Sky (staking): the Sky Savings Rate — `ssr()` on mainnet, `getSUSDSData()` on Base and Arbitrum. One rate for all
  *    Sky assets. No Sky deployment on Sepolia, so it's absent there.
  *  - Lido (staking): a backend endpoint (`/api/protocol-apy/lido`), since the APR isn't a simple read.
  */
@@ -14,11 +14,13 @@ const AAVE_POOL_DATA_PROVIDER: Partial<Record<Network, Address>> = {
   mainnet: '0x0a16f2FCC0D44FaE41cc54e079281D84A363bECD',
   sepolia: '0x3e9708d80f7B3e43118013075F7e95CE3AB31F31',
   base: '0x0F43731EB8d45A581f4a36DD74F5f358bc90C73A',
+  arbitrum: '0x243Aa95cAC2a25651eda86e80bEe66114413c43b',
 };
 
 const SKY_RATE_SOURCE: Partial<Record<Network, {address: Address; read: 'ssr' | 'susdsData'}>> = {
   mainnet: {address: '0xa3931d71877C0E7a3148CB7Eb4463524FEc27fbD', read: 'ssr'},
   base: {address: '0x65d946e533748A998B1f0E430803e39A6388f7a1', read: 'susdsData'},
+  arbitrum: {address: '0xEE2816c1E1eed14d444552654Ed3027abC033A36', read: 'susdsData'},
 };
 
 const AAVE_DATA_ABI = parseAbi([

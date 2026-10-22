@@ -42,6 +42,16 @@ export const VAULT_MANAGE_ABI = parseAbi([
 ]);
 
 /**
+ * v1.0.0 ownership handover. `transferOwnership` queues it behind the risk timelock; once the wait
+ * is over `owner()` already answers the new key. The current owner can cancel until then.
+ */
+export const VAULT_OWNERSHIP_ABI = parseAbi([
+  'function owner() view returns (address)',
+  'function transferOwnership(address newOwner)',
+  'function cancelOwnershipTransfer()',
+]);
+
+/**
  * v1.0.0's allow-list switch, named for the list a vault USES rather than whether it is restricted:
  * `useBittyAllowList(true)` is the old `disableAllowlist`, `false` the old `enableAllowlist`, and
  * `usingBittyAllowList()` is `!allowlistEnabled()`.

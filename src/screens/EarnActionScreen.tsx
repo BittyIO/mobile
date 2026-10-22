@@ -1,4 +1,4 @@
-import React, {useMemo, useState} from 'react';
+import React, {useState} from 'react';
 import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import type {RouteProp} from '@react-navigation/native';
 import {useNavigation, useRoute} from '@react-navigation/native';
@@ -12,7 +12,11 @@ import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {ownerVaultAddress, balanceOfSymbol} from '@/vault/read';
-import {depositToProtocol, withdrawFromProtocol} from '@/vault/actions';
+import {depositFromSources, depositToProtocol, withdrawFromProtocol} from '@/vault/actions';
+import {parseUnits} from 'viem';
+import {Sheet} from '@/components/Sheet';
+import {FundRow} from '@/components/FundRow';
+import {useVaultPositions} from '@/vault/useVaultPositions';
 
 import Svg, {Path} from 'react-native-svg';
 import {TokenIcon} from '@/components/TokenIcon';
@@ -26,7 +30,6 @@ import {useColors, useStyles, type Colors} from '@/theme';
 import {displaySymbol, fmtNum, fmtShort, floor6, round6} from '@/core/format';
 import {useT} from '@/i18n';
 import {useAssetCatalog} from '@/core/asset-catalog';
-import {routesForProtocol} from '@/vault/earn-routes';
 
 /**
  * Deposit / Withdraw. `route.params.mode` picks the action. When protocol+asset are passed (a
@@ -48,22 +51,19 @@ export function EarnActionScreen() {
 
   const catalog = useAssetCatalog(network);
   const stablecoins = catalog.filter((a) => a.kind === 'stable');
-  /**
-   * Everything the adapter this form was opened for will take.
-   *
-   * A deposit arrives here naming ONE route — Aave's USDC, say — but the adapter behind it accepts
-   * five, and the form had no way to say so: the asset was a navigation param and the source row
-   * was shown only on the coin-picker flow. So the one screen with a balance in front of it could
-   * not change which asset that balance was. Same adapter throughout; only the asset moves, which
-   * is what the Earn list's own rows are.
-   */
-  const routes = useMemo(
-    () => (specific && params.protocol ? routesForProtocol(network, catalog, params.protocol) : []),
-    [specific, params.protocol, network, catalog],
-  );
   const [coin, setCoin] = useState(stablecoins[0]?.symbol ?? 'USDC');
-  /** The route's asset, by symbol, which the source sheet can change. */
-  const [routeSym, setRouteSym] = useState(params.symbol ?? '');
+  /**
+   * Where a deposit on a fixed route takes its money from: the vault's free balance ('free') and/or
+   * other protocols holding the SAME asset, keyed by adapter address — a tick and an amount each,
+   * as the market order's funding sheet has. Positions are withdrawn and the total deposited in one
+   * multicall.
+   *
+   * The asset itself is not a choice. The form was opened from one market's detail page, so it
+   * deposits that market's asset; offering the adapter's other assets here answered a question
+   * the page had already settled.
+   */
+  const [fundOn, setFundOn] = useState<Record<string, boolean>>({free: true});
+  const [fundAmt, setFundAmt] = useState<Record<string, string>>({});
   const [amount, setAmount] = useState('');
   const [picker, setPicker] = useState(false);
   const [status, setStatus] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
@@ -73,18 +73,23 @@ export function EarnActionScreen() {
   const protocol = specific
     ? (params.protocol as `0x${string}`)
     : adapterByName(network, 'Sky');
-  /**
-   * The route in hand: the one picked, else the one navigated to.
-   *
-   * A WITHDRAWAL is never re-pointed — it takes a position apart, and the position is for one
-   * asset — so it stays on the params whatever is in `routeSym`.
-   */
-  const route = isDeposit ? routes.find((r) => r.asset.symbol === routeSym) : undefined;
-  const targetAsset = specific ? ((route?.asset.address ?? params.asset) as `0x${string}`) : selected?.address;
-  const targetDecimals = specific ? route?.asset.decimals ?? params.decimals ?? 18 : selected?.decimals ?? 18;
-  const targetSymbol = specific ? route?.asset.symbol ?? params.symbol ?? 'token' : coin;
+  // A fixed route deposits or withdraws exactly the asset it was opened for. See {source}.
+  const targetAsset = specific ? (params.asset as `0x${string}`) : selected?.address;
+  const targetDecimals = specific ? params.decimals ?? 18 : selected?.decimals ?? 18;
+  const targetSymbol = specific ? params.symbol ?? 'token' : coin;
   const feeCoin = selected?.address ?? targetAsset; // relay fee always paid in a stable coin
   const bal = useVaultBalances(network);
+  /**
+   * The other positions in this asset a deposit can be moved out of: Sky savings and Aave supply,
+   * which pay out in the same transaction. Lido is left out — its unstake is a queue, not a payout.
+   */
+  const pos = useVaultPositions(isDeposit && specific ? bal.vault : null, network);
+  const movable = pos.positions.filter(
+    (p) =>
+      p.asset.toLowerCase() === params.asset?.toLowerCase() &&
+      p.protocol.toLowerCase() !== params.protocol?.toLowerCase() &&
+      (p.kind === 'supplied' || p.protocolName === 'Sky'),
+  );
   const weth = useWethFeeCoin(network, bal.vault);
   /**
    * The float the relayer bills against, held back from a DEPOSIT as the order sheet holds it back
@@ -124,6 +129,29 @@ export function EarnActionScreen() {
     const keep = reserve.coin?.toUpperCase() === symbol.toUpperCase() ? reserve.size : 0;
     return round6(Math.max(0, held - keep));
   };
+  /** A fixed-route deposit draws on several sources; everything else is the plain one-source form. */
+  const multi = isDeposit && specific;
+  // Floored to at most six places, so a ticked row never names more than the position holds.
+  const fundDp = Math.min(targetDecimals, 6);
+  const floorDp = (n: number) => Math.floor(n * 10 ** fundDp) / 10 ** fundDp;
+  const fundKeys = ['free', ...movable.map((p) => p.protocol as string)];
+  const capOf = (key: string): number =>
+    key === 'free' ? floorDp(depositableOf(targetSymbol)) : floorDp(Number(movable.find((p) => p.protocol === key)?.formatted ?? 0));
+  const picked = (key: string) => (fundOn[key] ? Math.min(Number(fundAmt[key]) || 0, capOf(key)) : 0);
+  /** The positions ticked into this deposit — what the multicall will withdraw from. */
+  const tickedPositions = movable.filter((p) => fundOn[p.protocol]);
+  /** Change one source and restate the amount, so the field and the rows always agree. */
+  const applyFunding = (on: Record<string, boolean>, amt: Record<string, string>) => {
+    setFundOn(on);
+    setFundAmt(amt);
+    const total = round6(fundKeys.reduce((n, k) => n + (on[k] ? Math.min(Number(amt[k]) || 0, capOf(k)) : 0), 0));
+    setAmount(total > 0 ? String(total) : '');
+  };
+  /** Tick or untick: ticking brings in everything the source holds, unticking empties it. */
+  const toggleFunding = (k: string) => {
+    const on = {...fundOn, [k]: !fundOn[k]};
+    applyFunding(on, {...fundAmt, [k]: on[k] ? String(capOf(k)) : ''});
+  };
   /**
    * What the source sheet offers: on a fixed route the adapter's own assets, otherwise the dollars.
    *
@@ -136,7 +164,7 @@ export function EarnActionScreen() {
    * takes nothing away from a dollar reserve, and a USDC row in that sheet would be answering a
    * question nobody asked.
    */
-  const sourceAssets = specific ? routes.map((r) => r.asset) : stablecoins;
+  const sourceAssets = specific ? catalog.filter((a) => a.address.toLowerCase() === params.asset?.toLowerCase()) : stablecoins;
   const reserveCoin =
     reserve.coin && reserve.size > 0
       ? sourceAssets.find((a) => a.symbol.toUpperCase() === reserve.coin!.toUpperCase())
@@ -144,7 +172,7 @@ export function EarnActionScreen() {
   const sourceOptions: PickerItem[] = isDeposit
     ? [
         ...sourceAssets.map((a) => ({
-          key: a.symbol,
+          key: specific ? 'free' : a.symbol,
           label: displaySymbol(a.symbol),
           sub: `${fmtNum(depositableOf(a.symbol))} ${displaySymbol(a.symbol)}`,
           icon: <TokenIcon symbol={a.symbol} size={30} />,
@@ -166,11 +194,10 @@ export function EarnActionScreen() {
       ]
     : [];
   /** Is there a choice to offer? One asset and no float to name is not a list worth opening. */
-  const canPickSource = isDeposit && sourceOptions.length > 1;
-  /** Re-point the form. The amount goes with it: the ceiling it was typed against has changed. */
+  const canPickSource = isDeposit && sourceOptions.length + (multi ? movable.length : 0) > 1;
+  /** Re-point the one-source form. The amount goes with it: the ceiling it was typed against has changed. */
   const pickSource = (key: string) => {
-    if (specific) setRouteSym(key);
-    else setCoin(key);
+    setCoin(key);
     setAmount('');
   };
   // Deposit max = free balance of the coin; withdraw max = the position's amount (passed in params).
@@ -178,8 +205,14 @@ export function EarnActionScreen() {
   // Six places only when the reserve actually applies: that is the one case where the figure is
   // arithmetic rather than the balance itself, and rounding a token with eighteen decimals to six
   // for no reason would leave dust nobody can deposit.
+  // With positions ticked, everything the ticked sources hold: the fee is billed from the free
+  // balance, which a withdrawal-and-deposit leaves exactly as it found it.
   const max = isDeposit
-    ? reserve.keep > 0
+    ? multi && tickedPositions.length > 0
+      ? String(round6(fundKeys.reduce((n, k) => n + (fundOn[k] ? capOf(k) : 0), 0)))
+      : multi && !fundOn.free
+      ? '0'
+      : reserve.keep > 0
       ? String(round6(Math.max(0, freeBal - reserve.keep)))
       : balanceOfSymbol(bal.balances, targetSymbol)
     : params.max;
@@ -193,6 +226,32 @@ export function EarnActionScreen() {
   /** Six places at most, as the order sheet's fields use: enough to be exact, short enough to read. */
   const trim = (n: number): string => (!isFinite(n) || n <= 0 ? '' : String(Number(n < 1 ? n.toPrecision(6) : n.toFixed(6))));
   const pct = hasMax && Number(amount) > 0 ? (Number(amount) / Number(max)) * 100 : 0;
+  /**
+   * How much each ticked position gives, in raw units.
+   *
+   * The rows say where the money comes from and the amount says how much; moving a row restates the
+   * amount, but the field stays typable, so the two can disagree. Each ticked source gives what its
+   * row was set to, in order — the free balance first — and then tops up towards its whole balance
+   * if the amount is still short. The free balance's share is simply left in the vault to deposit.
+   */
+  const planWithdrawals = (): {protocol: `0x${string}`; raw: bigint}[] => {
+    const raw = (n: number) => parseUnits(n.toFixed(fundDp), targetDecimals);
+    const order = fundKeys.filter((k) => fundOn[k]);
+    const caps = order.map((k) => raw(capOf(k)));
+    let need = parseUnits(amount, targetDecimals);
+    const takes = order.map((k, i) => {
+      const t = raw(picked(k)) < need ? raw(picked(k)) : need;
+      need -= t;
+      return t < caps[i] ? t : caps[i];
+    });
+    for (let i = 0; i < order.length && need > 0n; i++) {
+      const extra = caps[i] - takes[i] < need ? caps[i] - takes[i] : need;
+      takes[i] += extra;
+      need -= extra;
+    }
+    return order.flatMap((k, i) => (k !== 'free' && takes[i] > 0n ? [{protocol: k as `0x${string}`, raw: takes[i]}] : []));
+  };
+
   const onSubmit = async () => {
     if (!unlocked || !owner || !protocol || !targetAsset || !feeCoin) return;
     setStatus('busy');
@@ -218,8 +277,19 @@ export function EarnActionScreen() {
       tx = showTx(`${title} · ${fmtShort(Number(amount))} ${displaySymbol(targetSymbol)}`, network);
       nav.goBack();
       const vault = ownerVaultAddress(owner, network);
-      const run = isDeposit ? depositToProtocol : withdrawFromProtocol;
-      const h = await run({
+      const withdrawals = multi ? planWithdrawals() : [];
+      const h = withdrawals.length
+        ? await depositFromSources({
+            account: acct,
+            vault,
+            network,
+            protocol,
+            asset: targetAsset,
+            raw: parseUnits(amount, targetDecimals),
+            withdrawals,
+            stableCoin: feeCoin,
+          })
+        : await (isDeposit ? depositToProtocol : withdrawFromProtocol)({
         account: acct,
         vault,
         network,
@@ -296,6 +366,12 @@ export function EarnActionScreen() {
               <Pressable style={styles.symPill} onPress={() => setPicker(true)} hitSlop={6}>
                 <TokenIcon symbol={targetSymbol} size={20} />
                 <Text style={styles.fieldSym}>{displaySymbol(targetSymbol)}</Text>
+                {/* Where it comes from, when not the free balance — as the order sheet's pay pill says. */}
+                {tickedPositions.length ? (
+                  <Text style={styles.sourceTag}>
+                    {[...new Set(tickedPositions.map((p) => t(p.kind === 'supplied' ? 'vault.lending' : 'vault.yielding')))].join(' · ')}
+                  </Text>
+                ) : null}
                 <Svg width={14} height={14} viewBox="0 0 24 24">
                   <Path
                     d="m9 18 6-6-6-6"
@@ -340,8 +416,47 @@ export function EarnActionScreen() {
       </ScrollView>
       {/* Inside the form sheet, like the order form's own pickers: presented from outside it, a
           sheet opens behind the one being looked at. */}
+      {/* A fixed-route deposit: the market order's funding rows — a tick, quick fractions and an
+          amount per source — over the same inert fee-float row. Edits apply as they are made. */}
+      <Sheet visible={picker && multi} title={t('vault.asset')} onClose={() => setPicker(false)} done>
+        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          {fundKeys.map((k) => {
+            const p = movable.find((x) => x.protocol === k);
+            return (
+              <FundRow
+                key={k}
+                label={p ? `${displaySymbol(targetSymbol)} ${t(p.kind === 'supplied' ? 'vault.lending' : 'vault.yielding')}` : displaySymbol(targetSymbol)}
+                sub={p ? `${fmtNum(capOf(k))} ${displaySymbol(targetSymbol)} · ${p.protocolName}` : `${t('vault.balance')} · ${fmtNum(capOf(k))}`}
+                symbol={targetSymbol}
+                cap={capOf(k)}
+                on={!!fundOn[k]}
+                amount={fundAmt[k] ?? ''}
+                onToggle={() => toggleFunding(k)}
+                onAmount={(v) => applyFunding({...fundOn, [k]: true}, {...fundAmt, [k]: v})}
+                onCommit={() => {
+                  if (!(Number(fundAmt[k]) > 0) && k !== 'free') applyFunding({...fundOn, [k]: false}, {...fundAmt, [k]: ''});
+                }}
+              />
+            );
+          })}
+          {reserveCoin ? (
+            <FundRow
+              inert
+              label={`${displaySymbol(reserveCoin.symbol)} ${t('mobile.trade.fee_reserved')}`}
+              sub={`${fmtNum(reserveHeld(reserve.size, floor6(Number(balanceOfSymbol(bal.balances, reserveCoin.symbol) || 0))))} ${displaySymbol(reserveCoin.symbol)}`}
+              symbol={reserveCoin.symbol}
+              cap={0}
+              on={false}
+              amount=""
+              onToggle={() => {}}
+              onAmount={() => {}}
+              onCommit={() => {}}
+            />
+          ) : null}
+        </ScrollView>
+      </Sheet>
       <PickerSheet
-        visible={picker}
+        visible={picker && !multi}
         title={t('vault.asset')}
         items={sourceOptions}
         selected={targetSymbol}
@@ -368,6 +483,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   // does not look like a different form.
   symPill: {flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.neutralSoft, borderRadius: 16, paddingVertical: 5, paddingHorizontal: 8},
   overText: {color: c.danger, fontSize: 12},
+  sourceTag: {color: c.subtext, fontSize: 11, fontWeight: '600'},
   input: {
     height: 44,
     borderRadius: 10,

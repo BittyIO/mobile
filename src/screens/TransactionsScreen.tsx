@@ -15,6 +15,7 @@ import {useVaultTransactions} from '@/vault/useVaultTransactions';
 import type {Operation, TransferRow} from '@/vault/transactions';
 import {TokenIcon} from '@/components/TokenIcon';
 import {Amount} from '@/components/Amount';
+import {GasIcon} from '@/components/GasIcon';
 import {splitMarketSwap, netTrade, isReceiptToken, STAKE_TOKENS, SUPPLY_TOKENS, STAKE_COUNTERPARTY, SUPPLY_COUNTERPARTY, BITTY_FEE_COLLECTORS} from '@/vault/market-trades';
 import {fmtNum, fmtShort, displaySymbol, shortAddress} from '@/core/format';
 import {EXPLORER_TX, type Network} from '@/core/chain';
@@ -81,6 +82,9 @@ function classify(
   words: (...parts: (string | false | null | undefined)[]) => string,
 ): OpView {
   // The gasless relay fee leg (paid to Bitty's fee collector) — shown on its own line, not as a transfer.
+  // A market trade pays the same Safe twice: the adapter's 0.2% during the swap, then the relay fee
+  // after it. The feed lists a transaction's legs newest log first, so the first match is the relay
+  // fee — ponytail: relies on that order (the feed carries no logIndex); match by amount if it changes.
   const fee = op.legs.find((l) => l.direction === 'out' && BITTY_FEE_COLLECTORS.has(lc(l.counterparty))) ?? null;
   const core = op.legs.filter((l) => l !== fee);
 
@@ -184,14 +188,8 @@ function classify(
             : kinds.received
               ? 'receive'
               : 'gas'));
-  /**
-   * A settings change moves nothing but the relay fee, and with the fee hidden the vault's balance
-   * dropped with no line to say why. So on Settings rows the fee is shown, as the last detail.
-   */
-  const details =
-    category === 'settings' && fee
-      ? [...described, t('mobile.actions.network_fee', {amount: `${fmtAmt(fee.amount)} ${displaySymbol(fee.assetSymbol ?? '')}`})]
-      : described;
+  // The relay fee is not a detail: every row carries it in its footer, beside the date.
+  const details = described;
   if (parts.length === 0) {
     /**
      * Nothing visible moved but the fee. What the row is called then comes from the CALL.
@@ -293,9 +291,17 @@ function Op({op, explorer, network, orders}: {op: Operation; explorer: string; n
 
       <View style={styles.footer}>
         <View style={styles.meta}>
-          {/* The gasless relay fee is still split out of the transfer legs (so it never inflates a
-              send), and shown only on Settings rows, as a detail line (see {classify}). */}
+          {/* The gasless relay fee, split out of the transfer legs so it never inflates a send, is
+              shown on every row: it left the vault, whatever the operation was. */}
           <Text style={styles.date}>{fmtDate(op.timestamp, language)}</Text>
+          {v.fee ? (
+            <>
+              <GasIcon color={c.subtext} size={12} />
+              <Text style={styles.fee}>
+                −<Amount v={fmtAmt(v.fee.amount)} /> {displaySymbol(v.fee.assetSymbol)}
+              </Text>
+            </>
+          ) : null}
         </View>
         <Text style={styles.link}>{t('mobile.home.view')} ↗</Text>
       </View>
@@ -579,8 +585,9 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   inC: {color: c.success},
   legText: {color: c.text, fontSize: 15, fontVariant: ['tabular-nums']},
   footer: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, paddingTop: 10},
-  // Just the timestamp on the left now — the gasless relay fee is no longer shown.
+  // Timestamp and fee together on the left; the fee is a pump and a number, no label.
   meta: {flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1},
+  fee: {color: c.subtext, fontSize: 12, fontVariant: ['tabular-nums']},
   link: {color: c.accent, fontSize: 12, fontWeight: '600'},
   note: {color: c.subtext, fontSize: 14},
   err: {color: c.danger, fontSize: 13},

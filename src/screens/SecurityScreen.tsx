@@ -1,6 +1,6 @@
 import React, {useCallback, useState} from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
-import {useFocusEffect, useIsFocused, useNavigation} from '@react-navigation/native';
+import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
 import {useT} from '@/i18n';
@@ -12,14 +12,12 @@ import {SAFETY_TITLE, levelOf, safetyColor, valuesInForce, type SafetyLevelOrCus
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {ownerVaultAddress} from '@/vault/read';
-import {customRpc} from '@/core/chain';
 
 /**
  * Security — three groups of rows, each opening what it names: Safety settings (the timelock and the
- * two daily allowances, with the vault's safety level beside it on v1.0.0+); the allow list, the asset manager, Legacy ETH (wrap idle native ETH) and RPC
- * (the owner's own node for on-chain reads);
- * Vault lock (emergency / forever lock) and the recovery phrase. The writes live on the pages the
- * rows open.
+ * two daily allowances, with the vault's safety level beside it on v1.0.0+); the allow list and the asset manager;
+ * Vault lock (emergency / forever lock), the recovery phrase and Transfer ownership. The writes live on
+ * the pages the rows open.
  *
  * Vault lock is left out on v1.0.3, which has no locks.
  */
@@ -31,8 +29,6 @@ export function SecurityScreen() {
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
   const vault = owner ? ownerVaultAddress(owner, network) : null;
-  // Re-render on return from the RPC page, so its row shows what was just saved.
-  useIsFocused();
 
   // The lock state answers the Vault lock row. Re-read on focus: the row's own page changes it.
   const [lockLevel, setLockLevel] = useState<LockLevel | null>(null);
@@ -75,22 +71,15 @@ export function SecurityScreen() {
           last
         />
       </SettingsGroup>
-      {/* What the vault lets happen beyond the owner's own hand: what it may touch, who else may act
-          for it, and the idle native ETH it can wrap. */}
+      {/* What the vault lets happen beyond the owner's own hand: what it may touch and who else may
+          act for it. */}
       <SettingsGroup>
         <SettingsRow icon="allowlist" title={t('mobile.settings.allow_list')} onPress={() => nav.navigate('VaultAssets')} />
         {/* No status here: who it is and what is pending live on the asset manager's own page. */}
-        <SettingsRow icon="delegation" title={t('vault.asset_manager')} onPress={() => nav.navigate('VaultAssetManager')} />
-        <SettingsRow icon="eth" title={t('mobile.vault.legacy_eth')} onPress={() => nav.navigate('VaultLegacyEth')} />
-        <SettingsRow
-          icon="network"
-          title={t('mobile.settings.rpc')}
-          value={customRpc(network) ? t('mobile.settings.rpc_custom') : t('mobile.settings.rpc_default')}
-          onPress={() => nav.navigate('Rpc')}
-          last
-        />
+        <SettingsRow icon="delegation" title={t('vault.asset_manager')} onPress={() => nav.navigate('VaultAssetManager')} last />
       </SettingsGroup>
-      {/* The last resorts: freezing the vault, and the phrase that restores the key. */}
+      {/* The last resorts: freezing the vault, the phrase that restores the key, and handing the vault
+          to another key. */}
       <SettingsGroup>
         {/* v1.0.0 only — v1.0.3 has no locks. */}
         {hasLocks ? (
@@ -99,10 +88,13 @@ export function SecurityScreen() {
         <SettingsRow
           icon="recovery"
           title={t('mobile.settings.recovery_phrase')}
-          sub={t('mobile.settings.reveal_face_id')}
           onPress={() => nav.navigate('VaultRecoveryPhrase')}
-          last
+          last={!hasLocks}
         />
+        {/* v1.0.0 only — the handover waits out the timelock, which v1.0.3 does not queue it behind. */}
+        {hasLocks ? (
+          <SettingsRow icon="delegation" title={t('mobile.vault.transfer_ownership')} onPress={() => nav.navigate('VaultTransferOwnership')} last />
+        ) : null}
       </SettingsGroup>
     </ScrollView>
   );

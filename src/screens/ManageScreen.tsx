@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {ownerVaultAddress} from '@/vault/read';
@@ -12,6 +12,7 @@ import {showTx} from '@/components/Toast';
 import {useConfirmAction} from '@/components/ConfirmAction';
 import {relayGasFor} from '@/vault/fee-quote';
 import {ProtocolIcon} from '@/components/ProtocolIcon';
+import {useAdapterVersions} from '@/components/useAdapterVersions';
 import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
@@ -26,7 +27,7 @@ import {useStyles, type Colors} from '@/theme';
 import {displaySymbol} from '@/core/format';
 
 /**
- * Allow list management (Settings › Vault › Allow list). Vault / adapter upgrades will return here later. Relayed, Face-ID-gated. The
+ * Allow list management (Settings › Vault › Allow list); each protocol row shows its version, and adapter upgrades sit in a section of their own. Relayed, Face-ID-gated. The
  * Bitty allowlist switch first, then the assets and the protocols, each in its own card.
  */
 /**
@@ -66,6 +67,7 @@ export function ManageScreen() {
   const assets = useAssetCatalog(network);
   const stable = assets.find((a) => a.kind === 'stable');
   const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const versions = useAdapterVersions();
 
   // The services come from the server version catalog (the single source shared with the web), not
   // from a bundled adapter table. One adapter per name (canonical address), in service order.
@@ -185,9 +187,15 @@ export function ManageScreen() {
   /** Services, as the web names them; the protocol behind each sits at the right of its row. */
   const serviceList = (
     <View style={styles.group}>
-      {protocols.map((p, i) => (
+      {protocols.map((p, i) => {
+        const v = versions.versionFor(p.address);
+        return (
         <View key={p.address} style={[styles.row, i === 0 && styles.rowFirst, i === protocols.length - 1 && styles.rowLast]}>
-          <Text style={styles.sym}>{t(SERVICE_KEY[p.category] ?? SERVICE_KEY.unknown)}</Text>
+          {/* The version the vault runs, under the service name. Upgrades have their own section. */}
+          <View style={styles.rowText}>
+            <Text style={styles.sym}>{t(SERVICE_KEY[p.category] ?? SERVICE_KEY.unknown)}</Text>
+            {v ? <Text style={styles.hint}>v{v}</Text> : null}
+          </View>
           <View style={styles.protoRight}>
             <ProtocolIcon name={p.name} size={20} uri={p.icon} />
             <Text style={styles.protoName}>{p.name}</Text>
@@ -203,15 +211,49 @@ export function ManageScreen() {
             }
           />
         </View>
-      ))}
+        );
+      })}
     </View>
   );
 
   if (section)
     return (
       <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
-        {section === 'assets' ? assetList : serviceList}
+        {section === 'services' && versions.upgrades.length > 0 && (
+          // One row per adapter clone behind its lineage's newest build; none when all are current.
+          <View style={styles.section}>
+            <Text style={styles.header}>{t('vault.upgrade_action')}</Text>
+            <View style={styles.group}>
+              {versions.upgrades.map((r, i) => (
+                <Pressable
+                  key={r.key}
+                  disabled={r.confirming}
+                  style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === versions.upgrades.length - 1 && styles.rowLast, pressed && styles.pressed]}
+                  onPress={r.onPress}>
+                  <View style={styles.symRow}>
+                    <ProtocolIcon name={r.name} size={20} uri={protocols.find((p) => r.addresses.includes(p.address.toLowerCase()))?.icon} />
+                    <Text style={styles.rowTitle}>{r.name}</Text>
+                  </View>
+                  <View style={styles.countRow}>
+                    {r.confirming ? <ActivityIndicator size="small" /> : null}
+                    <Text style={styles.count}>{r.value}</Text>
+                    {r.confirming ? null : <Text style={styles.chev}>›</Text>}
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
+        {section === 'assets' ? (
+          assetList
+        ) : (
+          <View style={styles.section}>
+            <Text style={styles.header}>{t('mobile.vault.current_protocols')}</Text>
+            {serviceList}
+          </View>
+        )}
         {sheet}
+        {versions.sheet}
       </ScrollView>
     );
 
@@ -274,6 +316,8 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   // draw a hairline on their top edge, and the first/last rows drop their outer padding so the card
   // frames the list evenly.
   section: {gap: 0},
+  // A card's title, sitting just above it.
+  header: {color: c.subtext, fontSize: 13, fontWeight: '600', paddingHorizontal: 16, marginBottom: 8},
   group: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 16},
   row: {
     flexDirection: 'row',

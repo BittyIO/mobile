@@ -17,6 +17,7 @@
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/native": "^7.1.0",
     "@react-navigation/native-stack": "^7.3.0",
+    "@scure/bip39": "1.6.0",
     "buffer": "^6.0.3",
     "react": "19.1.0",
     "react-native": "0.81.0",

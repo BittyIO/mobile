@@ -9,7 +9,6 @@
 import {createPublicClient, http, fallback, type PublicClient} from 'viem';
 import {mainnet, base, sepolia, arbitrum} from 'viem/chains';
 import {defineChain} from 'viem';
-import {MMKV} from 'react-native-mmkv';
 import {generationConfig} from '@/core/vault-generation';
 
 // Sepolia is the testnet — included so the app can be exercised end to end (activate, deposit, trade)
@@ -82,42 +81,15 @@ export const QUOTER_V2: Record<Network, `0x${string}`> = {
   arbitrum: '0x61fFE014bA17989E743c5F6cB21bF9697530B21e',
 };
 
-/**
- * The owner's own RPC per network (Settings › RPC), or null for the public defaults above.
- *
- * Every on-chain read goes through {publicClientFor}, so this decides who answers the reads the
- * owner relies on to judge risk — the address book, pending changes, balances. A node the owner
- * runs or trusts cannot be made to lie about them the way a public endpoint could.
- */
-const rpcStore = new MMKV({id: 'bitty.rpc'});
-export const customRpc = (network: Network): string | null => rpcStore.getString(network) ?? null;
-export function setCustomRpc(network: Network, url: string | null): void {
-  if (url) rpcStore.set(network, url);
-  else rpcStore.delete(network);
-}
-
-/** Does `url` answer as `network`? Run before saving, so a typo or the wrong chain never sticks. */
-export async function rpcServes(url: string, network: Network): Promise<boolean> {
-  const id = await createPublicClient({transport: http(url, {timeout: 10_000, retryCount: 0})})
-    .getChainId()
-    .catch(() => null);
-  return id === CHAIN_ID[network];
-}
-
 /** A read-only viem client for the given network, resilient to a single RPC failing. */
 export function publicClientFor(network: Network): PublicClient {
-  const own = customRpc(network);
   return createPublicClient({
     chain: VIEM_CHAIN[network],
-    // The owner's own node ALONE when set: falling back to a public one would hand the reads it was
-    // chosen to protect to exactly the endpoints it replaces. Otherwise try the defaults in order
-    // (rank off = keep the primary first); on error/timeout fall through.
-    transport: own
-      ? http(own, {retryCount: 1})
-      : fallback(
-          RPC_URLS[network].map((url) => http(url)),
-          {rank: false, retryCount: 1},
-        ),
+    // The defaults in order (rank off = keep the primary first); on error/timeout fall through.
+    transport: fallback(
+      RPC_URLS[network].map((url) => http(url)),
+      {rank: false, retryCount: 1},
+    ),
   }) as PublicClient;
 }
 

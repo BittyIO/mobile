@@ -187,7 +187,13 @@ export const RECEIPT_TOKENS: Record<Network, Record<string, {symbol: string; dec
     '0x1804bf30507dc2eb3bdebbbdd859991eaef6eeff': {symbol: 'aWBTC', decimals: 8, underlying: 'WBTC'},
   },
   robinhood: {},
-  arbitrum: {},
+  arbitrum: {
+    '0xddb46999f8891663a8f2828d25298f70416d7610': {symbol: 'sUSDS', decimals: 18, underlying: 'USDC'},
+    '0x724dc807b04555b71ed48a6896b6f41593b8c637': {symbol: 'aUSDC', decimals: 6, underlying: 'USDC'},
+    '0x6ab707aca953edaefbc4fd23ba73294241490620': {symbol: 'aUSDT', decimals: 6, underlying: 'USDT'},
+    '0xe50fa9b3c56ffb159cb0fca61f5c9d750e8128c8': {symbol: 'aWETH', decimals: 18, underlying: 'WETH'},
+    '0x078f358208685046a11c85e8ad32895ded33a249': {symbol: 'aWBTC', decimals: 8, underlying: 'WBTC'},
+  },
 };
 
 /** The asset a receipt token stands for, or null when the address is not one. */

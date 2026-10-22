@@ -1,5 +1,5 @@
 import React, {useEffect, useMemo, useState} from 'react';
-import {Alert, Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Button} from '@/components/Button';
 import {useWallet} from '@/wallet/store';
@@ -8,7 +8,7 @@ import {useRevealGuard} from '@/core/device-security';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 
-type Step = 'choose' | 'reveal' | 'confirm';
+type Step = 'choose' | 'reveal' | 'confirm' | 'import';
 
 function randomIndex(max: number): number {
   const value = new Uint32Array(1);
@@ -29,7 +29,14 @@ function randomPositions(): number[] {
   return shuffled(Array.from({length: 12}, (_, i) => i + 1)).slice(0, 3).sort((a, b) => a - b);
 }
 
-/** First-run onboarding. The generated phrase is stored only after the user confirms three words. */
+/**
+ * First-run onboarding: create a wallet (the generated phrase is stored only after the user confirms
+ * three words), or restore one from its recovery phrase.
+ *
+ * Restore is not optional. The phrase lives in the Keychain, which iOS deletes with the app, so
+ * without it a user who reinstalled could never reach their vault again — the phrase they were
+ * made to write down had nowhere to go.
+ */
 export function OnboardingScreen() {
   const {t} = useT();
   const c = useColors();
@@ -41,6 +48,7 @@ export function OnboardingScreen() {
   const [challengePositions, setChallengePositions] = useState<number[]>([]);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState(false);
+  const [phrase, setPhrase] = useState('');
 
   const words = useMemo(() => (mnemonic ? mnemonic.split(' ') : []), [mnemonic]);
   const wordChoices = useMemo(() => shuffled(Array.from(new Set(words))), [words]);
@@ -84,7 +92,19 @@ export function OnboardingScreen() {
     }
   };
 
-  const phraseHidden = reveal.captured && (step === 'reveal' || step === 'confirm');
+  const onImport = async () => {
+    setBusy(true);
+    try {
+      await createWallet(phrase);
+    } catch (e) {
+      Alert.alert(t('mobile.payments.onboarding_invalid_phrase'), String((e as Error)?.message ?? e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const phraseWords = phrase.trim().split(/\s+/).filter(Boolean).length;
+
+  const phraseHidden = reveal.captured && (step === 'reveal' || step === 'confirm' || step === 'import');
 
   return (
     <SafeAreaView style={styles.container}>
@@ -98,8 +118,50 @@ export function OnboardingScreen() {
             </View>
             <View style={styles.actions}>
               <Button title={t('mobile.payments.onboarding_create')} onPress={onCreate} />
+              <Button title={t('mobile.payments.onboarding_import')} variant="secondary" onPress={() => setStep('import')} />
             </View>
             <Text style={styles.fine}>{t('mobile.payments.onboarding_fine')}</Text>
+          </>
+        ) : step === 'import' ? (
+          <>
+            <Text style={styles.h}>{t('mobile.payments.onboarding_import')}</Text>
+            <Text style={styles.p}>{t('mobile.payments.onboarding_import_desc')}</Text>
+            {phraseHidden ? (
+              <View style={styles.grid}>
+                <Text style={styles.fine}>
+                  Your recovery phrase is hidden while the screen is being recorded or mirrored. Stop
+                  the recording to enter it.
+                </Text>
+              </View>
+            ) : (
+              <TextInput
+                style={styles.input}
+                placeholder={t('mobile.payments.onboarding_import_placeholder')}
+                placeholderTextColor={c.subtext}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="off"
+                spellCheck={false}
+                multiline
+                value={phrase}
+                onChangeText={setPhrase}
+              />
+            )}
+            <Button
+              title={busy ? t('mobile.payments.onboarding_importing') : t('mobile.payments.onboarding_import_btn')}
+              onPress={onImport}
+              loading={busy}
+              disabled={phraseHidden || busy || (phraseWords !== 12 && phraseWords !== 24)}
+            />
+            <Button
+              title={t('common.back')}
+              variant="secondary"
+              onPress={() => {
+                setPhrase('');
+                setStep('choose');
+              }}
+              disabled={busy}
+            />
           </>
         ) : step === 'reveal' ? (
           <>
@@ -214,4 +276,5 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   choiceSelected: {backgroundColor: c.accent, borderColor: c.accent},
   choiceText: {color: c.text, fontSize: 14, fontWeight: '600'},
   choiceTextSelected: {color: c.onAccent},
+  input: {minHeight: 96, borderRadius: 12, backgroundColor: c.input, color: c.text, padding: 16, fontSize: 17, textAlignVertical: 'top'},
 });

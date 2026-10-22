@@ -89,7 +89,6 @@ export type RootStackParamList = {
   /** What relay fees are billed in, and the float the app will not spend below. */
   NetworkFee: undefined;
   /** Settings › RPC: the owner's own node for on-chain reads. */
-  Rpc: undefined;
   AutoYield: undefined;
   /**
    * The allow list. Without a section it is the two summary rows; with one it is that list.
@@ -115,7 +114,7 @@ export type RootStackParamList = {
   VaultLockAction: {action: 'emergency' | 'unlock' | 'forever'};
   /** Overview › Pending: changes the vault has queued and not applied yet. */
   PendingChanges: undefined;
-  VaultLegacyEth: undefined;
+  VaultTransferOwnership: undefined;
   VaultRecoveryPhrase: undefined;
   VaultAssetManager: undefined;
   VaultSetAssetManager: undefined;
@@ -473,9 +472,8 @@ function Root() {
             ),
           })}
         />
-        <Stack.Screen name="Rpc" getComponent={() => require('@/screens/RpcScreen').RpcScreen} options={{title: t('mobile.settings.rpc')}} />
         <Stack.Screen name="PendingChanges" getComponent={() => require('@/screens/PendingChangesScreen').PendingChangesScreen} options={{title: t('mobile.vault.timelock_page')}} />
-        <Stack.Screen name="VaultLegacyEth" getComponent={() => require('@/screens/LegacyEthScreen').LegacyEthScreen} options={{title: t('mobile.vault.legacy_eth')}} />
+        <Stack.Screen name="VaultTransferOwnership" getComponent={() => require('@/screens/TransferOwnershipScreen').TransferOwnershipScreen} options={{title: t('mobile.vault.transfer_ownership')}} />
         <Stack.Screen name="VaultAssetManager" getComponent={() => require('@/screens/AssetManagerScreen').AssetManagerScreen} options={{title: t('vault.asset_manager')}} />
         <Stack.Screen
           name="VaultSetAssetManager"

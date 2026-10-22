@@ -2,6 +2,7 @@ import {useCallback, useEffect, useState} from 'react';
 import type {Address} from 'viem';
 import type {Network} from '@/core/chain';
 import {fetchPositions, fetchSkyPosition, type Position} from './positions';
+import {usePending} from './pending';
 
 type State = {
   positions: Position[];
@@ -33,6 +34,21 @@ export function useVaultPositions(vault: Address | null, network: Network): Stat
   const [nonce, setNonce] = useState(0);
 
   const refresh = useCallback(() => setNonce((n) => n + 1), []);
+
+  /**
+   * Re-read, fresh, whenever a transaction on this network confirms — from any screen.
+   *
+   * Each screen holds its own copy and only refreshed on its own pull, so a supply made from Earn
+   * never reached the Overview or the Trade sheet: both kept the server's cached answer, which still
+   * said 0 WETH supplied, and the sheet offered no Lending source to sell from. A confirmed write
+   * is exactly when positions move, and the fresh read also corrects the server's cache.
+   */
+  const lastConfirmed = usePending((s) =>
+    s.txs.reduce((at, t) => (t.network === network && t.status === 'confirmed' ? Math.max(at, t.settledAt ?? 0) : at), 0),
+  );
+  useEffect(() => {
+    if (lastConfirmed) refresh();
+  }, [lastConfirmed, refresh]);
 
   useEffect(() => {
     if (!vault) {

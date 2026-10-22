@@ -277,12 +277,26 @@ export function yieldAdapters(
   return allAdapters(network).filter((p) => p.category === 'staking' || p.category === 'lending');
 }
 
-/** Resolve a protocol adapter address by display name (e.g. "Sky", "Aave V3"). Null if unknown. */
+/**
+ * Resolve a protocol adapter address by display name (e.g. "Sky", "Aave V3"). Null if unknown.
+ *
+ * The name comes from the table, but the address has to be one the guard still runs. On Base the
+ * guard replaced CoW 0x6462… with 0x923B… on 2026-10-21 while the served and vendored tables kept
+ * the old one — and every call naming a deprecated adapter reverts, so a position-funded limit
+ * order's approval was refused. When the guard no longer lists the table's address, the answer is
+ * the live adapter of the same category that the table names as nothing else: its replacement.
+ */
 export function adapterByName(network: Network, name: string): Address | null {
-  const hit = Object.entries(table(network)).find(
-    ([, info]) => info.name.toLowerCase() === name.toLowerCase(),
-  );
-  return hit ? (hit[0] as Address) : null;
+  const t = table(network);
+  const hit = Object.entries(t).find(([, info]) => info.name.toLowerCase() === name.toLowerCase());
+  if (!hit) return null;
+  const [address, info] = hit;
+  const live = currentGuardProtocols(network);
+  if (!live || live.some((p) => p.address.toLowerCase() === address)) return address as Address;
+  // ponytail: assumes one unnamed live adapter per category; two replaced at once in one category
+  // (Sky AND Lido) would be ambiguous — read lineages if that ever happens.
+  const replacement = live.find((p) => p.category === info.category && !t[p.address.toLowerCase()]);
+  return replacement?.address ?? (address as Address);
 }
 
 export type {Address};

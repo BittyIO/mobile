@@ -4,10 +4,13 @@
  * the account with viem, and signs every vault action locally. The mnemonic is never in JS-readable
  * storage and never leaves the device.
  *
- * Recovery is the phrase: shown once on create. No server ever sees it.
+ * Recovery is the phrase: shown once on create, and typed back in to restore after a reinstall
+ * (iOS deletes the Keychain item with the app). No server ever sees it.
  */
 import * as Keychain from 'react-native-keychain';
 import {generateMnemonic, mnemonicToAccount, english, type HDAccount} from 'viem/accounts';
+import {validateMnemonic} from '@scure/bip39';
+import {wordlist} from '@scure/bip39/wordlists/english';
 
 const SERVICE = 'io.bitty.vault.mnemonic';
 
@@ -29,10 +32,17 @@ export function generateNewMnemonic(): string {
   return generateMnemonic(english);
 }
 
-/** Persist the phrase generated in onboarding after its backup check. */
+/**
+ * Persist a phrase — generated in onboarding after its backup check, or typed in to restore.
+ *
+ * Validated here rather than trusted to `mnemonicToAccount`, which checks neither the words nor
+ * the checksum: a restore with one word mistyped derived a DIFFERENT, empty wallet and opened it,
+ * so the user saw their vault gone instead of being told the phrase was wrong.
+ */
 export async function createWallet(mnemonic: string): Promise<HDAccount> {
   const normalized = mnemonic.trim().toLowerCase().replace(/\s+/g, ' ');
-  const account = mnemonicToAccount(normalized); // throws on an invalid phrase
+  if (!validateMnemonic(normalized, wordlist)) throw new Error('Invalid recovery phrase');
+  const account = mnemonicToAccount(normalized);
   await Keychain.setGenericPassword('bitty', normalized, SECURE);
   return account;
 }
