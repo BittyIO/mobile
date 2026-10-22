@@ -116,6 +116,8 @@ export type RootStackParamList = {
   /** Pick one risk number: presets, or a custom value. */
   VaultRiskValue: {field: 'timelock' | 'sendDailyAllowance' | 'marketTradeDailyLossAllowance'};
   VaultLock: undefined;
+  /** Settings › Vaults: every vault on this phone, and the ones its keys own that are not yet. */
+  VaultList: undefined;
   VaultLockAction: {action: 'emergency' | 'unlock' | 'forever'};
   /** Overview › Pending: changes the vault has queued and not applied yet. */
   PendingChanges: undefined;
@@ -480,6 +482,7 @@ function Root() {
           getComponent={() => require('@/screens/RiskValueScreen').RiskValueScreen}
           options={({route}) => ({title: t(RISK_TITLE[route.params.field])})}
         />
+        <Stack.Screen name="VaultList" getComponent={() => require('@/screens/VaultListScreen').VaultListScreen} options={{title: t('mobile.vaults.title')}} />
         <Stack.Screen name="VaultLock" getComponent={() => require('@/screens/VaultLockScreen').VaultLockScreen} options={{title: t('mobile.vault.vault_lock')}} />
         <Stack.Screen
           name="VaultLockAction"

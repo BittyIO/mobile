@@ -15,6 +15,7 @@ import {earn} from './earn';
 import {actions} from './actions';
 import {safe} from './safe';
 import {fees} from './fees';
+import {vaults} from './vaults';
 
 export const MOBILE_STRINGS: Record<string, MobileTable> = {
   settings,
@@ -27,4 +28,5 @@ export const MOBILE_STRINGS: Record<string, MobileTable> = {
   actions,
   safe,
   fees,
+  vaults,
 };
