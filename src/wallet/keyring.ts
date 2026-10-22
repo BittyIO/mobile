@@ -65,7 +65,7 @@ async function readSecret(prompt: string): Promise<string | null> {
  * Index 0 is the wallet that has always existed and keeps the default path.
  */
 export async function unlock(index = 0): Promise<HDAccount | null> {
-  const m = await readSecret('Unlock Bitty');
+  const m = await readSecret('Unlock Bitty Vault');
   return m ? mnemonicToAccount(m, {accountIndex: index}) : null;
 }
 
