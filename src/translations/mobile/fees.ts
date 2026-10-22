@@ -5,6 +5,7 @@ import type {MobileTable} from './index';
 // write the other way when the chosen way cannot.
 export const fees: MobileTable = {
   en: {
+    advanced: 'Advanced settings',
     payer_vault: 'Asset in vault',
     payer_owner: 'ETH in owner address',
     owner_wallet: 'Owner wallet',
@@ -19,6 +20,7 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Pay with owner ETH',
   },
   zh: {
+    advanced: '高级设置',
     payer_vault: '金库中的资产',
     payer_owner: '所有者地址中的 ETH',
     owner_wallet: '所有者钱包',
@@ -32,6 +34,7 @@ export const fees: MobileTable = {
     fallback_owner_button: '用所有者的 ETH 支付',
   },
   'zh-TW': {
+    advanced: '進階設定',
     payer_vault: '金庫中的資產',
     payer_owner: '擁有者地址中的 ETH',
     owner_wallet: '擁有者錢包',
@@ -45,6 +48,7 @@ export const fees: MobileTable = {
     fallback_owner_button: '用擁有者的 ETH 支付',
   },
   ja: {
+    advanced: '詳細設定',
     payer_vault: 'ボールト内の資産',
     payer_owner: 'オーナーアドレスの ETH',
     owner_wallet: 'オーナーウォレット',
@@ -58,6 +62,7 @@ export const fees: MobileTable = {
     fallback_owner_button: 'オーナーの ETH で払う',
   },
   ko: {
+    advanced: '고급 설정',
     payer_vault: '볼트 내 자산',
     payer_owner: '소유자 주소의 ETH',
     owner_wallet: '소유자 지갑',
@@ -71,6 +76,7 @@ export const fees: MobileTable = {
     fallback_owner_button: '소유자 ETH로 지불',
   },
   fr: {
+    advanced: 'Paramètres avancés',
     payer_vault: 'Actifs du coffre',
     payer_owner: 'ETH de l’adresse propriétaire',
     owner_wallet: 'Portefeuille propriétaire',
@@ -85,6 +91,7 @@ export const fees: MobileTable = {
     fallback_owner_button: "Payer avec l'ETH du propriétaire",
   },
   es: {
+    advanced: 'Configuración avanzada',
     payer_vault: 'Activos de la bóveda',
     payer_owner: 'ETH en la dirección propietaria',
     owner_wallet: 'Cartera propietaria',
@@ -99,6 +106,7 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Pagar con ETH del propietario',
   },
   de: {
+    advanced: 'Erweiterte Einstellungen',
     payer_vault: 'Guthaben im Tresor',
     payer_owner: 'ETH auf der Eigentümeradresse',
     owner_wallet: 'Eigentümer-Wallet',
@@ -113,6 +121,7 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Mit Eigentümer-ETH zahlen',
   },
   'pt-BR': {
+    advanced: 'Configurações avançadas',
     payer_vault: 'Ativos no cofre',
     payer_owner: 'ETH no endereço proprietário',
     owner_wallet: 'Carteira proprietária',
@@ -127,6 +136,7 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Pagar com ETH do proprietário',
   },
   hi: {
+    advanced: 'उन्नत सेटिंग्स',
     payer_vault: 'वॉल्ट में एसेट',
     payer_owner: 'ओनर पते में ETH',
     owner_wallet: 'ओनर वॉलेट',
@@ -140,6 +150,7 @@ export const fees: MobileTable = {
     fallback_owner_button: 'ओनर के ETH से भुगतान',
   },
   tr: {
+    advanced: 'Gelişmiş ayarlar',
     payer_vault: 'Kasadaki varlık',
     payer_owner: 'Sahip adresindeki ETH',
     owner_wallet: 'Sahip cüzdanı',
@@ -153,6 +164,7 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Sahip ETH’si ile öde',
   },
   ru: {
+    advanced: 'Расширенные настройки',
     payer_vault: 'Активы в хранилище',
     payer_owner: 'ETH на адресе владельца',
     owner_wallet: 'Кошелёк владельца',
@@ -166,6 +178,7 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Оплатить ETH владельца',
   },
   id: {
+    advanced: 'Pengaturan lanjutan',
     payer_vault: 'Aset di brankas',
     payer_owner: 'ETH di alamat pemilik',
     owner_wallet: 'Dompet pemilik',
@@ -179,6 +192,7 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Bayar dengan ETH pemilik',
   },
   vi: {
+    advanced: 'Cài đặt nâng cao',
     payer_vault: 'Tài sản trong két',
     payer_owner: 'ETH ở địa chỉ chủ sở hữu',
     owner_wallet: 'Ví chủ sở hữu',
@@ -192,6 +206,7 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Trả bằng ETH của chủ sở hữu',
   },
   th: {
+    advanced: 'การตั้งค่าขั้นสูง',
     payer_vault: 'สินทรัพย์ในวอลต์',
     payer_owner: 'ETH ในที่อยู่เจ้าของ',
     owner_wallet: 'กระเป๋าเจ้าของ',

@@ -1,8 +1,11 @@
 import React, {useEffect, useState} from 'react';
-import {ScrollView, StyleSheet, View} from 'react-native';
+import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {useNavigation} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import type {RootStackParamList} from '@/App';
+import {makeSettingsStyles} from '@/components/SettingsRow';
 import {FeePayerSection} from '@/components/FeePayerSection';
 import {StableCoinAsGasCoins} from '@/components/StableCoinAsGasCoins';
-import {StableCoinAsGasLimits} from '@/components/StableCoinAsGasLimits';
 import {PickerSheet} from '@/components/AssetPicker';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {useNetwork} from '@/core/network-store';
@@ -63,6 +66,7 @@ export function NetworkFeeScreen() {
    */
   const owner = useWallet((s) => s.address);
   const {payer} = useActiveFeePayer(network);
+  const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const vault = owner ? ownerVaultAddress(owner, network) : null;
   const key = `${network}:${vault ?? ''}`;
 
@@ -99,20 +103,25 @@ export function NetworkFeeScreen() {
       <FeePayerSection />
       {payer === 'vault' ? (
         <>
+          {/* The reserve is local, not on chain, so its row stays editable before activation; it is
+              held in the first fee coin above that can (see resolveFeeReserve), so it sits with them. */}
           <View>
-            <StableCoinAsGasCoins onDragging={setDragging} />
-          </View>
-
-          {/* The reserve is local, not on chain, so its row stays editable before activation; the coin
-              that holds it is the first fee coin above that can (see resolveFeeReserve). */}
-          <View style={styles.second}>
-            <StableCoinAsGasLimits
-              leading={{
+            <StableCoinAsGasCoins
+              onDragging={setDragging}
+              trailing={{
                 title: t('mobile.settings.gas_reserve_amount'),
                 value: Number(amount) > 0 ? `$${amount}` : t('vault.none'),
                 onPress: () => setPicking(true),
               }}
             />
+          </View>
+
+          {/* The two ceilings on what the relayer may bill, on a page of their own with Save. */}
+          <View style={[styles.group, styles.second]}>
+            <Pressable style={styles.row} onPress={() => nav.navigate('NetworkFeeLimits')}>
+              <Text style={styles.rowTitle}>{t('mobile.fees.advanced')}</Text>
+              <Text style={styles.chev}>›</Text>
+            </Pressable>
           </View>
         </>
       ) : null}
@@ -132,6 +141,7 @@ export function NetworkFeeScreen() {
 
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
+    ...makeSettingsStyles(c),
     container: {flex: 1, backgroundColor: c.bg},
     // The gap here is the one INSIDE a section — a card and the footnote that explains it. The
     // space BETWEEN sections is set on the second card, so the two kinds of distance stay

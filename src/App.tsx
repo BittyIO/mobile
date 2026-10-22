@@ -88,6 +88,8 @@ export type RootStackParamList = {
   Browser: {url: string; title?: string};
   /** What relay fees are billed in, and the float the app will not spend below. */
   NetworkFee: undefined;
+  /** Network fee › Advanced settings: the relayer's per-operation and 24-hour caps. */
+  NetworkFeeLimits: undefined;
   /** Settings › RPC: the owner's own node for on-chain reads. */
   AutoYield: undefined;
   /**
@@ -431,6 +433,11 @@ function Root() {
           name="NetworkFee"
           getComponent={() => require('@/screens/NetworkFeeScreen').NetworkFeeScreen}
           options={{title: t('mobile.settings.network_fee')}}
+        />
+        <Stack.Screen
+          name="NetworkFeeLimits"
+          getComponent={() => require('@/screens/NetworkFeeLimitsScreen').NetworkFeeLimitsScreen}
+          options={{title: t('mobile.fees.advanced')}}
         />
         <Stack.Screen name="AutoYield" getComponent={() => require('@/screens/AutoYieldScreen').AutoYieldScreen} options={{title: t('mobile.app.auto_yield'), presentation: 'modal'}} />
         <Stack.Screen
