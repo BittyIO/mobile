@@ -110,7 +110,6 @@ export function NetworkFeeScreen() {
               leading={{
                 title: t('mobile.settings.gas_reserve_amount'),
                 value: Number(amount) > 0 ? `$${amount}` : t('vault.none'),
-                hint: t('mobile.settings.gas_reserve_hint'),
                 onPress: () => setPicking(true),
               }}
             />

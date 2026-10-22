@@ -50,9 +50,9 @@ export function StableCoinAsGasLimits({
 }: {
   /**
    * A row drawn first in the same card — the page's fee reserve, which is a local setting and so
-   * stays editable before activation, unlike the two ceilings — with its footnote ahead of theirs.
+   * stays editable before activation, unlike the two ceilings.
    */
-  leading?: {title: string; value: string; hint: string; onPress: () => void};
+  leading?: {title: string; value: string; onPress: () => void};
 }) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
@@ -146,10 +146,6 @@ export function StableCoinAsGasLimits({
         {row('maxFeePerOp', false)}
         {row('dailyLimit', true)}
       </View>
-      <Text style={styles.hint}>
-        {leading ? `${leading.hint} ` : ''}
-        {t('mobile.settings.gas_limits_hint')}
-      </Text>
       <PickerSheet
         visible={picking !== null}
         title={picking ? t(TITLE[picking]) : ''}
@@ -176,10 +172,10 @@ export function StableCoinAsGasLimits({
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     ...makeSettingsStyles(c),
-    wrap: {gap: 8, marginTop: 20},
+    // No margin of its own: the page spaces its sections, and this one's was stacking on top.
+    wrap: {gap: 8},
     titleCol: {flex: 1, gap: 2},
     sub: {color: c.subtext, fontSize: 12},
     amount: {flexDirection: 'row', alignItems: 'center', gap: 6},
     off: {opacity: 0.4},
-    hint: {color: c.subtext, fontSize: 12, lineHeight: 17, paddingHorizontal: 4},
   });
