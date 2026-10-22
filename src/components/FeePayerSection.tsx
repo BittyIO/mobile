@@ -71,19 +71,20 @@ export function FeePayerSection() {
         />
         {payer === 'owner' ? (
           <>
-            <Pressable style={[styles.row, styles.rowDivider]} onPress={() => setQr(true)} accessibilityRole="button">
-              {/* The whole 42 characters, shrunk to one line: this is the address someone checks
-                  against the other side of a transfer. */}
-              <Text style={styles.addr} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+            {/* One row: the address to fund on the left — tap for its QR — and what is in it on the
+                right. The whole 42 characters, shrunk to fit: this is the address someone checks
+                against the other side of a transfer. */}
+            <Pressable style={styles.row} onPress={() => setQr(true)} accessibilityRole="button">
+              <Text style={styles.addr} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
                 {owner}
               </Text>
+              <View style={styles.balance}>
+                <Text style={styles.balanceLabel}>{t('mobile.fees.balance')}</Text>
+                <Text style={styles.rowValue}>
+                  {balance == null ? '…' : <><Amount v={formatEth(balance)} color={c.subtext} /> ETH</>}
+                </Text>
+              </View>
             </Pressable>
-            <View style={styles.row}>
-              <Text style={styles.rowTitle}>{t('mobile.fees.balance')}</Text>
-              <Text style={styles.rowValue}>
-                {balance == null ? '…' : <><Amount v={formatEth(balance)} color={c.subtext} /> ETH</>}
-              </Text>
-            </View>
           </>
         ) : null}
       </SettingsGroup>
@@ -105,4 +106,6 @@ const makeStyles = (c: Colors) =>
     ...makeSettingsStyles(c),
     wrap: {gap: 20, marginBottom: 20},
     addr: {flex: 1, color: c.text, fontSize: 13, fontFamily: 'Menlo'},
+    balance: {alignItems: 'flex-end', gap: 2},
+    balanceLabel: {color: c.subtext, fontSize: 11},
   });
