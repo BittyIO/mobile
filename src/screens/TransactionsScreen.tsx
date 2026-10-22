@@ -347,7 +347,7 @@ function Op({
  * relayed, the same change was listed only because of its fee leg. So it is drawn from this
  * device's note of what it sent, named with the words its toast used, with the gas it cost.
  */
-function OwnerOnlyOp({note, gas, explorer}: {note: OwnerTxNote; gas: TxGas; explorer: string}) {
+function OwnerOnlyOp({note, gas, explorer}: {note: OwnerTxNote; gas?: TxGas; explorer: string}) {
   const {t, language} = useT();
   const styles = useStyles(makeStyles);
   return (
@@ -356,11 +356,15 @@ function OwnerOnlyOp({note, gas, explorer}: {note: OwnerTxNote; gas: TxGas; expl
         <Text style={styles.title}>{note.title ?? t('mobile.home.transaction')}</Text>
       </View>
       {/* Reverted on chain: the gas was still spent, which is the one thing this row has to say. */}
-      {!gas.ok ? <Text style={styles.failed}>{t('vault.tx_failed')}</Text> : null}
+      {!gas ? (
+        <Text style={styles.detail}>{t('vault.confirming')}</Text>
+      ) : !gas.ok ? (
+        <Text style={styles.failed}>{t('vault.tx_failed')}</Text>
+      ) : null}
       <View style={styles.footer}>
         <View style={styles.meta}>
           <Text style={styles.date}>{fmtDate(new Date(note.at).toISOString(), language)}</Text>
-          <OwnerFee fee={gas.fee} />
+          {gas ? <OwnerFee fee={gas.fee} /> : null}
         </View>
         <Text style={styles.link}>{t('mobile.home.view')} ↗</Text>
       </View>
@@ -532,7 +536,7 @@ export function TransactionsScreen() {
     ],
     [ops, notes, opHashes, network, t, words],
   );
-  const ownerGas = useOwnerGas(network, owner, unbilled);
+  const ownerGas = useOwnerGas(network, owner, unbilled, ops);
 
   /**
    * No "Confirming" tab.
@@ -593,9 +597,9 @@ export function TransactionsScreen() {
       ...shown.map((op) => ({key: op.txHash, at: at(op), op})),
       ...failures.map((tx) => ({key: `relay-${tx.id}`, at: tx.at * 1000, tx})),
       // Unfiltered by the tabs, like the failures: nothing classifies a row the feed never had.
-      // Drawn once mined — the toast follows it until then.
+      // Drawn from the moment it is sent — confirming until its receipt is read, then with its fee.
       ...notes
-        .filter((n) => !opHashes.has(n.hash.toLowerCase()) && ownerGas.has(n.hash.toLowerCase()))
+        .filter((n) => !opHashes.has(n.hash.toLowerCase()))
         .map((note) => ({key: `owner-${note.hash}`, at: note.at, note})),
     ];
     return rows.sort((a, b) => b.at - a.at);
@@ -632,7 +636,7 @@ export function TransactionsScreen() {
           row.op ? (
             <Op key={row.key} op={row.op} explorer={explorer} network={network} orders={orders} ownerGas={ownerGas.get(row.op.txHash.toLowerCase())} />
           ) : row.note ? (
-            <OwnerOnlyOp key={row.key} note={row.note} gas={ownerGas.get(row.note.hash.toLowerCase())!} explorer={explorer} />
+            <OwnerOnlyOp key={row.key} note={row.note} gas={ownerGas.get(row.note.hash.toLowerCase())} explorer={explorer} />
           ) : (
             <FailedOp key={row.key} tx={row.tx!} explorer={explorer} network={network} />
           ),

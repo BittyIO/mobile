@@ -98,29 +98,47 @@ export async function txGas(network: Network, hash: string): Promise<TxGas | nul
 
 /** At a time, so a long history does not fire a hundred receipt reads at the RPC at once. */
 const CONCURRENCY = 4;
+/** How soon a receipt that could not be read — not mined yet, or the RPC said no — is asked again. */
+const RETRY_MS = 10_000;
 
 /**
  * The receipt of each of `hashes` that the OWNER sent, by lowercase hash. A transaction someone else
  * sent — the relayer, a depositor — is left out: whatever it cost, the owner did not pay it.
+ *
+ * Results arrive one by one, and a receipt that cannot be read yet is asked for again every
+ * {RETRY_MS} until it can. It used to be read once per list: a transaction still pending when the
+ * page opened, or one a rate-limited public RPC refused, then stayed unknown for as long as the page
+ * did — and so did the row the history draws from it. `refreshKey` (the feed, on a pull) starts a
+ * fresh pass; a receipt already read comes back from the cache at once.
  */
-export function useOwnerGas(network: Network, owner: string | null, hashes: string[]): Map<string, TxGas> {
+export function useOwnerGas(network: Network, owner: string | null, hashes: string[], refreshKey?: unknown): Map<string, TxGas> {
   const [out, setOut] = useState<Map<string, TxGas>>(() => new Map());
+  const [tick, setTick] = useState(0);
   const wanted = hashes.map((h) => h.toLowerCase()).join(',');
   useEffect(() => {
     if (!owner || !wanted) return;
     let live = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const queue = wanted.split(',');
-    const found = new Map<string, TxGas>();
+    let unread = 0;
     const worker = async () => {
-      for (let h = queue.shift(); h; h = queue.shift()) {
+      for (let h = queue.shift(); h && live; h = queue.shift()) {
         const g = await txGas(network, h);
-        if (g && g.from.toLowerCase() === owner.toLowerCase()) found.set(h, g);
+        if (!live) return;
+        if (!g) unread++;
+        else if (g.from.toLowerCase() === owner.toLowerCase()) {
+          const hash = h;
+          setOut((prev) => (prev.has(hash) ? prev : new Map(prev).set(hash, g)));
+        }
       }
     };
-    Promise.all(Array.from({length: CONCURRENCY}, worker)).then(() => live && setOut(new Map(found)));
+    Promise.all(Array.from({length: CONCURRENCY}, worker)).then(() => {
+      if (live && unread > 0) timer = setTimeout(() => setTick((n) => n + 1), RETRY_MS);
+    });
     return () => {
       live = false;
+      if (timer) clearTimeout(timer);
     };
-  }, [network, owner, wanted]);
+  }, [network, owner, wanted, tick, refreshKey]);
   return out;
 }
