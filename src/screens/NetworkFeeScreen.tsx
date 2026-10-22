@@ -49,7 +49,9 @@ export function NetworkFeeScreen() {
   const way = (p: FeePayer, title: string, route: 'NetworkFeeVault' | 'NetworkFeeOwner', last?: boolean) => (
     <View style={[styles.wayRow, !last && styles.rowDivider]}>
       <Pressable
-        style={({pressed}) => [styles.wayPick, pressed && styles.pressed]}
+        // No pressed dimming: the check moving is the feedback, and dimming the title read as it
+        // being highlighted.
+        style={styles.wayPick}
         onPress={() => vault && setFeePayer(network, vault, p)}
         accessibilityRole="radio"
         accessibilityState={{checked: payer === p}}>
