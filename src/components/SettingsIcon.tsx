@@ -128,23 +128,14 @@ export function SettingsIcon({name, size = 29}: {name: SettingsIconName; size?: 
             <Path d="M7 11V7a5 5 0 0 1 9.9-1" {...c} />
           </>
         ) : name === 'lockTemp' ? (
-          // A lock with a clock on its body: locked, for now.
+          // A closed lock: locked, for now — this key can open it again.
           <>
             <Rect x={3} y={11} width={18} height={11} rx={2} {...c} />
             <Path d="M7 11V7a5 5 0 0 1 10 0v4" {...c} />
-            <Circle cx={12} cy={16.5} r={2.6} {...c} strokeWidth={1.6} />
-            <Path d="M12 15.3v1.3l.9.6" {...c} strokeWidth={1.4} />
           </>
         ) : name === 'lockForever' ? (
-          // A lock with an infinity sign on its body: locked, for good.
-          <>
-            <Rect x={3} y={11} width={18} height={11} rx={2} {...c} />
-            <Path d="M7 11V7a5 5 0 0 1 10 0v4" {...c} />
-            <Path d="M12 16.5c-1-1.1-1.8-1.6-2.6-1.6a1.6 1.6 0 0 0 0 3.2c.8 0 1.6-.5 2.6-1.6s1.8-1.6 2.6-1.6a1.6 1.6 0 0 1 0 3.2c-.8 0-1.6-.5-2.6-1.6z" {...c} strokeWidth={1.5} />
-          </>
-        ) : name === 'ownership' ? (
-          // lucide ArrowRightLeft: one owner out, another in.
-          <Path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4" {...c} />
+          // lucide Infinity: no lock at all, because there is no key that opens it — forever.
+          <Path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 0 0 0-8c-2 0-4 1.33-6 4Z" {...c} />
         ) : name === 'eth' ? (
           // Ether's diamond: the native coin the Legacy ETH row wraps.
           <>
