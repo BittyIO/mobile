@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {Animated, StyleSheet, Text, View} from 'react-native';
+import {Animated, Pressable, StyleSheet, Text, View} from 'react-native';
 import type {Address} from 'viem';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
@@ -30,7 +30,17 @@ import {useReorder} from '@/components/useReorder';
  * to set the order of preference (see {feeCoinOrder}) — the first is the coin the relayer is asked
  * to bill and the first to hold the fee reserve.
  */
-export function StableCoinAsGasCoins({onDragging}: {onDragging: (active: boolean) => void}) {
+export function StableCoinAsGasCoins({
+  onDragging,
+  trailing,
+}: {
+  onDragging: (active: boolean) => void;
+  /**
+   * A row drawn after the coins in the same card — the page's fee reserve, which is held in the
+   * first of these coins and so belongs with them. Not draggable: it is not a coin.
+   */
+  trailing?: {title: string; value: string; onPress: () => void};
+}) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const getSigner = useWallet((s) => s.signer);
@@ -158,7 +168,7 @@ export function StableCoinAsGasCoins({onDragging}: {onDragging: (active: boolean
             style={[
               styles.row,
               i === 0 && styles.rowFirst,
-              i === rows - 1 && styles.rowLast,
+              i === rows - 1 && !trailing && styles.rowLast,
               drag.from === i && styles.lifted,
               drag.rowProps(i).style,
             ]}>
@@ -182,6 +192,15 @@ export function StableCoinAsGasCoins({onDragging}: {onDragging: (active: boolean
             />
           </Animated.View>
         ))}
+        {trailing ? (
+          <Pressable style={[styles.row, styles.rowLast, rows === 0 && styles.rowFirst]} onPress={trailing.onPress}>
+            <Text style={styles.sym}>{trailing.title}</Text>
+            <View style={styles.trailingValue}>
+              <Text style={styles.value}>{trailing.value}</Text>
+              <Text style={styles.chev}>›</Text>
+            </View>
+          </Pressable>
+        ) : null}
       </View>
       {/* Said before the switch is reached for, not after it refuses. */}
       {onCount <= 1 ? <Text style={styles.minNote}>{t('mobile.settings.gas_token_min')}</Text> : null}
@@ -215,6 +234,9 @@ const makeStyles = (c: Colors) =>
     symRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
     sym: {color: c.text, fontSize: 15, fontWeight: '600'},
     busy: {color: c.subtext, fontSize: 16},
+    trailingValue: {flexDirection: 'row', alignItems: 'center', gap: 6},
+    value: {color: c.subtext, fontSize: 14},
+    chev: {color: c.subtext, fontSize: 22, fontWeight: '300'},
     // The coin in hand, as the watch lists lift theirs.
     lifted: {
       zIndex: 2,

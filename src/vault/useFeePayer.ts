@@ -1,0 +1,26 @@
+import type {Address} from 'viem';
+import {useWallet} from '@/wallet/store';
+import {useVaults} from '@/core/vault-store';
+import {useFeePayer, type FeePayer} from '@/core/fee-payer-store';
+import {ownerVaultAddress} from './read';
+import type {Network} from '@/core/chain';
+
+/**
+ * Who pays the network fee for the vault in front, and whether that is the owner's to choose.
+ *
+ * A Safe-owned vault has no choice: the Safe is a contract and sends no transactions of its own, so
+ * its writes always go through the relayer and the vault always pays. For one owned by a key, it is
+ * the setting on the Network fee page.
+ */
+export function useActiveFeePayer(network: Network): {
+  owner: Address | null;
+  vault: Address | null;
+  payer: FeePayer;
+  canChoose: boolean;
+} {
+  const owner = useWallet((s) => s.address);
+  const isSafe = useVaults((s) => !!s.vaults.find((v) => v.index === s.activeIndex)?.safe);
+  const vault = owner ? ownerVaultAddress(owner, network) : null;
+  const chosen = useFeePayer(network, vault);
+  return {owner, vault, payer: isSafe ? 'vault' : chosen, canChoose: !isSafe && !!owner};
+}

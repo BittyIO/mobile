@@ -27,6 +27,7 @@ import {GPV2_SETTLEMENT, fetchRecentOrders, type CowOrder} from '@/vault/limit';
 import {currentCatalog} from '@/core/asset-catalog';
 import {openLink} from '@/core/open-link';
 import {attemptTrade, isFailure, useVaultAttempts, wasSent, type Attempt} from '@/vault/attempts';
+import {formatEth} from '@/vault/direct';
 
 const fmtAmt = (v: string | null): string => fmtNum(Number(v ?? '0'));
 const fmtN = fmtNum;
@@ -244,7 +245,31 @@ function Leg({r, counterparty}: {r: TransferRow; counterparty?: Part['counterpar
   );
 }
 
-function Op({op, explorer, network, orders}: {op: Operation; explorer: string; network: Network; orders?: Map<string, CowOrder>}) {
+/** The ETH the owner wallet paid in gas, drawn where a relayed row draws the relay fee. */
+function OwnerFee({fee}: {fee: bigint}) {
+  const styles = useStyles(makeStyles);
+  const c = useColors();
+  return (
+    <>
+      <GasIcon color={c.subtext} size={12} />
+      <Text style={styles.fee}>
+        −<Amount v={formatEth(fee)} size={12} color={c.subtext} /> ETH
+      </Text>
+    </>
+  );
+}
+
+function Op({
+  op,
+  explorer,
+  network,
+  orders,
+}: {
+  op: Operation;
+  explorer: string;
+  network: Network;
+  orders?: Map<string, CowOrder>;
+}) {
   const {t, language, words} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
@@ -301,6 +326,10 @@ function Op({op, explorer, network, orders}: {op: Operation; explorer: string; n
                 −<Amount v={fmtAmt(v.fee.amount)} /> {displaySymbol(v.fee.assetSymbol)}
               </Text>
             </>
+          ) : op.ownerFee ? (
+            // The owner wallet sent it and paid the gas itself: ETH from that wallet, as the
+            // server read it off the receipt.
+            <OwnerFee fee={op.ownerFee} />
           ) : null}
         </View>
         <Text style={styles.link}>{t('mobile.home.view')} ↗</Text>
@@ -308,6 +337,7 @@ function Op({op, explorer, network, orders}: {op: Operation; explorer: string; n
     </Pressable>
   );
 }
+
 
 
 /**

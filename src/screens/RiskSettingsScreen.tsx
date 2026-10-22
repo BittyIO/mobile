@@ -189,7 +189,14 @@ export function RiskSettingsScreen() {
     setCustomOpen(false);
   };
   const pick = (id: SafetyLevel) => {
-    if (locked || !inForce || selected === id) return;
+    if (locked || !inForce) return;
+    // Already this level's numbers — the one in force, with Custom opened over it and nothing
+    // edited. There is nothing to put in the draft, but the choice still has to move back from
+    // Custom; returning early here is what left Custom stuck on.
+    if (selected === id) {
+      setCustomOpen(false);
+      return;
+    }
     apply(id);
   };
 

@@ -1,4 +1,4 @@
-import type {Hex, TypedDataDefinition} from 'viem';
+import type {Hex, LocalAccount, TypedDataDefinition} from 'viem';
 
 /**
  * The only capability the vault modules need from "whoever owns this vault": an address, and the
@@ -28,4 +28,10 @@ export interface Signer {
    * for.
    */
   approvalWindowSeconds?: number;
+  /**
+   * Sign a transaction for the owner to send itself — the network fee paid by the owner wallet
+   * rather than the vault (see vault/direct). Only a key can: a Safe has no transactions of its
+   * own, so its signer leaves this out and its vault always pays through the relayer.
+   */
+  signTransaction?: LocalAccount['signTransaction'];
 }

@@ -7,7 +7,7 @@
  * Ported from web `activateByStablecoin`. The fee is priced from live gas + ETH/USD and SIGNED, so the
  * server accepts it within a band (see core/activation-fee).
  */
-import {keccak256, parseAbi, stringToHex, type Address, type Hex} from 'viem';
+import {encodeFunctionData, keccak256, parseAbi, stringToHex, type Address, type Hex} from 'viem';
 import type {Signer} from '@/wallet/signer';
 import {
   apiUrl,
@@ -22,6 +22,7 @@ import {ACTIVATION_GAS, activationFeeUnits, relayFeeUnits} from '@/core/activati
 // priced from the same source, or the two disagree for no reason the user can see.
 import {ETH_USD_FEED} from './fee-quote';
 import {fetchPrices} from '@/core/prices';
+import {sendFromOwner} from './direct';
 
 
 /** Is the vault deployed (activated)? A counterfactual vault has no code until activation. */
@@ -219,6 +220,30 @@ export async function activateVault(o: {
     signature,
   });
   return {hash, vault, feeAmount};
+}
+
+/**
+ * Activate with the network fee paid by the OWNER: the factory's plain `activateVault`, called from
+ * the owner key, deploys the caller's vault and runs `calls` during its init. No signature to check
+ * and no fee taken from the vault — the owner's ETH pays the gas, so the vault need hold nothing.
+ * Both factories the app knows (v1.0.0 and v1.0.3) have it, with the same arguments.
+ */
+export async function activateVaultDirect(o: {
+  account: Signer;
+  network: Network;
+  allowlistEnabled: boolean;
+  calls?: readonly Hex[];
+}): Promise<{hash: Hex}> {
+  return sendFromOwner({
+    account: o.account,
+    network: o.network,
+    to: generationConfig().factory,
+    data: encodeFunctionData({
+      abi: ACTIVATE_ESTIMATE_ABI,
+      functionName: 'activateVault',
+      args: [o.allowlistEnabled, (o.calls ?? []) as Hex[]],
+    }),
+  });
 }
 
 /**

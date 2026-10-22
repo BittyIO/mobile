@@ -1,128 +1,116 @@
-import React, {useEffect, useState} from 'react';
-import {ScrollView, StyleSheet, View} from 'react-native';
-import {StableCoinAsGasCoins} from '@/components/StableCoinAsGasCoins';
-import {StableCoinAsGasLimits} from '@/components/StableCoinAsGasLimits';
-import {PickerSheet} from '@/components/AssetPicker';
-import {useAssetCatalog} from '@/core/asset-catalog';
+import React, {useState} from 'react';
+import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {useNavigation} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import type {RootStackParamList} from '@/App';
+import {makeSettingsStyles} from '@/components/SettingsRow';
+import {VaultFeeSettings} from '@/components/VaultFeeSettings';
+import {OwnerWalletCard} from '@/components/FeePayer';
 import {useNetwork} from '@/core/network-store';
-import {gasReserveAmount, setGasReserveAmount} from '@/core/prefs';
-import {useWallet} from '@/wallet/store';
-import {useSyncFeeReserve} from '@/vault/stableCoinAsGas';
-import {ownerVaultAddress} from '@/vault/read';
-import {useVaultBalances} from '@/vault/useVaultBalances';
+import {useActiveFeePayer} from '@/vault/useFeePayer';
+import {setFeePayer, type FeePayer} from '@/core/fee-payer-store';
 import {useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 
 /**
- * What the vault's network fees are paid WITH, and what it always keeps to pay them.
+ * Network fee: the two ways to pay it, each a row that says whether it is the one in use and opens
+ * a page of its own.
  *
- * Two sections. First, which coins the relayer may bill, in the owner's order of preference —
- * long-press and drag to reorder; the first is asked for first and holds the reserve.
- * `StableCoinAsGasCoins` carries it entirely. Second, what is kept and what may be taken: the
- * reserve amount, then the most the relayer may bill per operation and per 24 hours.
+ * Each way's settings live on its page, reachable whichever is in use. They have to be: changing
+ * the vault's fee coins is itself a vault write, paid the way the vault is set to pay — so a vault
+ * whose only fee coin is one it holds none of can only change it with the owner wallet paying, and
+ * that means opening the vault's page while the owner's is the one chosen.
  *
- * The reserve is deliberately plain. Its value lives in the preferences file that is already open
- * at launch, read once into component state and written on change; there is no store, no
- * subscription and nothing initialised while this page renders. The version that had all three
- * crashed the app every time this page opened, and none of it was buying anything the row needs.
+ * A Safe-owned vault has only the one way — the Safe sends no transactions of its own — so its page
+ * is the vault's settings directly, with nothing to choose.
  */
-/**
- * What the reserve may be set to, per chain.
- *
- * A fixed set rather than a free field: these are the only answers worth giving, and a typed
- * figure invites a stray zero that locks the whole stablecoin balance behind a reserve nobody
- * meant to set — with Max then offering nothing and no clue why.
- *
- * Mainnet starts at ten because a relay there costs the better part of a dollar and the vault's
- * own per-operation ceiling is ten; everywhere else a relay costs cents, so one is a real choice
- * and a thousand would be absurd.
- */
-const CHOICES: Record<string, number[]> = {
-  mainnet: [5, 10, 100, 1000],
-};
-const CHOICES_DEFAULT = [1, 5, 10, 100];
-
 export function NetworkFeeScreen() {
   const {t} = useT();
   const styles = useStyles(makeStyles);
+  const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const network = useNetwork((s) => s.network);
-  const choices = CHOICES[network] ?? CHOICES_DEFAULT;
-  /**
-   * The reserve belongs to THIS vault on THIS chain, so the page has to say which.
-   *
-   * Predicted locally from the owner, as everywhere else — no RPC, so the right setting is on
-   * screen from the first frame rather than after a read.
-   */
-  const owner = useWallet((s) => s.address);
-  const vault = owner ? ownerVaultAddress(owner, network) : null;
-  const key = `${network}:${vault ?? ''}`;
-
-  const [amount, setAmount] = useState(() => gasReserveAmount(network, vault));
-  const [picking, setPicking] = useState(false);
+  const {payer, canChoose, vault} = useActiveFeePayer(network);
   // The page holds still while a fee coin is being dragged, as the Overview does for its lists.
   const [dragging, setDragging] = useState(false);
 
-  // Switching vault or chain while the page is open changes which setting it is editing.
-  useEffect(() => {
-    setAmount(gasReserveAmount(network, vault));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  if (!canChoose) {
+    return (
+      <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical scrollEnabled={!dragging} contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
+        <VaultFeeSettings onDragging={setDragging} />
+      </ScrollView>
+    );
+  }
 
-  const catalog = useAssetCatalog(network);
-  const bal = useVaultBalances(network);
-  // Reported as it is edited — a new amount, or a new first coin after a drag — so the next
-  // auto-yield sweep already leaves the new float.
-  useSyncFeeReserve(network, vault, bal.balances, catalog);
-
-  const choose = (v: string) => {
-    setGasReserveAmount(network, vault, v);
-    setAmount(v);
-  };
+  /**
+   * One way to pay, as two targets: the row chooses it — title, its check right after it, and the
+   * space beyond — and only the chevron at the far end opens its settings. Choosing is what this
+   * page is for, so it gets nearly all of the row; a tap anywhere but the end must not navigate.
+   */
+  const way = (p: FeePayer, title: string, route: 'NetworkFeeVault' | 'NetworkFeeOwner', last?: boolean) => (
+    <View style={[styles.wayRow, !last && styles.rowDivider]}>
+      <Pressable
+        // No pressed dimming: the check moving is the feedback, and dimming the title read as it
+        // being highlighted.
+        style={styles.wayPick}
+        onPress={() => vault && setFeePayer(network, vault, p)}
+        accessibilityRole="radio"
+        accessibilityState={{checked: payer === p}}>
+        <Text style={styles.rowTitle}>{title}</Text>
+        {/* Always laid out, shown only when chosen, so the row keeps its height (see OptionRow). */}
+        <Text style={[styles.check, payer !== p && styles.checkHidden]}>✓</Text>
+      </Pressable>
+      <Pressable
+        style={({pressed}) => [styles.wayMore, pressed && styles.pressed]}
+        onPress={() => nav.navigate(route)}
+        accessibilityRole="button"
+        accessibilityLabel={`${title} · ${t('vault.settings')}`}>
+        <Text style={styles.chev}>›</Text>
+      </Pressable>
+    </View>
+  );
 
   return (
-    <ScrollView
-      showsVerticalScrollIndicator={false}
-      alwaysBounceVertical
-      scrollEnabled={!dragging}
-      contentInsetAdjustmentBehavior="automatic"
-      style={styles.container}
-      contentContainerStyle={styles.body}>
-      <View>
-        <StableCoinAsGasCoins onDragging={setDragging} />
+    <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
+      <View style={styles.group}>
+        {way('vault', t('mobile.fees.payer_vault'), 'NetworkFeeVault')}
+        {way('owner', t('mobile.fees.payer_owner'), 'NetworkFeeOwner', true)}
       </View>
+    </ScrollView>
+  );
+}
 
-      {/* The reserve is local, not on chain, so its row stays editable before activation; the coin
-          that holds it is the first fee coin above that can (see resolveFeeReserve). */}
-      <View style={styles.second}>
-        <StableCoinAsGasLimits
-          leading={{
-            title: t('mobile.settings.gas_reserve_amount'),
-            value: Number(amount) > 0 ? `$${amount}` : t('vault.none'),
-            hint: t('mobile.settings.gas_reserve_hint'),
-            onPress: () => setPicking(true),
-          }}
-        />
-      </View>
+/** Network fee › Pay from vault: the vault's fee coins, reserve and caps. Chosen on the page before. */
+export function NetworkFeeVaultScreen() {
+  const styles = useStyles(makeStyles);
+  const [dragging, setDragging] = useState(false);
+  return (
+    <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical scrollEnabled={!dragging} contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
+      <VaultFeeSettings onDragging={setDragging} />
+    </ScrollView>
+  );
+}
 
-      <PickerSheet
-        visible={picking}
-        title={t('mobile.settings.gas_reserve_amount')}
-        // "None" turns the reserve off: nothing is held back from Max, and the keeper sweeps it all.
-        items={[{key: '0', label: t('vault.none')}, ...choices.map((n) => ({key: String(n), label: `$${n}`}))]}
-        selected={amount}
-        onSelect={choose}
-        onClose={() => setPicking(false)}
-      />
+/** Network fee › Pay from owner wallet: the address to fund, and what is in it. Chosen on the page before. */
+export function NetworkFeeOwnerScreen() {
+  const styles = useStyles(makeStyles);
+  return (
+    <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
+      <OwnerWalletCard />
     </ScrollView>
   );
 }
 
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
+    ...makeSettingsStyles(c),
     container: {flex: 1, backgroundColor: c.bg},
     // The gap here is the one INSIDE a section — a card and the footnote that explains it. The
-    // space BETWEEN sections is set on the second card, so the two kinds of distance stay
+    // space BETWEEN sections is set on the cards that start one, so the two kinds of distance stay
     // distinguishable.
     body: {padding: 16, gap: 8, paddingBottom: 32},
-    second: {marginTop: 20},
+    // A way to pay: the row chooses it; only the chevron's own square at the end opens its settings.
+    wayRow: {flexDirection: 'row', alignItems: 'stretch'},
+    wayPick: {flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 15, paddingLeft: 16},
+    wayMore: {width: 56, alignItems: 'center', justifyContent: 'center'},
+    pressed: {opacity: 0.6},
   });

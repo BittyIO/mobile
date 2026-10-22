@@ -113,3 +113,25 @@ export async function quoteRelayFeeUsd(network: Network, gasUnits = TYPICAL_RELA
     return null;
   }
 }
+
+/**
+ * The forwarder's share of {@link RELAY_GAS.overhead} — signature check, ERC-2771 suffix and the fee
+ * transfer that ends a relay. A transaction the owner sends itself skips all three and pays the
+ * flat 21,000 every transaction does instead.
+ */
+const RELAY_ONLY_GAS = RELAY_GAS.overhead - BigInt(21_000);
+
+/**
+ * Estimated network fee in wei when the OWNER pays (see vault/direct), or null when gas cannot be
+ * read. Same measured figures as the relay quote, less what only a relay spends, and no relayer
+ * margin — the owner pays the chain, not a relayer.
+ */
+export async function quoteOwnerFeeWei(network: Network, gasUnits = TYPICAL_RELAY_GAS): Promise<bigint | null> {
+  try {
+    const gasPrice = await publicClientFor(network).getGasPrice();
+    const gas = gasUnits > RELAY_ONLY_GAS + BigInt(21_000) ? gasUnits - RELAY_ONLY_GAS : BigInt(21_000);
+    return gas * gasPrice;
+  } catch {
+    return null;
+  }
+}

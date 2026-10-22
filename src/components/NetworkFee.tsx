@@ -2,13 +2,17 @@ import React, {useEffect, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {GasIcon} from '@/components/GasIcon';
 import {useNetwork} from '@/core/network-store';
-import {quoteRelayFeeUsd, TYPICAL_RELAY_GAS} from '@/vault/fee-quote';
+import {quoteOwnerFeeWei, quoteRelayFeeUsd, TYPICAL_RELAY_GAS} from '@/vault/fee-quote';
+import {formatEth} from '@/vault/direct';
+import {Amount} from '@/components/Amount';
+import {useActiveFeePayer} from '@/vault/useFeePayer';
 import {useColors, useStyles, type Colors} from '@/theme';
 
 // Quotes are shared across every confirm surface and go stale slowly, so one read per network per
 // minute is plenty. Without this each sheet opening re-read gas and the price feed.
 const TTL_MS = 60_000;
 const cache = new Map<string, {usd: number | null; at: number}>();
+const ownerCache = new Map<string, {wei: bigint | null; at: number}>();
 
 /**
  * The fee line above every Face ID confirm: a fuel pump and a figure, no words.
@@ -20,8 +24,55 @@ const cache = new Map<string, {usd: number | null; at: number}>();
  * is signed and posted off-chain, and costs nothing. That states the zero instead of quoting gas
  * for a relay that will not happen, and instead of hiding the line, which left the user to guess
  * whether the fee was nil or merely unknown.
+ *
+ * When the owner pays (see core/fee-payer-store) the figure is in ETH, because that is what leaves
+ * the owner wallet — no dollar conversion, and no relayer margin, since no relayer is paid.
  */
 export function NetworkFee({gas = TYPICAL_RELAY_GAS, free}: {gas?: bigint; free?: boolean}) {
+  const network = useNetwork((s) => s.network);
+  const {payer} = useActiveFeePayer(network);
+  if (payer === 'owner' && !free) return <OwnerFee gas={gas} />;
+  return <VaultFee gas={gas} free={free} />;
+}
+
+/** The fee in ETH, from the owner wallet. */
+function OwnerFee({gas}: {gas: bigint}) {
+  const styles = useStyles(makeStyles);
+  const c = useColors();
+  const network = useNetwork((s) => s.network);
+  const key = `${network}:${gas}`;
+  const [wei, setWei] = useState<bigint | null>(() => {
+    const hit = ownerCache.get(key);
+    return hit && Date.now() - hit.at < TTL_MS ? hit.wei : null;
+  });
+  useEffect(() => {
+    const hit = ownerCache.get(key);
+    if (hit && Date.now() - hit.at < TTL_MS) {
+      setWei(hit.wei);
+      return;
+    }
+    let live = true;
+    quoteOwnerFeeWei(network, gas).then((v) => {
+      ownerCache.set(key, {wei: v, at: Date.now()});
+      if (live) setWei(v);
+    });
+    return () => {
+      live = false;
+    };
+  }, [key, network, gas]);
+  if (wei == null) return null;
+  return (
+    <View style={styles.row}>
+      <GasIcon color={c.subtext} />
+      <Text style={styles.line}>
+        <Amount v={formatEth(wei)} size={12} color={c.subtext} /> ETH
+      </Text>
+    </View>
+  );
+}
+
+/** The fee in dollars, billed to the vault by the relayer. */
+function VaultFee({gas, free}: {gas: bigint; free?: boolean}) {
   const styles = useStyles(makeStyles);
   const c = useColors();
   const network = useNetwork((s) => s.network);

@@ -118,6 +118,9 @@ const ACTION_CATEGORY: Record<string, ActionCategory> = {
   updateRisk: 'settings',
   setStableCoinAsGas: 'settings',
   disableStableCoinAsGas: 'settings',
+  // The same two calls under the names the vault uses from v1.0.2, when WETH joined the fee coins.
+  setTokenAsGas: 'settings',
+  disableTokenAsGas: 'settings',
   setGasless: 'settings',
   disableGasless: 'settings',
   updateAssets: 'settings',
@@ -293,10 +296,12 @@ export function describeActions(
         break;
       case 'setGasless':
       case 'setStableCoinAsGas':
+      case 'setTokenAsGas':
         out.push(k('stable_coin_as_gas_set'));
         break;
       case 'disableGasless':
       case 'disableStableCoinAsGas':
+      case 'disableTokenAsGas':
         out.push(k('stable_coin_as_gas_disabled'));
         break;
       case 'updatePaymentRisk':

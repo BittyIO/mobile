@@ -97,7 +97,9 @@ export function OptionRow({
         <Text style={[styles.rowTitle, disabled && !checked && styles.rowTitleOff]}>{title}</Text>
         {sub ? <Text style={styles.rowSub}>{sub}</Text> : null}
       </View>
-      {busy ? <Text style={styles.rowValue}>…</Text> : checked ? <Text style={styles.check}>✓</Text> : null}
+      {/* The mark is always laid out and only shown when chosen: it is a little taller than the
+          title, so adding and removing it made the row change height as the choice moved. */}
+      {busy ? <Text style={styles.rowValue}>…</Text> : <Text style={[styles.check, !checked && styles.checkHidden]}>✓</Text>}
     </Pressable>
   );
 }
@@ -130,6 +132,7 @@ export const makeSettingsStyles = (c: Colors) =>
     rowSub: {color: c.subtext, fontSize: 12},
     rowTitleOff: {color: c.subtext},
     check: {color: c.accent, fontSize: 17, fontWeight: '700'},
+    checkHidden: {opacity: 0},
     rowRight: {flexDirection: 'row', alignItems: 'center', gap: 6},
     // A chevron's glyph sits a few points inside its box; a switch fills its own exactly, so
     // without this it looks nearer the edge than every other row in the group.
