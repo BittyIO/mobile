@@ -277,7 +277,6 @@ export function ManageScreen() {
             />
         </View>
       </View>
-      <Text style={styles.foot}>{t('mobile.vault.bitty_allowlist_foot')}</Text>
       </View>
 
       {/* What each list holds, and a way in. The two lists used to be here in full, one under the
@@ -354,6 +353,5 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   sym: {color: c.text, fontSize: 15, fontWeight: '600'},
   company: {color: c.subtext, fontSize: 12, marginTop: 1},
   hint: {color: c.subtext, fontSize: 12, marginTop: 2},
-  foot: {color: c.subtext, fontSize: 13, lineHeight: 18, paddingHorizontal: 16, marginTop: 6},
   busy: {color: c.subtext, fontSize: 16},
 });
