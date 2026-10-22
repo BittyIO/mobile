@@ -1,13 +1,11 @@
 import React, {useEffect, useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {OptionRow, SettingsGroup, makeSettingsStyles} from '@/components/SettingsRow';
-import {CopyAddress} from '@/components/CopyAddress';
 import {ReceiveDialog} from '@/components/ReceiveDialog';
 import {networkLabel, useNetwork} from '@/core/network-store';
 import {setFeePayer} from '@/core/fee-payer-store';
 import {useActiveFeePayer} from '@/vault/useFeePayer';
 import {formatEth, ownerEthBalance} from '@/vault/direct';
-import {quoteOwnerFeeWei, TYPICAL_RELAY_GAS} from '@/vault/fee-quote';
 import {useT} from '@/i18n';
 import {useStyles, type Colors} from '@/theme';
 
@@ -20,8 +18,8 @@ const BALANCE_POLL_MS = 15_000;
  *
  * With the owner paying, the page shows the owner address to fund and what is in it. Nothing here
  * moves ETH: the owner tops the address up however they like — a send from the vault, another
- * wallet, an exchange withdrawal — which is why the address is the whole of it, with a QR for a
- * phone on the other side of the transfer.
+ * wallet, an exchange withdrawal — which is why the address is the whole of it. Tapping it opens
+ * the QR, with copy and share, for whatever is on the other side of the transfer.
  *
  * Absent for a Safe-owned vault, which cannot send its own transactions and always pays through the
  * relayer.
@@ -32,7 +30,6 @@ export function FeePayerSection() {
   const network = useNetwork((s) => s.network);
   const {owner, vault, payer, canChoose} = useActiveFeePayer(network);
   const [balance, setBalance] = useState<bigint | null>(null);
-  const [perAction, setPerAction] = useState<bigint | null>(null);
   const [qr, setQr] = useState(false);
 
   useEffect(() => {
@@ -43,7 +40,6 @@ export function FeePayerSection() {
         .then((b) => live && setBalance(b))
         .catch(() => {});
     read();
-    quoteOwnerFeeWei(network, TYPICAL_RELAY_GAS).then((w) => live && setPerAction(w));
     const timer = setInterval(read, BALANCE_POLL_MS);
     return () => {
       live = false;
@@ -54,8 +50,6 @@ export function FeePayerSection() {
 
   if (!canChoose || !owner || !vault) return null;
   const label = networkLabel(network, t);
-  // A rough count, from a plain send's fee at today's gas: enough to tell "plenty" from "top up".
-  const actions = balance != null && perAction ? balance / perAction : null;
 
   return (
     <View style={styles.wrap}>
@@ -76,21 +70,17 @@ export function FeePayerSection() {
       </SettingsGroup>
 
       {payer === 'owner' ? (
-        <SettingsGroup label={t('mobile.fees.owner_wallet')} footer={t('mobile.fees.owner_footer', {network: label})}>
-          <View style={[styles.row, styles.rowDivider]}>
-            <View style={styles.rowText}>
-              <CopyAddress address={owner} textStyle={styles.addr} numberOfLines={1} />
-            </View>
-            <Pressable onPress={() => setQr(true)} hitSlop={6}>
-              <Text style={styles.link}>{t('mobile.fees.show_qr')}</Text>
-            </Pressable>
-          </View>
+        <SettingsGroup footer={t('mobile.fees.owner_footer', {network: label})}>
+          <Pressable style={[styles.row, styles.rowDivider]} onPress={() => setQr(true)} accessibilityRole="button">
+            {/* The whole 42 characters, shrunk to one line: this is the address someone checks
+                against the other side of a transfer. */}
+            <Text style={styles.addr} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+              {owner}
+            </Text>
+          </Pressable>
           <View style={styles.row}>
             <Text style={styles.rowTitle}>{t('mobile.fees.balance')}</Text>
-            <View style={styles.balance}>
-              <Text style={styles.rowValue}>{balance == null ? '…' : `${formatEth(balance)} ETH`}</Text>
-              {actions != null ? <Text style={styles.sub}>{t('mobile.fees.actions_left', {n: actions.toString()})}</Text> : null}
-            </View>
+            <Text style={styles.rowValue}>{balance == null ? '…' : `${formatEth(balance)} ETH`}</Text>
           </View>
         </SettingsGroup>
       ) : null}
@@ -111,8 +101,5 @@ const makeStyles = (c: Colors) =>
   StyleSheet.create({
     ...makeSettingsStyles(c),
     wrap: {gap: 20, marginBottom: 20},
-    addr: {color: c.text, fontSize: 13, fontFamily: 'Menlo'},
-    link: {color: c.accent, fontSize: 14, fontWeight: '600'},
-    balance: {alignItems: 'flex-end', gap: 2},
-    sub: {color: c.subtext, fontSize: 12},
+    addr: {flex: 1, color: c.text, fontSize: 13, fontFamily: 'Menlo'},
   });

@@ -9,6 +9,7 @@ import {useNetwork} from '@/core/network-store';
 import {gasReserveAmount, setGasReserveAmount} from '@/core/prefs';
 import {useWallet} from '@/wallet/store';
 import {useSyncFeeReserve} from '@/vault/stableCoinAsGas';
+import {useActiveFeePayer} from '@/vault/useFeePayer';
 import {ownerVaultAddress} from '@/vault/read';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {useStyles, type Colors} from '@/theme';
@@ -19,8 +20,9 @@ import {useT} from '@/i18n';
  * them.
  *
  * Who pays comes first (`FeePayerSection`): the vault, through the relayer, or the owner wallet,
- * from this phone. The fee-coin sections below stay either way — they are what the relayer bills
- * when the owner wallet is short and the user lets the vault pay that one.
+ * from this phone. The fee-coin sections below are the vault's and only show while the vault pays;
+ * with the owner paying they are not what the user is managing, and a page of coins and caps that
+ * no longer apply reads as if they still do.
  *
  * Then two sections. First, which coins the relayer may bill, in the owner's order of preference —
  * long-press and drag to reorder; the first is asked for first and holds the reserve.
@@ -60,6 +62,7 @@ export function NetworkFeeScreen() {
    * screen from the first frame rather than after a read.
    */
   const owner = useWallet((s) => s.address);
+  const {payer} = useActiveFeePayer(network);
   const vault = owner ? ownerVaultAddress(owner, network) : null;
   const key = `${network}:${vault ?? ''}`;
 
@@ -94,22 +97,26 @@ export function NetworkFeeScreen() {
       style={styles.container}
       contentContainerStyle={styles.body}>
       <FeePayerSection />
-      <View>
-        <StableCoinAsGasCoins onDragging={setDragging} />
-      </View>
+      {payer === 'vault' ? (
+        <>
+          <View>
+            <StableCoinAsGasCoins onDragging={setDragging} />
+          </View>
 
-      {/* The reserve is local, not on chain, so its row stays editable before activation; the coin
-          that holds it is the first fee coin above that can (see resolveFeeReserve). */}
-      <View style={styles.second}>
-        <StableCoinAsGasLimits
-          leading={{
-            title: t('mobile.settings.gas_reserve_amount'),
-            value: Number(amount) > 0 ? `$${amount}` : t('vault.none'),
-            hint: t('mobile.settings.gas_reserve_hint'),
-            onPress: () => setPicking(true),
-          }}
-        />
-      </View>
+          {/* The reserve is local, not on chain, so its row stays editable before activation; the coin
+              that holds it is the first fee coin above that can (see resolveFeeReserve). */}
+          <View style={styles.second}>
+            <StableCoinAsGasLimits
+              leading={{
+                title: t('mobile.settings.gas_reserve_amount'),
+                value: Number(amount) > 0 ? `$${amount}` : t('vault.none'),
+                hint: t('mobile.settings.gas_reserve_hint'),
+                onPress: () => setPicking(true),
+              }}
+            />
+          </View>
+        </>
+      ) : null}
 
       <PickerSheet
         visible={picking}
