@@ -136,6 +136,9 @@ export function SettingsIcon({name, size = 29}: {name: SettingsIconName; size?: 
         ) : name === 'lockForever' ? (
           // lucide Infinity: no lock at all, because there is no key that opens it — forever.
           <Path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 0 0 0-8c-2 0-4 1.33-6 4Z" {...c} />
+        ) : name === 'ownership' ? (
+          // lucide ArrowRightLeft: one owner out, another in.
+          <Path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4" {...c} />
         ) : name === 'eth' ? (
           // Ether's diamond: the native coin the Legacy ETH row wraps.
           <>
