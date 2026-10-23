@@ -15,9 +15,9 @@ import {LOCK_ICON, LOCK_TITLE} from '@/core/lock-status';
 
 /**
  * Security — three groups of rows, each opening what it names: Safety settings (the timelock and the
- * two daily allowances, with the vault's safety level beside it on v1.0.0+); the allow list and the asset manager;
- * Lock status (temporarily / forever locked), the recovery phrase and Transfer ownership. The writes live on
- * the pages the rows open.
+ * two daily allowances, with the vault's safety level beside it) and the allow list; the asset
+ * manager and Transfer ownership; Lock status (temporarily / forever locked) and the recovery
+ * phrase. The writes live on the pages the rows open.
  */
 export function SecurityScreen() {
   const {t} = useT();
@@ -49,29 +49,22 @@ export function SecurityScreen() {
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
-      {/* The safety numbers lead: the delay and the caps every other control is measured against. */}
+      {/* What the vault may do: the safety numbers every other control is measured against, and
+          what it may touch. */}
       <SettingsGroup>
-        <SettingsRow
-          icon="security"
-          title={t('mobile.vault.risk_settings')}
-          value={levelValue}
-          onPress={() => nav.navigate('VaultRiskSettings')}
-          last
-        />
+        <SettingsRow icon="security" title={t('mobile.vault.risk_settings')} value={levelValue} onPress={() => nav.navigate('VaultRiskSettings')} />
+        <SettingsRow icon="allowlist" title={t('mobile.settings.allow_list')} onPress={() => nav.navigate('VaultAssets')} last />
       </SettingsGroup>
-      {/* What the vault lets happen beyond the owner's own hand: what it may touch and who else may
-          act for it. */}
+      {/* Who else may act for it, and handing it to another key. */}
       <SettingsGroup>
-        <SettingsRow icon="allowlist" title={t('mobile.settings.allow_list')} onPress={() => nav.navigate('VaultAssets')} />
         {/* No status here: who it is and what is pending live on the asset manager's own page. */}
-        <SettingsRow icon="delegation" title={t('vault.asset_manager')} onPress={() => nav.navigate('VaultAssetManager')} last />
+        <SettingsRow icon="delegation" title={t('vault.asset_manager')} onPress={() => nav.navigate('VaultAssetManager')} />
+        <SettingsRow icon="ownership" title={t('mobile.vault.transfer_ownership')} onPress={() => nav.navigate('VaultTransferOwnership')} last />
       </SettingsGroup>
-      {/* The last resorts: freezing the vault, the phrase that restores the key, and handing the vault
-          to another key. */}
+      {/* The last resorts: freezing the vault, and the phrase that restores the key. */}
       <SettingsGroup>
         <SettingsRow icon={LOCK_ICON[lockLevel ?? 0]} title={t('mobile.vault.vault_lock')} value={lockValue} onPress={() => nav.navigate('VaultLock')} />
-        <SettingsRow icon="recovery" title={t('mobile.settings.recovery_phrase')} onPress={() => nav.navigate('VaultRecoveryPhrase')} />
-        <SettingsRow icon="ownership" title={t('mobile.vault.transfer_ownership')} onPress={() => nav.navigate('VaultTransferOwnership')} last />
+        <SettingsRow icon="recovery" title={t('mobile.settings.recovery_phrase')} onPress={() => nav.navigate('VaultRecoveryPhrase')} last />
       </SettingsGroup>
     </ScrollView>
   );
