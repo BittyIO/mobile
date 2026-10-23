@@ -48,7 +48,8 @@ import {OrderRow, OrderDetailLines, fmtPrice, type OrderPart, type OrderValue} f
 import {describeOrder} from '@/vault/tx-actions';
 import {useConfirmAction, useConfirmLocal} from '@/components/ConfirmAction';
 import {fetchProtocolApy, EMPTY_APY, type ProtocolApy} from '@/vault/apy';
-import {marketSell, buildMarketSell, poolSpotPrice, quotePreview} from '@/vault/trade';
+import {marketSell, buildMarketSell, marketSellFloor, poolSpotPrice, quotePreview} from '@/vault/trade';
+import {placeUniswapXOrder, quoteUniswapX, uniswapXAdapter, waitForUniswapX, withinFeed, type UniswapXQuote} from '@/vault/uniswapx';
 import {PositionPanel} from '@/components/PositionPanel';
 import {AssetPickRow} from '@/components/AssetPickRow';
 import {fetchPosition, type Position} from '@/vault/position';
@@ -1714,7 +1715,37 @@ export function TradeScreen() {
         });
       }
 
-      if (mode === 'Market') {
+      /**
+       * Where the intent adapter is UniswapX (Robinhood), a market sell may go to its auction instead
+       * of the pool: gasless once set up, and filled by whoever pays the vault most. Only when it is
+       * no worse — its floor at least the pool route's floor — and within the price feed, because
+       * the vault checks a UniswapX order against no price at all. A sell funded from a position
+       * stays on the pool, which withdraws and swaps in one transaction.
+       */
+      const ux = mode === 'Market' && withdrawCalls.length === 0 ? uniswapXAdapter(network) : null;
+      let uxQuote: UniswapXQuote | null = null;
+      if (ux) {
+        const q = await quoteUniswapX({network, vault, sellToken, buyToken, sellAmount: amount}).catch(() => null);
+        if (q) {
+          const [floor, fair] = await Promise.all([
+            marketSellFloor({network, sellToken, buyToken, sellAmount: amount, slippageBps: slippage}),
+            withinFeed({network, sellToken, buyToken, sellAmount: amount, quote: q}),
+          ]);
+          if (fair && (floor == null || q.minOut >= floor)) uxQuote = q;
+        }
+      }
+
+      if (ux && uxQuote) {
+        // The vault's clone of the adapter answers Permit2's signature check, and Permit2 pulls the
+        // sell token on the vault's approval: both once per vault (and token), mined before signing.
+        const needApprove = await needsRelayerApproval({vault, network, intentProtocol: ux, token: sellToken});
+        await prepareIntent({account: acct, vault, network, intentProtocol: ux, tokens: [sellToken, buyToken], approveToken: needApprove ? sellToken : undefined, stableCoin: feeCoin});
+        const orderId = await placeUniswapXOrder({account: acct, network, quote: uxQuote});
+        // A Dutch auction of ~80 blocks: it fills, with a transaction of its own, or it expires.
+        const fill = await waitForUniswapX(network, orderId);
+        if (fill.status !== 'filled') throw new Error(t('mobile.trade.uniswapx_unfilled', {status: fill.status}));
+        tx.success(fill.txHash);
+      } else if (mode === 'Market') {
         if (withdrawCalls.length) {
           const {setup, swap} = await buildMarketSell({network, vault, sellToken, buyToken, sellAmount: amount, slippageBps: slippage});
           const {hash} = await relayVaultMulticall({account: acct, vault, network, calls: [...withdrawCalls, ...setup, swap], stableCoin: feeCoin});

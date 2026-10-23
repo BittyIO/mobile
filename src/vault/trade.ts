@@ -198,6 +198,25 @@ type SellOpts = {
  * Build (without relaying) the allowlist setup + marketSell call for an exact-in swap. Lets a caller bundle
  * the swap with other vault calls in one multicall — e.g. a Sky withdraw ahead of a yielding market buy.
  */
+/**
+ * The least a market sell through the AMM adapter would receive — its slippage floor — or null when
+ * no pool prices it. What a UniswapX order's floor is weighed against (vault/uniswapx).
+ */
+export async function marketSellFloor(o: {
+  network: Network;
+  sellToken: Address;
+  buyToken: Address;
+  sellAmount: string;
+  slippageBps: number;
+}): Promise<bigint | null> {
+  const amm = ammAdapters(o.network)[0];
+  if (!amm) return null;
+  const amountIn = parseUnits(o.sellAmount, assetMeta(o.network, o.sellToken).decimals);
+  return sellRoute(o.network, amm, o.sellToken, o.buyToken, amountIn, o.slippageBps)
+    .then((r) => r.minOut)
+    .catch(() => null);
+}
+
 export async function buildMarketSell(o: {
   network: Network;
   vault: Address;

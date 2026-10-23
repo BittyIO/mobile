@@ -75,6 +75,7 @@ export const trade: MobileTable = {
     over: 'Over',
     enter_receive: 'Enter the amount to receive.',
     cow_unavailable: 'CoW Swap is not available on this network.',
+    uniswapx_unfilled: 'The UniswapX auction ended unfilled ({{status}}). Nothing was traded.',
     cannot_cancel: 'Cannot cancel',
   },
   zh: {
@@ -148,6 +149,7 @@ export const trade: MobileTable = {
     over: '持续',
     enter_receive: '请输入要收到的数量。',
     cow_unavailable: '此网络不支持 CoW Swap。',
+    uniswapx_unfilled: 'UniswapX 拍卖结束但未成交（{{status}}）。没有进行任何交易。',
     cannot_cancel: '无法撤销',
   },
   'zh-TW': {
@@ -221,6 +223,7 @@ export const trade: MobileTable = {
     over: '持續',
     enter_receive: '請輸入要收到的數量。',
     cow_unavailable: '此網路不支援 CoW Swap。',
+    uniswapx_unfilled: 'UniswapX 拍賣結束但未成交（{{status}}）。沒有進行任何交易。',
     cannot_cancel: '無法撤銷',
   },
   ja: {
@@ -294,6 +297,7 @@ export const trade: MobileTable = {
     over: '期間',
     enter_receive: '受け取る数量を入力してください。',
     cow_unavailable: 'このネットワークでは CoW Swap を利用できません。',
+    uniswapx_unfilled: 'UniswapX のオークションは約定せずに終了しました（{{status}}）。取引は行われていません。',
     cannot_cancel: 'キャンセルできません',
   },
   ko: {
@@ -367,6 +371,7 @@ export const trade: MobileTable = {
     over: '기간',
     enter_receive: '받을 수량을 입력하세요.',
     cow_unavailable: '이 네트워크에서는 CoW Swap을 사용할 수 없습니다.',
+    uniswapx_unfilled: 'UniswapX 경매가 체결되지 않고 종료되었습니다({{status}}). 거래된 것은 없습니다.',
     cannot_cancel: '취소할 수 없음',
   },
   fr: {
@@ -440,6 +445,7 @@ export const trade: MobileTable = {
     over: 'Sur',
     enter_receive: 'Saisissez le montant à recevoir.',
     cow_unavailable: 'CoW Swap n’est pas disponible sur ce réseau.',
+    uniswapx_unfilled: 'L’enchère UniswapX s’est terminée sans exécution ({{status}}). Rien n’a été échangé.',
     cannot_cancel: 'Annulation impossible',
   },
   es: {
@@ -513,6 +519,7 @@ export const trade: MobileTable = {
     over: 'Durante',
     enter_receive: 'Introduce la cantidad a recibir.',
     cow_unavailable: 'CoW Swap no está disponible en esta red.',
+    uniswapx_unfilled: 'La subasta de UniswapX terminó sin ejecutarse ({{status}}). No se negoció nada.',
     cannot_cancel: 'No se puede cancelar',
   },
   de: {
@@ -586,6 +593,7 @@ export const trade: MobileTable = {
     over: 'Über',
     enter_receive: 'Gib den zu erhaltenden Betrag ein.',
     cow_unavailable: 'CoW Swap ist in diesem Netzwerk nicht verfügbar.',
+    uniswapx_unfilled: 'Die UniswapX-Auktion endete ohne Ausführung ({{status}}). Es wurde nichts gehandelt.',
     cannot_cancel: 'Stornieren nicht möglich',
   },
   'pt-BR': {
@@ -659,6 +667,7 @@ export const trade: MobileTable = {
     over: 'Acima',
     enter_receive: 'Informe o valor a receber.',
     cow_unavailable: 'CoW Swap não está disponível nesta rede.',
+    uniswapx_unfilled: 'O leilão da UniswapX terminou sem execução ({{status}}). Nada foi negociado.',
     cannot_cancel: 'Não é possível cancelar',
   },
   hi: {
@@ -732,6 +741,7 @@ export const trade: MobileTable = {
     over: 'अधिक',
     enter_receive: 'प्राप्त करने की राशि दर्ज करें।',
     cow_unavailable: 'इस नेटवर्क पर CoW Swap उपलब्ध नहीं है।',
+    uniswapx_unfilled: 'UniswapX नीलामी बिना भरे समाप्त हुई ({{status}})। कोई ट्रेड नहीं हुआ।',
     cannot_cancel: 'रद्द नहीं कर सकते',
   },
   tr: {
@@ -805,6 +815,7 @@ export const trade: MobileTable = {
     over: 'Fazla',
     enter_receive: 'Alınacak tutarı girin.',
     cow_unavailable: 'CoW Swap bu ağda kullanılamıyor.',
+    uniswapx_unfilled: 'UniswapX açık artırması dolmadan sona erdi ({{status}}). Hiçbir işlem yapılmadı.',
     cannot_cancel: 'İptal edilemiyor',
   },
   ru: {
@@ -878,6 +889,7 @@ export const trade: MobileTable = {
     over: 'Сверх',
     enter_receive: 'Введите сумму к получению.',
     cow_unavailable: 'CoW Swap недоступен в этой сети.',
+    uniswapx_unfilled: 'Аукцион UniswapX завершился без исполнения ({{status}}). Ничего не обменяно.',
     cannot_cancel: 'Нельзя отменить',
   },
   id: {
@@ -951,6 +963,7 @@ export const trade: MobileTable = {
     over: 'Lebih',
     enter_receive: 'Masukkan jumlah yang diterima.',
     cow_unavailable: 'CoW Swap tidak tersedia di jaringan ini.',
+    uniswapx_unfilled: 'Lelang UniswapX berakhir tanpa terisi ({{status}}). Tidak ada yang diperdagangkan.',
     cannot_cancel: 'Tidak bisa dibatalkan',
   },
   vi: {
@@ -1024,6 +1037,7 @@ export const trade: MobileTable = {
     over: 'Vượt',
     enter_receive: 'Nhập số lượng muốn nhận.',
     cow_unavailable: 'CoW Swap không khả dụng trên mạng này.',
+    uniswapx_unfilled: 'Phiên đấu giá UniswapX kết thúc mà không khớp ({{status}}). Không có giao dịch nào.',
     cannot_cancel: 'Không thể hủy',
   },
   th: {
@@ -1097,6 +1111,7 @@ export const trade: MobileTable = {
     over: 'เกิน',
     enter_receive: 'กรอกจำนวนที่ต้องการรับ',
     cow_unavailable: 'CoW Swap ใช้ไม่ได้บนเครือข่ายนี้',
+    uniswapx_unfilled: 'การประมูล UniswapX จบลงโดยไม่มีการจับคู่ ({{status}}) ไม่มีการซื้อขายใดๆ',
     cannot_cancel: 'ยกเลิกไม่ได้',
   },
 };
