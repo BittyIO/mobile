@@ -5,8 +5,6 @@ import type {MobileTable} from './index';
 // write the other way when the chosen way cannot.
 export const fees: MobileTable = {
   en: {
-    vault_empty: 'Your vault holds none of its network fee coins. Deposit some into the vault first, or transactions will fail.',
-    owner_empty: 'No ETH in the owner wallet yet. Deposit ETH into it first, or transactions will fail.',
     advanced: 'Advanced settings',
     payer_vault: 'Pay from vault',
     payer_owner: 'Pay from owner wallet',
@@ -22,8 +20,6 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Pay with owner ETH',
   },
   zh: {
-    vault_empty: '金库中没有任何可用于支付网络手续费的币。请先向金库存入，否则交易会失败。',
-    owner_empty: '所有者钱包里还没有 ETH。请先向它存入 ETH，否则交易会失败。',
     advanced: '高级设置',
     payer_vault: '从金库支付',
     payer_owner: '从所有者钱包支付',
@@ -38,8 +34,6 @@ export const fees: MobileTable = {
     fallback_owner_button: '用所有者的 ETH 支付',
   },
   'zh-TW': {
-    vault_empty: '金庫中沒有任何可用於支付網路手續費的幣。請先向金庫存入，否則交易會失敗。',
-    owner_empty: '擁有者錢包裡還沒有 ETH。請先向它存入 ETH，否則交易會失敗。',
     advanced: '進階設定',
     payer_vault: '從金庫支付',
     payer_owner: '從擁有者錢包支付',
@@ -54,8 +48,6 @@ export const fees: MobileTable = {
     fallback_owner_button: '用擁有者的 ETH 支付',
   },
   ja: {
-    vault_empty: 'ボールトにネットワーク手数料用のコインがありません。先にボールトへ入金しないと取引は失敗します。',
-    owner_empty: 'オーナーウォレットにまだ ETH がありません。先に ETH を入金しないと取引は失敗します。',
     advanced: '詳細設定',
     payer_vault: 'ボールトから支払う',
     payer_owner: 'オーナーウォレットから支払う',
@@ -70,8 +62,6 @@ export const fees: MobileTable = {
     fallback_owner_button: 'オーナーの ETH で払う',
   },
   ko: {
-    vault_empty: '볼트에 네트워크 수수료용 코인이 없습니다. 먼저 볼트에 입금하지 않으면 거래가 실패합니다.',
-    owner_empty: '소유자 지갑에 아직 ETH가 없습니다. 먼저 ETH를 입금하지 않으면 거래가 실패합니다.',
     advanced: '고급 설정',
     payer_vault: '볼트에서 지불',
     payer_owner: '소유자 지갑에서 지불',
@@ -86,8 +76,6 @@ export const fees: MobileTable = {
     fallback_owner_button: '소유자 ETH로 지불',
   },
   fr: {
-    vault_empty: 'Votre coffre ne détient aucune de ses pièces de frais de réseau. Déposez-en d’abord, sinon les transactions échoueront.',
-    owner_empty: 'Pas encore d’ETH dans le portefeuille propriétaire. Déposez-y de l’ETH d’abord, sinon les transactions échoueront.',
     advanced: 'Paramètres avancés',
     payer_vault: 'Payer depuis le coffre',
     payer_owner: 'Payer depuis le portefeuille propriétaire',
@@ -103,8 +91,6 @@ export const fees: MobileTable = {
     fallback_owner_button: "Payer avec l'ETH du propriétaire",
   },
   es: {
-    vault_empty: 'Tu bóveda no tiene ninguna de sus monedas de comisión de red. Deposita alguna primero o las transacciones fallarán.',
-    owner_empty: 'Todavía no hay ETH en la cartera propietaria. Deposita ETH primero o las transacciones fallarán.',
     advanced: 'Configuración avanzada',
     payer_vault: 'Pagar desde la bóveda',
     payer_owner: 'Pagar desde la cartera propietaria',
@@ -120,8 +106,6 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Pagar con ETH del propietario',
   },
   de: {
-    vault_empty: 'Dein Tresor hält keine seiner Münzen für Netzwerkgebühren. Zahle zuerst welche ein, sonst schlagen Transaktionen fehl.',
-    owner_empty: 'Noch kein ETH in der Eigentümer-Wallet. Zahle zuerst ETH ein, sonst schlagen Transaktionen fehl.',
     advanced: 'Erweiterte Einstellungen',
     payer_vault: 'Aus dem Tresor zahlen',
     payer_owner: 'Aus der Eigentümer-Wallet zahlen',
@@ -137,8 +121,6 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Mit Eigentümer-ETH zahlen',
   },
   'pt-BR': {
-    vault_empty: 'Seu cofre não tem nenhuma das moedas de taxa de rede. Deposite alguma primeiro, ou as transações vão falhar.',
-    owner_empty: 'Ainda não há ETH na carteira proprietária. Deposite ETH primeiro, ou as transações vão falhar.',
     advanced: 'Configurações avançadas',
     payer_vault: 'Pagar pelo cofre',
     payer_owner: 'Pagar pela carteira proprietária',
@@ -154,8 +136,6 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Pagar com ETH do proprietário',
   },
   hi: {
-    vault_empty: 'आपके वॉल्ट में नेटवर्क शुल्क का कोई कॉइन नहीं है। पहले कुछ जमा करें, नहीं तो ट्रांज़ैक्शन विफल होंगे।',
-    owner_empty: 'ओनर वॉलेट में अभी ETH नहीं है। पहले ETH जमा करें, नहीं तो ट्रांज़ैक्शन विफल होंगे।',
     advanced: 'उन्नत सेटिंग्स',
     payer_vault: 'वॉल्ट से भुगतान',
     payer_owner: 'ओनर वॉलेट से भुगतान',
@@ -170,8 +150,6 @@ export const fees: MobileTable = {
     fallback_owner_button: 'ओनर के ETH से भुगतान',
   },
   tr: {
-    vault_empty: 'Kasanızda ağ ücreti coinlerinden hiçbiri yok. Önce biraz yatırın, yoksa işlemler başarısız olur.',
-    owner_empty: 'Sahip cüzdanında henüz ETH yok. Önce ETH yatırın, yoksa işlemler başarısız olur.',
     advanced: 'Gelişmiş ayarlar',
     payer_vault: 'Kasadan öde',
     payer_owner: 'Sahip cüzdanından öde',
@@ -186,8 +164,6 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Sahip ETH’si ile öde',
   },
   ru: {
-    vault_empty: 'В хранилище нет ни одной монеты для сетевых комиссий. Сначала пополните его, иначе транзакции не пройдут.',
-    owner_empty: 'В кошельке владельца пока нет ETH. Сначала пополните его, иначе транзакции не пройдут.',
     advanced: 'Расширенные настройки',
     payer_vault: 'Платить из хранилища',
     payer_owner: 'Платить с кошелька владельца',
@@ -202,8 +178,6 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Оплатить ETH владельца',
   },
   id: {
-    vault_empty: 'Brankas Anda tidak memiliki koin biaya jaringan apa pun. Setorkan dulu, atau transaksi akan gagal.',
-    owner_empty: 'Belum ada ETH di dompet pemilik. Setorkan ETH dulu, atau transaksi akan gagal.',
     advanced: 'Pengaturan lanjutan',
     payer_vault: 'Bayar dari brankas',
     payer_owner: 'Bayar dari dompet pemilik',
@@ -218,8 +192,6 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Bayar dengan ETH pemilik',
   },
   vi: {
-    vault_empty: 'Két của bạn không có đồng nào để trả phí mạng. Hãy nạp trước, nếu không giao dịch sẽ thất bại.',
-    owner_empty: 'Ví chủ sở hữu chưa có ETH. Hãy nạp ETH trước, nếu không giao dịch sẽ thất bại.',
     advanced: 'Cài đặt nâng cao',
     payer_vault: 'Trả từ két',
     payer_owner: 'Trả từ ví chủ sở hữu',
@@ -234,8 +206,6 @@ export const fees: MobileTable = {
     fallback_owner_button: 'Trả bằng ETH của chủ sở hữu',
   },
   th: {
-    vault_empty: 'วอลต์ของคุณไม่มีเหรียญสำหรับจ่ายค่าธรรมเนียมเครือข่ายเลย ฝากก่อน ไม่เช่นนั้นธุรกรรมจะล้มเหลว',
-    owner_empty: 'กระเป๋าเจ้าของยังไม่มี ETH ฝาก ETH ก่อน ไม่เช่นนั้นธุรกรรมจะล้มเหลว',
     advanced: 'การตั้งค่าขั้นสูง',
     payer_vault: 'จ่ายจากวอลต์',
     payer_owner: 'จ่ายจากกระเป๋าเจ้าของ',
