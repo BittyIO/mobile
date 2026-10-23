@@ -122,6 +122,9 @@ async function quote(o: {network: Network; vault: Address; sellToken: Address; b
  * price the user set), valid for `validSeconds`. The 0.2% fee comes out of `buyAmount`, as it does
  * for a CoW limit order. Returns the order hash.
  */
+/** Thrown when Uniswap will not quote the sell — below its minimum order size, most often. */
+export class UniswapXNoQuoteError extends Error {}
+
 export async function placeUniswapXLimit(o: {
   account: Signer;
   vault: Address;
@@ -135,7 +138,7 @@ export async function placeUniswapXLimit(o: {
   const amountIn = parseUnits(o.sellAmount, assetMeta(o.network, o.sellToken).decimals);
   const total = parseUnits(o.buyAmount, assetMeta(o.network, o.buyToken).decimals);
   const raw = await quote({...o, amountIn});
-  if (!raw) throw new Error("Uniswap won't quote an order this small on this chain (it needs roughly $300 or more). Try a larger amount.");
+  if (!raw) throw new UniswapXNoQuoteError('no-quote');
 
   const [full] = decodeAbiParameters(ENCODED_ORDER, raw.quote.encodedOrder);
   const {info, baseInput, baseOutputs} = full;

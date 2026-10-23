@@ -52,7 +52,7 @@ import {marketSell, buildMarketSell, poolSpotPrice, quotePreview} from '@/vault/
 import {PositionPanel} from '@/components/PositionPanel';
 import {AssetPickRow} from '@/components/AssetPickRow';
 import {fetchPosition, type Position} from '@/vault/position';
-import {placeUniswapXLimit, uniswapXAdapter} from '@/vault/uniswapx';
+import {placeUniswapXLimit, uniswapXAdapter, UniswapXNoQuoteError} from '@/vault/uniswapx';
 import {placeLimitOrder, prepareIntent, cancelLimitOrders, fetchRecentOrders, type CowOrder} from '@/vault/limit';
 import {cancelledAt, cancelledAtAny, recordCancelled} from '@/vault/cancel-log';
 import {placeTwap, fetchTwapSchedules, cancelTwap, type TwapSchedule} from '@/vault/twap';
@@ -1769,7 +1769,9 @@ export function TradeScreen() {
         if (mode === 'Limit' && uxIntent) {
           // A UniswapX limit order sells the token itself: the free balance, not a position's share.
           if (pt) throw new Error(t('mobile.trade.uniswapx_free_only'));
-          await placeUniswapXLimit({account: acct, vault, network, sellToken: payToken, buyToken, sellAmount: payAmount, buyAmount: minRecv, validSeconds: validSec});
+          await placeUniswapXLimit({account: acct, vault, network, sellToken: payToken, buyToken, sellAmount: payAmount, buyAmount: minRecv, validSeconds: validSec}).catch((e) => {
+            throw e instanceof UniswapXNoQuoteError ? new Error(t('mobile.trade.uniswapx_no_quote')) : e;
+          });
         } else if (mode === 'Limit') {
           await placeLimitOrder({account: acct, vault, network, intentProtocol: intent, sellToken: payToken, buyToken, sellAmount: payAmount, buyAmount: minRecv, kind: 'sell', validSeconds: validSec});
         } else {
