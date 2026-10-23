@@ -21,8 +21,6 @@ import {LOCK_ICON, LOCK_TITLE} from '@/core/lock-status';
  *
  * The control the risk numbers exist to serve: they buy TIME, and this is what the time is for.
  * Both locks are instant, by the contract's own design — a queued lock is one the thief cancels.
- *
- * v1.0.0 only: the Security page leaves the row out on v1.0.3, which has no locks.
  */
 export function VaultLockScreen() {
   const {t} = useT();

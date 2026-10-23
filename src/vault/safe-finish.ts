@@ -72,10 +72,9 @@ export async function finishSafeMessage(network: Network, status: SafeMessageSta
         owner: m.owner as Address,
         stableCoin: m.stableCoinAddress as Address,
         feeAmount: big(m.feeAmount),
-        // v1.0.0 signs it as restrictToOwnAllowList, v1.0.3 as allowlistEnabled.
-        allowlistEnabled: Boolean(m.restrictToOwnAllowList ?? m.allowlistEnabled),
+        allowlistEnabled: Boolean(m.restrictToOwnAllowList),
         calls: (m.calls ?? []) as Hex[],
-        deadline: m.deadline === undefined ? undefined : big(m.deadline),
+        deadline: big(m.deadline),
         signature,
       });
       return {kind: 'tx', hash};

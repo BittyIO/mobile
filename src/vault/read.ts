@@ -5,7 +5,7 @@
  */
 import {erc20Abi, formatUnits, type Address} from 'viem';
 import {publicClientFor, type Network} from '@/core/chain';
-import {generationConfig} from '@/core/vault-generation';
+import {VAULT_BOOTSTRAP, VAULT_FACTORY} from '@/core/vault-contracts';
 import {predictVaultAddress} from '@/core/predict-vault';
 import {ASSETS, type AssetKind} from '@/core/assets';
 import {currentCatalog} from '@/core/asset-catalog';
@@ -13,12 +13,10 @@ import {currentCatalog} from '@/core/asset-catalog';
 /**
  * The connected owner's vault address — defined whether or not the vault has been activated yet.
  *
- * On the chosen generation's factory, so the same owner has a different vault per generation. The
- * factory is one address on every chain; `network` stays in the signature for the callers.
+ * The factory is one address on every chain; `network` stays in the signature for the callers.
  */
 export function ownerVaultAddress(owner: Address, _network: Network): Address {
-  const g = generationConfig();
-  return predictVaultAddress(owner, g.factory, g.bootstrap);
+  return predictVaultAddress(owner, VAULT_FACTORY, VAULT_BOOTSTRAP);
 }
 
 export type TokenBalance = {

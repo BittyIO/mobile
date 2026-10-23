@@ -9,7 +9,6 @@ import {useRiskDraft} from '@/core/risk-draft';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {useActiveVaultAddress} from '@/core/active-vault';
-import {useAssetCatalog} from '@/core/asset-catalog';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 
@@ -17,18 +16,13 @@ const HOUR = 3600n;
 const DAY = 86400n;
 
 /**
- * The answers worth offering. Anything else is one Custom entry away. A v1.0.0 vault refuses 0 and
- * anything outside {RISK_BOUNDS}, so it is offered only what it accepts; v1.0.3 keeps 0 as "off".
+ * The answers worth offering. Anything else is one Custom entry away. The vault refuses 0 and
+ * anything outside {RISK_BOUNDS}, so it is offered only what it accepts.
  */
 const PRESETS = {
   timelock: [DAY, 2n * DAY, 7n * DAY, 14n * DAY, 30n * DAY],
   sendDailyAllowance: [100n, 500n, 1_000n, 5_000n, 10_000n],
   marketTradeDailyLossAllowance: [50n, 100n, 500n, 1_000n, 5_000n, 10_000n],
-} as const;
-const LEGACY_PRESETS = {
-  timelock: [0n, HOUR, 6n * HOUR, 24n * HOUR, 48n * HOUR, 7n * DAY],
-  sendDailyAllowance: [0n, 100n, 500n, 1_000n, 5_000n, 10_000n],
-  marketTradeDailyLossAllowance: [0n, 50n, 100n, 500n, 1_000n, 5_000n],
 } as const;
 
 /**
@@ -36,7 +30,7 @@ const LEGACY_PRESETS = {
  * daily loss allowance).
  *
  * A pick-one list of presets with the value in force checked, and Custom for any other value, typed
- * in hours (timelock) or whole USD (the allowances; the send cap in stablecoin tokens on v1.0.3).
+ * in hours (timelock) or whole USD (the allowances).
  * Choosing signs nothing: it goes into the page's draft and back to Risk settings, which saves every
  * changed field in one transaction. The check shows the draft value where there is one.
  */
@@ -53,7 +47,6 @@ export function RiskValueScreen() {
   const nav = useNavigation();
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
-  const stable = useAssetCatalog(network).find((a) => a.kind === 'stable');
   const vault = useActiveVaultAddress(network);
   const drafted = useRiskDraft((s) => s.changes[field]);
   const setDraft = useRiskDraft((s) => s.set);
@@ -66,17 +59,16 @@ export function RiskValueScreen() {
   useFocusEffect(load);
 
   const isTimelock = field === 'timelock';
-  const legacy = risk?.hasLocks === false;
   const inForce = risk ? risk[field] : null;
   // What the page is set to: the unsaved pick where there is one, otherwise the value in force.
   const current = drafted ?? inForce;
-  const presets: readonly bigint[] = (legacy ? LEGACY_PRESETS : PRESETS)[field];
-  const bounds = legacy ? null : RISK_BOUNDS[field];
+  const presets: readonly bigint[] = PRESETS[field];
+  const bounds = RISK_BOUNDS[field];
   const isCustom = current != null && !presets.includes(current);
   // A lock freezes these too, so nothing can be picked rather than signed and refused on chain.
   const locked = lockLevel === 1 || lockLevel === 2;
   const canPick = !locked && risk != null;
-  const fmt = (v: bigint) => fmtRiskValue(field, v, risk, stable?.symbol, t);
+  const fmt = (v: bigint) => fmtRiskValue(field, v, t);
 
   // Picking the value in force again drops the field from the draft rather than saving a no-op.
   const pick = (value: bigint) => {
@@ -89,24 +81,18 @@ export function RiskValueScreen() {
     if (custom.trim() === '' || !Number.isFinite(n) || n < 0) return null;
     const v = isTimelock ? BigInt(Math.round(n * Number(HOUR))) : BigInt(Math.floor(n));
     // Outside the bounds the vault would refuse it, so it cannot be picked.
-    if (bounds && (v < bounds.min || v > bounds.max)) return null;
+    if (v < bounds.min || v > bounds.max) return null;
     return v;
   };
   const parsed = customValue();
   const customOff = !canPick || parsed == null || parsed === current;
 
   // The accepted range, in the unit typed: hours for the timelock, whole USD for the allowances.
-  const range = bounds
-    ? isTimelock
-      ? `${Number(bounds.min / HOUR)}–${Number(bounds.max / HOUR)}`
-      : `${Number(bounds.min).toLocaleString()}–${Number(bounds.max).toLocaleString()}`
-    : '0';
+  const range = isTimelock
+    ? `${Number(bounds.min / HOUR)}–${Number(bounds.max / HOUR)}`
+    : `${Number(bounds.min).toLocaleString()}–${Number(bounds.max).toLocaleString()}`;
 
-  const unit = isTimelock
-    ? t('vault.time_unit.hours')
-    : legacy && field === 'sendDailyAllowance'
-      ? stable?.symbol ?? t('mobile.vault.tokens')
-      : 'USD';
+  const unit = isTimelock ? t('vault.time_unit.hours') : 'USD';
 
   return (
     <ScrollView
@@ -118,8 +104,8 @@ export function RiskValueScreen() {
       contentContainerStyle={styles.body}>
       <SettingsGroup
         footer={[
-          fmtPending(field, risk, stable?.symbol, t),
-          t(riskHintKey(field, !legacy)),
+          fmtPending(field, risk, t),
+          t(riskHintKey(field)),
         ]
           .filter(Boolean)
           .join('\n\n')}>

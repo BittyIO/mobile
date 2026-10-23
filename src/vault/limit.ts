@@ -5,17 +5,20 @@
  *  3. register the fee appData, then POST to the CoW orderbook (signingScheme: eip1271).
  * No on-chain tx, no gas — the order settles or expires against the vault's live balance.
  *
- * Prerequisite for a SELL to actually settle: the vault must have approved the CoW vault relayer for
- * the sell token once (see {@link prepareIntent}), and the CoW intent adapter must be enabled.
+ * Prerequisite for a SELL to actually settle: the vault must have approved the intent adapter's
+ * spender (CoW's vault relayer) for the sell token once (see {@link prepareIntent}), and the CoW
+ * intent adapter must be enabled.
  */
 import {encodeAbiParameters, parseAbi, parseUnits, type Address, type Hex} from 'viem';
 import type {Signer} from '@/wallet/signer';
 import {apiFetch, CHAIN_ID, publicClientFor, type Network} from '@/core/chain';
 import {BALANCE_ERC20, COW_PARTNER_FEE_BPS, GPV2_SETTLEMENT, KIND_BUY, KIND_SELL, LIMIT_APP_DATA_HASHES, ORDER_712_TYPES, ORDER_TUPLE, buildLimitAppData, cowApiBase, cowFeeRecipient, cowSupported, orderSignerSig} from '@/core/cow';
 import {VAULT_INTENT_ABI} from '@/core/abi';
+import {intentAdapters} from '@/core/protocols';
 import {assetMeta} from '@/core/assets';
 import {relayVaultWrite, relayVaultMulticall, type VaultCall} from './relay';
 import {buildSetupCalls} from './trade-setup';
+import {vaultImplVersion} from './manage';
 
 const FEE_BPS = BigInt(COW_PARTNER_FEE_BPS);
 
@@ -170,17 +173,22 @@ export async function postLimitOrder(o: {network: Network; order: LimitOrderFiel
  * One-time on-chain setup for a CoW order, bundled into a SINGLE relayed tx (one signature): allowlist the
  * sell/buy assets + register the intent adapter (which makes the vault clone it — the clone is what CoW
  * calls isValidSignature on) when the restricted allowlist requires it, and — when `approveToken` is set —
- * approve the settlement relayer to pull the sell token. Runs only the missing steps; a no-op when nothing
+ * approve the intent adapter's spender to pull the sell token. Runs only the missing steps; a no-op when nothing
  * is needed. Waits for the tx to mine, because the clone + allowlist must be on-chain before the order is
  * posted (CoW validates isValidSignature against them).
  */
-const RELAYER_SOURCE_ABI = parseAbi(['function vaultRelayer() view returns (address)']);
+const SPENDER_SOURCE_ABI = parseAbi([
+  'function spender() view returns (address)',
+  // The same address under the name adapters released before the generic intent interface use.
+  'function vaultRelayer() view returns (address)',
+]);
 const ALLOWANCE_ABI = parseAbi(['function allowance(address owner,address spender) view returns (uint256)']);
 
 /**
- * Does the vault still have to approve the settlement relayer for this token?
+ * Does the vault still have to approve the intent adapter's spender for this token?
  *
- * `approveIntentRelayer` sets an unlimited allowance from the VAULT to the adapter's vaultRelayer,
+ * The approval sets an unlimited allowance from the VAULT to the adapter's spender (CoW's vault
+ * relayer, Permit2 for UniswapX),
  * so the question is answered on chain and stays answered. It used to be tracked in a Set that
  * lived as long as the screen, which meant every app restart re-approved a token that already had
  * an unlimited allowance and charged a relay fee to do nothing.
@@ -196,21 +204,33 @@ export async function needsRelayerApproval(o: {
 }): Promise<boolean> {
   const client = publicClientFor(o.network);
   try {
-    const relayer = (await client.readContract({
-      address: o.intentProtocol,
-      abi: RELAYER_SOURCE_ABI,
-      functionName: 'vaultRelayer',
-    })) as Address;
+    const spender = (await client
+      .readContract({address: o.intentProtocol, abi: SPENDER_SOURCE_ABI, functionName: 'spender'})
+      .catch(() =>
+        client.readContract({address: o.intentProtocol, abi: SPENDER_SOURCE_ABI, functionName: 'vaultRelayer'}),
+      )) as Address;
     const allowance = (await client.readContract({
       address: o.token,
       abi: ALLOWANCE_ABI,
       functionName: 'allowance',
-      args: [o.vault, relayer],
+      args: [o.vault, spender],
     })) as bigint;
     return allowance === BigInt(0);
   } catch {
     return true;
   }
+}
+
+// v1.0.4 made intent protocols generic and renamed the approval for the adapter's spender.
+const INTENT_SPENDER_RENAME_VERSION = 1_000_004;
+
+async function approveIntentFunctionName(
+  vault: Address,
+  network: Network,
+): Promise<'approveIntentSpender' | 'approveIntentRelayer'> {
+  return (await vaultImplVersion(vault, network)) >= INTENT_SPENDER_RENAME_VERSION
+    ? 'approveIntentSpender'
+    : 'approveIntentRelayer';
 }
 
 /**
@@ -232,7 +252,10 @@ export async function intentPrepCalls(o: {
     ...(o.preCalls ?? []),
     ...(await buildSetupCalls({network: o.network, vault: o.vault, adapter: o.intentProtocol, tokens: o.tokens, intent: true})),
   ];
-  if (o.approveToken) calls.push({abi: VAULT_INTENT_ABI, functionName: 'approveIntentRelayer', args: [o.intentProtocol, o.approveToken]});
+  if (o.approveToken) {
+    const functionName = await approveIntentFunctionName(o.vault, o.network);
+    calls.push({abi: VAULT_INTENT_ABI, functionName, args: [o.intentProtocol, o.approveToken]});
+  }
   return calls;
 }
 
@@ -258,8 +281,10 @@ export async function prepareIntent(o: {
 }
 
 /**
- * Cancel one or more open orders. CoW can't soft-cancel a vault (eip1271) order, so the vault
- * invalidates the UIDs on-chain via cancelIntentOrders — relayed gaslessly. They stop filling at once.
+ * Cancel one or more open orders. CoW can't soft-cancel a vault (eip1271) order, so the vault cancels
+ * the UIDs on-chain via cancelIntentOrders — relayed gaslessly. On v1.0.4+ the cancel
+ * is recorded in the vault's adapter clone, which refuses the order from then on; CoW never
+ * learns of it, which is why {fetchRecentOrders} asks the clone. They stop filling at once.
  */
 export async function cancelLimitOrders(o: {
   account: Signer;
@@ -303,10 +328,53 @@ export async function fetchRecentOrders(vault: Address, network: Network): Promi
     if (!res.ok) return [];
     const all = (await res.json()) as CowOrder[];
     // CoW returns newest first already; keep it defensive.
-    return all;
+    return await markCancelledOrders(vault, network, all).catch(() => all);
   } catch {
     return [];
   }
+}
+
+const CLONE_ABI = parseAbi([
+  'function getClone(address protocol) view returns (address)',
+  'function isOrderCancelled(bytes orderId) view returns (bool)',
+]);
+
+/**
+ * Relabel as cancelled every order CoW still calls "open" that the vault cancelled on its adapter
+ * clone. That cancel never reaches CoW's orderbook, so without this a cancelled order reads open on
+ * every device but the one that cancelled it, until it expires. A clone older than the generic intent
+ * interface has no isOrderCancelled; those reads fail and the order keeps CoW's status.
+ */
+async function markCancelledOrders(vault: Address, network: Network, orders: CowOrder[]): Promise<CowOrder[]> {
+  const open = orders.filter((o) => o.status === 'open');
+  const adapters = intentAdapters(network);
+  if (open.length === 0 || adapters.length === 0) return orders;
+  const client = publicClientFor(network);
+  // Clones are per lineage, so every version of an adapter names the same one.
+  const clones = await client.multicall({
+    allowFailure: true,
+    contracts: adapters.map((a) => ({address: vault, abi: CLONE_ABI, functionName: 'getClone', args: [a]}) as const),
+  });
+  const live = [
+    ...new Set(
+      clones
+        .map((r) => (r.status === 'success' ? (r.result as Address) : null))
+        .filter((c): c is Address => !!c && !/^0x0+$/.test(c))
+        .map((c) => c.toLowerCase() as Address),
+    ),
+  ];
+  if (live.length === 0) return orders;
+  const reads = await client.multicall({
+    allowFailure: true,
+    contracts: live.flatMap((clone) =>
+      open.map((o) => ({address: clone, abi: CLONE_ABI, functionName: 'isOrderCancelled', args: [o.uid as Hex]}) as const),
+    ),
+  });
+  const cancelled = new Set<string>();
+  reads.forEach((r, i) => {
+    if (r.status === 'success' && r.result === true) cancelled.add(open[i % open.length].uid);
+  });
+  return orders.map((o) => (cancelled.has(o.uid) ? {...o, status: 'cancelled'} : o));
 }
 
 // The CoW settlement contract, the counterparty of every fill's transfer legs.

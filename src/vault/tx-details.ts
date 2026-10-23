@@ -28,7 +28,7 @@ export type OpDetails = {
   versionTo?: string;
 };
 
-const FEE_CALLS = new Set(['setTokenAsGas', 'setGasless', 'setStableCoinAsGas']);
+const FEE_CALLS = new Set(['setTokenAsGas', 'setStableCoinAsGas']);
 const list = (v: string | string[] | undefined): string[] => (Array.isArray(v) ? v : v ? [v] : []);
 
 /** The fee-coin setting a transaction's calls leave behind, if any of them set one. */

@@ -29,12 +29,8 @@ export function fmtPerms(mask: number, t: T): string {
   return on.length ? on.join(' · ') : t('mobile.vault.perm_none');
 }
 
-/**
- * "until 18/10/2026" / "on 18/10/2026", "expired" once past. "no expiry" for 0 is only ever read
- * back from a v1.0.3 vault, the one generation that allowed a grant without one.
- */
+/** "until 18/10/2026" / "on 18/10/2026", "expired" once past. */
 export function fmtExpiry(expiresAt: bigint, t: T, mode: 'until' | 'on' = 'until'): string {
-  if (expiresAt === 0n) return t('mobile.vault.no_expiry');
   const d = new Date(Number(expiresAt) * 1000);
   if (d < new Date()) return t('mobile.vault.expired');
   return t(mode === 'on' ? 'mobile.vault.on_date' : 'mobile.vault.until_date', {date: d.toLocaleDateString()});

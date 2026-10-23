@@ -9,7 +9,7 @@ import {useRiskDraft} from '@/core/risk-draft';
 import {useVaultWrite} from '@/components/useVaultWrite';
 import {Button} from '@/components/Button';
 import {SettingsRow, SettingsGroup} from '@/components/SettingsRow';
-import {RISK_TITLE, fmtCountdown, fmtPending, fmtRiskValue, riskHintKey} from '@/components/riskFormat';
+import {RISK_TITLE, fmtCountdown, fmtPending, fmtRiskValue} from '@/components/riskFormat';
 import {
   RISK_FIELDS,
   SAFETY_LEVELS,
@@ -25,8 +25,6 @@ import {
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {useActiveVaultAddress} from '@/core/active-vault';
-import {useAssetCatalog} from '@/core/asset-catalog';
-import {isLegacy} from '@/core/vault-generation';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 
@@ -36,7 +34,7 @@ const ICON = {timelock: 'timelock', sendDailyAllowance: 'dailyLimit', marketTrad
 /**
  * Safety settings (Security › Safety settings).
  *
- * On v1.0.0+ the page is two groups: the safety level — Maximum, Balanced, Standard, Custom — and
+ * The page is two groups: the safety level — Maximum, Balanced, Standard, Custom — and
  * under it the three numbers, which follow the level picked. Picking a level fills all three into
  * the draft; the numbers can be edited by hand only under Custom. Save writes every changed number in ONE transaction,
  * and leaving with changes unsaved asks whether to discard them.
@@ -45,9 +43,6 @@ const ICON = {timelock: 'timelock', sendDailyAllowance: 'dailyLimit', marketTrad
  * waits out the timelock in force now. A change already waiting shows under the levels, counting
  * down to the second. A locked
  * vault cannot change any of it, so the cards are shown but cannot be picked.
- *
- * v1.0.3 has no levels: its rules are different (0 turns a number off, there is no trade-loss
- * allowance), so it keeps the plain number rows.
  */
 export function RiskSettingsScreen() {
   const {t} = useT();
@@ -56,7 +51,6 @@ export function RiskSettingsScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
-  const symbol = useAssetCatalog(network).find((a) => a.kind === 'stable')?.symbol;
   const vault = useActiveVaultAddress(network);
   const [risk, setRisk] = useState<RiskConfig | null>(null);
   const [lockLevel, setLockLevel] = useState<LockLevel | null>(null);
@@ -98,50 +92,13 @@ export function RiskSettingsScreen() {
 
   const save = () => run('save', t('mobile.vault.risk_settings'), (b) => updateRiskSettings({...b, changes}));
 
-  const legacy = risk ? !risk.hasLocks : isLegacy();
-  const fmt = (f: RiskField, v: bigint) => fmtRiskValue(f, v, risk, symbol, t);
+  const fmt = (f: RiskField, v: bigint) => fmtRiskValue(f, v, t);
 
-  /** The row's value — the unsaved pick where there is one — and its second line. */
-  const shown = (f: RiskField) => {
-    const v = changes[f] ?? risk?.[f];
-    return v === undefined ? undefined : fmt(f, v);
-  };
+  /** A row's second line: what an unsaved pick replaces, or a change already waiting. */
   const sub = (f: RiskField) =>
-    changes[f] !== undefined && risk ? t('mobile.vault.unsaved_from', {value: fmt(f, risk[f])}) : fmtPending(f, risk, symbol, t);
-
-  const numberRows = (bounded: boolean) =>
-    RISK_FIELDS.filter((f) => bounded || f !== 'marketTradeDailyLossAllowance').map((f) => (
-      <SettingsGroup key={f} footer={t(riskHintKey(f, bounded))}>
-        <SettingsRow
-          icon={ICON[f]}
-          title={t(RISK_TITLE[f])}
-          value={shown(f)}
-          sub={sub(f)}
-          onPress={() => nav.navigate('VaultRiskValue', {field: f})}
-          last
-        />
-      </SettingsGroup>
-    ));
+    changes[f] !== undefined && risk ? t('mobile.vault.unsaved_from', {value: fmt(f, risk[f])}) : fmtPending(f, risk, t);
 
   const saveButton = <Button title={t('vault.save')} onPress={save} loading={busy === 'save'} disabled={!dirty || !ready} />;
-
-  if (legacy) {
-    return (
-      <View style={styles.fill}>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          alwaysBounceVertical
-          contentInsetAdjustmentBehavior="automatic"
-          style={styles.container}
-          contentContainerStyle={styles.body}>
-          {numberRows(false)}
-          {saveButton}
-          {sheet}
-        </ScrollView>
-        {edge}
-      </View>
-    );
-  }
 
   const inForce = risk ? valuesInForce(risk) : null;
   const picked: RiskValues | null = inForce

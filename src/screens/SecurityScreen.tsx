@@ -6,7 +6,6 @@ import type {RootStackParamList} from '@/App';
 import {useT} from '@/i18n';
 import {useStyles, type Colors} from '@/theme';
 import {SettingsRow, SettingsGroup} from '@/components/SettingsRow';
-import {useVaultGeneration} from '@/core/vault-generation';
 import {getLockLevel, getRiskConfig, type LockLevel} from '@/vault/risk';
 import {SAFETY_TITLE, levelOf, valuesInForce, type SafetyLevelOrCustom} from '@/core/safety-levels';
 import {useWallet} from '@/wallet/store';
@@ -19,14 +18,11 @@ import {LOCK_ICON, LOCK_TITLE} from '@/core/lock-status';
  * two daily allowances, with the vault's safety level beside it on v1.0.0+); the allow list and the asset manager;
  * Lock status (temporarily / forever locked), the recovery phrase and Transfer ownership. The writes live on
  * the pages the rows open.
- *
- * Vault lock is left out on v1.0.3, which has no locks.
  */
 export function SecurityScreen() {
   const {t} = useT();
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const styles = useStyles(makeStyles);
-  const hasLocks = useVaultGeneration((s) => s.generation) !== 'v1.0.3';
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
   const vault = useActiveVaultAddress(network);
@@ -35,16 +31,16 @@ export function SecurityScreen() {
   const [lockLevel, setLockLevel] = useState<LockLevel | null>(null);
   useFocusEffect(
     useCallback(() => {
-      if (vault && hasLocks) getLockLevel(vault, network).then(setLockLevel);
-    }, [vault, network, hasLocks]),
+      if (vault) getLockLevel(vault, network).then(setLockLevel);
+    }, [vault, network]),
   );
   // The safety level answers the Safety settings row.
   const [level, setLevel] = useState<SafetyLevelOrCustom | null>(null);
   useFocusEffect(
     useCallback(() => {
-      if (!vault || !hasLocks) return;
+      if (!vault) return;
       getRiskConfig(vault, network).then((r) => setLevel(levelOf(valuesInForce(r))));
-    }, [vault, network, hasLocks]),
+    }, [vault, network]),
   );
   // Both rows answer with plain text on the right, as every other settings row does.
   const levelValue = level == null ? undefined : t(SAFETY_TITLE[level]);
@@ -73,20 +69,9 @@ export function SecurityScreen() {
       {/* The last resorts: freezing the vault, the phrase that restores the key, and handing the vault
           to another key. */}
       <SettingsGroup>
-        {/* v1.0.0 only — v1.0.3 has no locks. */}
-        {hasLocks ? (
-          <SettingsRow icon={LOCK_ICON[lockLevel ?? 0]} title={t('mobile.vault.vault_lock')} value={lockValue} onPress={() => nav.navigate('VaultLock')} />
-        ) : null}
-        <SettingsRow
-          icon="recovery"
-          title={t('mobile.settings.recovery_phrase')}
-          onPress={() => nav.navigate('VaultRecoveryPhrase')}
-          last={!hasLocks}
-        />
-        {/* v1.0.0 only — the handover waits out the timelock, which v1.0.3 does not queue it behind. */}
-        {hasLocks ? (
-          <SettingsRow icon="ownership" title={t('mobile.vault.transfer_ownership')} onPress={() => nav.navigate('VaultTransferOwnership')} last />
-        ) : null}
+        <SettingsRow icon={LOCK_ICON[lockLevel ?? 0]} title={t('mobile.vault.vault_lock')} value={lockValue} onPress={() => nav.navigate('VaultLock')} />
+        <SettingsRow icon="recovery" title={t('mobile.settings.recovery_phrase')} onPress={() => nav.navigate('VaultRecoveryPhrase')} />
+        <SettingsRow icon="ownership" title={t('mobile.vault.transfer_ownership')} onPress={() => nav.navigate('VaultTransferOwnership')} last />
       </SettingsGroup>
     </ScrollView>
   );

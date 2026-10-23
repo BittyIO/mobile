@@ -32,7 +32,6 @@ import {getFlag, setFlag, HIDE_BALANCES} from '@/core/prefs';
 import {useWatchDraft} from '@/core/watch-draft';
 import {balanceOfSymbol} from '@/vault/read';
 import {getPendingChanges} from '@/vault/risk';
-import {useVaultGeneration} from '@/core/vault-generation';
 import {formatUnits} from 'viem';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
@@ -349,7 +348,6 @@ export function VaultHomeScreen() {
   const flows = useFlows(bal.vault, network);
   // Queued changes, counted on the Pending action. Re-read on focus: one call, and a change queued
   // elsewhere (or by someone else holding the key) is exactly what this badge is for.
-  const legacy = useVaultGeneration((g) => g.generation) === 'v1.0.3';
   const [pendingCount, setPendingCount] = useState(0);
   useFocusEffect(
     useCallback(() => {
@@ -359,7 +357,7 @@ export function VaultHomeScreen() {
       // loading state of its own, so re-reading it on focus flashes nothing.
       flows.refresh();
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [bal.vault, network, legacy]),
+    }, [bal.vault, network]),
   );
 
   // The hooks load once on mount; after that the data refreshes only on pull-to-refresh. Refetching on
@@ -776,8 +774,7 @@ export function VaultHomeScreen() {
             {label: t('vault.send'), icon: 'send', onPress: () => nav.navigate('Payments')},
             {label: t('vault.receive'), icon: 'receive', onPress: () => setReceiveOpen(true)},
             {label: t('mobile.app.history'), icon: 'history', onPress: () => nav.navigate('Transactions')},
-            // v1.0.3 vaults have no pending-changes surface.
-            ...(legacy ? [] : [{label: t('mobile.vault.timelock_page'), icon: 'pending', onPress: () => nav.navigate('PendingChanges')}] as const),
+            {label: t('mobile.vault.timelock_page'), icon: 'pending', onPress: () => nav.navigate('PendingChanges')},
           ] as const).map((a) => (
             <Pressable key={a.icon} style={styles.action} onPress={a.onPress}>
               <View style={styles.actionCircle}>

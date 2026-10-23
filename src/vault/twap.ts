@@ -14,9 +14,6 @@ import {
   KIND_SELL,
   ORDER_TUPLE,
   TWAP_712_TYPES,
-  TWAP_712_TYPES_BOUND,
-  cowAdapterFor,
-  twapBindsVault,
   TWAP_TUPLE,
   buildTwapAppData,
   cowApiBase,
@@ -76,14 +73,10 @@ export async function placeTwap(o: {
     body: JSON.stringify({fullAppData}),
   }).catch(() => {});
 
-  // ONE signature authorizes every part, in the form this vault's adapter hashes: bound to the vault
-  // on the newer builds, bare on the older (core/cow twapBindsVault). A Safe owner's may first have
-  // to be completed by co-owners (vault/safe SafeSignaturePending).
+  // ONE signature authorizes every part, bound to the vault. A Safe owner's may first have to be
+  // completed by co-owners (vault/safe SafeSignaturePending).
   const domain = {name: 'Gnosis Protocol', version: 'v2', chainId, verifyingContract: GPV2_SETTLEMENT} as const;
-  const bound = await twapBindsVault(o.network, await cowAdapterFor(o.network, o.vault, o.intentProtocol));
-  const managerSig = bound
-    ? await o.account.signTypedData({domain, types: TWAP_712_TYPES_BOUND, primaryType: 'TwapOrder', message: {vault: o.vault, ...twap}})
-    : await o.account.signTypedData({domain, types: TWAP_712_TYPES, primaryType: 'TwapOrder', message: twap});
+  const managerSig = await o.account.signTypedData({domain, types: TWAP_712_TYPES, primaryType: 'TwapOrder', message: {vault: o.vault, ...twap}});
 
   return postTwapSchedule({network: o.network, vault: o.vault, twap, appData, signerSig: orderSignerSig(o.account, managerSig)});
 }

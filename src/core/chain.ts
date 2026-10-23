@@ -9,7 +9,7 @@
 import {createPublicClient, http, fallback, type PublicClient} from 'viem';
 import {mainnet, base, sepolia, arbitrum} from 'viem/chains';
 import {defineChain} from 'viem';
-import {generationConfig} from '@/core/vault-generation';
+import {API_VERSION} from '@/core/vault-contracts';
 
 // Sepolia is the testnet — included so the app can be exercised end to end (activate, deposit, trade)
 // without real funds. "Ethereum" in the UI means Sepolia on a testnet build, mainnet on production.
@@ -26,8 +26,7 @@ export const robinhood = defineChain({
   contracts: {multicall3: {address: '0xcA11bde05977b3631167028862bE2a173976CA11'}},
 });
 
-// The guard, factory and bootstrap differ per vault GENERATION, so they live with the generation
-// the user has chosen — see `core/vault-generation`.
+// The guard, factory and bootstrap are in `core/vault-contracts`.
 
 // Public RPCs as a default; point these at the app's own indexer endpoints before release (the web
 // app uses per-provider keys to stay under free getLogs caps). Several per network so a single node
@@ -136,11 +135,11 @@ export async function apiFetch(url: string, init?: RequestInit, timeoutMs = 30_0
 }
 
 /**
- * Build an API URL, tagging the chain (`?network=`) and the vault generation (`&version=`) the same
+ * Build an API URL, tagging the chain (`?network=`) and the vault deployment (`&version=`) the same
  * way the web app does. The version is what the server resolves the factory, guard and catalog by,
  * so it rides on every call rather than on the few that happened to need it first.
  */
 export function apiUrl(path: string, network: Network): string {
   const sep = path.includes('?') ? '&' : '?';
-  return `${API_BASE}${path}${sep}network=${network}&version=${generationConfig().apiVersion}`;
+  return `${API_BASE}${path}${sep}network=${network}&version=${API_VERSION}`;
 }

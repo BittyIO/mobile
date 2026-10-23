@@ -1,7 +1,6 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
-import {useVaultGeneration} from '@/core/vault-generation';
 import {useActiveVaultAddress} from '@/core/active-vault';
 import {adapterStatuses, formatVersion, upgradeAdapter, type AdapterStatus} from '@/vault/upgrade-adapter';
 import {protocolDisplayName} from '@/core/protocols';
@@ -38,7 +37,6 @@ export function useAdapterVersions(): {
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
-  const generation = useVaultGeneration((s) => s.generation);
   const stable = useAssetCatalog(network).find((a) => a.kind === 'stable');
   const vault = useActiveVaultAddress(network);
 
@@ -55,9 +53,7 @@ export function useAdapterVersions(): {
     return () => {
       live = false;
     };
-    // `generation` changes the guard (and the vault) the read goes to.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vault, network, generation]);
+  }, [vault, network]);
   useEffect(load, [load]);
 
   // As on the version row: the relayer accepting is not the upgrade landing, so a row stays

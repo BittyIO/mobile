@@ -4,7 +4,7 @@ import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {Address} from 'viem';
 import type {RootStackParamList} from '@/App';
-import {isPayableAddress, isTokenAddress, useAssetCatalog} from '@/core/asset-catalog';
+import {isPayableAddress, isTokenAddress} from '@/core/asset-catalog';
 import {useNetwork} from '@/core/network-store';
 import {useWallet} from '@/wallet/store';
 import {useActiveVaultAddress} from '@/core/active-vault';
@@ -31,7 +31,6 @@ export function NewRecipientScreen() {
   const network = useNetwork((s) => s.network);
   const owner = useWallet((s) => s.address);
   const vault = useActiveVaultAddress(network);
-  const symbol = useAssetCatalog(network).find((a) => a.kind === 'stable')?.symbol;
   const setPicked = useRecipientPick((st) => st.set);
   const setName = useRecipientNames((st) => st.setName);
 
@@ -50,7 +49,7 @@ export function NewRecipientScreen() {
   const max = addToBook
     ? t('mobile.payments.max_send_none')
     : risk
-      ? t('mobile.payments.max_send_daily', {value: fmtAllowance(risk.sendDailyAllowance, risk, symbol, t)})
+      ? t('mobile.payments.max_send_daily', {value: fmtAllowance(risk.sendDailyAllowance, t)})
       : '…';
 
   const confirm = () => {

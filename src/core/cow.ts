@@ -5,9 +5,8 @@
  * order is POSTed to the CoW orderbook. Nothing on-chain, no gas — it simply settles or expires
  * against the vault's live balance.
  */
-import {encodeAbiParameters, hashTypedData, keccak256, parseAbi, stringToHex, type AbiParameter, type Address, type Hex} from 'viem';
+import {encodeAbiParameters, keccak256, parseAbi, stringToHex, type AbiParameter, type Address, type Hex} from 'viem';
 import {CHAIN_ID, publicClientFor, type Network} from '@/core/chain';
-import {isLegacy} from '@/core/vault-generation';
 
 // GPv2Settlement — the EIP-712 verifying contract for CoW orders. Same address on every chain.
 export const GPV2_SETTLEMENT = '0x9008D19f58AAbD9eD0D60971565AA8510560ab41' as const;
@@ -69,9 +68,16 @@ export const ORDER_TUPLE: AbiParameter = {
   ],
 };
 
-// EIP-712 type for a whole TWAP schedule — signed ONCE; the clone reconstructs each part from it.
+/**
+ * EIP-712 type for a whole TWAP schedule — signed ONCE; the clone reconstructs each part from it.
+ * Bound to one vault: the adapter's TWAP_TYPE_HASH starts with `address vault` (the clone's owner),
+ * so a schedule signed for one vault cannot be replayed on another.
+ *
+ * The vault is NOT in the TWAP_TUPLE payload: the clone supplies its own when it re-hashes.
+ */
 export const TWAP_712_TYPES = {
   TwapOrder: [
+    {name: 'vault', type: 'address'},
     {name: 'sellToken', type: 'address'},
     {name: 'buyToken', type: 'address'},
     {name: 'sellAmountPerPart', type: 'uint256'},
@@ -81,60 +87,6 @@ export const TWAP_712_TYPES = {
     {name: 'numParts', type: 'uint256'},
   ],
 } as const;
-
-/**
- * The same schedule bound to one vault, as the newer adapter builds hash it: their TWAP_TYPE_HASH
- * starts with `address vault` (the clone's owner), so a schedule signed for one vault cannot be
- * replayed on another. The v1.0.0 generation's adapters all hash this form; the v1.0.3 generation's
- * hash {@link TWAP_712_TYPES}. Signing the wrong one gives a digest the clone never computes, and
- * every part fails CoW's signature check — see {@link twapBindsVault}.
- *
- * The vault is NOT in the TWAP_TUPLE payload either way: the clone supplies its own when it re-hashes.
- */
-export const TWAP_712_TYPES_BOUND = {
-  TwapOrder: [{name: 'vault', type: 'address'}, ...TWAP_712_TYPES.TwapOrder],
-} as const;
-
-const TWAP_DIGEST_ABI = parseAbi([
-  'function owner() view returns (address)',
-  'function twapDigest((address sellToken,address buyToken,uint256 sellAmountPerPart,uint256 buyAmountPerPart,uint256 startTime,uint256 partDuration,uint256 numParts) p) view returns (bytes32)',
-]);
-const bindsVault = new Map<string, boolean>();
-
-/**
- * Whether the CoW adapter at `adapter` (the vault's clone, or the adapter itself) hashes TWAP
- * schedules bound to a vault. Asked of the contract rather than inferred from a version: its own
- * `twapDigest` of a fixed schedule is compared with both forms. Remembered per address — code does
- * not change under an address, and an upgrade moves a clone to a new implementation, not this answer.
- * A failed read answers the newer form, which every adapter deployed since has used.
- */
-export async function twapBindsVault(network: Network, adapter: Address): Promise<boolean> {
-  const key = `${network}:${adapter.toLowerCase()}`;
-  const known = bindsVault.get(key);
-  if (known !== undefined) return known;
-  const p = {
-    sellToken: '0x0000000000000000000000000000000000000001' as Address,
-    buyToken: '0x0000000000000000000000000000000000000002' as Address,
-    sellAmountPerPart: BigInt(1),
-    buyAmountPerPart: BigInt(1),
-    startTime: BigInt(1),
-    partDuration: BigInt(1),
-    numParts: BigInt(1),
-  };
-  try {
-    const client = publicClientFor(network);
-    const [owner, onchain] = await Promise.all([
-      client.readContract({address: adapter, abi: TWAP_DIGEST_ABI, functionName: 'owner'}),
-      client.readContract({address: adapter, abi: TWAP_DIGEST_ABI, functionName: 'twapDigest', args: [p]}),
-    ]);
-    const domain = {name: 'Gnosis Protocol', version: 'v2', chainId: CHAIN_ID[network], verifyingContract: GPV2_SETTLEMENT} as const;
-    const bound = hashTypedData({domain, types: TWAP_712_TYPES_BOUND, primaryType: 'TwapOrder', message: {vault: owner, ...p}}) === onchain;
-    bindsVault.set(key, bound);
-    return bound;
-  } catch {
-    return true;
-  }
-}
 
 // TwapOrder tuple for abi.encode into each part's eip1271 payload. Field order matches the struct.
 export const TWAP_TUPLE: AbiParameter = {
@@ -154,15 +106,14 @@ export const TWAP_TUPLE: AbiParameter = {
 // so keccak256(fullAppData) == the intent clone's APP_DATA(). Registering it lets solvers resolve the
 // 0.2% partner fee; the contract requires exactly this appData, so the fee can't be stripped.
 // The recipient is part of those bytes and differs by adapter build, so it is read from the vault's own
-// clone ({cowFeeRecipient}) rather than assumed: v1.0.3's adapter pays the earlier recipient, the 1.0.0
-// adapter the fee Safe, and 1.0.1 the fee Safe's vault — and a vault may sit on any of them.
-const LEGACY_RECIPIENT = '0x12EE2de7BF086388B1D560eb95e7191Edfab9823';
+// clone ({cowFeeRecipient}) rather than assumed: the 1.0.0 adapter pays the fee Safe, and 1.0.1 the
+// fee Safe's vault — and a vault may sit on either.
 const FEE_SAFE = '0x5837C8F4963F694C59e53445C070acb266187bF1';
 const FEE_VAULT = '0xF0E7f6998B362BD15CF819C7EBfcaCe8865FECA0';
-const defaultRecipient = () => (isLegacy() ? LEGACY_RECIPIENT : FEE_SAFE);
+const defaultRecipient = () => FEE_SAFE;
 
 /** Every partner-fee recipient an adapter build has used; what a fee appData can name. */
-export const FEE_RECIPIENTS = [FEE_VAULT, FEE_SAFE, LEGACY_RECIPIENT];
+export const FEE_RECIPIENTS = [FEE_VAULT, FEE_SAFE];
 
 /**
  * The signer's part of an eip1271 payload, as the intent clone reads it.
@@ -183,8 +134,8 @@ const COW_FEE_ABI = parseAbi([
 
 /**
  * The partner-fee recipient the vault's CoW clone requires — the one its code was built with. Read
- * after {prepareIntent} has made the clone; before that (or on an RPC failure) the generation's
- * recipient is the best guess, and a wrong one fails as an unauthorised order rather than silently.
+ * after {prepareIntent} has made the clone; before that (or on an RPC failure) the fee Safe is the
+ * best guess, and a wrong one fails as an unauthorised order rather than silently.
  */
 export async function cowFeeRecipient(network: Network, vault: Address, intentProtocol: Address): Promise<string> {
   try {
@@ -217,7 +168,7 @@ export function buildLimitAppData(recipient: string = defaultRecipient()): {hash
  * so this is how history tells the two apart whichever adapter placed the order.
  */
 export const LIMIT_APP_DATA_HASHES = new Set(
-  [LEGACY_RECIPIENT, FEE_SAFE, FEE_VAULT].map((r) => buildLimitAppData(r).hash.toLowerCase()),
+  [FEE_SAFE, FEE_VAULT].map((r) => buildLimitAppData(r).hash.toLowerCase()),
 );
 
 // A TWAP's appData is salted by its start time (the on-chain block timestamp), carried in an

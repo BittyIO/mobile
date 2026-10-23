@@ -1,14 +1,13 @@
 import type {Address} from 'viem';
 import type {Network} from '@/core/chain';
 import {shortAddress} from '@/core/format';
-import {generationKey, useVaultGeneration, type VaultGeneration} from '@/core/vault-generation';
 import {currentGuardProtocols} from '@/core/guard-catalog';
 
 /**
  * Guard categories, as the app names them. `amm` is the market-trade adapter (guard category 3),
  * which swaps through the Universal Router. The guard's market-maker category (5, concentrated
  * liquidity) has no name here: the app provides no liquidity, and the guard reads skip it — see
- * {IGNORED_GUARD_CATEGORIES}.
+ * {IGNORED_GUARD_CATEGORIES} in `core/vault-contracts`.
  */
 export type ProtocolCategory = 'staking' | 'lending' | 'amm' | 'intent' | 'unknown';
 
@@ -20,117 +19,44 @@ type ProtocolInfo = {name: string; category: ProtocolCategory};
  * map to the same name. Unknown addresses fall back to a shortened address (see {@link protocolMeta}).
  * A real build resolves these from the on-chain guard catalog; vendored here until `packages/core`.
  *
- * Kept per vault generation, because each generation has its own guard and so its own adapters: one
- * table per network mixed them, and a v1.0.0 vault asking for "CoW Swap" was handed the v1.0.3
- * adapter its guard does not know. Read through {table}, never directly.
+ * Only what the guard (0x0000…9554) lists: an adapter it does not know would be handed to a vault
+ * that cannot use it. Read through {table}, never directly.
  */
-const PROTOCOLS: Record<VaultGeneration, Record<Network, Record<string, ProtocolInfo>>> = {
-  /**
-   * The new vault generation, behind guard 0x0000…9554. Only what that guard lists: an old-generation
-   * adapter here would hand a v1.0.0 vault an address its guard does not know. Aave, Lido and the
-   * Uniswap trade adapter on Sepolia are the same contracts the old generation lists, registered in
-   * both guards; CoW is this generation's own (0x236b…, 1.0.0, partner fee to the Safe).
-   */
-  'v1.0.0': {
-    // Read off the mainnet guard 2026-10-19. The catalog API wins once it answers; this is the
-    // first frame and offline — without it Earn has no adapter to name and shows nothing.
-    mainnet: {
-      '0xbb51e4d055f213d0e38a103b9ba5943de2e83287': {name: 'Aave V3', category: 'lending'},
-      '0x8b2b9ae6dea163a382b02ff921fb3c3559769d10': {name: 'Uniswap Universal', category: 'amm'},
-      '0x350f13cdc7311713ee6dac05dd3b9fd624536b02': {name: 'CoW Swap', category: 'intent'},
-      '0x355b273974111508328155ccf65a7af434f24243': {name: 'Lido', category: 'staking'},
-      '0x093cedc958bf07eb0063e6299e5b547292cf9ad4': {name: 'Sky', category: 'staking'},
-    },
-    // Registered on the Base guard 2026-10-18. Sky is the SkyV1EvmProtocol the old generation also
-    // runs; the other three are this generation's own, with fees to the Safe.
-    base: {
-      '0x8e14e91f29066ccdd9e9e2db6bafe6fef7c14ac6': {name: 'Sky', category: 'staking'},
-      '0xb3ff9df07f2901d97c07146d18093de914141ad3': {name: 'Aave V3', category: 'lending'},
-      '0xb5b4313d88b4aa68d03bd6467eb1460ffaf136e5': {name: 'Uniswap Universal', category: 'amm'},
-      '0x646248f1ad34a4ef927726bd818c19107231322b': {name: 'CoW Swap', category: 'intent'},
-    },
-    robinhood: {},
-    // Registered on the Arbitrum guard 2026-10-19. Names only; routing reads the guard.
-    arbitrum: {
-      '0x7e97befd060124ed648d77901398f4051a1cf1ed': {name: 'Sky', category: 'staking'},
-      '0x5786f0ef83c4fc08ae372207707bb577e413c227': {name: 'Aave V3', category: 'lending'},
-      '0x2576d292401c03985e41737a09bce9f1214fb7f3': {name: 'Uniswap Universal', category: 'amm'},
-      '0x0936b90022eb22ae3329751573d22da26f1b1ad3': {name: 'CoW Swap', category: 'intent'},
-    },
-    sepolia: {
-      '0x9c01f9b6ed7bbd86f7a309a3414595608ab9d80d': {name: 'Aave V3', category: 'lending'},
-      '0x9f6d7b2defcf45cb837560209099083ddf59840a': {name: 'Lido', category: 'staking'},
-      '0x67bd4c240d513e7eb35bf8d871cbed314856b125': {name: 'Uniswap Universal', category: 'amm'},
-      '0x236b4b260bd29dca1df29360fa09c084e37fb100': {name: 'CoW Swap', category: 'intent'},
-    },
+const PROTOCOLS: Record<Network, Record<string, ProtocolInfo>> = {
+  // Read off the mainnet guard 2026-10-19. The catalog API wins once it answers; this is the
+  // first frame and offline — without it Earn has no adapter to name and shows nothing.
+  mainnet: {
+    '0xbb51e4d055f213d0e38a103b9ba5943de2e83287': {name: 'Aave V3', category: 'lending'},
+    '0x8b2b9ae6dea163a382b02ff921fb3c3559769d10': {name: 'Uniswap Universal', category: 'amm'},
+    '0x350f13cdc7311713ee6dac05dd3b9fd624536b02': {name: 'CoW Swap', category: 'intent'},
+    '0x355b273974111508328155ccf65a7af434f24243': {name: 'Lido', category: 'staking'},
+    '0x093cedc958bf07eb0063e6299e5b547292cf9ad4': {name: 'Sky', category: 'staking'},
   },
-  'v1.0.3': {
-    // The old generation's guard is not deployed on Arbitrum.
-    arbitrum: {},
-    mainnet: {
-      // The 1.0.3 AMM split, registered on the guard 2026-10-04. Listed for their NAMES, not for
-      // routing: `ammAdapters` reads the guard, so what an order is sent
-      // to still changes without a release. A name cannot be read from the guard at all, and
-      // without one the Trade screen's venue chip had nothing to draw — it fell back to a lettered
-      // disc of a shortened address, and then to nothing once unnamed venues were dropped. The
-      // server's service catalog carries names too and wins when it has answered; this is what
-      // makes the mark correct on the first frame and offline.
-      '0x73d16efa39e2195cfac4b0f18bda3aa35056663a': {name: 'Uniswap Universal', category: 'amm'},
-      '0x9296f7ffe86da8b652988f07920b42f8779ce64b': {name: 'Aave V3', category: 'lending'},
-      '0x35252547c41661103865d700d8fcace07afce1bd': {name: 'Lido', category: 'staking'},
-      '0x0968632ad0a79220ffb2d2320de82b7c17357774': {name: 'Sky', category: 'staking'},
-      // Uniswap V3 adapter 1.0.1 — the ONLY one listed here. It is what `ammAdapters` hands the
-      // market swap, and only 1.0.1 carries market buy/sell: with the 1.0.0 adapter
-      // (0xcE02C925…) in its place every market trade on mainnet reverted and came back from the
-      // relayer as "simulation-failed". The web keeps 1.0.0 listed behind it; this app does not, so a
-      // history row from a vault that traded through the old adapter names a short address instead of
-      // "Uniswap V3".
-      '0xf72ab1ca4dd4c8d5e747271e80ff2c71d129a664': {name: 'Uniswap V3', category: 'amm'},
-      '0x3d7589cd35400e0a1b8d6f5f8ed3ae4171a5e195': {name: 'CoW Swap', category: 'intent'},
-    },
-    base: {
-      // The 1.0.3 AMM split, registered on the guard 2026-10-04. Listed for their NAMES, not for
-      // routing: `ammAdapters` reads the guard, so what an order is sent
-      // to still changes without a release. A name cannot be read from the guard at all, and
-      // without one the Trade screen's venue chip had nothing to draw — it fell back to a lettered
-      // disc of a shortened address, and then to nothing once unnamed venues were dropped. The
-      // server's service catalog carries names too and wins when it has answered; this is what
-      // makes the mark correct on the first frame and offline.
-      '0x4753f9a82659edcffc940fe8e330741d14bad82b': {name: 'Uniswap Universal', category: 'amm'},
-      '0x4b38baa01e6fd30163f4de7e678dc868045eb27f': {name: 'Aave V3', category: 'lending'},
-      '0x8e14e91f29066ccdd9e9e2db6bafe6fef7c14ac6': {name: 'Sky', category: 'staking'},
-      // 1.0.1 only, as on mainnet above; the 1.0.0 adapter (0x7aE75624…) is deliberately not listed.
-      '0xfd30f05b9d36488631c212f0421eb9a117382fd5': {name: 'Uniswap V3', category: 'amm'},
-      '0x5daa6aef7de9c13624a8fdfde47c10d35fd79b0a': {name: 'CoW Swap', category: 'intent'},
-    },
-    // Only the AMM adapter (Universal Router build, 1.0.2): no Aave, Sky or CoW on this chain.
-    robinhood: {
-      // The 1.0.3 AMM split, registered on the guard 2026-10-04. Listed for their NAMES, not for
-      // routing: `ammAdapters` reads the guard, so what an order is sent
-      // to still changes without a release. A name cannot be read from the guard at all, and
-      // without one the Trade screen's venue chip had nothing to draw — it fell back to a lettered
-      // disc of a shortened address, and then to nothing once unnamed venues were dropped. The
-      // server's service catalog carries names too and wins when it has answered; this is what
-      // makes the mark correct on the first frame and offline.
-      '0x7ae75624f265a700d011df819bed6ef10615ac38': {name: 'Uniswap Universal', category: 'amm'},
-      // The pre-split COMBINED adapter (1.0.2) — and on this chain it is a Universal Router build,
-      // so it is named for that like the split one above it. The combined adapters on mainnet and
-      // Base keep "Uniswap V3", because there the one contract really was v3 only.
-      '0x2b2ecfad219fe9fd358ba196962d1536665b2041': {name: 'Uniswap Universal', category: 'amm'},
-    },
-    // Sepolia took the AMM split on 2026-10-02 and is the only chain that has. The two adapters that
-    // used to sit here (0x88b9f031…, 0xc701e8d6…) were the combined Uniswap V3 adapter of the
-    // previous guard generation and are deliberately NOT listed: the whole set was redeployed, so
-    // keeping them would hand `ammAdapters` a superseded address to trade through.
-    //
-    // The trade side routes v2/v3/v4 through the Universal Router, so it is "Uniswap Universal",
-    // matching what Robinhood Chain's Universal adapter is called.
-    sepolia: {
-      '0x9c01f9b6ed7bbd86f7a309a3414595608ab9d80d': {name: 'Aave V3', category: 'lending'},
-      '0x9f6d7b2defcf45cb837560209099083ddf59840a': {name: 'Lido', category: 'staking'},
-      '0x67bd4c240d513e7eb35bf8d871cbed314856b125': {name: 'Uniswap Universal', category: 'amm'},
-      '0x5a365990111b5a460526a25a8d4493df103759df': {name: 'CoW Swap', category: 'intent'},
-    },
+  // Registered on the Base guard 2026-10-18, with fees to the Safe.
+  base: {
+    '0x8e14e91f29066ccdd9e9e2db6bafe6fef7c14ac6': {name: 'Sky', category: 'staking'},
+    '0xb3ff9df07f2901d97c07146d18093de914141ad3': {name: 'Aave V3', category: 'lending'},
+    '0xb5b4313d88b4aa68d03bd6467eb1460ffaf136e5': {name: 'Uniswap Universal', category: 'amm'},
+    '0x646248f1ad34a4ef927726bd818c19107231322b': {name: 'CoW Swap', category: 'intent'},
+  },
+  // Read off the Robinhood guard 2026-10-23. Its intent adapter is UniswapX, not CoW, so the Trade
+  // sheet offers no Limit/TWAP there (they are CoW orders).
+  robinhood: {
+    '0xc1608cfc8c272c693f8b0a65cfe16597b9e281ae': {name: 'Uniswap Universal', category: 'amm'},
+    '0x2db440cf6215d68d44736a287b253f4461399aa0': {name: 'UniswapX', category: 'intent'},
+  },
+  // Registered on the Arbitrum guard 2026-10-19. Names only; routing reads the guard.
+  arbitrum: {
+    '0x7e97befd060124ed648d77901398f4051a1cf1ed': {name: 'Sky', category: 'staking'},
+    '0x5786f0ef83c4fc08ae372207707bb577e413c227': {name: 'Aave V3', category: 'lending'},
+    '0x2576d292401c03985e41737a09bce9f1214fb7f3': {name: 'Uniswap Universal', category: 'amm'},
+    '0x0936b90022eb22ae3329751573d22da26f1b1ad3': {name: 'CoW Swap', category: 'intent'},
+  },
+  sepolia: {
+    '0x9c01f9b6ed7bbd86f7a309a3414595608ab9d80d': {name: 'Aave V3', category: 'lending'},
+    '0x9f6d7b2defcf45cb837560209099083ddf59840a': {name: 'Lido', category: 'staking'},
+    '0x67bd4c240d513e7eb35bf8d871cbed314856b125': {name: 'Uniswap Universal', category: 'amm'},
+    '0x236b4b260bd29dca1df29360fa09c084e37fb100': {name: 'CoW Swap', category: 'intent'},
   },
 };
 
@@ -149,6 +75,7 @@ const DISPLAY_NAME: Record<string, string> = {
   Lido: 'Lido V2',
   Sky: 'Sky V1',
   'CoW Swap': 'CoW Swap V1',
+  UniswapX: 'UniswapX V1',
 };
 export const protocolDisplayName = (name: string) => DISPLAY_NAME[name] ?? name;
 
@@ -165,23 +92,22 @@ const SERVED_CATEGORY: Record<string, ProtocolCategory> = {
 // The server names adapters as displayed ("Sky V1"); the app keys its routes by the short name.
 const SHORT_NAME: Record<string, string> = Object.fromEntries(Object.entries(DISPLAY_NAME).map(([k, v]) => [v, k]));
 
-// Keyed by {generationKey}: each generation's guard has its own adapters.
+// Keyed by network.
 const served = new Map<string, Record<string, ProtocolInfo>>();
 
-/** The adapters the catalog API serves for a generation + network. See {loadCatalog}. */
-export function registerServedProtocols(key: string, rows: {address: string; category: string; name?: string}[]) {
+/** The adapters the catalog API serves for a network. See {loadCatalog}. */
+export function registerServedProtocols(network: Network, rows: {address: string; category: string; name?: string}[]) {
   const out: Record<string, ProtocolInfo> = {};
   for (const r of rows) {
     const category = SERVED_CATEGORY[r.category];
     if (category && r.name) out[r.address.toLowerCase()] = {name: SHORT_NAME[r.name] ?? r.name, category};
   }
   // An empty answer (Arbitrum, before the server lists it) must not blank the vendored table.
-  if (Object.keys(out).length) served.set(key, out);
+  if (Object.keys(out).length) served.set(network, out);
 }
 
-/** The server's adapters for the generation the app is on; the vendored table until it has answered. */
-const table = (network: Network): Record<string, ProtocolInfo> =>
-  served.get(generationKey(network)) ?? PROTOCOLS[useVaultGeneration.getState().generation][network];
+/** The server's adapters; the vendored table until it has answered. */
+const table = (network: Network): Record<string, ProtocolInfo> => served.get(network) ?? PROTOCOLS[network];
 
 /**
  * Every adapter the guard is running, newest first — or the vendored table when it has not
