@@ -324,7 +324,8 @@ export function ManageScreen() {
 
 const makeStyles = (c: Colors) => StyleSheet.create({
   container: {flex: 1, backgroundColor: c.bg},
-  body: {flexGrow: 1, padding: 20, paddingBottom: 20, gap: 16},
+  // The same 20 between cards as the Settings tab, which this page is opened from.
+  body: {flexGrow: 1, padding: 20, paddingBottom: 20, gap: 20},
   // One section card per list, the same card as everywhere else: the card carries the padding, rows
   // draw a hairline on their top edge, and the first/last rows drop their outer padding so the card
   // frames the list evenly.
