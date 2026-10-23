@@ -331,8 +331,9 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   // frames the list evenly.
   section: {gap: 0},
   // A card's title, sitting just above it.
-  header: {color: c.subtext, fontSize: 13, fontWeight: '600', paddingHorizontal: 16, marginBottom: 8},
-  group: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 16},
+  header: {color: c.subtext, fontSize: 13, fontWeight: '600', paddingHorizontal: 20, marginBottom: 8},
+  // Inset as far as the corners are round: at 16 the switch at a row's end sat against the curve.
+  group: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 20},
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
