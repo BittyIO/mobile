@@ -6,6 +6,7 @@ import {CopyAddress} from '@/components/CopyAddress';
 import {TokenIcon} from '@/components/TokenIcon';
 import {assetDescription} from '@/core/asset-info';
 import {isAmmLiquid} from '@/core/assets';
+import {adapterByName} from '@/core/protocols';
 import {displaySymbol} from '@/core/format';
 import {useNetwork, networkLabel} from '@/core/network-store';
 import {fmtUsd} from '@/core/prices';
@@ -167,9 +168,17 @@ export function AssetDetailScreen() {
         {/* Why a pair offers Limit only: the guard registers the Ondo and Robinhood stocks without
             the AMM-liquid bit, because no Uniswap pool prices them. Said here rather than left for
             the order form to refuse. */}
+        {/* And where there are no limit orders either (Robinhood: its intent adapter is UniswapX,
+            not CoW), an asset the guard cannot price for Market is not tradable at all. */}
         <Row
           label={t('mobile.trade.market_trading')}
-          value={isAmmLiquid(network, asset.symbol) ? t('mobile.trade.market_available') : t('mobile.trade.limit_only')}
+          value={
+            isAmmLiquid(network, asset.symbol)
+              ? t('mobile.trade.market_available')
+              : adapterByName(network, 'CoW Swap')
+                ? t('mobile.trade.limit_only')
+                : t('mobile.trade.not_tradable_title')
+          }
           tone={isAmmLiquid(network, asset.symbol) ? c.success : c.subtext}
         />
       </View>

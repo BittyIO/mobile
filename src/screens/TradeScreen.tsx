@@ -4,7 +4,7 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList, TradeParams} from '@/App';
 import {BottomTabBarHeightContext} from '@react-navigation/bottom-tabs';
 import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {Animated, Keyboard, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type TextStyle} from 'react-native';
+import {Alert, Animated, Keyboard, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type TextStyle} from 'react-native';
 import Svg, {Circle, Ellipse, Path} from 'react-native-svg';
 import {TokenIcon} from '@/components/TokenIcon';
 import {TradeMenu} from '@/components/TradeMenu';
@@ -2284,6 +2284,8 @@ export function TradeScreen() {
     setValidSec(clamped * 86400);
   };
 
+  const explainUntradable = () => Alert.alert(t('mobile.trade.not_tradable_title'), t('mobile.trade.not_tradable', {token: displaySymbol(baseSym)}));
+
   const pickMode = (next: Mode) => {
     if (next === mode) return;
     setMode(next);
@@ -2296,6 +2298,14 @@ export function TradeScreen() {
     setErr(null);
     setStatus('idle');
   };
+
+  /**
+   * No way to trade this pair here at all: no Market (a leg the guard cannot price, or no pool) and
+   * no intent order type (Robinhood's intent adapter is UniswapX, which this sheet only uses for
+   * Market). UNI on Robinhood is one. The mode tabs were simply empty then, the sheet stayed on
+   * Market, and a Buy or Sell opened a market form whose trade the vault refuses.
+   */
+  const untradable = ammKnown && !marketable && !intentable;
 
   const MODES: {key: Mode; label: string}[] = [
     ...(marketable ? [{key: 'Market' as Mode, label: t('vault.market')}] : []),
@@ -3378,10 +3388,10 @@ export function TradeScreen() {
         // BAR_HEIGHT / BAR_SLIDE / the content padding stay consistent (the bar grows down by
         // exactly the gap it used to float above). When hidden it slides its full height clear.
         style={[styles.bar, {bottom: 0, paddingBottom: 18 + barBottom, transform: [{translateY: barY}]}]}>
-        <Pressable style={[styles.barBtn, {backgroundColor: c.buy}]} onPress={() => openSheet('buy')}>
+        <Pressable style={[styles.barBtn, {backgroundColor: c.buy}, untradable && styles.dim]} onPress={() => (untradable ? explainUntradable() : openSheet('buy'))}>
           <Text style={styles.barText}>{t('vault.buy')}</Text>
         </Pressable>
-        <Pressable style={[styles.barBtn, {backgroundColor: c.sell}]} onPress={() => openSheet('sell')}>
+        <Pressable style={[styles.barBtn, {backgroundColor: c.sell}, untradable && styles.dim]} onPress={() => (untradable ? explainUntradable() : openSheet('sell'))}>
           <Text style={styles.barText}>{t('vault.sell')}</Text>
         </Pressable>
       </Animated.View>
