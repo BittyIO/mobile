@@ -15,8 +15,8 @@ import {
   publicClientFor,
   type Network,
 } from '@/core/chain';
-import {ACTIVATION_TYPES, ACTIVATION_TYPES_V2, GUARD_IMPL_ABI, IMPLEMENTATION_VAULT, PRICE_FEED_ABI} from '@/core/abi';
-import {generationConfig, isLegacy} from '@/core/vault-generation';
+import {ACTIVATION_TYPES, GUARD_IMPL_ABI, IMPLEMENTATION_VAULT, PRICE_FEED_ABI} from '@/core/abi';
+import {API_VERSION, VAULT_FACTORY, VAULT_GUARD} from '@/core/vault-contracts';
 import {ACTIVATION_GAS, activationFeeUnits, relayFeeUnits} from '@/core/activation-fee';
 // One copy of the ETH/USD feeds: the fee shown before signing and the fee actually signed must be
 // priced from the same source, or the two disagree for no reason the user can see.
@@ -44,14 +44,13 @@ const WETH_ACTIVATION_VERSION = BigInt(1_000_003);
 /**
  * What a vault not deployed yet will be born on: the guard's latest vault implementation's version,
  * and the WETH the factory will hand it (the guard's `bitty.gasWrapped`). The factory deploys onto
- * that latest implementation, so this is the vault's real starting point, not a guess. Null on the
- * legacy generation, whose version numbers are not comparable, or when the chain cannot be read.
+ * that latest implementation, so this is the vault's real starting point, not a guess. Null when the
+ * chain cannot be read.
  */
 export async function bornVault(network: Network): Promise<{version: bigint; weth: Address} | null> {
-  if (isLegacy()) return null;
   try {
     const client = publicClientFor(network);
-    const guard = generationConfig().guard;
+    const guard = VAULT_GUARD;
     const impl = await client.readContract({
       address: guard,
       abi: GUARD_IMPL_ABI,
@@ -120,7 +119,7 @@ export async function activateVault(o: {
   calls?: readonly Hex[];
 }): Promise<{hash: Hex; vault: Address; feeAmount: bigint}> {
   const client = publicClientFor(o.network);
-  const factory = generationConfig().factory;
+  const factory = VAULT_FACTORY;
   const vault = await client.readContract({
     address: factory,
     abi: FACTORY_VAULT_ABI,
@@ -177,35 +176,20 @@ export async function activateVault(o: {
     chainId: CHAIN_ID[o.network],
     verifyingContract: factory,
   } as const;
-  // v1.0.3 signs the flag as `allowlistEnabled` with no expiry; v1.0.0 renames it and adds `deadline`.
-  const legacy = isLegacy();
   const deadline = BigInt(Math.floor(Date.now() / 1000) + (o.account.approvalWindowSeconds ?? ACTIVATION_DEADLINE_SECONDS));
-  const signature = legacy
-    ? await o.account.signTypedData({
-        domain,
-        types: ACTIVATION_TYPES,
-        primaryType: 'Activation',
-        message: {
-          owner: o.account.address,
-          stableCoinAddress: coin,
-          feeAmount,
-          allowlistEnabled: o.allowlistEnabled,
-          calls,
-        },
-      })
-    : await o.account.signTypedData({
-        domain,
-        types: ACTIVATION_TYPES_V2,
-        primaryType: 'Activation',
-        message: {
-          owner: o.account.address,
-          stableCoinAddress: coin,
-          feeAmount,
-          restrictToOwnAllowList: o.allowlistEnabled,
-          calls,
-          deadline,
-        },
-      });
+  const signature = await o.account.signTypedData({
+    domain,
+    types: ACTIVATION_TYPES,
+    primaryType: 'Activation',
+    message: {
+      owner: o.account.address,
+      stableCoinAddress: coin,
+      feeAmount,
+      restrictToOwnAllowList: o.allowlistEnabled,
+      calls,
+      deadline,
+    },
+  });
 
   const {hash} = await submitActivation({
     network: o.network,
@@ -215,8 +199,8 @@ export async function activateVault(o: {
     feeAmount,
     allowlistEnabled: o.allowlistEnabled,
     calls,
-    // Signed only on v1.0.0, where the factory refuses the activation after it.
-    deadline: legacy ? undefined : deadline,
+    // The factory refuses the activation after it.
+    deadline,
     signature,
   });
   return {hash, vault, feeAmount};
@@ -226,7 +210,6 @@ export async function activateVault(o: {
  * Activate with the network fee paid by the OWNER: the factory's plain `activateVault`, called from
  * the owner key, deploys the caller's vault and runs `calls` during its init. No signature to check
  * and no fee taken from the vault — the owner's ETH pays the gas, so the vault need hold nothing.
- * Both factories the app knows (v1.0.0 and v1.0.3) have it, with the same arguments.
  */
 export async function activateVaultDirect(o: {
   account: Signer;
@@ -237,7 +220,7 @@ export async function activateVaultDirect(o: {
   return sendFromOwner({
     account: o.account,
     network: o.network,
-    to: generationConfig().factory,
+    to: VAULT_FACTORY,
     data: encodeFunctionData({
       abi: ACTIVATE_ESTIMATE_ABI,
       functionName: 'activateVault',
@@ -258,7 +241,7 @@ export async function submitActivation(o: {
   feeAmount: bigint;
   allowlistEnabled: boolean;
   calls: readonly Hex[];
-  deadline?: bigint;
+  deadline: bigint;
   signature: Hex;
 }): Promise<{hash: Hex; vault: Address}> {
   const res = await fetch(apiUrl('/api/ethereum/vaults/activate', o.network), {
@@ -269,11 +252,11 @@ export async function submitActivation(o: {
       stableCoinAddress: o.stableCoin,
       feeAmount: o.feeAmount.toString(),
       signature: o.signature,
-      version: generationConfig().apiVersion,
+      version: API_VERSION,
       factory: o.factory,
       allowlistEnabled: o.allowlistEnabled,
       calls: o.calls,
-      ...(o.deadline === undefined ? {} : {deadline: o.deadline.toString()}),
+      deadline: o.deadline.toString(),
     }),
   });
 

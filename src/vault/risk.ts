@@ -1,7 +1,7 @@
 /**
  * Owner risk & controls — the vault's risk surface, plus the locks.
  *
- *  Risk is three numbers on v1.0.0 (v1.0.3 had four), none of which can be turned off:
+ *  Risk is three numbers, none of which can be turned off:
  *   - timelock: seconds a LOOSENING of anything deferred waits out (tightening is immediate).
  *     1 to 30 days.
  *   - sendDailyAllowance: the ceiling on what regular sends may move per rolling day, in whole USD,
@@ -22,18 +22,11 @@
  *     to a key that is gone rather than merely suspect. Afterwards a whitelisted recipient is the
  *     only way money leaves, so it names one the vault can pay right now and is refused without.
  *
- * The v1.0.3 generation keeps the old four-field `PaymentRisk` surface, with no locks and no
- * market-trade protection. Two numbers map onto it (`timelock` = `changeTimelock`, the send cap =
- * `maxSendValue`, in stablecoin tokens per `maxSendInterval`); `hasLocks` tells the screen what to
- * leave out. Which surface applies is the GENERATION's call, not the version's: a v1.0.0 vault
- * reports a lower version than a v1.0.3 one.
- *
  * All relayed & gasless, Face-ID-gated at signing.
  */
 import type {Address, Hex} from 'viem';
 import {publicClientFor, type Network} from '@/core/chain';
-import {VAULT_RISK_ABI, VAULT_RISK_V103_ABI, WHITELIST_STATUS} from '@/core/abi';
-import {isLegacy} from '@/core/vault-generation';
+import {VAULT_RISK_ABI, WHITELIST_STATUS} from '@/core/abi';
 import {relayVaultWrite} from './relay';
 import {fetchWhitelist} from './payments';
 
@@ -43,8 +36,8 @@ type Acct = Parameters<typeof relayVaultWrite>[0]['account'];
 const UNCHANGED = (1n << 256n) - 1n; // type(uint256).max
 
 /**
- * What a v1.0.0 vault accepts for each risk number (MIN_RISK_TIMELOCK, MAX_RISK_TIMELOCK and the two
- * MAX_*_DAILY_*_ALLOWANCE constants in the vault). v1.0.3 has no bounds and keeps 0 as "off".
+ * What the vault accepts for each risk number (MIN_RISK_TIMELOCK, MAX_RISK_TIMELOCK and the two
+ * MAX_*_DAILY_*_ALLOWANCE constants in the vault).
  */
 export const RISK_BOUNDS: Record<'timelock' | 'sendDailyAllowance' | 'marketTradeDailyLossAllowance', {min: bigint; max: bigint}> = {
   timelock: {min: 86_400n, max: 30n * 86_400n},
@@ -54,46 +47,26 @@ export const RISK_BOUNDS: Record<'timelock' | 'sendDailyAllowance' | 'marketTrad
 
 export type RiskConfig = {
   timelock: bigint; // seconds
-  /** Whole USD regular sends may move per day, 0 = no cap. On v1.0.3: stablecoin tokens per `window`. */
+  /** Whole USD regular sends may move per day, 0 = no cap. */
   sendDailyAllowance: bigint;
-  /** Whole USD market trades may lose against oracle value per day, 0 = unprotected. Always 0 on v1.0.3. */
+  /** Whole USD market trades may lose against oracle value per day, 0 = unprotected. */
   marketTradeDailyLossAllowance: bigint;
-  /** Seconds the send cap covers: a day on v1.0.0; v1.0.3's owner-set `maxSendInterval`. */
-  window: bigint;
-  /** v1.0.0: emergency / forever lock and the market-trade allowance exist. False on v1.0.3. */
-  hasLocks: boolean;
   /**
    * A loosening still waiting out the timelock: the value it will take and when (unix seconds).
-   * Only v1.0.0 reports these; a tightening never waits, so it never shows here.
+   * A tightening never waits, so it never shows here.
    */
   pending: Partial<Record<RiskField, {value: bigint; at: bigint}>>;
 };
 
-const DAY = 86400n;
-
 /** 0 unlocked, 1 emergency locked, 2 locked for ever — the contract's own numbering. */
 export type LockLevel = 0 | 1 | 2;
 
-/** Zeros, shaped for the generation — the screen decides what to render from `hasLocks`. */
-const zeroRisk = (): RiskConfig => ({timelock: 0n, sendDailyAllowance: 0n, marketTradeDailyLossAllowance: 0n, window: DAY, hasLocks: !isLegacy(), pending: {}});
+const zeroRisk = (): RiskConfig => ({timelock: 0n, sendDailyAllowance: 0n, marketTradeDailyLossAllowance: 0n, pending: {}});
 
 /** The risk numbers in force. Zeros for an un-activated vault or a failed read. */
 export async function getRiskConfig(vault: Address, network: Network): Promise<RiskConfig> {
   try {
     const client = publicClientFor(network);
-    if (isLegacy()) {
-      const [, maxSendValue, changeTimelock, maxSendInterval] = await client.readContract({
-        address: vault,
-        abi: VAULT_RISK_V103_ABI,
-        functionName: 'getRiskConfig',
-      });
-      return {
-        timelock: changeTimelock,
-        sendDailyAllowance: maxSendValue,
-        marketTradeDailyLossAllowance: 0n,
-        window: maxSendInterval,
-        hasLocks: false, pending: {}};
-    }
     const [[timelock, sendDailyAllowance, marketTradeDailyLossAllowance], changes] = await Promise.all([
       client.readContract({address: vault, abi: VAULT_RISK_ABI, functionName: 'riskSettings'}),
       // The pending read is extra information, never a reason to show nothing.
@@ -104,7 +77,7 @@ export async function getRiskConfig(vault: Address, network: Network): Promise<R
     if (changes?.sendDailyAllowanceAt) pending.sendDailyAllowance = {value: changes.sendDailyAllowance, at: changes.sendDailyAllowanceAt};
     if (changes?.marketTradeDailyLossAllowanceAt)
       pending.marketTradeDailyLossAllowance = {value: changes.marketTradeDailyLossAllowance, at: changes.marketTradeDailyLossAllowanceAt};
-    return {timelock, sendDailyAllowance, marketTradeDailyLossAllowance, window: DAY, hasLocks: true, pending};
+    return {timelock, sendDailyAllowance, marketTradeDailyLossAllowance, pending};
   } catch {
     return zeroRisk();
   }
@@ -143,26 +116,6 @@ export async function updateRiskSettings(o: {
   stableCoin: Address;
 }): Promise<Hex> {
   const v = (f: RiskField) => o.changes[f] ?? UNCHANGED;
-  if (isLegacy()) {
-    if (o.changes.marketTradeDailyLossAllowance !== undefined) throw new Error('v1.0.3 vaults have no market-trade allowance');
-    const {hash} = await relayVaultWrite({
-      account: o.account,
-      vault: o.vault,
-      network: o.network,
-      abi: VAULT_RISK_V103_ABI,
-      functionName: 'updatePaymentRisk',
-      args: [
-        {
-          newPaymentProtection: UNCHANGED,
-          maxSendValue: v('sendDailyAllowance'),
-          maxSendInterval: UNCHANGED,
-          changeTimelock: v('timelock'),
-        },
-      ],
-      stableCoin: o.stableCoin,
-    });
-    return hash;
-  }
   const {hash} = await relayVaultWrite({
     account: o.account,
     vault: o.vault,
@@ -263,10 +216,9 @@ export type PendingChange =
 /**
  * Everything in flight, soonest first: the vault's own `pendingChanges()` slot read, plus the address
  * book entries still maturing or queued for removal, which the contract leaves out of that read and
- * reports per entry. Empty on v1.0.3 (no such surface) and on any failed read.
+ * reports per entry. Empty on any failed read.
  */
 export async function getPendingChanges(vault: Address, network: Network): Promise<PendingChange[]> {
-  if (isLegacy()) return [];
   const [p, book] = await Promise.all([
     publicClientFor(network)
       .readContract({address: vault, abi: VAULT_RISK_ABI, functionName: 'pendingChanges'})

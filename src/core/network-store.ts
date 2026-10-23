@@ -1,7 +1,6 @@
 import {create} from 'zustand';
 import {MMKV} from 'react-native-mmkv';
 import type {Network} from '@/core/chain';
-import {useVaultGeneration, type VaultGeneration} from '@/core/vault-generation';
 
 // Persist the chosen network so it survives relaunch.
 const store = new MMKV({id: 'bitty.network'});
@@ -22,18 +21,8 @@ export const useNetwork = create<NetworkState>((set) => ({
 }));
 
 export const NETWORKS: Network[] = ['mainnet', 'base', 'arbitrum', 'robinhood', 'sepolia'];
-/** The networks a generation is deployed on: the old one never shipped to Arbitrum. */
-export const networksFor = (g: VaultGeneration): Network[] =>
-  g === 'v1.0.3' ? NETWORKS.filter((n) => n !== 'arbitrum') : NETWORKS;
-
-/** The networks to offer, for the generation in use. */
-export const useNetworks = (): Network[] => networksFor(useVaultGeneration((s) => s.generation));
-
-// Switching to a generation that is not on the current network leaves it for Ethereum.
-useVaultGeneration.subscribe(({generation}) => {
-  const {network, setNetwork} = useNetwork.getState();
-  if (!networksFor(generation).includes(network)) setNetwork('mainnet');
-});
+/** The networks to offer. */
+export const useNetworks = (): Network[] => NETWORKS;
 
 export const NETWORK_LABEL: Record<Network, string> = {
   mainnet: 'Ethereum',

@@ -7,7 +7,7 @@ import {ownerVaultAddress} from '@/vault/read';
  * The address of a listed vault on `network`.
  *
  * Almost always the one the factory derives from its owner — the same on every chain the
- * generation is deployed on — so it is computed, not stored. A vault received by an ownership
+ * factory is deployed on — so it is computed, not stored. A vault received by an ownership
  * transfer is the exception: it keeps its first owner's address, and exists only on the chain it
  * was received on; anywhere else it is null.
  */

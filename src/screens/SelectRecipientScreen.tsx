@@ -13,7 +13,6 @@ import {fetchWhitelist, removeWhitelisted, type WhitelistedRecipient} from '@/va
 import {WHITELIST_STATUS} from '@/core/abi';
 import {getRiskConfig, type RiskConfig} from '@/vault/risk';
 import {fmtAllowance} from '@/components/riskFormat';
-import {useAssetCatalog} from '@/core/asset-catalog';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {showToast} from '@/components/Toast';
 import {ProgressRing, leftUnit, waitDone} from '@/components/ProgressRing';
@@ -60,7 +59,6 @@ export function SelectRecipientScreen() {
    */
   const [loading, setLoading] = useState(true);
   const [reload, setReload] = useState(0);
-  const symbol = useAssetCatalog(network).find((a) => a.kind === 'stable')?.symbol;
   const [risk, setRisk] = useState<RiskConfig | null>(null);
   useEffect(() => {
     if (vault) getRiskConfig(vault, network).then(setRisk);
@@ -244,11 +242,11 @@ export function SelectRecipientScreen() {
   };
 
   // Payable now (a queued removal still is, until it lands) vs still waiting out the timelock, or
-  // voided by a lock. A v1.0.3 entry carries no status and is payable.
+  // voided by a lock. An entry with no status (from the server) is payable.
   const isPending = (b: WhitelistedRecipient) => b.status === WHITELIST_STATUS.pending || b.status === WHITELIST_STATUS.voided;
   const live = book.filter((b) => !isPending(b));
   const waiting = book.filter(isPending);
-  const allowance = risk ? t('mobile.payments.max_send_daily', {value: fmtAllowance(risk.sendDailyAllowance, risk, symbol, t)}) : null;
+  const allowance = risk ? t('mobile.payments.max_send_daily', {value: fmtAllowance(risk.sendDailyAllowance, t)}) : null;
   const whitelisted = (a: string) => live.some((b) => b.recipientAddress.toLowerCase() === a.toLowerCase());
 
   // New recipient in the header: always in reach, however long the book grows.

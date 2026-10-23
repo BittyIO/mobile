@@ -10,7 +10,6 @@ import {TabIcon, type TabName} from '@/components/TabIcon';
 import {NetworkSwitcher} from '@/components/NetworkSwitcher';
 import {useGuardProtocols} from '@/core/guard-catalog';
 import {useNetwork} from '@/core/network-store';
-import {useVaultGeneration} from '@/core/vault-generation';
 import {RISK_TITLE} from '@/components/riskFormat';
 import {ToastHost} from '@/components/Toast';
 import {resumePending} from '@/vault/pending';
@@ -292,14 +291,6 @@ function Root() {
   const init = useWallet((s) => s.init);
   const network = useNetwork((s) => s.network);
   /**
-   * The vault generation keys the whole navigator.
-   *
-   * Switching it changes the factory, so the owner's vault ADDRESS changes under every screen —
-   * and most screens read the address once, from the network alone. Remounting is what makes each
-   * of them start again against the new vault rather than go on showing the old one's balances.
-   */
-  const generation = useVaultGeneration((s) => s.generation);
-  /**
    * The guard's protocol catalog, read before anything needs it.
    *
    * Every relayed write resolves its adapter through a plain function, which cannot wait on a
@@ -325,7 +316,7 @@ function Root() {
   if (status === 'locked') return <LockScreen />;
 
   return (
-    <NavigationContainer key={generation} theme={navTheme} ref={navigationRef}>
+    <NavigationContainer theme={navTheme} ref={navigationRef}>
       <Stack.Navigator
         screenOptions={{
           // Translucent header with the same tinted ground as the tab header, so a pushed page and a

@@ -33,8 +33,6 @@ const KNOWN_CALLS = parseAbi([
   'function updateProtocols(address[] addProtocols,address[] removeProtocols)',
   'function upgradeProtocol(address protocol,address newImplementation)',
   'function upgrade(address newImpl)',
-  'function enableAllowlist()',
-  'function disableAllowlist()',
   'function useBittyAllowList(bool use)',
   'function setStableCoinAsGas(address[] stableCoins,uint64 dailyLimit,uint64 maxFeePerOp)',
   'function disableStableCoinAsGas()',
@@ -47,6 +45,7 @@ const KNOWN_CALLS = parseAbi([
   'function wrapNative()',
   'function autoYield(address asset)',
   'function approveIntentRelayer(address intentProtocol,address token)',
+  'function approveIntentSpender(address intentProtocol,address token)',
   'function cancelIntentOrders(address intentProtocol,bytes[] orderUids)',
   'function multicall(bytes[] data)',
 ]);

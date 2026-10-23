@@ -44,7 +44,7 @@ export async function fetchPositions(
 ): Promise<Position[]> {
   const res = await apiFetch(
     apiUrl(
-      // `apiUrl` adds the generation's `version`.
+      // `apiUrl` adds the deployment's `version`.
       `/api/ethereum/vaults/${vault}/positions${fresh ? '?fresh=1' : ''}`,
       network,
     ),

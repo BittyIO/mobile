@@ -27,15 +27,12 @@ export const FORWARDER_EXEC_ABI = parseAbi([
 
 /**
  * Asset / protocol allowlist management + upgrades (v1.0.x). `updateAssets`/`updateProtocols` add/remove
- * from the vault's allowlist; enable/disableAllowlist toggles restricted mode; `upgrade` UUPS-upgrades
+ * from the vault's allowlist; `upgrade` UUPS-upgrades
  * the vault; `upgradeProtocol` upgrades an adapter clone in place (same lineage, strictly newer).
  */
 export const VAULT_MANAGE_ABI = parseAbi([
   'function updateAssets(address[] addAssets,address[] removeAssets)',
   'function updateProtocols(address[] addProtocols,address[] removeProtocols)',
-  'function enableAllowlist()',
-  'function disableAllowlist()',
-  'function allowlistEnabled() view returns (bool)',
   'function isAssetAllowed(address assetAddress) view returns (bool)',
   'function isProtocolAllowed(address protocol) view returns (bool)',
   'function upgrade(address newImpl)',
@@ -54,9 +51,8 @@ export const VAULT_OWNERSHIP_ABI = parseAbi([
 ]);
 
 /**
- * v1.0.0's allow-list switch, named for the list a vault USES rather than whether it is restricted:
- * `useBittyAllowList(true)` is the old `disableAllowlist`, `false` the old `enableAllowlist`, and
- * `usingBittyAllowList()` is `!allowlistEnabled()`.
+ * The allow-list switch, named for the list a vault USES rather than whether it is restricted:
+ * `useBittyAllowList(false)` restricts the vault to its own list.
  */
 export const VAULT_ALLOWLIST_V2_ABI = parseAbi([
   'function useBittyAllowList(bool use)',
@@ -102,9 +98,6 @@ export const VAULT_STABLE_COIN_AS_GAS_ABI = parseAbi([
   'function setStableCoinAsGas(address[] stableCoins,uint64 dailyLimit,uint64 maxFeePerOp)',
   'function disableStableCoinAsGas()',
   'function stableCoinAsGasConfig() view returns (address[] stableCoins,uint256 dailyLimit,uint256 maxFeePerOp)',
-  'function setGasless(address[] stableCoins,uint64 dailyLimit,uint64 maxFeePerOp)',
-  'function disableGasless()',
-  'function gaslessConfig() view returns (address[] stableCoins,uint256 dailyLimit,uint256 maxFeePerOp)',
   'function vaultVersion() view returns (uint256)',
   'function gasBudgetRemaining() view returns (uint256)',
 ]);
@@ -169,13 +162,6 @@ export const WHITELIST_STATUS = {
   removalQueued: 4, // payable until `removeAt`, then gone
 } as const;
 
-/** v1.0.3's whitelist entry also names the one asset it may be paid in; the app always passes "any". */
-export const VAULT_PAYMENTS_V103_ABI = parseAbi([
-  'function addWhitelistedRecipient(address recipient,address allowedAsset) returns (uint256 id)',
-  // One recipient per leg; the app passes the same recipient for every leg.
-  'function batchSend(address[] recipients,address[] assets,uint256[] amounts,address[][] withdrawProtocols,uint256[][] withdrawAmounts)',
-]);
-
 /**
  * Delegation (v1.0.0). `setAssetManager` appoints the single trading delegate until `expiresAt` with a
  * `permissions` mask of what it may do (0 addr revokes; appointing, extending or widening the mask
@@ -186,16 +172,6 @@ export const VAULT_PAYMENTS_V103_ABI = parseAbi([
 export const VAULT_DELEGATE_ABI = parseAbi([
   'function setAssetManager(address assetManager,uint64 expiresAt,uint32 permissions)',
   'function getAssetManagerSettings() view returns (address manager,uint64 expiresAt,address pendingManager,uint64 pendingAt,uint32 permissions,uint32 pendingPermissions)',
-]);
-
-/**
- * v1.0.3's delegation: no permission masks, so `setAssetManager` takes two arguments and
- * `getAssetManagerSettings` returns four. Decoding a v1.0.3 return with the v1.0.0 fragment fails
- * outright, so callers pick this one by generation.
- */
-export const VAULT_DELEGATE_V103_ABI = parseAbi([
-  'function setAssetManager(address assetManager,uint64 expiresAt)',
-  'function getAssetManagerSettings() view returns (address manager,uint64 expiresAt,address pendingManager,uint64 pendingAt)',
 ]);
 
 /**
@@ -249,21 +225,13 @@ export const VAULT_RISK_ABI = parseAbi([
 ]);
 
 /**
- * v1.0.3's risk surface: one 4-field `PaymentRisk` struct, each field `type(uint256).max` (UNCHANGED)
- * to leave it. `getRiskConfig`'s tuple order swaps the last two vs the struct. No locks on v1.0.3,
- * and no market-trade allowance. The app maps v1.0.0's numbers onto it: `timelock` =
- * `changeTimelock`, the send allowance = `maxSendValue` (per `maxSendInterval`, which v1.0.3 lets
- * the owner set).
+ * Intent — spender approval + on-chain cancel (CoW can't soft-cancel an eip1271 vault order). The
+ * approval is approveIntentSpender from v1.0.4 and approveIntentRelayer before it; see
+ * {approveIntentFunctionName}.
  */
-export const VAULT_RISK_V103_ABI = parseAbi([
-  'struct PaymentRisk { uint256 newPaymentProtection; uint256 maxSendValue; uint256 maxSendInterval; uint256 changeTimelock; }',
-  'function updatePaymentRisk(PaymentRisk update)',
-  'function getRiskConfig() view returns (uint64 newPaymentProtection,uint64 maxSendValue,uint64 changeTimelock,uint64 maxSendInterval)',
-]);
-
-/** Intent (CoW) — relayer approval + on-chain cancel (CoW can't soft-cancel an eip1271 vault order). */
 export const VAULT_INTENT_ABI = parseAbi([
   'function approveIntentRelayer(address intentProtocol,address token)',
+  'function approveIntentSpender(address intentProtocol,address token)',
   'function cancelIntentOrders(address intentProtocol,bytes[] orderUids)',
 ]);
 
@@ -310,22 +278,12 @@ export const FORWARD_REQUEST_TYPES = {
  * is plain activation. Must match the new factory's Activation typehash exactly or every signature is
  * rejected with InvalidActivationSignature.
  */
-export const ACTIVATION_TYPES = {
-  Activation: [
-    {name: 'owner', type: 'address'},
-    {name: 'stableCoinAddress', type: 'address'},
-    {name: 'feeAmount', type: 'uint256'},
-    {name: 'allowlistEnabled', type: 'bool'},
-    {name: 'calls', type: 'bytes[]'},
-  ],
-} as const;
-
 /**
- * The v1.0.0 generation's Activation: the allow-list flag is named for what it does
- * (`restrictToOwnAllowList`), and the signature now expires at `deadline`, so one the relayer sat on
- * cannot be spent later. Field names are part of the typehash — they must match the factory's exactly.
+ * The allow-list flag is named for what it does (`restrictToOwnAllowList`), and the signature expires
+ * at `deadline`, so one the relayer sat on cannot be spent later. Field names are part of the
+ * typehash — they must match the factory's exactly.
  */
-export const ACTIVATION_TYPES_V2 = {
+export const ACTIVATION_TYPES = {
   Activation: [
     {name: 'owner', type: 'address'},
     {name: 'stableCoinAddress', type: 'address'},

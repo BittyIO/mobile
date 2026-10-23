@@ -7,7 +7,7 @@
  *    reverts.
  *  - Registering an INTENT adapter is what makes the vault CLONE it. The clone is the contract CoW calls
  *    `isValidSignature` on, so without it a limit/TWAP order can't validate and CoW rejects it — and
- *    `approveIntentRelayer` reverts too.
+ *    the spender approval (`approveIntentSpender`, `approveIntentRelayer` on older vaults) reverts too.
  *
  * The registration is relayed gaslessly like every other write. On an un-activated vault it rides on
  * activation (relayVaultWrite runs it as the activation `calls`). Idempotent: a no-op when already listed.

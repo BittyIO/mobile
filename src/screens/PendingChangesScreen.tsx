@@ -46,7 +46,7 @@ export function pendingValue(p: PendingChange, t: T): string {
     case 'timelock':
     case 'sendDailyAllowance':
     case 'marketTradeDailyLossAllowance':
-      return fmtRiskValue(p.kind, p.value, null, undefined, t);
+      return fmtRiskValue(p.kind, p.value, t);
     case 'gasBudgetDaily':
     case 'maxFeePerOp':
       // Whole dollars, as the contract stores them.

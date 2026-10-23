@@ -17,7 +17,6 @@ import {SettingsRow as Row, makeSettingsStyles} from '@/components/SettingsRow';
 import {useVaults, vaultLabel} from '@/core/vault-store';
 import {useVaultVersionRow} from '@/components/useVaultVersionRow';
 import {PickerSheet} from '@/components/AssetPicker';
-import {GENERATIONS, VAULT_GENERATIONS, useVaultGeneration, type VaultGeneration} from '@/core/vault-generation';
 
 import {useT} from '@/i18n';
 
@@ -76,9 +75,7 @@ export function SettingsScreen() {
   // Language and Theme Mode use the app's own picker sheet, the one the asset and network selectors
   // use: it is part of the React tree, so it opens on the next frame, where the native action sheet
   // waits on a round trip to UIKit and a presentation animation of its own.
-  const [picker, setPicker] = useState<'language' | 'currency' | 'appearance' | 'generation' | null>(null);
-  const generation = useVaultGeneration((s) => s.generation);
-  const setGeneration = useVaultGeneration((s) => s.setGeneration);
+  const [picker, setPicker] = useState<'language' | 'currency' | 'appearance' | null>(null);
   // The currency in force (explicit choice, else US dollars) and the setter. Independent of the
   // language: changing one never changes the other.
   const currency = useDisplayCurrency();
@@ -132,21 +129,12 @@ export function SettingsScreen() {
             own title, so the label they tap is the heading they land on. */}
         <Row icon="security" title={t('mobile.app.security')} onPress={() => nav.navigate('VaultSecurity')} />
         {/* Last, and in THIS section rather than under About: the version it shows is the
-            vault's contract generation, not the app's, and tapping it upgrades the vault. That
+            vault's contract version, not the app's, and tapping it upgrades the vault. That
             is a vault setting that happens to read like a credit, and it sat among the links to
             the website where nobody looking to upgrade would think to open it. */}
         {/* While the upgrade is being mined the row is inert and says so: a spinner beside
             "Confirming", no chevron, and `onPress` already refuses. Tapping again would submit
             a second upgrade to the same implementation and pay for it. */}
-        {/* Which contract generation the app talks to. The two share nothing but the owner key:
-            each has its own factory, so the same owner has a different vault on each. Kept beside
-            the version row because it decides what that row is a version OF. */}
-        <Row
-          icon="settings"
-          title={t('mobile.settings.vault_generation')}
-          value={GENERATIONS[generation].label}
-          onPress={() => setPicker('generation')}
-        />
         <Row
           icon="settings"
           title={t('mobile.settings.vault_version')}
@@ -185,18 +173,6 @@ export function SettingsScreen() {
         items={CURRENCIES.map((x) => ({key: x.code, label: currencyLabel(x.code)}))}
         selected={currency}
         onSelect={(code) => setCurrency(code as Currency)}
-        onClose={() => setPicker(null)}
-      />
-      <PickerSheet
-        visible={picker === 'generation'}
-        title={t('mobile.settings.vault_generation')}
-        items={VAULT_GENERATIONS.map((g) => ({
-          key: g,
-          label: GENERATIONS[g].label,
-          sub: t(g === 'v1.0.3' ? 'mobile.settings.vault_generation_legacy' : 'mobile.settings.vault_generation_new'),
-        }))}
-        selected={generation}
-        onSelect={(g) => setGeneration(g as VaultGeneration)}
         onClose={() => setPicker(null)}
       />
       {/* The confirmations for the two rows that write on their own (asset manager, upgrade). */}

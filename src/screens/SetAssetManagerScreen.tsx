@@ -5,7 +5,6 @@ import type {Address} from 'viem';
 import {getAssetManager, setAssetManager} from '@/vault/delegate';
 import {isPayableAddress} from '@/core/asset-catalog';
 import {ASSET_MANAGER_ALL_PERMISSIONS} from '@/core/abi';
-import {useVaultGeneration} from '@/core/vault-generation';
 import {Button} from '@/components/Button';
 import {useVaultWrite} from '@/components/useVaultWrite';
 import {EXPIRIES, PERM_ROWS, isSet} from '@/components/useAssetManagerRow';
@@ -27,8 +26,6 @@ export function SetAssetManagerScreen() {
   const c = useColors();
   const styles = useStyles(makeStyles);
   const nav = useNavigation();
-  const legacy = useVaultGeneration((s) => s.generation) === 'v1.0.3';
-
   const [addr, setAddr] = useState('');
   const [days, setDays] = useState<number>(EXPIRIES[0].days);
   const [perms, setPerms] = useState<number>(ASSET_MANAGER_ALL_PERMISSIONS);
@@ -55,7 +52,7 @@ export function SetAssetManagerScreen() {
 
   const badAddr = addr.length > 0 && !isPayableAddress(addr, network);
   const daysOk = Number.isInteger(grantDays) && grantDays >= 1 && grantDays <= 365;
-  const canSet = ready && isPayableAddress(addr, network) && daysOk && (legacy || perms !== 0);
+  const canSet = ready && isPayableAddress(addr, network) && daysOk && perms !== 0;
 
   const set = () => {
     if (!canSet) return;
@@ -125,20 +122,16 @@ export function SetAssetManagerScreen() {
           </View>
         </View>
 
-        {legacy ? null : (
-          <>
-            <Text style={styles.label}>{t('mobile.vault.permissions')}</Text>
-            <View style={styles.permGroup}>
-              {PERM_ROWS.map((p, i) => (
-                <View key={p.bit} style={[styles.permRow, i < PERM_ROWS.length - 1 && styles.permDivider]}>
-                  <Text style={styles.permText}>{t(p.key)}</Text>
-                  <Switch value={(perms & p.bit) !== 0} onValueChange={(on) => setPerms(on ? perms | p.bit : perms & ~p.bit)} />
-                </View>
-              ))}
+        <Text style={styles.label}>{t('mobile.vault.permissions')}</Text>
+        <View style={styles.permGroup}>
+          {PERM_ROWS.map((p, i) => (
+            <View key={p.bit} style={[styles.permRow, i < PERM_ROWS.length - 1 && styles.permDivider]}>
+              <Text style={styles.permText}>{t(p.key)}</Text>
+              <Switch value={(perms & p.bit) !== 0} onValueChange={(on) => setPerms(on ? perms | p.bit : perms & ~p.bit)} />
             </View>
-            <Text style={styles.fine}>{t('mobile.vault.permissions_hint')}</Text>
-          </>
-        )}
+          ))}
+        </View>
+        <Text style={styles.fine}>{t('mobile.vault.permissions_hint')}</Text>
 
         <Button title={t('vault.set')} onPress={set} loading={busy === 'set'} disabled={!canSet} style={styles.setBtn} />
       </Pressable>

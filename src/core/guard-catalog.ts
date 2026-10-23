@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react';
 import {parseAbi, type Address} from 'viem';
 import {publicClientFor, type Network} from '@/core/chain';
-import {generationConfig, generationKey, useVaultGeneration, IGNORED_GUARD_CATEGORIES} from '@/core/vault-generation';
+import {GUARD_CATEGORIES, IGNORED_GUARD_CATEGORIES, VAULT_GUARD} from '@/core/vault-contracts';
 import type {ProtocolCategory} from '@/core/protocols';
 
 /**
@@ -33,14 +33,13 @@ const GUARD_ABI = parseAbi([
 ]);
 
 /**
- * The guard's category numbers come from the generation (`protocolCategories`): the v1.0.0 guard
- * swapped staking and lending to 1 and 2. 3 is the market-TRADE adapter on both — the old guard's
- * `PROTOCOL_AMM`. 5, market maker, is dropped: see {IGNORED_GUARD_CATEGORIES}.
+ * The guard's category numbers: see {GUARD_CATEGORIES}. 3 is the market-TRADE adapter. 5, market
+ * maker, is dropped: see {IGNORED_GUARD_CATEGORIES}.
  */
 
 export type GuardProtocol = {address: Address; category: ProtocolCategory};
 
-// Keyed by generation AND network: the two generations' guards hold different adapters.
+// Keyed by network.
 const cache = new Map<string, GuardProtocol[]>();
 const inflight = new Map<string, Promise<GuardProtocol[] | null>>();
 
@@ -49,16 +48,14 @@ const inflight = new Map<string, Promise<GuardProtocol[] | null>>();
  * the caller already had — the last good read, or the vendored table.
  */
 export async function fetchGuardProtocols(network: Network): Promise<GuardProtocol[] | null> {
-  const key = generationKey(network);
-  const {guard, protocolCategories} = generationConfig();
-  const running = inflight.get(key);
+  const running = inflight.get(network);
   if (running) return running;
 
   const task = (async () => {
     try {
       const client = publicClientFor(network);
       const list = (await client.readContract({
-        address: guard,
+        address: VAULT_GUARD,
         abi: GUARD_ABI,
         functionName: 'getProtocols',
       })) as readonly Address[];
@@ -70,7 +67,7 @@ export async function fetchGuardProtocols(network: Network): Promise<GuardProtoc
       const cats = await Promise.all(
         list.map((a) =>
           client
-            .readContract({address: guard, abi: GUARD_ABI, functionName: 'protocolCategory', args: [a]})
+            .readContract({address: VAULT_GUARD, abi: GUARD_ABI, functionName: 'protocolCategory', args: [a]})
             .catch(() => 0),
         ),
       );
@@ -80,23 +77,23 @@ export async function fetchGuardProtocols(network: Network): Promise<GuardProtoc
       const out: GuardProtocol[] = list
         .map((address, i) => ({address, raw: Number(cats[i])}))
         .filter((p) => !IGNORED_GUARD_CATEGORIES.has(p.raw))
-        .map(({address, raw}) => ({address, category: protocolCategories[raw] ?? 'unknown'}))
+        .map(({address, raw}) => ({address, category: GUARD_CATEGORIES[raw] ?? 'unknown'}))
         .reverse();
-      cache.set(key, out);
+      cache.set(network, out);
       return out;
     } catch {
       return null;
     } finally {
-      inflight.delete(key);
+      inflight.delete(network);
     }
   })();
-  inflight.set(key, task);
+  inflight.set(network, task);
   return task;
 }
 
 /** The best catalog we have right now, or null when the guard has never answered. */
 export const currentGuardProtocols = (network: Network): GuardProtocol[] | null =>
-  cache.get(generationKey(network)) ?? null;
+  cache.get(network) ?? null;
 
 /**
  * Keep the catalog warm and re-render when it lands.
@@ -107,8 +104,6 @@ export const currentGuardProtocols = (network: Network): GuardProtocol[] | null 
  */
 export function useGuardProtocols(network: Network): GuardProtocol[] | null {
   const [list, setList] = useState<GuardProtocol[] | null>(() => currentGuardProtocols(network));
-  // A generation switch is a different guard, so it refetches exactly as a network change does.
-  const generation = useVaultGeneration((s) => s.generation);
   useEffect(() => {
     let live = true;
     setList(currentGuardProtocols(network));
@@ -118,6 +113,6 @@ export function useGuardProtocols(network: Network): GuardProtocol[] | null {
     return () => {
       live = false;
     };
-  }, [network, generation]);
+  }, [network]);
   return list;
 }

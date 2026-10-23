@@ -37,7 +37,7 @@ export type Asset = {
   // Remote icon URL from the DB catalog (API). Bundled entries omit it and fall back to the local
   // by-symbol icon in TokenIcon. Present only on assets hydrated from /api/ethereum/assets.
   icon?: string;
-  // The asset's category bit field on the active generation's guard, served by the catalog API.
+  // The asset's category bit field on the guard, served by the catalog API.
   // Absent on bundled rows and when the server could not read the guard. See {isAmmLiquid}.
   guardCategory?: number;
 };
@@ -136,8 +136,8 @@ const ASSET_AMM_LIQUID = 4;
 /**
  * Whether this asset can be market-traded on this network (it has AMM liquidity).
  *
- * The answer is the guard's own category bit, which the catalog API reads off the guard of the
- * active generation and serves on every row (`guardCategory`) — the vault enforces the swap
+ * The answer is the guard's own category bit, which the catalog API reads off the guard and serves
+ * on every row (`guardCategory`) — the vault enforces the swap
  * against the same bit. There is no bundled list to fall back to: one was kept here and on the
  * web and drifted from the guard twice. Before the catalog answers this is false; the Trade
  * screen waits for {ammLiquidKnown} before it treats that as "no".

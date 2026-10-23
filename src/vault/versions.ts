@@ -1,7 +1,7 @@
 import type {Address} from 'viem';
 import {API_BASE, apiFetch, apiUrl, type Network} from '@/core/chain';
 import {type ProtocolCategory} from '@/core/protocols';
-import {generationConfig, generationKey, IGNORED_GUARD_CATEGORIES} from '@/core/vault-generation';
+import {GUARD_CATEGORIES, IGNORED_GUARD_CATEGORIES} from '@/core/vault-contracts';
 
 // Client for the server's vault VERSION catalog (GET /api/ethereum/vaults/versions) — the single
 // source of truth shared with the web. It supplies the allow-list SERVICES (adapters + names/icons
@@ -61,26 +61,23 @@ export type VaultVersionsCatalog = {
 // categories 1-5 are protocol adapters); the upgrade prompt looks its note up under 0.
 export const VAULT_NOTE_CATEGORY = 0;
 
-// Guard uint8 category -> the mobile ProtocolCategory name comes from the generation, whose guard
-// numbers them: 3 is the market-TRADE adapter (which mobile has historically called 'amm'), 5 the
-// market-MAKER (LP) adapter, and 1 / 2 are lending and staking in an order each guard picked.
+// Guard uint8 category -> the mobile ProtocolCategory name: see GUARD_CATEGORIES. 3 is the
+// market-TRADE adapter (which mobile has historically called 'amm'), 5 the market-MAKER (LP) adapter.
 
-// Shared across the app: the catalog changes rarely, so one fetch per network (and generation —
-// `apiUrl` asks for the active one) serves every caller.
+// Shared across the app: the catalog changes rarely, so one fetch per network serves every caller.
 const cache = new Map<string, VaultVersionsCatalog>();
 
 /** The server version catalog for a network (cached). Null on any failure, so callers degrade. */
 export async function fetchVaultVersions(
   network: Network,
 ): Promise<VaultVersionsCatalog | null> {
-  const key = generationKey(network);
-  const hit = cache.get(key);
+  const hit = cache.get(network);
   if (hit) return hit;
   try {
     const res = await apiFetch(apiUrl('/api/ethereum/vaults/versions', network));
     if (!res.ok) return null;
     const c = (await res.json()) as VaultVersionsCatalog;
-    cache.set(key, c);
+    cache.set(network, c);
     return c;
   } catch {
     return null;
@@ -119,7 +116,6 @@ export function currentServices(
   vaultVersion = 0,
 ): ManageService[] {
   if (!catalog) return [];
-  const categories = generationConfig().protocolCategories;
   const v =
     catalog.versions.find((x) => x.id === catalog.currentVersionId) ??
     catalog.versions[0];
@@ -128,7 +124,7 @@ export function currentServices(
     .map((s) => ({
     address: s.address as Address,
     name: s.name ?? s.address,
-    category: categories[s.category] ?? 'unknown',
+    category: GUARD_CATEGORIES[s.category] ?? 'unknown',
     icon: iconUri(s.icon),
   }));
 }

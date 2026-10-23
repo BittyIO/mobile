@@ -1,11 +1,11 @@
 /**
  * Asset / protocol allowlist management + vault upgrade. Restricted vaults can only hold/use assets and
  * protocols on their allowlist; the owner adds/removes them here (relayed, gasless). Ported from web
- * updateAssets / updateProtocols / enable-disableAllowlist and use-upgrade.
+ * updateAssets / updateProtocols / useBittyAllowList and use-upgrade.
  */
 import {getAddress, type Address, type Hex, parseAbi} from 'viem';
 import {publicClientFor, type Network} from '@/core/chain';
-import {generationConfig, isLegacy} from '@/core/vault-generation';
+import {VAULT_GUARD} from '@/core/vault-contracts';
 import {
   VAULT_MANAGE_ABI,
   VAULT_ALLOWLIST_V2_ABI,
@@ -20,17 +20,10 @@ type Acct = Parameters<typeof relayVaultWrite>[0]['account'];
 
 // ---- Reads ----
 
-/** Whether the vault is restricted to its OWN allow list (v1.0.0 asks the inverse question). */
+/** Whether the vault is restricted to its OWN allow list (the vault asks the inverse question). */
 export async function isAllowlistEnabled(vault: Address, network: Network): Promise<boolean> {
   try {
     const client = publicClientFor(network);
-    if (isLegacy()) {
-      return (await client.readContract({
-        address: vault,
-        abi: VAULT_MANAGE_ABI,
-        functionName: 'allowlistEnabled',
-      })) as boolean;
-    }
     return !((await client.readContract({
       address: vault,
       abi: VAULT_ALLOWLIST_V2_ABI,
@@ -98,25 +91,14 @@ export function updateProtocol(o: {account: Acct; vault: Address; network: Netwo
 }
 
 export function setAllowlistEnabled(o: {account: Acct; vault: Address; network: Network; enabled: boolean; stableCoin: Address}): Promise<Hex> {
-  if (!isLegacy()) {
-    // Restricting to the vault's own list is NOT using Bitty's.
-    return relayVaultWrite({
-      account: o.account,
-      vault: o.vault,
-      network: o.network,
-      abi: VAULT_ALLOWLIST_V2_ABI,
-      functionName: 'useBittyAllowList',
-      args: [!o.enabled],
-      stableCoin: o.stableCoin,
-    }).then((r) => r.hash);
-  }
+  // Restricting to the vault's own list is NOT using Bitty's.
   return relayVaultWrite({
     account: o.account,
     vault: o.vault,
     network: o.network,
-    abi: VAULT_MANAGE_ABI,
-    functionName: o.enabled ? 'enableAllowlist' : 'disableAllowlist',
-    args: [],
+    abi: VAULT_ALLOWLIST_V2_ABI,
+    functionName: 'useBittyAllowList',
+    args: [!o.enabled],
     stableCoin: o.stableCoin,
   }).then((r) => r.hash);
 }
@@ -147,10 +129,10 @@ export async function vaultImplVersion(vault: Address, network: Network): Promis
       .then((v) => Number(v))
       .catch(() => 0);
     if (own) return own;
-    // A deployed pre-versioned implementation is legacy; only counterfactual vaults inherit latest.
+    // A deployed pre-versioned implementation reads 0; only counterfactual vaults inherit latest.
     if (code && code !== '0x') return 0;
     const latest = (await client.readContract({
-      address: generationConfig().guard,
+      address: VAULT_GUARD,
       abi: GUARD_IMPL_ABI,
       functionName: 'latestImplementation',
       args: [IMPLEMENTATION_VAULT],
@@ -168,20 +150,17 @@ export async function vaultImplVersion(vault: Address, network: Network): Promis
 const tokenAsGasVaults = new Set<string>();
 
 /**
- * The relay-fee entry points: `*Gasless` on the v1.0.3 generation, renamed `*StableCoinAsGas` on
- * v1.0.0, then `*TokenAsGas` from v1.0.2, when the vault's WETH may pay too. The first split is by
- * generation, not by version number — v1.0.0 reports a LOWER version than v1.0.3. The second is
- * asked of the vault itself, because both shapes live in this generation until each vault upgrades.
+ * The relay-fee entry points: `*StableCoinAsGas`, renamed `*TokenAsGas` from v1.0.2, when the
+ * vault's WETH may pay too. Asked of the vault itself, because both shapes live on until each vault
+ * upgrades.
  */
 export async function stableCoinAsGasFunctionNames(
   vault: Address,
   network: Network,
 ): Promise<
-  | {set: 'setGasless'; disable: 'disableGasless'; config: 'gaslessConfig'}
   | {set: 'setStableCoinAsGas'; disable: 'disableStableCoinAsGas'; config: 'stableCoinAsGasConfig'}
   | {set: 'setTokenAsGas'; disable: 'disableTokenAsGas'; config: 'tokenAsGasConfig'}
 > {
-  if (isLegacy()) return {set: 'setGasless', disable: 'disableGasless', config: 'gaslessConfig'};
   const key = `${network}:${vault.toLowerCase()}`;
   if (!tokenAsGasVaults.has(key)) {
     try {
@@ -218,7 +197,7 @@ export async function checkVaultUpgrade(vault: Address, network: Network): Promi
     const [slot, latest] = await Promise.all([
       client.getStorageAt({address: vault, slot: ERC1967_IMPL_SLOT}),
       client.readContract({
-        address: generationConfig().guard,
+        address: VAULT_GUARD,
         abi: GUARD_IMPL_ABI,
         functionName: 'latestImplementation',
         args: [IMPLEMENTATION_VAULT],

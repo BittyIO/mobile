@@ -98,6 +98,7 @@ const ACTION_CATEGORY: Record<string, ActionCategory> = {
   withdraw: 'stake',
   // Trading. None of these move a token, but every one of them is part of an order's life.
   approveIntentRelayer: 'trade',
+  approveIntentSpender: 'trade',
   cancelIntentOrder: 'trade',
   cancelIntentOrders: 'trade',
   disableTradeUntilTimestamp: 'trade',
@@ -126,8 +127,6 @@ const ACTION_CATEGORY: Record<string, ActionCategory> = {
   // The same two calls under the names the vault uses from v1.0.2, when WETH joined the fee coins.
   setTokenAsGas: 'settings',
   disableTokenAsGas: 'settings',
-  setGasless: 'settings',
-  disableGasless: 'settings',
   updateAssets: 'settings',
   updateProtocols: 'settings',
   upgradeProtocol: 'settings',
@@ -135,9 +134,6 @@ const ACTION_CATEGORY: Record<string, ActionCategory> = {
   setAssetManager: 'settings',
   clearDelegates: 'settings',
   useBittyAllowList: 'settings',
-  enableAllowlist: 'settings',
-  disableAllowlist: 'settings',
-  updatePaymentRisk: 'settings',
   updatePayoutOperator: 'settings',
   emergencyLock: 'settings',
   foreverLock: 'settings',
@@ -235,7 +231,7 @@ function riskLines(raw: string | string[] | undefined, t: T): string[] {
     return RISK_FIELDS.flatMap((f) => {
       if (settings[f] === undefined) return [];
       const v = BigInt(settings[f]!);
-      return v === RISK_UNCHANGED ? [] : [`${t(RISK_TITLE[f])}: ${fmtRiskValue(f, v, null, undefined, t)}`];
+      return v === RISK_UNCHANGED ? [] : [`${t(RISK_TITLE[f])}: ${fmtRiskValue(f, v, t)}`];
     });
   } catch {
     return [];
@@ -298,7 +294,9 @@ export function describeActions(
   // Approving a token for limit trading registers the intent adapter in the same transaction the
   // first time; the approval is the story, so that adapter's "enable service" line is dropped.
   const approvedIntents = new Set(
-    actions.filter((x) => x.name === 'approveIntentRelayer').map((x) => String(x.args.intent).toLowerCase()),
+    actions
+      .filter((x) => x.name === 'approveIntentRelayer' || x.name === 'approveIntentSpender')
+      .map((x) => String(x.args.intent).toLowerCase()),
   );
   // An adapter upgrade is sent with the allow-list swap that goes with it (add the new address, drop
   // the old one) in the same multicall. The upgrade's own lines already say which address went and
@@ -323,7 +321,8 @@ export function describeActions(
         break;
       // A position's receipt token is named as the asset it holds: enabling limit trading on a
       // Flexible Lend WETH is "WETH", not "aWETH".
-      case 'approveIntentRelayer': {
+      case 'approveIntentRelayer':
+      case 'approveIntentSpender': {
         const tk = String(g.token);
         const u = underlyingOf(network, tk);
         out.push(k('approve_intent', {token: u ? displaySymbol(u) : token(tk)}));
@@ -427,7 +426,6 @@ export function describeActions(
       case 'autoYields':
         out.push(k('auto_yield_run'));
         break;
-      case 'setGasless':
       case 'setStableCoinAsGas':
       case 'setTokenAsGas': {
         out.push(k('stable_coin_as_gas_set'));
@@ -435,13 +433,9 @@ export function describeActions(
         if (cfg) out.push(...feeLines(cfg, details?.feePrev, network, t));
         break;
       }
-      case 'disableGasless':
       case 'disableStableCoinAsGas':
       case 'disableTokenAsGas':
         out.push(k('stable_coin_as_gas_disabled'));
-        break;
-      case 'updatePaymentRisk':
-        out.push(k('payment_risk'));
         break;
       case 'updateRisk':
         // The deployed vault names the struct `riskSettings`; an earlier one named it `settings`.
@@ -449,12 +443,6 @@ export function describeActions(
         break;
       case 'updatePayoutOperator':
         out.push(k(String(g.add) === 'true' ? 'operator_added' : 'operator_removed'));
-        break;
-      case 'enableAllowlist':
-        out.push(k('allowlist_enabled'));
-        break;
-      case 'disableAllowlist':
-        out.push(k('allowlist_disabled'));
         break;
       case 'disableTradeUntilTimestamp':
         out.push(k('trade_paused'));

@@ -6,7 +6,6 @@ import type {RootStackParamList} from '@/App';
 import {cancelPendingAssetManager, getAssetManager, revokeAssetManager, type AssetManagerSettings} from '@/vault/delegate';
 import {getRiskConfig} from '@/vault/risk';
 import {shortAddress} from '@/core/format';
-import {useVaultGeneration} from '@/core/vault-generation';
 import {OptionRow, SettingsGroup, SettingsRow} from '@/components/SettingsRow';
 import {Sheet} from '@/components/Sheet';
 import {PendingRow} from '@/components/PendingRow';
@@ -28,7 +27,6 @@ export function AssetManagerScreen() {
   const c = useColors();
   const styles = useStyles(makeStyles);
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const legacy = useVaultGeneration((s) => s.generation) === 'v1.0.3';
   const [am, setAm] = useState<AssetManagerSettings | null>(null);
   const [timelock, setTimelock] = useState(0);
   const [permSheet, setPermSheet] = useState(false);
@@ -104,8 +102,8 @@ export function AssetManagerScreen() {
             timelock={timelock}
             title={t('mobile.vault.pending_new_asset_manager')}
             value={am!.pendingManager}
-            onPress={legacy ? undefined : () => setPermSheet(true)}
-            onCancel={legacy ? undefined : cancelPending}
+            onPress={() => setPermSheet(true)}
+            onCancel={cancelPending}
             cancelling={busy === 'cancel'}
             cancelDisabled={!ready || busy !== null}
             last
@@ -114,7 +112,7 @@ export function AssetManagerScreen() {
       ) : null}
 
       {/* What the manager in force may do. Read-only: Set asset manager is where it changes. */}
-      {legacy || !hasManager ? null : (
+      {!hasManager ? null : (
         <SettingsGroup label={t('mobile.vault.permissions')}>
           {PERM_ROWS.map((p, i) => (
             <OptionRow key={p.bit} title={t(p.key)} checked={(Number(am!.permissions) & p.bit) !== 0} last={i === PERM_ROWS.length - 1} />

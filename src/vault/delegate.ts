@@ -1,6 +1,6 @@
 /**
  * Delegation — the asset manager: a single trading delegate that can route swaps/LP until `expiresAt`
- * (a unix second). Every grant expires: v1.0.0 refuses 0, which only a v1.0.3 vault reads as never. Appointing or extending a grant waits out an on-chain change timelock and
+ * (a unix second). Every grant expires: the vault refuses 0. Appointing or extending a grant waits out an on-chain change timelock and
  * lands in the `pending` slot until it applies; revoking or shortening takes effect at once. Read the
  * live state (current + pending) with getAssetManager; appoint/revoke with setAssetManager.
  *
@@ -11,8 +11,7 @@
  */
 import {zeroAddress, type Address, type Hex} from 'viem';
 import {publicClientFor, type Network} from '@/core/chain';
-import {ASSET_MANAGER_ALL_PERMISSIONS, VAULT_DELEGATE_ABI, VAULT_DELEGATE_V103_ABI} from '@/core/abi';
-import {isLegacy} from '@/core/vault-generation';
+import {ASSET_MANAGER_ALL_PERMISSIONS, VAULT_DELEGATE_ABI} from '@/core/abi';
 import {relayVaultWrite} from './relay';
 
 type Acct = Parameters<typeof relayVaultWrite>[0]['account'];
@@ -21,7 +20,7 @@ const isZero = (a?: string) => !a || /^0x0+$/.test(a);
 
 export type AssetManagerSettings = {
   manager: Address; // active grant (zeroAddress = none)
-  expiresAt: bigint; // unix seconds; 0 = no manager (or a never-expiring v1.0.3 grant)
+  expiresAt: bigint; // unix seconds; 0 = no manager
   pendingManager: Address; // queued grant awaiting the timelock (zeroAddress = none)
   pendingAt: bigint; // unix seconds the pending grant becomes active
   permissions: bigint; // effective grant permission mask, or 0 if inactive
@@ -39,7 +38,6 @@ const NONE: AssetManagerSettings = {
 
 /**
  * Current + pending asset-manager grant. Returns NONE for an un-activated vault or a read failure.
- * A v1.0.3-generation vault returns four fields (no permission masks), so its masks read as 0.
  */
 export async function getAssetManager(
   vault: Address,
@@ -47,14 +45,6 @@ export async function getAssetManager(
 ): Promise<AssetManagerSettings> {
   try {
     const client = publicClientFor(network);
-    if (isLegacy()) {
-      const [manager, expiresAt, pendingManager, pendingAt] = await client.readContract({
-        address: vault,
-        abi: VAULT_DELEGATE_V103_ABI,
-        functionName: 'getAssetManagerSettings',
-      });
-      return {manager, expiresAt: BigInt(expiresAt), pendingManager, pendingAt: BigInt(pendingAt), permissions: 0n, pendingPermissions: 0n};
-    }
     const [manager, expiresAt, pendingManager, pendingAt, permissions, pendingPermissions] = await client.readContract({
       address: vault,
       abi: VAULT_DELEGATE_ABI,
@@ -77,9 +67,9 @@ export async function getAssetManager(
  * Appoint (or extend) the asset manager until `expiresAt`; pass the zero address (or use
  * revokeAssetManager) to clear it. Appointing/extending queues behind the change timelock.
  *
- * On v1.0.0 the grant carries a permission mask (`ASSET_MANAGER_PERMS`), every permission when the
+ * The grant carries a permission mask (`ASSET_MANAGER_PERMS`), every permission when the
  * caller names none, and 0 on a revoke. Removing a permission from the same manager applies at once;
- * adding one waits out the timelock. v1.0.3 has no masks and a two-argument setter.
+ * adding one waits out the timelock.
  */
 export async function setAssetManager(o: {
   account: Acct;
@@ -87,25 +77,13 @@ export async function setAssetManager(o: {
   network: Network;
   manager: Address;
   expiresAt: bigint;
-  /** v1.0.0 permission mask. Ignored on v1.0.3. */
+  /** Permission mask. */
   permissions?: number;
   stableCoin: Address;
 }): Promise<Hex> {
   // Caught here rather than by the vault, so the owner never pays a relay fee for a sure revert.
   if (!isZero(o.manager) && o.expiresAt <= BigInt(Math.floor(Date.now() / 1000))) {
     throw new Error('An asset manager grant needs an expiry in the future');
-  }
-  if (isLegacy()) {
-    const {hash} = await relayVaultWrite({
-      account: o.account,
-      vault: o.vault,
-      network: o.network,
-      abi: VAULT_DELEGATE_V103_ABI,
-      functionName: 'setAssetManager',
-      args: [o.manager, o.expiresAt],
-      stableCoin: o.stableCoin,
-    });
-    return hash;
   }
   const {hash} = await relayVaultWrite({
     account: o.account,
