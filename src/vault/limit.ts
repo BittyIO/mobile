@@ -19,6 +19,7 @@ import {assetMeta} from '@/core/assets';
 import {relayVaultWrite, relayVaultMulticall, type VaultCall} from './relay';
 import {buildSetupCalls} from './trade-setup';
 import {vaultImplVersion} from './manage';
+import {fetchUniswapXOrders, uniswapXAdapter} from './uniswapx';
 
 const FEE_BPS = BigInt(COW_PARTNER_FEE_BPS);
 
@@ -323,11 +324,17 @@ export async function cancelLimitOrder(o: {
  * cancellations, not just the currently-open ones. Poll this to track status.
  */
 export async function fetchRecentOrders(vault: Address, network: Network): Promise<CowOrder[]> {
-  try {
+  const cow = async (): Promise<CowOrder[]> => {
+    if (!cowSupported(network)) return [];
     const res = await apiFetch(`${cowApiBase(network)}/account/${vault}/orders?limit=30`);
-    if (!res.ok) return [];
-    const all = (await res.json()) as CowOrder[];
-    // CoW returns newest first already; keep it defensive.
+    return res.ok ? ((await res.json()) as CowOrder[]) : [];
+  };
+  // Where the intent adapter is UniswapX (Robinhood), its limit orders share this list.
+  const ux = (): Promise<CowOrder[]> => (uniswapXAdapter(network) ? fetchUniswapXOrders(vault, network) : Promise.resolve([]));
+  try {
+    const [a, b] = await Promise.all([cow().catch(() => []), ux().catch(() => [])]);
+    const all = b.length ? [...a, ...b].sort((x, y) => (y.creationDate ?? '').localeCompare(x.creationDate ?? '')) : a;
+    // Cancels are recorded on the vault's adapter clone, never at CoW or Uniswap: asked of it.
     return await markCancelledOrders(vault, network, all).catch(() => all);
   } catch {
     return [];
