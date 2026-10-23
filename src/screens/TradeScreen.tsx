@@ -48,7 +48,7 @@ import {OrderRow, OrderDetailLines, fmtPrice, type OrderPart, type OrderValue} f
 import {describeOrder} from '@/vault/tx-actions';
 import {useConfirmAction, useConfirmLocal} from '@/components/ConfirmAction';
 import {fetchProtocolApy, EMPTY_APY, type ProtocolApy} from '@/vault/apy';
-import {marketSell, buildMarketSell, marketSellFloor, poolSpotPrice, quotePreview} from '@/vault/trade';
+import {marketSell, buildMarketSell, poolSpotPrice, quotePreview} from '@/vault/trade';
 import {placeUniswapXOrder, quoteUniswapX, uniswapXAdapter, waitForUniswapX, withinFeed, type UniswapXQuote} from '@/vault/uniswapx';
 import {PositionPanel} from '@/components/PositionPanel';
 import {AssetPickRow} from '@/components/AssetPickRow';
@@ -992,19 +992,30 @@ export function TradeScreen() {
 
   const payTokenAddr = spendAsset?.address as Address | undefined;
   const buyTokenAddr = (paysBase ? quoteAsset : base)?.address as Address | undefined;
+  /**
+   * The UniswapX order a market sell would go out as, where the intent adapter is UniswapX
+   * (Robinhood) — quoted with the sheet's amount, checked against the adapter and the price feed.
+   * While there is one, Market goes to UniswapX's auction; without one (no quote, too small, the
+   * feed says it is a bad price, a sell funded from a position) it goes to the pool as before.
+   */
+  const uxAdapter = uniswapXAdapter(network);
+  const [uxPreview, setUxPreview] = useState<UniswapXQuote | null>(null);
+  const uxRoute = mode === 'Market' && !!uxAdapter && uxPreview != null;
+  // The adapter whose one-time setup the sheet prices: CoW for Limit/TWAP, UniswapX for its Market.
+  const setupAdapter = uxRoute ? uxAdapter : mode === 'Market' ? null : intent;
   useEffect(() => {
-    if (mode === 'Market' || !intent || !owner || !payTokenAddr || !buyTokenAddr) {
+    if (!setupAdapter || !owner || !payTokenAddr || !buyTokenAddr) {
       setIntentSetup(null);
       return;
     }
     let live = true;
     const vault = activeVaultAddress(network)!;
     (async () => {
-      const approve = await needsRelayerApproval({vault, network, intentProtocol: intent, token: payTokenAddr});
+      const approve = await needsRelayerApproval({vault, network, intentProtocol: setupAdapter, token: payTokenAddr});
       const calls = await intentPrepCalls({
         vault,
         network,
-        intentProtocol: intent,
+        intentProtocol: setupAdapter,
         tokens: [payTokenAddr, buyTokenAddr],
         approveToken: approve ? payTokenAddr : undefined,
       });
@@ -1013,14 +1024,14 @@ export function TradeScreen() {
     return () => {
       live = false;
     };
-  }, [mode, intent, owner, network, payTokenAddr, buyTokenAddr]);
+  }, [setupAdapter, owner, network, payTokenAddr, buyTokenAddr]);
 
   const feeGas = useMemo(
     () =>
-      mode === 'Market'
+      mode === 'Market' && !uxRoute
         ? relayGasFor({swap: 1, withdraw: (planSky > 0 ? 1 : 0) + (planAave > 0 ? 1 : 0)})
         : relayGasFor({setup: true}),
-    [mode, planSky, planAave],
+    [mode, uxRoute, planSky, planAave],
   );
   /**
    * Three answers, not two: a figure, a zero, or nothing.
@@ -1034,8 +1045,10 @@ export function TradeScreen() {
    * While the probe is still in flight `intentSetup` is null and the cost is genuinely UNKNOWN, so
    * there the line stays hidden rather than claiming a zero it cannot back.
    */
-  const feeApplies = mode === 'Market' || intentSetup?.needed === true;
-  const feeFree = mode !== 'Market' && intentSetup?.needed === false;
+  // A UniswapX market order is an intent order too: signed, not sent, once the vault is set up.
+  const poolSwap = mode === 'Market' && !uxRoute;
+  const feeApplies = poolSwap || intentSetup?.needed === true;
+  const feeFree = !poolSwap && intentSetup?.needed === false;
   // Until the balances are in, the figure is unknown — not zero. Showing 0 reads as "you have
   // nothing", so the line shows a dash, Max is withheld, and nothing is flagged as over balance.
   const balKnown = balances.balances != null;
@@ -1541,10 +1554,29 @@ export function TradeScreen() {
     const recvAsset = paysBase ? quoteAsset : base;
     if (mode !== 'Market' || !spendAsset || !recvAsset || !(Number(amount) > 0)) {
       setMktQuote(null);
+      setUxPreview(null);
       return;
     }
     let live = true;
-    const h = setTimeout(() => {
+    const h = setTimeout(async () => {
+      // UniswapX first, where it exists: when it will take the order, its figures are the order's.
+      const vault = activeVaultAddress(network);
+      // From the free balance only: a sell that tops up from a position withdraws and swaps in one
+      // transaction, which only the pool route does.
+      if (uxAdapter && vault && spendSource === 'free' && Number(amount) <= Number(freeSpend)) {
+        const sell = {network, sellToken: spendAsset.address as Address, buyToken: recvAsset.address as Address, sellAmount: amount};
+        const q = await quoteUniswapX({...sell, vault}).catch(() => null);
+        const fair = q ? await withinFeed({...sell, quote: q}).catch(() => false) : false;
+        if (!live) return;
+        if (q && fair) {
+          setUxPreview(q);
+          const est = formatUnits(q.out, recvAsset.decimals);
+          setMktQuote({est, guard: formatUnits(q.minOut, recvAsset.decimals)});
+          setReceiveInput(toField(Number(est)));
+          return;
+        }
+      }
+      if (live) setUxPreview(null);
       quotePreview({
         network,
         mode: 'sell',
@@ -1565,7 +1597,7 @@ export function TradeScreen() {
       clearTimeout(h);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, amount, spendSym, recvSym, network, slippage]);
+  }, [mode, amount, spendSym, recvSym, network, slippage, spendSource, freeSpend]);
 
   /**
    * Which stablecoin the relayer should charge its fee to.
@@ -1722,17 +1754,15 @@ export function TradeScreen() {
        * the vault checks a UniswapX order against no price at all. A sell funded from a position
        * stays on the pool, which withdraws and swaps in one transaction.
        */
-      const ux = mode === 'Market' && withdrawCalls.length === 0 ? uniswapXAdapter(network) : null;
+      // The route the sheet showed. The quote is taken again: the one previewed may be minutes
+      // old, and its auction's deadline counts from when it was quoted.
+      // No fee reserve to keep back: once set up, a UniswapX order sends no transaction.
+      const ux = uxRoute && Number(amount) <= Number(freeSpend) ? uxAdapter : null;
       let uxQuote: UniswapXQuote | null = null;
       if (ux) {
-        const q = await quoteUniswapX({network, vault, sellToken, buyToken, sellAmount: amount}).catch(() => null);
-        if (q) {
-          const [floor, fair] = await Promise.all([
-            marketSellFloor({network, sellToken, buyToken, sellAmount: amount, slippageBps: slippage}),
-            withinFeed({network, sellToken, buyToken, sellAmount: amount, quote: q}),
-          ]);
-          if (fair && (floor == null || q.minOut >= floor)) uxQuote = q;
-        }
+        const sell = {network, sellToken, buyToken, sellAmount: amount};
+        uxQuote = await quoteUniswapX({...sell, vault});
+        if (!uxQuote || !(await withinFeed({...sell, quote: uxQuote}))) throw new Error(t('mobile.trade.uniswapx_no_quote'));
       }
 
       if (ux && uxQuote) {
@@ -2333,6 +2363,7 @@ export function TradeScreen() {
    * chip at all: a mark that cannot say what it is is worse than no mark.
    */
   const venues = useMemo(() => {
+    if (uxRoute) return [{name: 'UniswapX', uri: undefined}];
     const category = mode === 'Market' ? ('amm' as const) : ('intent' as const);
     const canonical = (category === 'amm' ? ammAdapters(network) : intentAdapters(network))[0];
     if (!canonical) return [];
@@ -2343,7 +2374,7 @@ export function TradeScreen() {
     // The catalog's icon travels with the name: a mark for an adapter deployed after this build
     // is not in the bundle, and the server has both.
     return [{name, uri: service?.icon}];
-  }, [network, mode, services]);
+  }, [network, mode, services, uxRoute]);
   const busy = status === 'busy';
   // The sheet slides up and fills the screen below a strip of backdrop at the top: the keyboard then
   // opens over its lower half, where nothing is, so a tapped field is never covered and the sheet
