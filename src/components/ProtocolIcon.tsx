@@ -32,6 +32,8 @@ const LOGOS: Record<string, ImageSourcePropType> = {
   'Uniswap Universal': require('@/assets/protocols/uniswap.png'),
   'Uniswap V3': require('@/assets/protocols/uniswap.png'),
   'Uniswap V4': require('@/assets/protocols/uniswap.png'),
+  // Uniswap's intent venue (Robinhood Chain's limit orders) wears the same mark.
+  UniswapX: require('@/assets/protocols/uniswap.png'),
   'CoW Swap': require('@/assets/protocols/cow.png'),
 };
 
