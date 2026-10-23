@@ -16,10 +16,12 @@ import {useAdapterVersions} from '@/components/useAdapterVersions';
 import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
-import {type ProtocolCategory} from '@/core/protocols';
+import {allAdapters, type ProtocolCategory} from '@/core/protocols';
+import {useGuardProtocols} from '@/core/guard-catalog';
 import {
   fetchVaultVersions,
   currentServices,
+  type ManageService,
   type VaultVersionsCatalog,
 } from '@/vault/versions';
 import {useT} from '@/i18n';
@@ -90,13 +92,25 @@ export function ManageScreen() {
    * on that kept whichever came last, which silently dropped one from the list. Two versions of
    * one adapter within a category still collapse to one row.
    */
-  const protocols = useMemo(
-    () =>
-      Array.from(
-        new Map(currentServices(catalog, implVersion).map((p) => [`${p.category}:${p.name}`, p])).values(),
-      ).sort((a, b) => serviceRank(a.category) - serviceRank(b.category)),
-    [catalog, implVersion],
-  );
+  // The guard's own list, for a category the server catalog does not serve yet: an adapter
+  // registered on chain before the server's config names it would otherwise be missing here.
+  const guardList = useGuardProtocols(network);
+  const protocols = useMemo(() => {
+    const served = currentServices(catalog, implVersion);
+    const servedCategories = new Set(served.map((p) => p.category));
+    const seen = new Set<string>();
+    // allAdapters lists newest first, so the first of a category is its canonical adapter.
+    const fromGuard: ManageService[] = allAdapters(network).filter((p) => {
+      if (p.category === 'unknown' || servedCategories.has(p.category) || seen.has(p.category)) return false;
+      seen.add(p.category);
+      return true;
+    });
+    return Array.from(
+      new Map([...served, ...fromGuard].map((p) => [`${p.category}:${p.name}`, p])).values(),
+    ).sort((a, b) => serviceRank(a.category) - serviceRank(b.category));
+    // guardList re-runs this once the chain has answered; allAdapters reads that snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalog, implVersion, network, guardList]);
 
   const [restricted, setRestricted] = useState(false);
   // With the Bitty allowlist on, the vault accepts every asset and protocol in Bitty's catalog, so the
