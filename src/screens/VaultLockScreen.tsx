@@ -16,7 +16,7 @@ import {LOCK_ICON, LOCK_TITLE} from '@/core/lock-status';
 /**
  * Vault lock (Security › Vault lock) — the vault's lock status on top, then only the moves open from
  * it: Unlock while emergency locked, Emergency lock while unlocked, Lock forever from either. Each
- * pushes its own page ({VaultLockActionScreen}) that says what will happen and confirms it there.
+ * pushes its own page ({VaultLockActionScreen}), which alone says what will happen and confirms it.
  * Once locked for ever nothing is offered — no key, ever, can move it again.
  *
  * The control the risk numbers exist to serve: they buy TIME, and this is what the time is for.
@@ -40,16 +40,15 @@ export function VaultLockScreen() {
   );
 
   const status = lockLevel == null ? undefined : t(LOCK_TITLE[lockLevel]);
-  const statusHint =
-    lockLevel === 2 ? 'mobile.vault.lock_forever_state' : lockLevel === 1 ? 'mobile.vault.lock_emergency_state' : 'mobile.vault.vault_lock_hint';
 
-  const actions: {action: LockAction; title: string; hint: string}[] =
+  // Titles only: what each one does is said on the page it opens.
+  const actions: {action: LockAction; title: string}[] =
     lockLevel == null
       ? []
       : [
-          ...(lockLevel === 1 ? [{action: 'unlock' as const, title: 'mobile.vault.unlock', hint: 'mobile.vault.unlock_hint'}] : []),
-          ...(lockLevel === 0 ? [{action: 'emergency' as const, title: 'mobile.vault.emergency_lock', hint: 'mobile.vault.emergency_lock_hint'}] : []),
-          ...(lockLevel !== 2 ? [{action: 'forever' as const, title: 'mobile.vault.forever_lock', hint: 'mobile.vault.forever_lock_hint'}] : []),
+          ...(lockLevel === 1 ? [{action: 'unlock' as const, title: 'mobile.vault.unlock'}] : []),
+          ...(lockLevel === 0 ? [{action: 'emergency' as const, title: 'mobile.vault.emergency_lock'}] : []),
+          ...(lockLevel !== 2 ? [{action: 'forever' as const, title: 'mobile.vault.forever_lock'}] : []),
         ];
 
   return (
@@ -59,7 +58,7 @@ export function VaultLockScreen() {
       contentInsetAdjustmentBehavior="automatic"
       style={styles.container}
       contentContainerStyle={styles.body}>
-      <SettingsGroup footer={lockLevel == null ? undefined : t(statusHint)}>
+      <SettingsGroup>
         <SettingsRow icon={LOCK_ICON[lockLevel ?? 0]} title={t('vault.status')} value={status} chevron={false} last />
       </SettingsGroup>
       {actions.length > 0 ? (
@@ -70,7 +69,6 @@ export function VaultLockScreen() {
               // Each action wears the icon of the state it leads to.
               icon={LOCK_ICON[a.action === 'unlock' ? 0 : a.action === 'emergency' ? 1 : 2]}
               title={t(a.title)}
-              sub={t(a.hint)}
               onPress={() => nav.navigate('VaultLockAction', {action: a.action})}
               last={i === actions.length - 1}
             />
