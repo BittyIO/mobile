@@ -2202,9 +2202,9 @@ export function TradeScreen() {
   // (no Uniswap market prices them) and the savings share has no pool either, so those pairs offer
   // the intent modes only.
   const marketable = pairAmmLiquid;
-  // Limit and TWAP are CoW INTENT orders; a network with no intent adapter registered (Robinhood has
-  // only the AMM) cannot place them, so those modes are not offered there.
-  const intentable = intentAdapters(network).length > 0;
+  // Limit and TWAP are CoW orders, so they are offered only where a CoW adapter is registered. An
+  // intent adapter of another kind (UniswapX on Robinhood) takes orders this sheet cannot build.
+  const intentable = !!intent;
   // Until the catalog has served guard categories, "not marketable" means "not known yet" — demoting
   // the default Market mode to Limit then would stick after the answer turned out to be yes.
   const ammKnown = ammLiquidKnown(network);

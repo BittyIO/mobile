@@ -39,7 +39,12 @@ const PROTOCOLS: Record<Network, Record<string, ProtocolInfo>> = {
     '0xb5b4313d88b4aa68d03bd6467eb1460ffaf136e5': {name: 'Uniswap Universal', category: 'amm'},
     '0x646248f1ad34a4ef927726bd818c19107231322b': {name: 'CoW Swap', category: 'intent'},
   },
-  robinhood: {},
+  // Read off the Robinhood guard 2026-10-23. Its intent adapter is UniswapX, not CoW, so the Trade
+  // sheet offers no Limit/TWAP there (they are CoW orders).
+  robinhood: {
+    '0xc1608cfc8c272c693f8b0a65cfe16597b9e281ae': {name: 'Uniswap Universal', category: 'amm'},
+    '0x2db440cf6215d68d44736a287b253f4461399aa0': {name: 'UniswapX', category: 'intent'},
+  },
   // Registered on the Arbitrum guard 2026-10-19. Names only; routing reads the guard.
   arbitrum: {
     '0x7e97befd060124ed648d77901398f4051a1cf1ed': {name: 'Sky', category: 'staking'},
@@ -70,6 +75,7 @@ const DISPLAY_NAME: Record<string, string> = {
   Lido: 'Lido V2',
   Sky: 'Sky V1',
   'CoW Swap': 'CoW Swap V1',
+  UniswapX: 'UniswapX V1',
 };
 export const protocolDisplayName = (name: string) => DISPLAY_NAME[name] ?? name;
 
