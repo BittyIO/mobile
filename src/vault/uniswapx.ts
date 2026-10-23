@@ -15,10 +15,8 @@
  * user's own, as it is for a CoW limit order.
  *
  * Prerequisite, as for CoW: the vault has cloned the adapter and approved its spender (Permit2) for
- * the sell token — {prepareIntent}. Uniswap's API looks orders up only by hash, so the orders this
- * device placed are kept here ({fetchUniswapXOrders}).
+ * the sell token — {prepareIntent}.
  */
-import {MMKV} from 'react-native-mmkv';
 import {decodeAbiParameters, encodeAbiParameters, hashStruct, parseAbiParameters, parseUnits, type Address, type Hex} from 'viem';
 import type {Signer} from '@/wallet/signer';
 import {apiFetch, apiUrl, type Network} from '@/core/chain';
@@ -137,7 +135,7 @@ export async function placeUniswapXLimit(o: {
   const amountIn = parseUnits(o.sellAmount, assetMeta(o.network, o.sellToken).decimals);
   const total = parseUnits(o.buyAmount, assetMeta(o.network, o.buyToken).decimals);
   const raw = await quote({...o, amountIn});
-  if (!raw) throw new Error('UniswapX would not quote this sell. It may be too small: try a larger amount.');
+  if (!raw) throw new Error("Uniswap won't quote an order this small on this chain (it needs roughly $300 or more). Try a larger amount.");
 
   const [full] = decodeAbiParameters(ENCODED_ORDER, raw.quote.encodedOrder);
   const {info, baseInput, baseOutputs} = full;
@@ -212,69 +210,19 @@ export async function placeUniswapXLimit(o: {
   });
   const j = (await res.json().catch(() => null)) as {orderHash?: string; error?: string} | null;
   if (!res.ok) throw new Error(`UniswapX rejected: ${j?.error ?? res.status}`);
+  // The server records the order, so it lists on the web and on any device ({fetchUniswapXOrders}).
 
-  remember(o.network, o.vault, {
-    uid: orderId,
-    kind: 'sell',
-    sellToken: o.sellToken,
-    buyToken: o.buyToken,
-    sellAmount: amountIn.toString(),
-    // The order's own buy amount, net of the fee, as a CoW order's is.
-    buyAmount: out.toString(),
-    validTo: Number(deadline),
-    status: 'open',
-    creationDate: new Date().toISOString(),
-  });
   return orderId;
 }
 
-// The orders this device placed, per vault: the Trading API finds an order only by its hash.
-const store = new MMKV({id: 'bitty.uniswapx-orders'});
-const key = (network: Network, vault: Address) => `${network}:${lower(vault)}`;
-const MAX_KEPT = 100;
-
-function stored(network: Network, vault: Address): CowOrder[] {
-  try {
-    return JSON.parse(store.getString(key(network, vault)) ?? '[]') as CowOrder[];
-  } catch {
-    return [];
-  }
-}
-
-function remember(network: Network, vault: Address, order: CowOrder): void {
-  store.set(key(network, vault), JSON.stringify([order, ...stored(network, vault)].slice(0, MAX_KEPT)));
-}
-
-// The Trading API's statuses in CoW's words, so the order rows read them as they read CoW's.
-const STATUS: Record<string, string> = {
-  open: 'open',
-  filled: 'fulfilled',
-  expired: 'expired',
-  cancelled: 'cancelled',
-  error: 'expired',
-  'insufficient-funds': 'open',
-};
-
 /**
- * This vault's UniswapX orders, newest first, with their live status — the same shape as CoW's, so
- * they share its list. A filled order's amounts are its own fixed ones: a limit order fills whole.
+ * This vault's UniswapX orders, newest first, with their live status, in CoW's order shape so they
+ * share its list. The server keeps them — it records each order it submits, since the Trading API
+ * finds an order only by its hash — so an order placed on the web lists here too.
  */
 export async function fetchUniswapXOrders(vault: Address, network: Network): Promise<CowOrder[]> {
-  const mine = stored(network, vault);
-  if (mine.length === 0) return [];
-  const now = Math.floor(Date.now() / 1000);
-  const ask = mine.filter((o) => o.status === 'open').slice(0, 50);
-  const live = new Map<string, string>();
-  if (ask.length) {
-    const res = await apiFetch(apiUrl(`/api/ethereum/uniswapx/order?orderIds=${ask.map((o) => o.uid).join(',')}`, network)).catch(() => null);
-    const j = res?.ok ? ((await res.json().catch(() => null)) as {orders?: {orderId: string; orderStatus: string}[]} | null) : null;
-    for (const s of j?.orders ?? []) live.set(lower(s.orderId), STATUS[s.orderStatus] ?? 'open');
-  }
-  const next = mine.map((o) => {
-    const status = live.get(lower(o.uid)) ?? (o.status === 'open' && o.validTo < now ? 'expired' : o.status);
-    return status === o.status ? o : {...o, status, ...(status === 'fulfilled' ? {executedSellAmount: o.sellAmount, executedBuyAmount: o.buyAmount} : {})};
-  });
-  // Settled answers are kept, so a finished order is never asked about again.
-  store.set(key(network, vault), JSON.stringify(next));
-  return next;
+  const res = await apiFetch(apiUrl(`/api/ethereum/uniswapx/orders?vault=${vault}`, network));
+  if (!res.ok) return [];
+  const j = (await res.json().catch(() => null)) as {orders?: CowOrder[]} | null;
+  return j?.orders ?? [];
 }
