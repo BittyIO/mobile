@@ -10,7 +10,7 @@ import type {Signer} from '@/wallet/signer';
 import {apiFetch, apiUrl, publicClientFor, type Network} from '@/core/chain';
 import {VAULT_PAYMENTS_ABI, VAULT_RISK_ABI, WHITELIST_STATUS} from '@/core/abi';
 import {assetMeta} from '@/core/assets';
-import {relayVaultWrite, type VaultCall} from './relay';
+import {relayVaultMulticall, relayVaultWrite, type VaultCall} from './relay';
 
 /** Send `amount` of `asset` from the vault to `recipient` (from free balance). */
 export async function sendPayment(o: {
@@ -20,12 +20,13 @@ export async function sendPayment(o: {
   recipient: Address;
   asset: Address;
   amount: string; // human — the TOTAL to send (free + any protocol-sourced amounts)
+  decimals?: number;
   stableCoin: Address;
   /** Pull these amounts from these protocol positions to cover the send (e.g. an Aave/Sky position). */
   withdrawProtocols?: Address[];
   withdrawAmounts?: bigint[];
 }): Promise<Hex> {
-  const {decimals} = assetMeta(o.network, o.asset);
+  const decimals = o.decimals ?? assetMeta(o.network, o.asset).decimals;
   const {hash} = await relayVaultWrite({
     account: o.account,
     vault: o.vault,
@@ -45,6 +46,8 @@ export async function sendPayment(o: {
 export type SendRow = {
   asset: Address;
   amount: string;
+  /** The token's decimals, for one the catalog does not know (a token pasted in by address). */
+  decimals?: number;
   withdrawProtocols?: Address[];
   withdrawAmounts?: bigint[];
 };
@@ -55,7 +58,7 @@ export type SendRow = {
  */
 function batchSendCall(network: Network, recipient: Address, rows: SendRow[], andAdd = false): VaultCall {
   const assets = rows.map((r) => r.asset);
-  const amounts = rows.map((r) => parseUnits(r.amount, assetMeta(network, r.asset).decimals));
+  const amounts = rows.map((r) => parseUnits(r.amount, r.decimals ?? assetMeta(network, r.asset).decimals));
   const withdrawProtocols = rows.map((r) => r.withdrawProtocols ?? []);
   const withdrawAmounts = rows.map((r) => r.withdrawAmounts ?? []);
   return {
@@ -111,7 +114,7 @@ export async function sendWithWhitelist(o: {
       ? {
           abi: VAULT_PAYMENTS_ABI,
           functionName: 'sendAndAddWhitelistedRecipient',
-          args: [o.recipient, row.asset, parseUnits(row.amount, assetMeta(o.network, row.asset).decimals), row.withdrawProtocols ?? [], row.withdrawAmounts ?? []],
+          args: [o.recipient, row.asset, parseUnits(row.amount, row.decimals ?? assetMeta(o.network, row.asset).decimals), row.withdrawProtocols ?? [], row.withdrawAmounts ?? []],
         }
       : batchSendCall(o.network, o.recipient, o.rows, true);
   const {hash} = await relayVaultWrite({account: o.account, vault: o.vault, network: o.network, ...call, stableCoin: o.stableCoin});
@@ -179,26 +182,33 @@ export async function removeWhitelisted(o: {
   return hash;
 }
 
-/** Pay a whitelisted recipient by id (from free balance). */
+/**
+ * Pay a whitelisted recipient by id: one `sendToWhitelistedRecipient` per row, several as one
+ * multicall. The way out for anything a plain send refuses — a token that is not an allowed
+ * stablecoin, or one the catalog does not list at all — since the vault pays a whitelisted
+ * recipient any token it holds, unmetered by the daily send allowance.
+ */
 export async function sendToWhitelisted(o: {
   account: Signer;
   vault: Address;
   network: Network;
   id: string;
-  asset: Address;
-  amount: string;
+  rows: SendRow[];
   stableCoin: Address;
 }): Promise<Hex> {
-  const {decimals} = assetMeta(o.network, o.asset);
-  const {hash} = await relayVaultWrite({
-    account: o.account,
-    vault: o.vault,
-    network: o.network,
+  const calls: VaultCall[] = o.rows.map((r) => ({
     abi: VAULT_PAYMENTS_ABI,
     functionName: 'sendToWhitelistedRecipient',
-    args: [BigInt(o.id), o.asset, parseUnits(o.amount, decimals), [], []],
-    stableCoin: o.stableCoin,
-  });
+    args: [
+      BigInt(o.id),
+      r.asset,
+      parseUnits(r.amount, r.decimals ?? assetMeta(o.network, r.asset).decimals),
+      r.withdrawProtocols ?? [],
+      r.withdrawAmounts ?? [],
+    ],
+  }));
+  const base = {account: o.account, vault: o.vault, network: o.network, stableCoin: o.stableCoin};
+  const {hash} = calls.length === 1 ? await relayVaultWrite({...base, ...calls[0]}) : await relayVaultMulticall({...base, calls});
   return hash;
 }
 

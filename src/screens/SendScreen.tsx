@@ -21,7 +21,9 @@ import {useVaultBalances} from '@/vault/useVaultBalances';
 import {useVaultPositions} from '@/vault/useVaultPositions';
 import {balanceOfSymbol} from '@/vault/read';
 import {useActiveVaultAddress} from '@/core/active-vault';
-import {sendWithWhitelist} from '@/vault/payments';
+import {fetchWhitelist, sendToWhitelisted, sendWithWhitelist, type WhitelistedRecipient} from '@/vault/payments';
+import {useCustomTokens} from '@/vault/custom-tokens';
+import {WHITELIST_STATUS} from '@/core/abi';
 import type {Position} from '@/vault/positions';
 
 import {useT} from '@/i18n';
@@ -64,14 +66,14 @@ type Row = {asset: Address; amount: string; withdrawProtocols: Address[]; withdr
  * A coin's free and reserve lines are one balance on chain, so they go out as one transfer: two
  * rows of the same asset with nothing to withdraw are summed into the first.
  */
-const mergeFree = (rows: Row[]): Omit<Row, 'decimals'>[] => {
+const mergeFree = (rows: Row[]): Row[] => {
   const out: Row[] = [];
   for (const r of rows) {
     const same = r.withdrawProtocols.length === 0 && out.find((o) => o.asset === r.asset && o.withdrawProtocols.length === 0);
     if (same) same.amount = formatUnits(parseUnits(same.amount, r.decimals) + parseUnits(r.amount, r.decimals), r.decimals);
     else out.push({...r});
   }
-  return out.map(({decimals: _d, ...r}) => r);
+  return out;
 };
 const parse = (v: string, d: number): bigint => {
   try {
@@ -131,6 +133,17 @@ export function SendScreen() {
   const bal = useVaultBalances(network);
   const weth = useWethFeeCoin(network, vault);
   const pos = useVaultPositions(vault, network);
+  // Tokens pasted in by contract address. A line on one carries the ADDRESS as its `sym` — a pasted
+  // token may call itself anything, "USDC" included, so its name never keys or matches anything.
+  const custom = useCustomTokens(network, vault);
+  const customOf = (sym: string) => custom.tokens.find((x) => x.address.toLowerCase() === sym.toLowerCase());
+  /** What a line's token is called on screen. */
+  const nameOf = (sym: string) => customOf(sym)?.symbol ?? displaySymbol(sym);
+  // The address book, for the id a whitelisted payment is made by.
+  const [book, setBook] = useState<WhitelistedRecipient[]>([]);
+  useEffect(() => {
+    if (vault) fetchWhitelist(vault, network).then(setBook);
+  }, [vault, network]);
 
   const [recipient, setRecipient] = useState<Recipient>({to: '', lines: [newLine(first)]});
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -151,12 +164,23 @@ export function SendScreen() {
   const [status, setStatus] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
   const [err, setErr] = useState<string | null>(null);
 
-  const meta = (sym: string) => assets.find((a) => a.symbol === sym);
+  const meta = (sym: string): {symbol: string; address: Address; decimals: number; kind: string} | undefined => {
+    const x = customOf(sym);
+    return x ? {symbol: sym, address: x.address, decimals: x.decimals, kind: 'custom'} : assets.find((a) => a.symbol === sym);
+  };
+  /**
+   * Whether a plain send can carry this token: only an allowed stablecoin can, metered by the daily
+   * send allowance. Anything else — ETH, BTC, a stock, a pasted token — the vault pays only to a
+   * whitelisted recipient whose timelock has run out.
+   */
+  const plain = (sym: string) => meta(sym)?.kind === 'stable';
   const stakePos = (sym: string): Position | undefined => pos.positions.find((p) => p.kind === 'staked' && p.symbol === sym);
   const lendPos = (sym: string): Position | undefined => pos.positions.find((p) => p.kind === 'supplied' && p.symbol === sym);
 
   // One source of one asset: what it holds and, for a position, the adapter to withdraw from.
   const sourceOf = (sym: string, source: Source): {balance: string; protocol: Address | null} => {
+    const x = customOf(sym);
+    if (x) return {balance: source === 'free' ? x.balance : '0', protocol: null};
     if (source === 'yield') {
       const p = stakePos(sym);
       return {balance: p?.formatted ?? '0', protocol: p?.protocol ?? null};
@@ -198,14 +222,22 @@ export function SendScreen() {
           : t('mobile.payments.from_vault');
 
   // Every asset/source the vault can actually pay from — the picker's rows.
-  const sourceOptions = useMemo(
+  type SourceOption = {asset: {symbol: string; address: Address; decimals: number; kind: string}; source: Source; balance: string; protocol: Address | null};
+  const sourceOptions = useMemo<SourceOption[]>(
     () =>
-      assets.flatMap((a) =>
+      assets.flatMap((a): SourceOption[] =>
         (['free', 'reserve', 'yield', 'lend'] as Source[])
           .map((source) => ({asset: a, source, ...sourceOf(a.symbol, source)}))
           .filter((o) => o.source === 'free' || Number(o.balance) > 0),
+      ).concat(
+        custom.tokens.map((x) => ({
+          asset: {symbol: x.address, address: x.address, decimals: x.decimals, kind: 'custom'},
+          source: 'free',
+          balance: x.balance,
+          protocol: null,
+        })),
       ),
-    [assets, bal.balances, pos.positions],
+    [assets, bal.balances, pos.positions, custom.tokens],
   );
 
   // What the recipient starts with: EVERY funded source of one token — a stablecoin the vault holds,
@@ -338,7 +370,18 @@ export function SendScreen() {
     return left > 0n ? left : 0n;
   };
   const anyOver = recipient.lines.some((l) => exceedsMax(l.amount, maxFor(l)));
-  const canSubmit = unlocked && !!stable && status !== 'busy' && rows.length > 0 && !anyOver;
+  // The funded lines a plain send would refuse, by name. Any one of them sends the whole card as a
+  // whitelisted payment — stablecoins too, which a whitelisted recipient can be paid in as well.
+  const bookOnly = Array.from(new Set(recipient.lines.filter((l) => Number(l.amount) > 0 && !plain(l.sym)).map((l) => nameOf(l.sym))));
+  const entry = recipient.to
+    ? book.find(
+        (b) =>
+          b.recipientAddress.toLowerCase() === recipient.to.toLowerCase() &&
+          (b.status === undefined || b.status === WHITELIST_STATUS.payable || b.status === WHITELIST_STATUS.removalQueued),
+      )
+    : undefined;
+  const bookBlocked = bookOnly.length > 0 && !!recipient.to && !entry;
+  const canSubmit = unlocked && !!stable && status !== 'busy' && rows.length > 0 && !anyOver && !bookBlocked;
 
   const onSubmit = async () => {
     if (!vault || !stable) return;
@@ -348,25 +391,29 @@ export function SendScreen() {
       rows.length === 1
         ? // `fmtShort`, as the lists use: `fmtNum` keeps up to seven decimals under 1, which is right
           // for a balance and too long for a line reporting what was just sent.
-          `${t('vault.send')} ${fmtShort(Number(rows[0].amount))} ${displaySymbol(assets.find((a) => a.address === rows[0].asset)?.symbol ?? '')}`
+          `${t('vault.send')} ${fmtShort(Number(rows[0].amount))} ${nameOf(assets.find((a) => a.address === rows[0].asset)?.symbol ?? rows[0].asset)}`
         : t('mobile.payments.send_n_payments', {count: rows.length}),
       network,
     );
     try {
       const acct = await getSigner();
-      const h = await sendWithWhitelist({
-        account: acct,
-        vault,
-        network,
-        recipient: recipient.to as Address,
-        rows,
-        addToWhitelist: !!recipient.needsWhitelist,
-        stableCoin: stable.address,
-      });
+      const h =
+        bookOnly.length > 0 && entry
+          ? await sendToWhitelisted({account: acct, vault, network, id: entry.id, rows, stableCoin: stable.address})
+          : await sendWithWhitelist({
+              account: acct,
+              vault,
+              network,
+              recipient: recipient.to as Address,
+              rows,
+              addToWhitelist: !!recipient.needsWhitelist,
+              stableCoin: stable.address,
+            });
       tx.success(h);
       setStatus('done');
       setRecipient({to: '', lines: defaultLines});
       setLinesTouched(false);
+      custom.reload();
     } catch (e) {
       const msg = String((e as Error)?.message ?? e);
       tx.error(msg);
@@ -421,7 +468,7 @@ export function SendScreen() {
             {recipient.lines.map((l, k) => {
               const max = maxFor(l);
               const over = exceedsMax(l.amount, max);
-              const sym = displaySymbol(l.sym);
+              const sym = nameOf(l.sym);
               const hasAmount = Number(l.amount) > 0;
               return (
                 <View key={k} style={[styles.line, k < recipient.lines.length - 1 && styles.lineDivider]}>
@@ -437,7 +484,7 @@ export function SendScreen() {
                       something. */}
                   <View style={styles.field}>
                     <Pressable style={styles.assetPill} onPress={() => setPicker({k})}>
-                      <TokenIcon symbol={l.sym} size={20} />
+                      <TokenIcon symbol={nameOf(l.sym)} size={20} badgeOnly={!!customOf(l.sym)} />
                       <Text style={styles.assetSym}>{sym}</Text>
                       {l.source !== 'free' ? <Text style={styles.assetSource}>{sourceLabel(l.source)}</Text> : null}
                     </Pressable>
@@ -480,6 +527,11 @@ export function SendScreen() {
               </SettingsGroup>
             ) : null}
 
+        {bookOnly.length > 0 ? (
+          <Text style={bookBlocked ? styles.err : styles.hint}>
+            {t('mobile.payments.whitelisted_only', {tokens: bookOnly.join(', ')})}
+          </Text>
+        ) : null}
         {status === 'error' && err ? <Text style={styles.err}>{err}</Text> : null}
       </ScrollView>
 
@@ -497,15 +549,18 @@ export function SendScreen() {
           {picker == null
             ? null
             : pickableFor(picker.k).map((o) => {
-                const sym = displaySymbol(o.asset.symbol);
+                const sym = nameOf(o.asset.symbol);
+                const pasted = customOf(o.asset.symbol);
                 const key = `${o.asset.symbol}:${o.source}`;
                 const line = picker.k == null ? null : recipient.lines[picker.k];
                 const on = line != null && lineKey(line) === key;
                 return (
                   <Pressable key={key} style={styles.pickRow} onPress={() => choose(picker.k, o.asset.symbol, o.source)}>
-                    <TokenIcon symbol={o.asset.symbol} size={30} />
+                    <TokenIcon symbol={sym} size={30} badgeOnly={!!pasted} />
                     <View style={styles.pickCol}>
                       <Text style={styles.pickLabel}>{o.source === 'free' ? sym : `${sym} ${sourceLabel(o.source)}`}</Text>
+                      {/* A pasted token is known by its address, not its name: shown in full. */}
+                      {pasted ? <Text style={styles.pickAddr}>{pasted.address}</Text> : null}
                     </View>
                     <Text style={styles.pickSub}>
                       {fmtNum(Number(formatUnits(remaining(o.asset.symbol, o.source), o.asset.decimals)))}
@@ -518,6 +573,12 @@ export function SendScreen() {
                   </Pressable>
                 );
               })}
+          <AddByAddress
+            onAdd={async (address) => {
+              const x = await custom.add(address);
+              if (picker) choose(picker.k, x.address, 'free');
+            }}
+          />
         </ScrollView>
       </Sheet>
 
@@ -573,9 +634,67 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   pickRow: {flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border},
   pickCol: {flex: 1},
   pickLabel: {color: c.text, fontSize: 15, fontWeight: '600'},
+  pickAddr: {color: c.subtext, fontSize: 11, fontVariant: ['tabular-nums'], marginTop: 2},
+  addAddrRow: {gap: 8, paddingVertical: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border},
+  addAddrTitle: {color: c.text, fontSize: 15, fontWeight: '600'},
+  addAddrBar: {flexDirection: 'row', alignItems: 'center', gap: 8},
+  addAddrInput: {flex: 1, minWidth: 0, backgroundColor: c.input, color: c.text, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, fontVariant: ['tabular-nums']},
+  addAddrBtn: {backgroundColor: c.accent, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10},
+  addAddrBtnOff: {opacity: 0.5},
+  addAddrBtnText: {color: c.onAccent, fontSize: 14, fontWeight: '700'},
   pickSub: {color: c.subtext, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums']},
   addRow: {minHeight: 52, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16},
   addToken: {color: c.accent, fontSize: 15, fontWeight: '600'},
   ok: {color: c.success, fontSize: 12, fontFamily: 'Menlo'},
   err: {color: c.danger, fontSize: 13},
 });
+
+/**
+ * The picker's last row: a token by contract address, for one the catalog does not list. What it
+ * shows is read from the token on chain; a pasted token goes out only to a whitelisted recipient.
+ */
+function AddByAddress({onAdd}: {onAdd: (address: string) => Promise<void>}) {
+  const {t} = useT();
+  const c = useColors();
+  const styles = useStyles(makeStyles);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const ok = /^0x[0-9a-fA-F]{40}$/.test(text.trim());
+  const add = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await onAdd(text);
+      setText('');
+    } catch {
+      setErr(t('mobile.payments.token_not_found'));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <View style={styles.addAddrRow}>
+      <Text style={styles.addAddrTitle}>{t('mobile.payments.token_by_address')}</Text>
+      <View style={styles.addAddrBar}>
+        <TextInput
+          style={styles.addAddrInput}
+          value={text}
+          onChangeText={(v) => {
+            setText(v);
+            setErr(null);
+          }}
+          placeholder="0x…"
+          placeholderTextColor={c.subtext}
+          autoCapitalize="none"
+          autoCorrect={false}
+          spellCheck={false}
+        />
+        <Pressable style={[styles.addAddrBtn, (!ok || busy) && styles.addAddrBtnOff]} disabled={!ok || busy} onPress={add}>
+          <Text style={styles.addAddrBtnText}>{busy ? '…' : t('mobile.payments.token_add')}</Text>
+        </Pressable>
+      </View>
+      {err ? <Text style={styles.err}>{err}</Text> : null}
+    </View>
+  );
+}
