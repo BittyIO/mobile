@@ -2,7 +2,7 @@ import type {MobileTable} from './index';
 
 export const settings: MobileTable = {
   en: {
-    whitelisted_addresses: 'Whitelisted addresses',
+    whitelisted_addresses: 'Whitelisted',
     add_whitelisted: 'Add whitelisted address',
     vault_upgrading: 'Upgrading…',
     vault_checking: 'Checking for a new version…',
@@ -56,8 +56,8 @@ export const settings: MobileTable = {
     gas: 'Network fee',
   },
   zh: {
-    whitelisted_addresses: '白名单地址',
-    add_whitelisted: '添加白名单地址',
+    whitelisted_addresses: '地址簿',
+    add_whitelisted: '添加到地址簿',
     vault_upgrading: '正在升级…',
     vault_checking: '正在检查新版本…',
     gas_max_per_op: '单笔上限',
@@ -66,7 +66,7 @@ export const settings: MobileTable = {
     rpc: 'RPC',
     rpc_default: '默认',
     rpc_custom: '自定义',
-    rpc_hint: '用你自己的节点读取此网络的链上数据——白名单、待生效变更和余额。保持默认则使用公共 RPC。自定义 RPC 会单独使用，不会回退。',
+    rpc_hint: '用你自己的节点读取此网络的链上数据——地址簿、待生效变更和余额。保持默认则使用公共 RPC。自定义 RPC 会单独使用，不会回退。',
     rpc_reset: '使用默认',
     rpc_invalid: '请输入 https:// 开头的地址。',
     rpc_wrong_chain: '该 RPC 不是 {{network}} 网络。',
@@ -110,8 +110,8 @@ export const settings: MobileTable = {
     gas: '网络费',
   },
   'zh-TW': {
-    whitelisted_addresses: '白名單地址',
-    add_whitelisted: '新增白名單地址',
+    whitelisted_addresses: '地址簿',
+    add_whitelisted: '新增到地址簿',
     vault_upgrading: '正在升級…',
     vault_checking: '正在檢查新版本…',
     choose_vault: '選擇金庫',
@@ -154,7 +154,7 @@ export const settings: MobileTable = {
     gas: '網路費',
   },
   ja: {
-    whitelisted_addresses: 'ホワイトリストのアドレス',
+    whitelisted_addresses: 'ホワイトリスト',
     add_whitelisted: 'ホワイトリストにアドレスを追加',
     vault_upgrading: 'アップグレード中…',
     vault_checking: '新しいバージョンを確認中…',
@@ -198,7 +198,7 @@ export const settings: MobileTable = {
     gas: 'ネットワーク手数料',
   },
   ko: {
-    whitelisted_addresses: '화이트리스트 주소',
+    whitelisted_addresses: '화이트리스트',
     add_whitelisted: '화이트리스트 주소 추가',
     vault_upgrading: '업그레이드 중…',
     vault_checking: '새 버전 확인 중…',
@@ -242,7 +242,7 @@ export const settings: MobileTable = {
     gas: '네트워크 수수료',
   },
   fr: {
-    whitelisted_addresses: 'Adresses sur liste blanche',
+    whitelisted_addresses: 'Liste blanche',
     add_whitelisted: 'Ajouter une adresse à la liste blanche',
     vault_upgrading: 'Mise à niveau…',
     vault_checking: 'Recherche d’une nouvelle version…',
@@ -286,7 +286,7 @@ export const settings: MobileTable = {
     gas: 'Frais de réseau',
   },
   es: {
-    whitelisted_addresses: 'Direcciones en lista blanca',
+    whitelisted_addresses: 'Lista blanca',
     add_whitelisted: 'Añadir dirección a la lista blanca',
     vault_upgrading: 'Actualizando…',
     vault_checking: 'Buscando una nueva versión…',
@@ -330,7 +330,7 @@ export const settings: MobileTable = {
     gas: 'Comisión de red',
   },
   de: {
-    whitelisted_addresses: 'Freigegebene Adressen',
+    whitelisted_addresses: 'Whitelist',
     add_whitelisted: 'Freigegebene Adresse hinzufügen',
     vault_upgrading: 'Wird aktualisiert…',
     vault_checking: 'Suche nach neuer Version…',
@@ -374,7 +374,7 @@ export const settings: MobileTable = {
     gas: 'Netzwerkgebühr',
   },
   'pt-BR': {
-    whitelisted_addresses: 'Endereços na lista branca',
+    whitelisted_addresses: 'Lista branca',
     add_whitelisted: 'Adicionar endereço à lista branca',
     vault_upgrading: 'Atualizando…',
     vault_checking: 'Procurando nova versão…',
@@ -418,7 +418,7 @@ export const settings: MobileTable = {
     gas: 'Taxa de rede',
   },
   hi: {
-    whitelisted_addresses: 'व्हाइटलिस्ट पते',
+    whitelisted_addresses: 'व्हाइटलिस्ट',
     add_whitelisted: 'व्हाइटलिस्ट पता जोड़ें',
     vault_upgrading: 'अपग्रेड हो रहा है…',
     vault_checking: 'नया संस्करण जाँचा जा रहा है…',
@@ -462,7 +462,7 @@ export const settings: MobileTable = {
     gas: 'नेटवर्क फीस',
   },
   tr: {
-    whitelisted_addresses: 'Beyaz listedeki adresler',
+    whitelisted_addresses: 'Beyaz liste',
     add_whitelisted: 'Beyaz listeye adres ekle',
     vault_upgrading: 'Yükseltiliyor…',
     vault_checking: 'Yeni sürüm kontrol ediliyor…',
@@ -506,7 +506,7 @@ export const settings: MobileTable = {
     gas: 'Ağ ücreti',
   },
   ru: {
-    whitelisted_addresses: 'Адреса в белом списке',
+    whitelisted_addresses: 'Белый список',
     add_whitelisted: 'Добавить адрес в белый список',
     vault_upgrading: 'Обновление…',
     vault_checking: 'Проверка новой версии…',
@@ -550,7 +550,7 @@ export const settings: MobileTable = {
     gas: 'Комиссия сети',
   },
   id: {
-    whitelisted_addresses: 'Alamat whitelist',
+    whitelisted_addresses: 'Whitelist',
     add_whitelisted: 'Tambah alamat whitelist',
     vault_upgrading: 'Meningkatkan…',
     vault_checking: 'Memeriksa versi baru…',
@@ -594,7 +594,7 @@ export const settings: MobileTable = {
     gas: 'Biaya jaringan',
   },
   vi: {
-    whitelisted_addresses: 'Địa chỉ trong danh sách trắng',
+    whitelisted_addresses: 'Danh sách trắng',
     add_whitelisted: 'Thêm địa chỉ vào danh sách trắng',
     vault_upgrading: 'Đang nâng cấp…',
     vault_checking: 'Đang kiểm tra phiên bản mới…',
@@ -638,7 +638,7 @@ export const settings: MobileTable = {
     gas: 'Phí mạng',
   },
   th: {
-    whitelisted_addresses: 'ที่อยู่ในไวท์ลิสต์',
+    whitelisted_addresses: 'ไวท์ลิสต์',
     add_whitelisted: 'เพิ่มที่อยู่ในไวท์ลิสต์',
     vault_upgrading: 'กำลังอัปเกรด…',
     vault_checking: 'กำลังตรวจหาเวอร์ชันใหม่…',

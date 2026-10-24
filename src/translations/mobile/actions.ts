@@ -95,7 +95,7 @@ export const actions: MobileTable = {
     relay_no_liquid: '金库中没有稳定币可以支付网络手续费。请先从理财或借贷头寸中取出一些。',
     relay_budget: '金库的每日网络手续费额度已用完，将在首次扣费后 24 小时重置。',
     relay_stable_coin_as_gas_off: '该金库已关闭代付。请在“网络手续费”页面重新启用一种手续费代币。',
-    relay_refused: '金库拒绝了本次操作，因此未发送任何交易。请检查资产是否在允许列表中，以及交易是否被暂停。',
+    relay_refused: '金库拒绝了本次操作，因此未发送任何交易。请检查资产是否在白名单中，以及交易是否被暂停。',
     relay_failed: '代付服务拒绝了本次操作（{{reason}}），因此未发送任何交易。',
     app_update_required: '此金库运行的是 {{version}} 版本，需要更新的应用版本。请从 App Store 更新 Bitty Vault 后重试。未发送任何交易。',
     withdraw_from: '从 {{name}} 取出',
