@@ -582,6 +582,9 @@ export function TradeScreen() {
   if (sheetSide) lastSide.current = sheetSide;
   const shownSide = sheetSide ?? lastSide.current;
   const [mode, setMode] = useState<Mode>('Market');
+  // Market trade slippage in 24 hours at $0: the owner turned market trading off (see `marketOk`).
+  const tradeVault = useActiveVaultAddress(network);
+  const marketOff = useAllowancesOff(tradeVault, network).marketTrades;
   /**
    * Which balance of the PAY asset funds the order: the vault's free balance, its Sky savings, or its
    * Aave supply. Chosen in the order sheet, and it never hides Market — a market swap withdraws from
@@ -1488,6 +1491,7 @@ export function TradeScreen() {
 
   const openSheet = (side: Side) => {
     setSheetSide(side);
+    if (marketOff && intentable && mode === 'Market') setMode('Limit');
     setSpendSource('free');
     setStatus('idle');
     setErr(null);
@@ -1600,7 +1604,7 @@ export function TradeScreen() {
   const canConfirm =
     !!sheetSide && unlocked && !!owner && !!base && !!quoteAsset &&
     Number(amount) > 0 &&
-    (mode === 'Market' || Number(price) > 0) &&
+    (mode === 'Market' ? !marketOff : Number(price) > 0) &&
     (mode !== 'TWAP' || Number(parts) >= 2) &&
     !overBalance;
 
@@ -2214,10 +2218,9 @@ export function TradeScreen() {
   // (no Uniswap market prices them) and the savings share has no pool either, so those pairs offer
   // the intent modes only.
   const marketable = pairAmmLiquid;
-  // The owner can turn market trading off by setting the market-trade daily loss allowance to $0.
-  // Market stays on the tabs, greyed, and says why when tapped; the sheet opens on Limit instead.
-  const tradeVault = useActiveVaultAddress(network);
-  const marketOff = useAllowancesOff(tradeVault, network).marketTrades;
+  // The owner can turn market trading off by setting market trade slippage in 24 hours to $0. Market
+  // stays on the tabs, greyed: the sheet opens on Limit, and picking Market shows why it cannot be
+  // placed — only there, never under Limit or TWAP.
   const marketOk = marketable && !marketOff;
   // Limit goes to the intent adapter, CoW or UniswapX; TWAP is a CoW order, offered only with CoW.
   const intentable = !!intent;
@@ -2231,12 +2234,17 @@ export function TradeScreen() {
   useEffect(() => {
     if (!ammKnown) return;
     const avail: Mode[] = [
-      ...(marketOk ? (['Market'] as Mode[]) : []),
+      ...(marketable ? (['Market'] as Mode[]) : []),
       ...(intentable ? (['Limit'] as Mode[]) : []),
       ...(twapable ? (['TWAP'] as Mode[]) : []),
     ];
     if (avail.length && !avail.includes(mode)) setMode(avail[0]);
-  }, [marketOk, intentable, twapable, mode, ammKnown]);
+  }, [marketable, intentable, twapable, mode, ammKnown]);
+  // Off when the read lands (the sheet may already be open on Market): over to Limit.
+  useEffect(() => {
+    if (marketOff && intentable && mode === 'Market') setMode('Limit');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marketOff, intentable]);
   // Market spends the vault balance and tops up from the positions by itself, so a named source has
   // no meaning there.
   useEffect(() => {
@@ -3410,7 +3418,7 @@ export function TradeScreen() {
                 <Pressable
                   key={m.key}
                   style={[styles.segBtn, m.key === 'Market' && marketOff && styles.dim]}
-                  onPress={() => (m.key === 'Market' && marketOff ? explainMarketOff() : pickMode(m.key))}>
+                  onPress={() => pickMode(m.key)}>
                   <Text style={[styles.segText, mode === m.key && styles.segTextOn]}>{m.label}</Text>
                 </Pressable>
               ))}
@@ -3424,7 +3432,7 @@ export function TradeScreen() {
                 </View>
               ) : null}
             </View>
-            {marketable && marketOff ? (
+            {mode === 'Market' && marketOff ? (
               <Pressable onPress={explainMarketOff} hitSlop={6}>
                 <Text style={styles.marketOff}>{t('mobile.trade.market_off_line')}</Text>
               </Pressable>

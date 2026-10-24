@@ -109,7 +109,6 @@ export function RiskValueScreen() {
         footer={[
           fmtPending(field, risk, t),
           t(riskHintKey(field)),
-          zeroHint ? t(zeroHint) : null,
         ]
           .filter(Boolean)
           .join('\n\n')}>
@@ -117,6 +116,8 @@ export function RiskValueScreen() {
           <OptionRow
             key={String(v)}
             title={fmt(v)}
+            // What off means, on the row that turns it off.
+            sub={v === 0n && zeroHint ? t(zeroHint) : undefined}
             checked={!customOpen && current === v}
             disabled={!canPick}
             onPress={() => {
