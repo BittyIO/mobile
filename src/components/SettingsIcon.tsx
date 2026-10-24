@@ -70,11 +70,12 @@ const TINT: Record<SettingsIconName, string> = {
   privacy: '#5856D6',
 };
 
-export function SettingsIcon({name, size = 29}: {name: SettingsIconName; size?: number}) {
+/** `round` draws it in a circle rather than the rounded square of a Settings row (the header's lock). */
+export function SettingsIcon({name, size = 29, round = false}: {name: SettingsIconName; size?: number; round?: boolean}) {
   const c = {stroke: '#fff', strokeWidth: 2, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const};
   const g = size * 0.62;
   return (
-    <View style={[styles.box, {width: size, height: size, borderRadius: size * 0.24, backgroundColor: TINT[name]}]}>
+    <View style={[styles.box, {width: size, height: size, borderRadius: round ? size / 2 : size * 0.24, backgroundColor: TINT[name]}]}>
       <Svg width={g} height={g} viewBox="0 0 24 24">
         {name === 'language' ? (
           <>
