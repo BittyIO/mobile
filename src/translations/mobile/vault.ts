@@ -142,7 +142,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'The delegate loses trading access immediately.',
   },
   zh: {
-    pending_not_me: '不，不是我',
+    pending_not_me: '不是我，非本人操作',
     safety_needs_version: '需要金库 {{version}}+',
     send_allowance_zero_hint: '$0 将关闭发送给新地址：资金只能发送给已过等待期的已保存收款人。',
     market_trade_allowance_zero_hint: '$0 将关闭市价交易。限价单仍可使用。',
@@ -275,7 +275,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: '受托人将立即失去交易权限。',
   },
   'zh-TW': {
-    pending_not_me: '不，不是我',
+    pending_not_me: '不是我，非本人操作',
     safety_needs_version: '需要金庫 {{version}}+',
     send_allowance_zero_hint: '$0 會關閉傳送給新地址：資金只能傳送給已過等待期的已儲存收款人。',
     market_trade_allowance_zero_hint: '$0 會關閉市價交易。限價單仍可使用。',
