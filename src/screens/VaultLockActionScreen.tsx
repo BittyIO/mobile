@@ -113,8 +113,8 @@ export function VaultLockActionScreen() {
                 at={Number(p.at)}
                 now={now}
                 timelock={timelock}
-                title={pendingTitle(p, t)}
-                value={pendingValue(p, t, nameOf)}
+                title={pendingTitle(p, t, nameOf)}
+                value={pendingValue(p, t)}
                 last={i === pending.length - 1}
               />
             ))

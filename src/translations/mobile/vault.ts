@@ -3,6 +3,9 @@ import type {MobileTable} from './index';
 // Settings › Security / Manage / StableCoinAsGas / Auto-yield / Delegation screens.
 export const vault: MobileTable = {
   en: {
+    pending_whitelist_add: 'New whitelisted',
+    pending_whitelist_remove: 'Remove whitelisted',
+    pending_named: '{{title}}: {{name}}',
     pending_not_me: 'No, it wasn\'t me',
     safety_needs_version: 'Needs vault {{version}}+',
     send_allowance_zero_hint: '$0 turns sends to new addresses off: money then leaves only to saved recipients whose waiting period is over.',
@@ -21,11 +24,9 @@ export const vault: MobileTable = {
     pending_max_fee: 'Network fee per operation',
     pending_new_owner: 'New owner',
     pending_new_asset_manager: 'New asset manager',
-    pending_whitelist_add: 'New whitelisted recipient',
     cancel_whitelist_add: 'Cancel new whitelisted recipient',
     cancel_pending_manager: 'Cancel new asset manager',
     change_asset_manager: 'Change asset manager',
-    pending_whitelist_remove: 'Whitelisted recipient removal',
     permissions: 'Permissions',
     perm_market_trade: 'Market trade',
     perm_intent: 'Limit orders & TWAP',
@@ -142,6 +143,9 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'The delegate loses trading access immediately.',
   },
   zh: {
+    pending_whitelist_add: '新增白名单',
+    pending_whitelist_remove: '移除白名单',
+    pending_named: '{{title}}：{{name}}',
     pending_not_me: '不是我，非本人操作',
     safety_needs_version: '需要金库 {{version}}+',
     send_allowance_zero_hint: '$0 将关闭发送给新地址：资金只能发送给已过等待期的已保存收款人。',
@@ -160,11 +164,9 @@ export const vault: MobileTable = {
     pending_max_fee: '单笔网络费上限',
     pending_new_owner: '新所有者',
     pending_new_asset_manager: '新资产管理人',
-    pending_whitelist_add: '新增白名单收款人',
     cancel_whitelist_add: '取消新增白名单收款人',
     cancel_pending_manager: '取消新资产管理人',
     change_asset_manager: '更换资产管理人',
-    pending_whitelist_remove: '移除白名单收款人',
     permissions: '权限',
     perm_market_trade: '市价交易',
     perm_intent: '限价单与 TWAP',
@@ -275,6 +277,9 @@ export const vault: MobileTable = {
     revoke_manager_msg: '受托人将立即失去交易权限。',
   },
   'zh-TW': {
+    pending_whitelist_add: '新增白名單',
+    pending_whitelist_remove: '移除白名單',
+    pending_named: '{{title}}：{{name}}',
     pending_not_me: '不是我，非本人操作',
     safety_needs_version: '需要金庫 {{version}}+',
     send_allowance_zero_hint: '$0 會關閉傳送給新地址：資金只能傳送給已過等待期的已儲存收款人。',
@@ -375,6 +380,9 @@ export const vault: MobileTable = {
     revoke_manager_msg: '受託人將立即失去交易權限。',
   },
   ja: {
+    pending_whitelist_add: 'ホワイトリストに追加',
+    pending_whitelist_remove: 'ホワイトリストから削除',
+    pending_named: '{{title}}：{{name}}',
     pending_not_me: 'いいえ、私ではありません',
     safety_needs_version: 'Vault {{version}} 以降が必要',
     send_allowance_zero_hint: '$0 にすると新しい宛先への送金がオフになり、資金は待機期間を終えた保存済みの受取人にのみ送れます。',
@@ -472,6 +480,9 @@ export const vault: MobileTable = {
     revoke_manager_msg: '委任先は直ちに取引アクセスを失います。',
   },
   ko: {
+    pending_whitelist_add: '새 화이트리스트',
+    pending_whitelist_remove: '화이트리스트 제거',
+    pending_named: '{{title}}: {{name}}',
     pending_not_me: '아니요, 제가 아닙니다',
     safety_needs_version: '볼트 {{version}} 이상 필요',
     send_allowance_zero_hint: '$0으로 설정하면 새 주소로 송금이 꺼지고, 대기 기간이 지난 저장된 수취인에게만 자금을 보낼 수 있습니다.',
@@ -569,6 +580,9 @@ export const vault: MobileTable = {
     revoke_manager_msg: '위임자는 즉시 거래 권한을 잃습니다.',
   },
   fr: {
+    pending_whitelist_add: 'Ajout en liste blanche',
+    pending_whitelist_remove: 'Retrait de la liste blanche',
+    pending_named: '{{title}} : {{name}}',
     pending_not_me: 'Non, ce n’était pas moi',
     safety_needs_version: 'Coffre {{version}}+ requis',
     send_allowance_zero_hint: '0 $ désactive les envois vers de nouvelles adresses : l’argent ne part plus que vers des destinataires enregistrés dont le délai d’attente est écoulé.',
@@ -666,6 +680,9 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Le délégué perd immédiatement l’accès au trading.',
   },
   es: {
+    pending_whitelist_add: 'Nuevo en lista blanca',
+    pending_whitelist_remove: 'Quitar de la lista blanca',
+    pending_named: '{{title}}: {{name}}',
     pending_not_me: 'No, no fui yo',
     safety_needs_version: 'Requiere bóveda {{version}}+',
     send_allowance_zero_hint: '0 $ desactiva los envíos a direcciones nuevas: el dinero solo sale hacia destinatarios guardados cuyo periodo de espera haya terminado.',
@@ -763,6 +780,9 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'El delegado pierde el acceso al trading de inmediato.',
   },
   de: {
+    pending_whitelist_add: 'Neu auf der Whitelist',
+    pending_whitelist_remove: 'Von der Whitelist entfernen',
+    pending_named: '{{title}}: {{name}}',
     pending_not_me: 'Nein, das war ich nicht',
     safety_needs_version: 'Tresor {{version}}+ nötig',
     send_allowance_zero_hint: '0 $ schaltet Sendungen an neue Adressen aus: Geld geht dann nur noch an gespeicherte Empfänger, deren Wartezeit abgelaufen ist.',
@@ -860,6 +880,9 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Der Delegierte verliert sofort den Handelszugriff.',
   },
   'pt-BR': {
+    pending_whitelist_add: 'Novo na lista branca',
+    pending_whitelist_remove: 'Remover da lista branca',
+    pending_named: '{{title}}: {{name}}',
     pending_not_me: 'Não, não fui eu',
     safety_needs_version: 'Requer cofre {{version}}+',
     send_allowance_zero_hint: '$0 desativa os envios para novos endereços: o dinheiro só sai para destinatários salvos cujo período de espera terminou.',
@@ -956,6 +979,9 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'O delegado perde o acesso de negociação imediatamente.',
   },
   tr: {
+    pending_whitelist_add: 'Yeni beyaz liste',
+    pending_whitelist_remove: 'Beyaz listeden çıkarma',
+    pending_named: '{{title}}: {{name}}',
     pending_not_me: 'Hayır, ben değildim',
     safety_needs_version: 'Kasa {{version}}+ gerekir',
     send_allowance_zero_hint: '$0 yeni adreslere gönderimi kapatır: para yalnızca bekleme süresi dolmuş kayıtlı alıcılara gider.',
@@ -1052,6 +1078,9 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Yetkili işlem erişimini hemen kaybeder.',
   },
   ru: {
+    pending_whitelist_add: 'Новый в белом списке',
+    pending_whitelist_remove: 'Удаление из белого списка',
+    pending_named: '{{title}}: {{name}}',
     pending_not_me: 'Нет, это был не я',
     safety_needs_version: 'Нужно хранилище {{version}}+',
     send_allowance_zero_hint: '$0 отключает отправку на новые адреса: средства уходят только сохранённым получателям, у которых истёк период ожидания.',
@@ -1148,6 +1177,9 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Делегат немедленно теряет доступ к торговле.',
   },
   id: {
+    pending_whitelist_add: 'Whitelist baru',
+    pending_whitelist_remove: 'Hapus dari whitelist',
+    pending_named: '{{title}}: {{name}}',
     pending_not_me: 'Tidak, bukan saya',
     safety_needs_version: 'Perlu vault {{version}}+',
     send_allowance_zero_hint: '$0 mematikan pengiriman ke alamat baru: dana hanya bisa keluar ke penerima tersimpan yang masa tunggunya sudah lewat.',
@@ -1244,6 +1276,9 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Delegasi langsung kehilangan akses perdagangan.',
   },
   vi: {
+    pending_whitelist_add: 'Thêm vào danh sách trắng',
+    pending_whitelist_remove: 'Xóa khỏi danh sách trắng',
+    pending_named: '{{title}}: {{name}}',
     pending_not_me: 'Không, không phải tôi',
     safety_needs_version: 'Cần vault {{version}}+',
     send_allowance_zero_hint: '$0 sẽ tắt gửi tới địa chỉ mới: tiền chỉ được gửi tới người nhận đã lưu đã qua thời gian chờ.',
@@ -1340,6 +1375,9 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Người được ủy quyền mất quyền giao dịch ngay lập tức.',
   },
   th: {
+    pending_whitelist_add: 'เพิ่มในไวท์ลิสต์',
+    pending_whitelist_remove: 'นำออกจากไวท์ลิสต์',
+    pending_named: '{{title}}: {{name}}',
     pending_not_me: 'ไม่ ไม่ใช่ฉัน',
     safety_needs_version: 'ต้องใช้ห้องนิรภัย {{version}}+',
     send_allowance_zero_hint: '$0 จะปิดการส่งไปยังที่อยู่ใหม่ เงินจะออกได้เฉพาะไปยังผู้รับที่บันทึกไว้ซึ่งพ้นระยะรอแล้ว',
@@ -1436,6 +1474,9 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'ผู้รับมอบสิทธิ์จะเสียสิทธิ์เทรดทันที',
   },
   hi: {
+    pending_whitelist_add: 'नया व्हाइटलिस्ट',
+    pending_whitelist_remove: 'व्हाइटलिस्ट से हटाना',
+    pending_named: '{{title}}: {{name}}',
     pending_not_me: 'नहीं, यह मैं नहीं था',
     safety_needs_version: 'वॉल्ट {{version}}+ चाहिए',
     send_allowance_zero_hint: '$0 नए पतों पर भेजना बंद कर देता है: पैसा तब केवल उन सहेजे गए प्राप्तकर्ताओं को जाता है जिनकी प्रतीक्षा अवधि पूरी हो चुकी है।',

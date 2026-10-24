@@ -22,7 +22,11 @@ import {useColors, useStyles, type Colors} from '@/theme';
 
 type T = ReturnType<typeof useT>['t'];
 
-export function pendingTitle(p: PendingChange, t: T): string {
+/**
+ * A pending item's title. An address-book entry carries the name given on this device after it —
+ * "New whitelisted: Alice" — and the plain title where it has none.
+ */
+export function pendingTitle(p: PendingChange, t: T, nameOf?: (address: string) => string | undefined): string {
   switch (p.kind) {
     case 'timelock':
     case 'sendDailyAllowance':
@@ -37,9 +41,11 @@ export function pendingTitle(p: PendingChange, t: T): string {
     case 'newAssetManager':
       return t('mobile.vault.pending_new_asset_manager');
     case 'whitelistAdd':
-      return t('mobile.vault.pending_whitelist_add');
-    case 'whitelistRemove':
-      return t('mobile.vault.pending_whitelist_remove');
+    case 'whitelistRemove': {
+      const title = t(p.kind === 'whitelistAdd' ? 'mobile.vault.pending_whitelist_add' : 'mobile.vault.pending_whitelist_remove');
+      const name = nameOf?.(p.address);
+      return name ? t('mobile.vault.pending_named', {title, name}) : title;
+    }
   }
 }
 
@@ -49,12 +55,8 @@ export function useEntryLabel(network: Network) {
   return (address: string) => recipientName(names, network, address);
 }
 
-/**
- * A pending item's value. An address-book entry is shown as the book shows it — the name given on
- * this device, or its place in the book — over its address, so a new entry can be recognised
- * before it can be paid.
- */
-export function pendingValue(p: PendingChange, t: T, nameOf?: (address: string) => string | undefined): string {
+/** A pending item's value: the number it changes to, or the address it is about. */
+export function pendingValue(p: PendingChange, t: T): string {
   switch (p.kind) {
     case 'timelock':
     case 'sendDailyAllowance':
@@ -64,9 +66,6 @@ export function pendingValue(p: PendingChange, t: T, nameOf?: (address: string) 
     case 'maxFeePerOp':
       // Whole dollars, as the contract stores them.
       return `$${Number(p.value).toLocaleString()}`;
-    case 'whitelistAdd':
-    case 'whitelistRemove':
-      return `${nameOf?.(p.address) ?? t('mobile.payments.recipient_n', {n: p.id})}\n${p.address}`;
     default:
       return p.address;
   }
@@ -167,8 +166,8 @@ export function PendingChangesScreen() {
                 at={Number(p.at)}
                 now={now}
                 timelock={timelock}
-                title={pendingTitle(p, t)}
-                value={pendingValue(p, t, nameOf)}
+                title={pendingTitle(p, t, nameOf)}
+                value={pendingValue(p, t)}
                 // A new asset manager's permissions are a list, so they open in a sheet rather than crowd the row.
                 onPress={p.kind === 'newAssetManager' ? () => setPermsOf(p.perms) : undefined}
                 onCancel={cancel ?? undefined}
