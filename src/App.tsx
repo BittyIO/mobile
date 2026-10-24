@@ -8,6 +8,7 @@ import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {useWallet} from '@/wallet/store';
 import {TabIcon, type TabName} from '@/components/TabIcon';
 import {NetworkSwitcher} from '@/components/NetworkSwitcher';
+import {LockBadge} from '@/components/LockBadge';
 import {useGuardProtocols} from '@/core/guard-catalog';
 import {useNetwork} from '@/core/network-store';
 import {RISK_TITLE} from '@/components/riskFormat';
@@ -219,7 +220,8 @@ function MainTabs() {
          * already goes for it.
          */
         headerRight: () => <NetworkSwitcher />,
-        headerLeft: undefined,
+        // The vault's lock, while it has one: on every tab, tapped through to Lock status.
+        headerLeft: () => <LockBadge />,
         /**
          * The same surface as the header, at the other end of the screen.
          *
