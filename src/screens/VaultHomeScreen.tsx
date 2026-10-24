@@ -57,7 +57,7 @@ function EyeIcon({off, color, size = 20}: {off: boolean; color: string; size?: n
   );
 }
 
-/** Send (arrow out, up-right) / Receive (arrow in, down-left) / History (clock) / Security (shield) action icons. */
+/** Send (arrow out, up-right) / Receive (arrow in, down-left) / History (clock) / Pending (hourglass) action icons. */
 function ActionIcon({name, color, size = 22}: {name: 'send' | 'receive' | 'history' | 'pending'; color: string; size?: number}) {
   const c = {stroke: color, strokeWidth: 2.2, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const};
   return (
@@ -75,8 +75,13 @@ function ActionIcon({name, color, size = 22}: {name: 'send' | 'receive' | 'histo
           <Path d="M16 17H7V8" {...c} />
         </>
       ) : name === 'pending' ? (
-        // Security: what is waiting out the timelock (lucide shield).
-        <Path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" {...c} />
+        // Pending: what is waiting out the timelock (lucide hourglass, as on the web).
+        <>
+          <Path d="M5 22h14" {...c} />
+          <Path d="M5 2h14" {...c} />
+          <Path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22" {...c} />
+          <Path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2" {...c} />
+        </>
       ) : (
         <>
           <Circle cx={12} cy={12} r={9} {...c} />
