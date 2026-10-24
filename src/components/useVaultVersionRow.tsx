@@ -145,13 +145,19 @@ export function useVaultVersionRow(): {
   const shown = up.currentVersion ?? (!up.current ? up.latestVersion : null);
   const value = up.available && up.latestVersion ? `${shown ?? '?'} → ${up.latestVersion}` : shown ?? t('vault.upgrade_version_unknown');
   /**
-   * The only state worth a second line: an update is offered.
+   * The second line says whether there is anything newer: an update is offered, or none has been
+   * released — so a row with no chevron reads as checked rather than as broken. Nothing when the
+   * latest build could not be read.
    *
    * It also said "not deployed yet" before activation, and that is the app's business rather
    * than the user's. A vault is created by its first action and the version shown is the one it
    * will be born on, so the row is already telling the truth; announcing that nothing exists on
    * chain yet invites a question — do I have to do something? — whose answer is no.
    */
-  const sub = up.available ? t('vault.upgrade_available') : undefined;
+  const sub = up.available
+    ? t('vault.upgrade_available')
+    : up.latestVersion
+      ? t('mobile.settings.vault_no_new_version')
+      : undefined;
   return {value, sub, upgradeable, confirming: false, onPress, reload: load, sheet};
 }
