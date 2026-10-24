@@ -462,16 +462,14 @@ export function VaultHomeScreen() {
 
   // Category filter, the web's grouping: whichever categories this network's assets use, Crypto
   /**
-   * What the Overview lists: the starred assets, plus anything the vault holds worth more than a
-   * dime.
+   * What the Overview lists: the starred assets, plus anything the vault holds at all — dust
+   * included, and a token with no price, so no balance is ever missing from the vault's own list.
    *
    * Starring happens on an asset's trade page, and the defaults are the assets any vault is
    * expected to hold. A balance shows whether or not it is starred — money must not be able to
-   * disappear from this screen because of a display preference — but it is judged by VALUE, not
-   * amount: a holding worth over $0.10 earns a row, so a dust leftover or a scrap of a near-zero
-   * token does not clutter the list. A starred asset shows at any balance, dust included, because
-   * the user asked for it; the stablecoins, BTC and ETH are seeded starred, so none of them is
-   * ever hidden by this.
+   * disappear from this screen because of a display preference. It used to need $0.10 of value to
+   * earn a row, which left a leftover after a send or a sold-down position looking like nothing.
+   * The stablecoins, BTC and ETH are seeded starred, so they show even at zero.
    */
   /**
    * Every watch list on this network, and the orders for all of them.
@@ -563,7 +561,7 @@ export function VaultHomeScreen() {
     const held = isAssetsList(listId);
     const starred = new Set(watch.lists.find((l) => l.id === listId)?.symbols ?? []);
     const visible = held
-      ? rows.filter((r) => starred.has(r.symbol) || (r.usd ?? 0) > 0.1)
+      ? rows.filter((r) => starred.has(r.symbol) || r.total > 0)
       : rows.filter((r) => starred.has(r.symbol));
     // A list of the user's own keeps the order they dragged it into: they chose what is on it,
     // so they choose the sequence, and it shows no balance to sort by anyway.
