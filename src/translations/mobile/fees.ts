@@ -7,7 +7,7 @@ export const fees: MobileTable = {
   en: {
     advanced: 'Advanced settings',
     payer_vault: 'Pay from vault',
-    payer_owner: 'Pay from owner wallet',
+    payer_owner: 'Pay from owner',
     owner_wallet: 'Owner wallet',
     balance: 'Balance',
     qr_sub: 'Pays network fees on {{network}}',
@@ -22,7 +22,7 @@ export const fees: MobileTable = {
   zh: {
     advanced: '高级设置',
     payer_vault: '从金库支付',
-    payer_owner: '从所有者钱包支付',
+    payer_owner: '从所有者支付',
     owner_wallet: '所有者钱包',
     balance: '余额',
     qr_sub: '用于支付 {{network}} 网络手续费',
@@ -36,7 +36,7 @@ export const fees: MobileTable = {
   'zh-TW': {
     advanced: '進階設定',
     payer_vault: '從金庫支付',
-    payer_owner: '從擁有者錢包支付',
+    payer_owner: '從擁有者支付',
     owner_wallet: '擁有者錢包',
     balance: '餘額',
     qr_sub: '用於支付 {{network}} 網路手續費',
@@ -50,7 +50,7 @@ export const fees: MobileTable = {
   ja: {
     advanced: '詳細設定',
     payer_vault: 'ボールトから支払う',
-    payer_owner: 'オーナーウォレットから支払う',
+    payer_owner: 'オーナーから支払う',
     owner_wallet: 'オーナーウォレット',
     balance: '残高',
     qr_sub: '{{network}} のネットワーク手数料用',
@@ -64,7 +64,7 @@ export const fees: MobileTable = {
   ko: {
     advanced: '고급 설정',
     payer_vault: '볼트에서 지불',
-    payer_owner: '소유자 지갑에서 지불',
+    payer_owner: '소유자에서 지불',
     owner_wallet: '소유자 지갑',
     balance: '잔액',
     qr_sub: '{{network}} 네트워크 수수료용',
@@ -78,7 +78,7 @@ export const fees: MobileTable = {
   fr: {
     advanced: 'Paramètres avancés',
     payer_vault: 'Payer depuis le coffre',
-    payer_owner: 'Payer depuis le portefeuille propriétaire',
+    payer_owner: 'Payer par le propriétaire',
     owner_wallet: 'Portefeuille propriétaire',
     balance: 'Solde',
     qr_sub: 'Paie les frais de réseau sur {{network}}',
@@ -93,7 +93,7 @@ export const fees: MobileTable = {
   es: {
     advanced: 'Configuración avanzada',
     payer_vault: 'Pagar desde la bóveda',
-    payer_owner: 'Pagar desde la cartera propietaria',
+    payer_owner: 'Pagar desde el propietario',
     owner_wallet: 'Cartera propietaria',
     balance: 'Saldo',
     qr_sub: 'Paga comisiones de red en {{network}}',
@@ -108,7 +108,7 @@ export const fees: MobileTable = {
   de: {
     advanced: 'Erweiterte Einstellungen',
     payer_vault: 'Aus dem Tresor zahlen',
-    payer_owner: 'Aus der Eigentümer-Wallet zahlen',
+    payer_owner: 'Vom Eigentümer zahlen',
     owner_wallet: 'Eigentümer-Wallet',
     balance: 'Guthaben',
     qr_sub: 'Zahlt Netzwerkgebühren auf {{network}}',
@@ -123,7 +123,7 @@ export const fees: MobileTable = {
   'pt-BR': {
     advanced: 'Configurações avançadas',
     payer_vault: 'Pagar pelo cofre',
-    payer_owner: 'Pagar pela carteira proprietária',
+    payer_owner: 'Pagar pelo proprietário',
     owner_wallet: 'Carteira proprietária',
     balance: 'Saldo',
     qr_sub: 'Paga taxas de rede na {{network}}',
@@ -138,7 +138,7 @@ export const fees: MobileTable = {
   hi: {
     advanced: 'उन्नत सेटिंग्स',
     payer_vault: 'वॉल्ट से भुगतान',
-    payer_owner: 'ओनर वॉलेट से भुगतान',
+    payer_owner: 'ओनर से भुगतान',
     owner_wallet: 'ओनर वॉलेट',
     balance: 'बैलेंस',
     qr_sub: '{{network}} पर नेटवर्क शुल्क के लिए',
@@ -152,7 +152,7 @@ export const fees: MobileTable = {
   tr: {
     advanced: 'Gelişmiş ayarlar',
     payer_vault: 'Kasadan öde',
-    payer_owner: 'Sahip cüzdanından öde',
+    payer_owner: 'Sahipten öde',
     owner_wallet: 'Sahip cüzdanı',
     balance: 'Bakiye',
     qr_sub: '{{network}} ağ ücretlerini öder',
@@ -166,7 +166,7 @@ export const fees: MobileTable = {
   ru: {
     advanced: 'Расширенные настройки',
     payer_vault: 'Платить из хранилища',
-    payer_owner: 'Платить с кошелька владельца',
+    payer_owner: 'Платит владелец',
     owner_wallet: 'Кошелёк владельца',
     balance: 'Баланс',
     qr_sub: 'Оплата сетевых комиссий в {{network}}',
@@ -180,7 +180,7 @@ export const fees: MobileTable = {
   id: {
     advanced: 'Pengaturan lanjutan',
     payer_vault: 'Bayar dari brankas',
-    payer_owner: 'Bayar dari dompet pemilik',
+    payer_owner: 'Bayar dari pemilik',
     owner_wallet: 'Dompet pemilik',
     balance: 'Saldo',
     qr_sub: 'Membayar biaya jaringan di {{network}}',
@@ -194,7 +194,7 @@ export const fees: MobileTable = {
   vi: {
     advanced: 'Cài đặt nâng cao',
     payer_vault: 'Trả từ két',
-    payer_owner: 'Trả từ ví chủ sở hữu',
+    payer_owner: 'Trả từ chủ sở hữu',
     owner_wallet: 'Ví chủ sở hữu',
     balance: 'Số dư',
     qr_sub: 'Trả phí mạng trên {{network}}',
@@ -208,7 +208,7 @@ export const fees: MobileTable = {
   th: {
     advanced: 'การตั้งค่าขั้นสูง',
     payer_vault: 'จ่ายจากวอลต์',
-    payer_owner: 'จ่ายจากกระเป๋าเจ้าของ',
+    payer_owner: 'จ่ายจากเจ้าของ',
     owner_wallet: 'กระเป๋าเจ้าของ',
     balance: 'ยอดคงเหลือ',
     qr_sub: 'จ่ายค่าธรรมเนียมเครือข่ายบน {{network}}',
