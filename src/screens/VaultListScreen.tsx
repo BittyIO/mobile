@@ -112,6 +112,10 @@ export function VaultListScreen() {
           .filter((f) => !listedHere.has(f.vault.toLowerCase()))
           .map((f) => ({...f, key: {index: current.keyIndex, address: current.address as Address}}))
       : [];
+  // Owned now: listed with the rest. Handed over and waiting to be accepted (the handover older
+  // vaults used): offered on their own, since accepting is a signature.
+  const received = foundMine.filter((f) => !f.pending);
+  const waiting = foundMine.filter((f) => f.pending);
   const [busy, setBusy] = useState(false);
   const [safeOpen, setSafeOpen] = useState(false);
   const [safeDraft, setSafeDraft] = useState('');
@@ -234,7 +238,7 @@ export function VaultListScreen() {
     }
   };
 
-  const row = (v: VaultRef, i: number, list: VaultRef[]) => {
+  const row = (v: VaultRef, i: number, count: number) => {
     const on = v.index === activeIndex;
     const gone = notYours.has(v.index);
     const address = vaultAddressOf(v, network);
@@ -244,7 +248,7 @@ export function VaultListScreen() {
     return (
       <Pressable
         key={v.index}
-        style={({pressed}) => [styles.vaultRow, i < list.length - 1 && styles.rowDivider, gone && styles.gone, pressed && styles.pressed]}
+        style={({pressed}) => [styles.vaultRow, i < count - 1 && styles.rowDivider, gone && styles.gone, pressed && styles.pressed]}
         onPress={() => choose(v)}
         onLongPress={() => askRemove(v)}>
         <View style={styles.vaultText}>
@@ -314,12 +318,35 @@ export function VaultListScreen() {
         </SettingsGroup>
       ) : null}
 
-      <SettingsGroup label={t('mobile.vaults.vaults_of_owner')}>{mine.map(row)}</SettingsGroup>
+      {/* The owner's vaults: those on this phone, then those the server says it holds that are not
+          on the phone yet — listed the same way, since a transfer needs nothing from the receiver.
+          Choosing one of those puts it on the phone's list (nothing on chain) and opens it. */}
+      <SettingsGroup label={t('mobile.vaults.vaults_of_owner')}>
+        {mine.map((v, i) => row(v, i, mine.length + received.length))}
+        {received.map((f, i) => (
+          <Pressable
+            key={f.vault}
+            style={({pressed}) => [styles.vaultRow, i < received.length - 1 && styles.rowDivider, pressed && styles.pressed]}
+            onPress={() => onAddFound(f)}>
+            <View style={styles.vaultText}>
+              <View style={styles.nameLine}>
+                <Text style={styles.name} numberOfLines={1}>
+                  {/* The name it will have once on the phone's list: the next free index. */}
+                  {label(Math.max(...vaults.map((v) => v.index)) + i + 2)}
+                </Text>
+                <Text style={styles.tag}>{t('mobile.vaults.tag_received')}</Text>
+              </View>
+              <Text style={styles.addr}>{f.vault}</Text>
+            </View>
+            <Text style={[styles.check, styles.checkHidden]}>✓</Text>
+          </Pressable>
+        ))}
+      </SettingsGroup>
 
-      {foundMine.length > 0 ? (
+      {waiting.length > 0 ? (
         <SettingsGroup label={t('mobile.vaults.found')}>
-          {foundMine.map((f, i) => (
-            <View key={f.vault} style={[styles.vaultRow, i < foundMine.length - 1 && styles.rowDivider]}>
+          {waiting.map((f, i) => (
+            <View key={f.vault} style={[styles.vaultRow, i < waiting.length - 1 && styles.rowDivider]}>
               <View style={styles.vaultText}>
                 <Text style={styles.addr}>{f.vault}</Text>
                 {/* Handed to this key and waiting for it to accept: it is not this key's until then. */}
