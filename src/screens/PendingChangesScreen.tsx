@@ -15,6 +15,8 @@ import {Sheet} from '@/components/Sheet';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {useActiveVaultAddress} from '@/core/active-vault';
+import {recipientName, useRecipientNames} from '@/core/recipient-names';
+import type {Network} from '@/core/chain';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 
@@ -41,7 +43,18 @@ export function pendingTitle(p: PendingChange, t: T): string {
   }
 }
 
-export function pendingValue(p: PendingChange, t: T): string {
+/** The name an address-book entry goes by on this device, as the book shows it. */
+export function useEntryLabel(network: Network) {
+  const names = useRecipientNames((s) => s.names);
+  return (address: string) => recipientName(names, network, address);
+}
+
+/**
+ * A pending item's value. An address-book entry is shown as the book shows it — the name given on
+ * this device, or its place in the book — over its address, so a new entry can be recognised
+ * before it can be paid.
+ */
+export function pendingValue(p: PendingChange, t: T, nameOf?: (address: string) => string | undefined): string {
   switch (p.kind) {
     case 'timelock':
     case 'sendDailyAllowance':
@@ -51,6 +64,9 @@ export function pendingValue(p: PendingChange, t: T): string {
     case 'maxFeePerOp':
       // Whole dollars, as the contract stores them.
       return `$${Number(p.value).toLocaleString()}`;
+    case 'whitelistAdd':
+    case 'whitelistRemove':
+      return `${nameOf?.(p.address) ?? t('mobile.payments.recipient_n', {n: p.id})}\n${p.address}`;
     default:
       return p.address;
   }
@@ -74,6 +90,7 @@ export function PendingChangesScreen() {
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
   const vault = useActiveVaultAddress(network);
+  const nameOf = useEntryLabel(network);
   const [items, setItems] = useState<PendingChange[] | null>(null);
   const [timelock, setTimelock] = useState(0);
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
@@ -151,7 +168,7 @@ export function PendingChangesScreen() {
                 now={now}
                 timelock={timelock}
                 title={pendingTitle(p, t)}
-                value={pendingValue(p, t)}
+                value={pendingValue(p, t, nameOf)}
                 // A new asset manager's permissions are a list, so they open in a sheet rather than crowd the row.
                 onPress={p.kind === 'newAssetManager' ? () => setPermsOf(p.perms) : undefined}
                 onCancel={cancel ?? undefined}
