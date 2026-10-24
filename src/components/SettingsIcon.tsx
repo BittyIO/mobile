@@ -27,6 +27,7 @@ export type SettingsIconName =
   | 'perTx'
   | 'settings'
   | 'allowlist'
+  | 'whitelist'
   | 'follow'
   | 'terms'
   | 'privacy';
@@ -63,6 +64,7 @@ const TINT: Record<SettingsIconName, string> = {
   perTx: '#5856D6',
   settings: '#8E8E93',
   allowlist: '#30B0C7',
+  whitelist: '#34C759',
   follow: '#0E85FF',
   terms: '#8E8E93',
   privacy: '#5856D6',
@@ -136,6 +138,13 @@ export function SettingsIcon({name, size = 29}: {name: SettingsIconName; size?: 
         ) : name === 'lockForever' ? (
           // lucide Infinity: no lock at all, because there is no key that opens it — forever.
           <Path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 0 0 0-8c-2 0-4 1.33-6 4Z" {...c} />
+        ) : name === 'whitelist' ? (
+          // lucide BookUser: the address book.
+          <>
+            <Path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20" {...c} />
+            <Circle cx={12} cy={8} r={2} {...c} />
+            <Path d="M15 13a3 3 0 1 0-6 0" {...c} />
+          </>
         ) : name === 'ownership' ? (
           // lucide ArrowRightLeft: one owner out, another in.
           <Path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4" {...c} />

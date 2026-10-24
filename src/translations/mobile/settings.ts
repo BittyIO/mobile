@@ -2,6 +2,8 @@ import type {MobileTable} from './index';
 
 export const settings: MobileTable = {
   en: {
+    whitelisted_addresses: 'Whitelisted addresses',
+    add_whitelisted: 'Add whitelisted address',
     vault_upgrading: 'Upgrading…',
     vault_checking: 'Checking for a new version…',
     gas_max_per_op: 'Max per transaction',
@@ -54,6 +56,8 @@ export const settings: MobileTable = {
     gas: 'Network fee',
   },
   zh: {
+    whitelisted_addresses: '白名单地址',
+    add_whitelisted: '添加白名单地址',
     vault_upgrading: '正在升级…',
     vault_checking: '正在检查新版本…',
     gas_max_per_op: '单笔上限',
@@ -106,6 +110,8 @@ export const settings: MobileTable = {
     gas: '网络费',
   },
   'zh-TW': {
+    whitelisted_addresses: '白名單地址',
+    add_whitelisted: '新增白名單地址',
     vault_upgrading: '正在升級…',
     vault_checking: '正在檢查新版本…',
     choose_vault: '選擇金庫',
@@ -148,6 +154,8 @@ export const settings: MobileTable = {
     gas: '網路費',
   },
   ja: {
+    whitelisted_addresses: 'ホワイトリストのアドレス',
+    add_whitelisted: 'ホワイトリストにアドレスを追加',
     vault_upgrading: 'アップグレード中…',
     vault_checking: '新しいバージョンを確認中…',
     choose_vault: 'ボールトを選択',
@@ -190,6 +198,8 @@ export const settings: MobileTable = {
     gas: 'ネットワーク手数料',
   },
   ko: {
+    whitelisted_addresses: '화이트리스트 주소',
+    add_whitelisted: '화이트리스트 주소 추가',
     vault_upgrading: '업그레이드 중…',
     vault_checking: '새 버전 확인 중…',
     choose_vault: '볼트 선택',
@@ -232,6 +242,8 @@ export const settings: MobileTable = {
     gas: '네트워크 수수료',
   },
   fr: {
+    whitelisted_addresses: 'Adresses sur liste blanche',
+    add_whitelisted: 'Ajouter une adresse à la liste blanche',
     vault_upgrading: 'Mise à niveau…',
     vault_checking: 'Recherche d’une nouvelle version…',
     choose_vault: 'Choisir un coffre',
@@ -274,6 +286,8 @@ export const settings: MobileTable = {
     gas: 'Frais de réseau',
   },
   es: {
+    whitelisted_addresses: 'Direcciones en lista blanca',
+    add_whitelisted: 'Añadir dirección a la lista blanca',
     vault_upgrading: 'Actualizando…',
     vault_checking: 'Buscando una nueva versión…',
     choose_vault: 'Elegir bóveda',
@@ -316,6 +330,8 @@ export const settings: MobileTable = {
     gas: 'Comisión de red',
   },
   de: {
+    whitelisted_addresses: 'Freigegebene Adressen',
+    add_whitelisted: 'Freigegebene Adresse hinzufügen',
     vault_upgrading: 'Wird aktualisiert…',
     vault_checking: 'Suche nach neuer Version…',
     choose_vault: 'Tresor wählen',
@@ -358,6 +374,8 @@ export const settings: MobileTable = {
     gas: 'Netzwerkgebühr',
   },
   'pt-BR': {
+    whitelisted_addresses: 'Endereços na lista branca',
+    add_whitelisted: 'Adicionar endereço à lista branca',
     vault_upgrading: 'Atualizando…',
     vault_checking: 'Procurando nova versão…',
     choose_vault: 'Escolher cofre',
@@ -400,6 +418,8 @@ export const settings: MobileTable = {
     gas: 'Taxa de rede',
   },
   hi: {
+    whitelisted_addresses: 'व्हाइटलिस्ट पते',
+    add_whitelisted: 'व्हाइटलिस्ट पता जोड़ें',
     vault_upgrading: 'अपग्रेड हो रहा है…',
     vault_checking: 'नया संस्करण जाँचा जा रहा है…',
     choose_vault: 'वॉल्ट चुनें',
@@ -442,6 +462,8 @@ export const settings: MobileTable = {
     gas: 'नेटवर्क फीस',
   },
   tr: {
+    whitelisted_addresses: 'Beyaz listedeki adresler',
+    add_whitelisted: 'Beyaz listeye adres ekle',
     vault_upgrading: 'Yükseltiliyor…',
     vault_checking: 'Yeni sürüm kontrol ediliyor…',
     choose_vault: 'Kasa seç',
@@ -484,6 +506,8 @@ export const settings: MobileTable = {
     gas: 'Ağ ücreti',
   },
   ru: {
+    whitelisted_addresses: 'Адреса в белом списке',
+    add_whitelisted: 'Добавить адрес в белый список',
     vault_upgrading: 'Обновление…',
     vault_checking: 'Проверка новой версии…',
     choose_vault: 'Выбрать хранилище',
@@ -526,6 +550,8 @@ export const settings: MobileTable = {
     gas: 'Комиссия сети',
   },
   id: {
+    whitelisted_addresses: 'Alamat whitelist',
+    add_whitelisted: 'Tambah alamat whitelist',
     vault_upgrading: 'Meningkatkan…',
     vault_checking: 'Memeriksa versi baru…',
     choose_vault: 'Pilih brankas',
@@ -568,6 +594,8 @@ export const settings: MobileTable = {
     gas: 'Biaya jaringan',
   },
   vi: {
+    whitelisted_addresses: 'Địa chỉ trong danh sách trắng',
+    add_whitelisted: 'Thêm địa chỉ vào danh sách trắng',
     vault_upgrading: 'Đang nâng cấp…',
     vault_checking: 'Đang kiểm tra phiên bản mới…',
     choose_vault: 'Chọn kho',
@@ -610,6 +638,8 @@ export const settings: MobileTable = {
     gas: 'Phí mạng',
   },
   th: {
+    whitelisted_addresses: 'ที่อยู่ในไวท์ลิสต์',
+    add_whitelisted: 'เพิ่มที่อยู่ในไวท์ลิสต์',
     vault_upgrading: 'กำลังอัปเกรด…',
     vault_checking: 'กำลังตรวจหาเวอร์ชันใหม่…',
     choose_vault: 'เลือกวอลต์',

@@ -35,6 +35,9 @@ export type RootStackParamList = {
   Payments: undefined;
   SelectRecipient: undefined;
   NewRecipient: undefined;
+  /** Security › Whitelisted addresses: the address book, to add to and remove from. */
+  VaultWhitelist: undefined;
+  VaultWhitelistAdd: undefined;
   /** The asset directory as a watch list editor: no prices, a star on every row. */
   Watchlist: undefined;
   /** One Earn position in full: its rate over time, what Auto-Yield does, and both actions. */
@@ -343,6 +346,16 @@ function Root() {
           name="NewRecipient"
           getComponent={() => require('@/screens/NewRecipientScreen').NewRecipientScreen}
           options={{title: t('mobile.payments.new_recipient')}}
+        />
+        <Stack.Screen
+          name="VaultWhitelist"
+          getComponent={() => require('@/screens/SelectRecipientScreen').WhitelistScreen}
+          options={{title: t('mobile.settings.whitelisted_addresses')}}
+        />
+        <Stack.Screen
+          name="VaultWhitelistAdd"
+          getComponent={() => require('@/screens/NewRecipientScreen').AddWhitelistedScreen}
+          options={{title: t('mobile.settings.add_whitelisted')}}
         />
         <Stack.Screen
           name="Watchlist"

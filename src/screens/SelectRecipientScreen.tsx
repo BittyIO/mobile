@@ -17,6 +17,7 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import {showToast} from '@/components/Toast';
 import {ProgressRing, leftUnit, waitDone} from '@/components/ProgressRing';
 import {useVaultWrite} from '@/components/useVaultWrite';
+import {usePending} from '@/vault/pending';
 import {useRecipientNames, recipientName} from '@/core/recipient-names';
 import {useRecipientPick} from '@/core/recipient-pick';
 import {useColors, useStyles, type Colors} from '@/theme';
@@ -32,7 +33,15 @@ import {vaultAddressOf} from '@/core/active-vault';
  * have to be delivered by `navigate`, which is as willing to push a second Send page as it is to
  * return to the first; `goBack` can only unwind, which is the behaviour this page wants.
  */
-export function SelectRecipientScreen() {
+/**
+ * Security › Whitelisted addresses: the same book, to manage rather than to pay from. A tap does not
+ * choose (long press still copies), your own vaults are not listed, and + adds to the book.
+ */
+export function WhitelistScreen() {
+  return <SelectRecipientScreen manage />;
+}
+
+export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
   const {t} = useT();
   const c = useColors();
   const styles = useStyles(makeStyles);
@@ -59,6 +68,12 @@ export function SelectRecipientScreen() {
    */
   const [loading, setLoading] = useState(true);
   const [reload, setReload] = useState(0);
+  // Read again whenever a relayed write lands: an add or a removal is only in the book once mined,
+  // and the write's own callback fires when the relayer accepted it, before that.
+  const settled = usePending((s) => s.txs.filter((x) => x.status !== 'pending').length);
+  useEffect(() => {
+    if (settled > 0) setReload((n) => n + 1);
+  }, [settled]);
   const [risk, setRisk] = useState<RiskConfig | null>(null);
   useEffect(() => {
     if (vault) getRiskConfig(vault, network).then(setRisk);
@@ -160,7 +175,8 @@ export function SelectRecipientScreen() {
         key={b.id}
         style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === list.length - 1 && styles.rowLast, pressed && !isEditing && styles.pressed]}
         // While the name is being edited the row is a form, not a choice: a tap must not pay it.
-        disabled={isEditing}
+        // Managing the book, a tap chooses nothing either.
+        disabled={isEditing || manage}
         onPress={() => pick(b.recipientAddress, named)}
         onLongPress={() => copy(b.recipientAddress)}>
         {/* Every entry under a name: the one saved on this device, or its place in the
@@ -254,7 +270,7 @@ export function SelectRecipientScreen() {
     nav.setOptions({
       headerRight: () => (
         <Pressable
-          onPress={() => nav.navigate('NewRecipient')}
+          onPress={() => nav.navigate(manage ? 'VaultWhitelistAdd' : 'NewRecipient')}
           hitSlop={10}
           style={styles.headerBtn}
           accessibilityRole="button"
@@ -265,7 +281,7 @@ export function SelectRecipientScreen() {
         </Pressable>
       ),
     });
-  }, [nav, t, c, styles]);
+  }, [nav, t, c, styles, manage]);
 
   return (
     <ScrollView
@@ -306,7 +322,7 @@ export function SelectRecipientScreen() {
         </>
       ) : null}
 
-      {mine.length > 0 ? (
+      {!manage && mine.length > 0 ? (
         <>
           {/* Your own vaults are paid like anyone else: no limit once whitelisted, else the allowance. */}
           <Text style={styles.section}>

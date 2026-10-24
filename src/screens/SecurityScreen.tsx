@@ -58,7 +58,8 @@ export function SecurityScreen() {
           what it may touch. */}
       <SettingsGroup>
         <SettingsRow icon="security" title={t('mobile.vault.risk_settings')} value={levelValue} onPress={() => nav.navigate('VaultRiskSettings')} />
-        <SettingsRow icon="allowlist" title={t('mobile.settings.allow_list')} onPress={() => nav.navigate('VaultAssets')} last />
+        <SettingsRow icon="allowlist" title={t('mobile.settings.allow_list')} onPress={() => nav.navigate('VaultAssets')} />
+        <SettingsRow icon="whitelist" title={t('mobile.settings.whitelisted_addresses')} onPress={() => nav.navigate('VaultWhitelist')} last />
       </SettingsGroup>
       {/* Who else may act for it, and handing it to another key. */}
       <SettingsGroup>

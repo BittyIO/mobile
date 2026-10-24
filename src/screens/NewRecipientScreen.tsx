@@ -14,6 +14,8 @@ import {useRecipientNames} from '@/core/recipient-names';
 import {useRecipientPick} from '@/core/recipient-pick';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
+import {useVaultWrite} from '@/components/useVaultWrite';
+import {addWhitelisted} from '@/vault/payments';
 
 /**
  * Select recipient › New recipient — an address to type, a name for it on this device, and whether
@@ -23,7 +25,15 @@ import {useT} from '@/i18n';
  * Confirming hands the address back through {useRecipientPick} and unwinds past the picker straight
  * to the Send card, which is where the choice is used.
  */
-export function NewRecipientScreen() {
+/**
+ * Security › Whitelisted addresses › + — the same form, without the payment: the address always goes
+ * into the book, through the Face-ID and fee confirm, and the page closes once it is submitted.
+ */
+export function AddWhitelistedScreen() {
+  return <NewRecipientScreen manage />;
+}
+
+export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
   const {t} = useT();
   const c = useColors();
   const styles = useStyles(makeStyles);
@@ -52,12 +62,20 @@ export function NewRecipientScreen() {
       ? t('mobile.payments.max_send_daily', {value: fmtAllowance(risk.sendDailyAllowance, t)})
       : '…';
 
+  const write = useVaultWrite(() => nav.goBack());
   const confirm = () => {
     const given = nameDraft.trim();
     if (given) setName(network, draft, given);
+    if (manage) {
+      write.run('add', `${t('vault.add')} · ${t('vault.address_book')}`, (base) =>
+        addWhitelisted({...base, recipient: draft as Address}),
+      );
+      return;
+    }
     setPicked({address: draft as Address, label: given || undefined, addToBook});
     nav.pop(2);
   };
+  const canConfirm = valid && (!manage || write.ready);
 
   return (
     <ScrollView
@@ -93,14 +111,19 @@ export function NewRecipientScreen() {
         {isToken ? <Text style={styles.warn}>{t('mobile.payments.token_address_warning')}</Text> : null}
 
         <View style={[styles.card, styles.gap]}>
-          <View style={[styles.row, styles.divider]}>
-            <Text style={styles.rowLabel}>{t('mobile.payments.add_to_whitelist')}</Text>
-            <Switch value={addToBook} onValueChange={setAddToBook} style={styles.switch} />
-          </View>
-          <View style={[styles.row, addToBook && styles.divider]}>
-            <Text style={styles.rowLabel}>{t('mobile.payments.max_send')}</Text>
-            <Text style={styles.rowValue}>{max}</Text>
-          </View>
+          {/* Managing the book there is no payment: no switch, and no cap to show. */}
+          {manage ? null : (
+            <>
+              <View style={[styles.row, styles.divider]}>
+                <Text style={styles.rowLabel}>{t('mobile.payments.add_to_whitelist')}</Text>
+                <Switch value={addToBook} onValueChange={setAddToBook} style={styles.switch} />
+              </View>
+              <View style={[styles.row, addToBook && styles.divider]}>
+                <Text style={styles.rowLabel}>{t('mobile.payments.max_send')}</Text>
+                <Text style={styles.rowValue}>{max}</Text>
+              </View>
+            </>
+          )}
           {/* A new whitelist entry waits out the timelock before it can be paid. */}
           {addToBook ? (
             <View style={styles.row}>
@@ -111,12 +134,13 @@ export function NewRecipientScreen() {
         </View>
 
         <Pressable
-          style={({pressed}) => [styles.use, !valid && styles.useOff, pressed && styles.pressed]}
-          disabled={!valid}
+          style={({pressed}) => [styles.use, !canConfirm && styles.useOff, pressed && styles.pressed]}
+          disabled={!canConfirm}
           onPress={confirm}>
-          <Text style={[styles.useText, !valid && styles.useTextOff]}>{t('vault.confirm')}</Text>
+          <Text style={[styles.useText, !canConfirm && styles.useTextOff]}>{t('vault.confirm')}</Text>
         </Pressable>
       </Pressable>
+      {write.sheet}
     </ScrollView>
   );
 }
