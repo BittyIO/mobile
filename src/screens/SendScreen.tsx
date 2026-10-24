@@ -655,7 +655,6 @@ const makeStyles = (c: Colors) => StyleSheet.create({
  */
 function AddByAddress({onAdd}: {onAdd: (address: string) => Promise<void>}) {
   const {t} = useT();
-  const c = useColors();
   const styles = useStyles(makeStyles);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -684,8 +683,6 @@ function AddByAddress({onAdd}: {onAdd: (address: string) => Promise<void>}) {
             setText(v);
             setErr(null);
           }}
-          placeholder="0x…"
-          placeholderTextColor={c.subtext}
           autoCapitalize="none"
           autoCorrect={false}
           spellCheck={false}
