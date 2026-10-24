@@ -536,5 +536,5 @@ const makeStyles = (colors: Colors) =>
   StyleSheet.create({
     splash: {flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center'},
     headerTitle: {color: colors.text, fontSize: 17, fontWeight: '700'},
-    headerTitleRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
+    headerTitleRow: {flexDirection: 'row', alignItems: 'center', gap: 6},
   });

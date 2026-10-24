@@ -48,7 +48,7 @@ export function LockBadge() {
       style={styles.badge}
       accessibilityRole="button"
       accessibilityLabel={t(LOCK_TITLE[level])}>
-      <SettingsIcon name={LOCK_ICON[level]} size={24} round />
+      <SettingsIcon name={LOCK_ICON[level]} size={18} round />
     </Pressable>
   );
 }
