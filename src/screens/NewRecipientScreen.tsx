@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {Keyboard, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View} from 'react-native';
+import {Alert, Keyboard, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {Address} from 'viem';
@@ -15,7 +15,8 @@ import {useRecipientPick} from '@/core/recipient-pick';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 import {useVaultWrite} from '@/components/useVaultWrite';
-import {addWhitelisted} from '@/vault/payments';
+import {addWhitelisted, fetchWhitelist, type WhitelistedRecipient} from '@/vault/payments';
+import {WHITELIST_STATUS} from '@/core/abi';
 
 /**
  * Select recipient › New recipient — an address to type, a name for it on this device, and whether
@@ -53,6 +54,13 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
   useEffect(() => {
     if (vault) getRiskConfig(vault, network).then(setRisk);
   }, [vault, network]);
+  // With sends to new addresses off, a typed address can be paid only if it is already in the book
+  // and past its wait — so the book is read to tell.
+  const sendsOff = !manage && !!risk?.read && risk.sendDailyAllowance === 0n;
+  const [book, setBook] = useState<WhitelistedRecipient[]>([]);
+  useEffect(() => {
+    if (sendsOff && vault) fetchWhitelist(vault, network).then(setBook).catch(() => setBook([]));
+  }, [sendsOff, vault, network]);
 
   const valid = isPayableAddress(draft, network);
   const isToken = isTokenAddress(draft, network);
@@ -70,6 +78,15 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
       write.run('add', `${t('vault.add')} · ${t('vault.address_book')}`, (base) =>
         addWhitelisted({...base, recipient: draft as Address}),
       );
+      return;
+    }
+    const payable = book.some(
+      (b) =>
+        b.recipientAddress.toLowerCase() === draft.toLowerCase() &&
+        (b.status === undefined || b.status === WHITELIST_STATUS.payable || b.status === WHITELIST_STATUS.removalQueued),
+    );
+    if (sendsOff && !payable) {
+      Alert.alert(t('mobile.payments.cant_pay_title'), t('mobile.payments.cant_pay_sends_off'));
       return;
     }
     setPicked({address: draft as Address, label: given || undefined, addToBook});

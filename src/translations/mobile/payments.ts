@@ -3,6 +3,8 @@ import type {MobileTable} from './index';
 // Payments tab (Send / Scheduled / Address Book), plus first-run onboarding and the lock screen.
 export const payments: MobileTable = {
   en: {
+    cant_pay_title: 'Can\'t pay this address',
+    cant_pay_sends_off: 'Send to new in 24 hours is $0, so the vault only pays whitelisted addresses whose waiting period is over. This one isn\'t, so the payment would be refused. Pick a whitelisted address, or add this one to the whitelist and pay it once its wait is over.',
     edit_name: 'Edit name',
     sends_off: 'Sends to new addresses are off: send to new in 24 hours is $0. Choose a saved recipient whose waiting period is over.',
     whitelisted_book: 'Whitelisted',
@@ -69,6 +71,8 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Unlock',
   },
   zh: {
+    cant_pay_title: '无法向此地址付款',
+    cant_pay_sends_off: '24 小时内发送给新地址为 $0，金库只向已过等待期的地址簿地址付款。此地址不在其中，付款会被拒绝。请选择地址簿中的地址，或先将此地址加入地址簿，等待期结束后再付款。',
     edit_name: '编辑名称',
     sends_off: '发送给新地址已关闭：24 小时内发送给新地址为 $0。请选择已过等待期的已保存收款人。',
     whitelisted_book: '地址簿',
@@ -135,6 +139,8 @@ export const payments: MobileTable = {
     lock_unlock_face_id: '解锁',
   },
   'zh-TW': {
+    cant_pay_title: '無法向此地址付款',
+    cant_pay_sends_off: '24 小時內傳送給新地址為 $0，金庫只向已過等待期的地址簿地址付款。此地址不在其中，付款會被拒絕。請選擇地址簿中的地址，或先將此地址加入地址簿，等待期結束後再付款。',
     edit_name: '編輯名稱',
     sends_off: '傳送給新地址已關閉：24 小時內傳送給新地址為 $0。請選擇已過等待期的已儲存收款人。',
     whitelisted_book: '地址簿',
@@ -201,6 +207,8 @@ export const payments: MobileTable = {
     lock_unlock_face_id: '解鎖',
   },
   ja: {
+    cant_pay_title: 'このアドレスには支払えません',
+    cant_pay_sends_off: '24時間以内の新しい宛先への送金が $0 のため、Vault は待機期間を終えたホワイトリストのアドレスにのみ支払います。このアドレスは該当しないため、支払いは拒否されます。ホワイトリストのアドレスを選ぶか、このアドレスをホワイトリストに追加し、待機期間の後に支払ってください。',
     edit_name: '名前を編集',
     sends_off: '新しい宛先への送金はオフです（24時間以内の新しい宛先への送金が $0）。待機期間を終えた保存済みの受取人を選んでください。',
     token_address_warning: 'これはトークンのコントラクトアドレスで、ウォレットではありません。送金すると取り戻せません。',
@@ -252,6 +260,8 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'ロック解除',
   },
   ko: {
+    cant_pay_title: '이 주소로 지불할 수 없습니다',
+    cant_pay_sends_off: '24시간 내 새 주소로 송금이 $0이므로 볼트는 대기 기간이 지난 화이트리스트 주소에만 지불합니다. 이 주소는 해당하지 않아 지불이 거부됩니다. 화이트리스트 주소를 선택하거나, 이 주소를 화이트리스트에 추가하고 대기 기간이 지난 후 지불하세요.',
     edit_name: '이름 편집',
     sends_off: '새 주소로 송금이 꺼져 있습니다(24시간 내 새 주소로 송금 $0). 대기 기간이 지난 저장된 수취인을 선택하세요.',
     token_address_warning: '이 주소는 지갑이 아니라 토큰 컨트랙트입니다. 보낸 자금은 되찾을 수 없습니다.',
@@ -303,6 +313,8 @@ export const payments: MobileTable = {
     lock_unlock_face_id: '잠금 해제',
   },
   fr: {
+    cant_pay_title: 'Impossible de payer cette adresse',
+    cant_pay_sends_off: 'L’envoi vers de nouvelles adresses sur 24 h est à 0 $ : le coffre ne paie que les adresses en liste blanche dont le délai d’attente est écoulé. Ce n’est pas le cas de celle-ci, le paiement serait refusé. Choisissez une adresse en liste blanche, ou ajoutez celle-ci et payez-la une fois son délai écoulé.',
     edit_name: 'Modifier le nom',
     sends_off: 'Envois vers de nouvelles adresses désactivés : l’envoi vers de nouvelles adresses sur 24 h est de 0 $. Choisissez un destinataire enregistré dont le délai d’attente est écoulé.',
     token_address_warning: 'Ceci est un contrat de token, pas un portefeuille. Les fonds envoyés seraient irrécupérables.',
@@ -354,6 +366,8 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Déverrouiller',
   },
   es: {
+    cant_pay_title: 'No se puede pagar a esta dirección',
+    cant_pay_sends_off: 'Los envíos a direcciones nuevas en 24 horas están en 0 $, así que la bóveda solo paga a direcciones en lista blanca cuyo periodo de espera haya terminado. Esta no lo es, así que el pago sería rechazado. Elige una dirección en lista blanca, o añade esta y págala cuando termine su espera.',
     edit_name: 'Editar nombre',
     sends_off: 'Envíos a direcciones nuevas desactivados: los envíos a direcciones nuevas en 24 horas están en 0 $. Elige un destinatario guardado cuyo periodo de espera haya terminado.',
     token_address_warning: 'Esta es la dirección de un contrato de token, no una cartera. Los fondos enviados no se podrían recuperar.',
@@ -405,6 +419,8 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Desbloquear',
   },
   de: {
+    cant_pay_title: 'An diese Adresse kann nicht gezahlt werden',
+    cant_pay_sends_off: '„An neue Adressen in 24 Stunden“ ist 0 $, daher zahlt der Tresor nur an freigegebene Adressen, deren Wartezeit abgelaufen ist. Diese gehört nicht dazu, die Zahlung würde abgelehnt. Wähle eine freigegebene Adresse oder füge diese hinzu und zahle nach Ablauf ihrer Wartezeit.',
     edit_name: 'Namen bearbeiten',
     sends_off: 'Sendungen an neue Adressen sind aus: „An neue Adressen in 24 Stunden“ ist 0 $. Wähle einen gespeicherten Empfänger, dessen Wartezeit abgelaufen ist.',
     token_address_warning: 'Das ist ein Token-Contract, keine Wallet. Dorthin gesendete Mittel sind verloren.',
@@ -456,6 +472,8 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Entsperren',
   },
   'pt-BR': {
+    cant_pay_title: 'Não é possível pagar este endereço',
+    cant_pay_sends_off: 'O envio para novos endereços em 24 horas é $0, então o cofre só paga endereços da lista branca cujo período de espera terminou. Este não é um deles, e o pagamento seria recusado. Escolha um endereço da lista branca, ou adicione este e pague quando a espera terminar.',
     edit_name: 'Editar nome',
     sends_off: 'Envios para novos endereços desativados: o envio para novos endereços em 24 horas é $0. Escolha um destinatário salvo cujo período de espera terminou.',
     token_address_warning: 'Este é um contrato de token, não uma carteira. Fundos enviados não podem ser recuperados.',
@@ -507,6 +525,8 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Desbloquear',
   },
   hi: {
+    cant_pay_title: 'इस पते पर भुगतान नहीं हो सकता',
+    cant_pay_sends_off: '24 घंटे में नए पतों पर भेजना $0 है, इसलिए वॉल्ट केवल उन व्हाइटलिस्ट पतों पर भुगतान करता है जिनकी प्रतीक्षा अवधि पूरी हो चुकी है। यह पता उनमें नहीं है, इसलिए भुगतान अस्वीकार हो जाएगा। कोई व्हाइटलिस्ट पता चुनें, या इसे व्हाइटलिस्ट में जोड़ें और प्रतीक्षा पूरी होने पर भुगतान करें।',
     edit_name: 'नाम संपादित करें',
     sends_off: 'नए पतों पर भेजना बंद है: 24 घंटे में नए पतों पर भेजना $0 है। ऐसा सहेजा गया प्राप्तकर्ता चुनें जिसकी प्रतीक्षा अवधि पूरी हो चुकी है।',
     token_address_warning: 'यह टोकन कॉन्ट्रैक्ट पता है, वॉलेट नहीं। यहां भेजी गई राशि वापस नहीं मिलेगी।',
@@ -558,6 +578,8 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'अनलॉक करें',
   },
   tr: {
+    cant_pay_title: 'Bu adrese ödeme yapılamaz',
+    cant_pay_sends_off: '24 saatte yeni adreslere gönderim $0, bu yüzden kasa yalnızca bekleme süresi dolmuş beyaz listedeki adreslere ödeme yapar. Bu adres onlardan değil, ödeme reddedilir. Beyaz listeden bir adres seçin ya da bunu beyaz listeye ekleyip bekleme süresi bitince ödeyin.',
     edit_name: 'Adı düzenle',
     sends_off: 'Yeni adreslere gönderim kapalı: 24 saatte yeni adreslere gönderim $0. Bekleme süresi dolmuş kayıtlı bir alıcı seçin.',
     token_address_warning: 'Bu bir token sözleşmesi, cüzdan değil. Buraya gönderilen varlıklar geri alınamaz.',
@@ -609,6 +631,8 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Kilidi aç',
   },
   ru: {
+    cant_pay_title: 'Нельзя заплатить на этот адрес',
+    cant_pay_sends_off: 'Отправка на новые адреса за 24 часа — $0, поэтому хранилище платит только на адреса из белого списка, у которых истёк период ожидания. Этот адрес не из них, платёж будет отклонён. Выберите адрес из белого списка или добавьте этот и заплатите после окончания ожидания.',
     edit_name: 'Изменить имя',
     sends_off: 'Отправка на новые адреса отключена: отправка на новые адреса за 24 часа — $0. Выберите сохранённого получателя, у которого истёк период ожидания.',
     token_address_warning: 'Это адрес контракта токена, а не кошелёк. Отправленные туда средства вернуть нельзя.',
@@ -660,6 +684,8 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Разблокировать',
   },
   id: {
+    cant_pay_title: 'Tidak bisa membayar ke alamat ini',
+    cant_pay_sends_off: 'Kirim ke alamat baru dalam 24 jam adalah $0, jadi vault hanya membayar alamat whitelist yang masa tunggunya sudah lewat. Alamat ini bukan salah satunya, jadi pembayaran akan ditolak. Pilih alamat whitelist, atau tambahkan alamat ini dan bayar setelah masa tunggunya selesai.',
     edit_name: 'Edit nama',
     sends_off: 'Pengiriman ke alamat baru dimatikan: kirim ke alamat baru dalam 24 jam adalah $0. Pilih penerima tersimpan yang masa tunggunya sudah lewat.',
     token_address_warning: 'Ini alamat kontrak token, bukan dompet. Dana yang dikirim ke sana tidak bisa diambil kembali.',
@@ -711,6 +737,8 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Buka kunci',
   },
   vi: {
+    cant_pay_title: 'Không thể thanh toán tới địa chỉ này',
+    cant_pay_sends_off: 'Gửi tới địa chỉ mới trong 24 giờ là $0, nên vault chỉ thanh toán cho các địa chỉ trong danh sách trắng đã qua thời gian chờ. Địa chỉ này không thuộc số đó nên khoản thanh toán sẽ bị từ chối. Hãy chọn một địa chỉ trong danh sách trắng, hoặc thêm địa chỉ này và thanh toán khi hết thời gian chờ.',
     edit_name: 'Sửa tên',
     sends_off: 'Gửi tới địa chỉ mới đang tắt: gửi tới địa chỉ mới trong 24 giờ là $0. Hãy chọn người nhận đã lưu đã qua thời gian chờ.',
     token_address_warning: 'Đây là địa chỉ hợp đồng token, không phải ví. Tiền gửi tới đó không thể lấy lại.',
@@ -762,6 +790,8 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Mở khóa',
   },
   th: {
+    cant_pay_title: 'ไม่สามารถชำระไปยังที่อยู่นี้',
+    cant_pay_sends_off: 'ส่งไปยังที่อยู่ใหม่ใน 24 ชั่วโมงคือ $0 ห้องนิรภัยจึงชำระเฉพาะที่อยู่ในไวท์ลิสต์ที่พ้นระยะรอแล้ว ที่อยู่นี้ไม่ใช่ การชำระจะถูกปฏิเสธ เลือกที่อยู่ในไวท์ลิสต์ หรือเพิ่มที่อยู่นี้แล้วชำระเมื่อพ้นระยะรอ',
     edit_name: 'แก้ไขชื่อ',
     sends_off: 'ปิดการส่งไปยังที่อยู่ใหม่อยู่: ส่งไปยังที่อยู่ใหม่ใน 24 ชั่วโมงคือ $0 เลือกผู้รับที่บันทึกไว้ซึ่งพ้นระยะรอแล้ว',
     token_address_warning: 'นี่คือที่อยู่สัญญาโทเคน ไม่ใช่กระเป๋าเงิน เงินที่ส่งไปจะไม่สามารถนำกลับมาได้',

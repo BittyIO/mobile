@@ -147,6 +147,12 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
     );
 
   const pick = (address: string, label?: string) => {
+    // Send to new in 24 hours at $0: the vault pays only a whitelisted address whose wait is over.
+    // Choosing any other would only fail at the payment, so say why here instead of choosing it.
+    if (risk?.read && risk.sendDailyAllowance === 0n && !whitelisted(address)) {
+      Alert.alert(t('mobile.payments.cant_pay_title'), t('mobile.payments.cant_pay_sends_off'));
+      return;
+    }
     setPicked({address: address as Address, label, addToBook: false});
     nav.goBack();
   };
