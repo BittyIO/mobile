@@ -3,6 +3,7 @@ import {Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View} 
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Button} from '@/components/Button';
 import {useWallet} from '@/wallet/store';
+import {markPhraseVerified} from '@/wallet/phrase-backup';
 import {generateNewMnemonic} from '@/wallet/keyring';
 import {useRevealGuard} from '@/core/device-security';
 import {useT} from '@/i18n';
@@ -85,6 +86,7 @@ export function OnboardingScreen() {
     setBusy(true);
     try {
       await createWallet(mnemonic);
+      markPhraseVerified(useWallet.getState().account?.address);
     } catch (e) {
       Alert.alert(t('vault.failed'), String((e as Error)?.message ?? e));
     } finally {
@@ -96,6 +98,8 @@ export function OnboardingScreen() {
     setBusy(true);
     try {
       await createWallet(phrase);
+      // Typed in from the backup, so the backup is proven.
+      markPhraseVerified(useWallet.getState().account?.address);
     } catch (e) {
       Alert.alert(t('mobile.payments.onboarding_invalid_phrase'), String((e as Error)?.message ?? e));
     } finally {

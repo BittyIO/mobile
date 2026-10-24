@@ -12,6 +12,7 @@ import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {useActiveVaultAddress} from '@/core/active-vault';
 import {LOCK_ICON, LOCK_TITLE} from '@/core/lock-status';
+import {isPhraseVerified} from '@/wallet/phrase-backup';
 
 /**
  * Security — three groups of rows, each opening what it names: Safety settings (the timelock and the
@@ -24,6 +25,10 @@ export function SecurityScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const styles = useStyles(makeStyles);
   const owner = useWallet((s) => s.address);
+  const signer = useWallet((s) => s.account?.address);
+  // Re-read on focus: the Recovery phrase page is where it is verified.
+  const [phraseOk, setPhraseOk] = useState(() => isPhraseVerified(signer));
+  useFocusEffect(useCallback(() => setPhraseOk(isPhraseVerified(signer)), [signer]));
   const network = useNetwork((s) => s.network);
   const vault = useActiveVaultAddress(network);
 
@@ -64,7 +69,11 @@ export function SecurityScreen() {
       {/* The last resorts: freezing the vault, and the phrase that restores the key. */}
       <SettingsGroup>
         <SettingsRow icon={LOCK_ICON[lockLevel ?? 0]} title={t('mobile.vault.vault_lock')} value={lockValue} onPress={() => nav.navigate('VaultLock')} />
-        <SettingsRow icon="recovery" title={t('mobile.settings.recovery_phrase')} onPress={() => nav.navigate('VaultRecoveryPhrase')} last />
+        <SettingsRow
+          icon="recovery"
+          title={t('mobile.settings.recovery_phrase')}
+          value={t(phraseOk ? 'mobile.settings.phrase_verified' : 'mobile.settings.phrase_not_verified')}
+          onPress={() => nav.navigate('VaultRecoveryPhrase')} last />
       </SettingsGroup>
     </ScrollView>
   );
