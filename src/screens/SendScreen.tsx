@@ -258,23 +258,26 @@ export function SendScreen() {
   const [picker, setPicker] = useState<{k: number | null} | null>(null);
   const fundRows = useMemo(() => sourceOptions.filter((o) => Number(o.balance) > 0), [sourceOptions]);
 
-  // The fee for sending EVERYTHING: one transfer per source, one withdrawal per position. Twice the
-  // live quote, whole cents up, at least one cent — what the fee coin keeps back (see {remaining}).
-  const worstGas = useMemo(
-    () => relayGasFor({transfer: fundRows.length, withdraw: fundRows.filter((o) => o.source !== 'free').length}),
-    [fundRows],
-  );
+  // The fee for sending what the card holds: one transfer per line, one withdrawal per position,
+  // counted whether or not a line has an amount yet — so filling one with Max does not move the
+  // figure Max was taken against. The live quote with half again on top for gas moving before it
+  // lands, whole cents up, at least one cent — what the fee coin keeps back (see {remaining}).
+  // Priced for every source the vault holds, doubled, it left dollars behind on a one-coin send.
+  const cardGas = useMemo(() => {
+    const unwinds = new Set(recipient.lines.filter((l) => l.source !== 'free' && l.source !== 'reserve').map(lineKey));
+    return relayGasFor({transfer: Math.max(1, recipient.lines.length), withdraw: unwinds.size});
+  }, [recipient.lines]);
   const [feeKeep, setFeeKeep] = useState<number | null>(null);
   useEffect(() => {
     let live = true;
     setFeeKeep(null);
-    quoteRelayFeeUsd(network, worstGas).then((usd) => {
-      if (live && usd != null) setFeeKeep(Math.max(0.01, Math.ceil(usd * 2 * 100) / 100));
+    quoteRelayFeeUsd(network, cardGas).then((usd) => {
+      if (live && usd != null) setFeeKeep(Math.max(0.01, Math.ceil(usd * 1.5 * 100) / 100));
     });
     return () => {
       live = false;
     };
-  }, [network, worstGas]);
+  }, [network, cardGas]);
   /** What the recipient has not taken yet, plus whatever the row being changed already shows. */
   const pickableFor = (k: number | null) =>
     fundRows.filter((o) => {
@@ -320,9 +323,9 @@ export function SendScreen() {
    *
    * The fee coin keeps back what this very send will be billed: the relayer charges AFTER the
    * transfers, so a batch that sends every last unit of the coin it is billed in reverts at the
-   * charge with `fee-leg-failed`. That fee is priced for the largest send the card can make — every
-   * source the vault holds, each position unwound — at twice the live quote, so neither a fuller
-   * card nor a gas spike before it lands can outgrow it. It comes out of the reserve line first and
+   * charge with `fee-leg-failed`. That fee is priced for the card as it stands — every line on it,
+   * each position unwound — at half again the live quote, so a gas rise before it lands cannot
+   * outgrow it; adding a line re-prices it. It comes out of the reserve line first and
    * the free line after; while the quote is out (or failed), the whole reserve is held.
    */
   const remaining = (sym: string, source: Source): bigint => {
