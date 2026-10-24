@@ -3,7 +3,8 @@ import type {MobileTable} from './index';
 // Settings › Security / Manage / StableCoinAsGas / Auto-yield / Delegation screens.
 export const vault: MobileTable = {
   en: {
-    timelock_page: 'Timelocks',
+    timelock_page: 'Pending',
+    timelock_page_title: 'Pending changes',
     unsaved_from: 'Unsaved · now {{value}}',
     discard_title: 'Discard changes?',
     discard_msg: "Your risk settings changes haven't been saved.",
@@ -138,7 +139,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'The delegate loses trading access immediately.',
   },
   zh: {
-    timelock_page: '时间锁',
+    timelock_page: '待生效',
+    timelock_page_title: '待生效的更改',
     unsaved_from: '未保存 · 当前 {{value}}',
     discard_title: '放弃更改？',
     discard_msg: '你的风险设置更改尚未保存。',
@@ -267,7 +269,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: '受托人将立即失去交易权限。',
   },
   'zh-TW': {
-    timelock_page: '時間鎖',
+    timelock_page: '待生效',
+    timelock_page_title: '待生效的變更',
     permissions: '權限',
     perm_market_trade: '市價交易',
     perm_intent: '限價單與 TWAP',
@@ -362,7 +365,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: '受託人將立即失去交易權限。',
   },
   ja: {
-    timelock_page: 'タイムロック',
+    timelock_page: '保留中',
+    timelock_page_title: '保留中の変更',
     permissions: '権限',
     perm_market_trade: '成行取引',
     perm_intent: '指値注文と TWAP',
@@ -454,7 +458,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: '委任先は直ちに取引アクセスを失います。',
   },
   ko: {
-    timelock_page: '타임락',
+    timelock_page: '대기 중',
+    timelock_page_title: '대기 중인 변경',
     permissions: '권한',
     perm_market_trade: '시장가 거래',
     perm_intent: '지정가 주문 및 TWAP',
@@ -546,7 +551,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: '위임자는 즉시 거래 권한을 잃습니다.',
   },
   fr: {
-    timelock_page: 'Timelocks',
+    timelock_page: 'En attente',
+    timelock_page_title: 'Changements en attente',
     permissions: 'Autorisations',
     perm_market_trade: 'Trading au marché',
     perm_intent: 'Ordres limites et TWAP',
@@ -638,7 +644,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Le délégué perd immédiatement l’accès au trading.',
   },
   es: {
-    timelock_page: 'Timelocks',
+    timelock_page: 'Pendientes',
+    timelock_page_title: 'Cambios pendientes',
     permissions: 'Permisos',
     perm_market_trade: 'Operar a mercado',
     perm_intent: 'Órdenes límite y TWAP',
@@ -730,7 +737,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'El delegado pierde el acceso al trading de inmediato.',
   },
   de: {
-    timelock_page: 'Timelocks',
+    timelock_page: 'Ausstehend',
+    timelock_page_title: 'Ausstehende Änderungen',
     permissions: 'Berechtigungen',
     perm_market_trade: 'Markt-Trades',
     perm_intent: 'Limit-Orders & TWAP',
@@ -822,7 +830,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Der Delegierte verliert sofort den Handelszugriff.',
   },
   'pt-BR': {
-    timelock_page: 'Timelocks',
+    timelock_page: 'Pendentes',
+    timelock_page_title: 'Alterações pendentes',
     permissions: 'Permissões',
     perm_market_trade: 'Negociação a mercado',
     perm_intent: 'Ordens limitadas e TWAP',
@@ -913,7 +922,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'O delegado perde o acesso de negociação imediatamente.',
   },
   tr: {
-    timelock_page: 'Zaman kilitleri',
+    timelock_page: 'Bekleyenler',
+    timelock_page_title: 'Bekleyen değişiklikler',
     permissions: 'İzinler',
     perm_market_trade: 'Piyasa işlemi',
     perm_intent: 'Limit emirler ve TWAP',
@@ -1004,7 +1014,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Yetkili işlem erişimini hemen kaybeder.',
   },
   ru: {
-    timelock_page: 'Таймлоки',
+    timelock_page: 'Ожидают',
+    timelock_page_title: 'Ожидающие изменения',
     permissions: 'Разрешения',
     perm_market_trade: 'Рыночная торговля',
     perm_intent: 'Лимитные ордера и TWAP',
@@ -1095,7 +1106,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Делегат немедленно теряет доступ к торговле.',
   },
   id: {
-    timelock_page: 'Timelock',
+    timelock_page: 'Tertunda',
+    timelock_page_title: 'Perubahan tertunda',
     permissions: 'Izin',
     perm_market_trade: 'Perdagangan pasar',
     perm_intent: 'Order limit & TWAP',
@@ -1186,7 +1198,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Delegasi langsung kehilangan akses perdagangan.',
   },
   vi: {
-    timelock_page: 'Khóa thời gian',
+    timelock_page: 'Đang chờ',
+    timelock_page_title: 'Thay đổi đang chờ',
     permissions: 'Quyền',
     perm_market_trade: 'Giao dịch thị trường',
     perm_intent: 'Lệnh giới hạn & TWAP',
@@ -1277,7 +1290,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Người được ủy quyền mất quyền giao dịch ngay lập tức.',
   },
   th: {
-    timelock_page: 'ไทม์ล็อก',
+    timelock_page: 'รอดำเนินการ',
+    timelock_page_title: 'การเปลี่ยนแปลงที่รอดำเนินการ',
     permissions: 'สิทธิ์',
     perm_market_trade: 'เทรดราคาตลาด',
     perm_intent: 'คำสั่งลิมิตและ TWAP',
@@ -1368,7 +1382,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'ผู้รับมอบสิทธิ์จะเสียสิทธิ์เทรดทันที',
   },
   hi: {
-    timelock_page: 'टाइमलॉक',
+    timelock_page: 'लंबित',
+    timelock_page_title: 'लंबित बदलाव',
     permissions: 'अनुमतियाँ',
     perm_market_trade: 'मार्केट ट्रेड',
     perm_intent: 'लिमिट ऑर्डर और TWAP',
