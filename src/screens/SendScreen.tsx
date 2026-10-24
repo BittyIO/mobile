@@ -520,17 +520,15 @@ export function SendScreen() {
             })}
         </SettingsGroup>
 
-            {/* Offered while the recipient still has a token left to take — the same list the
-                chooser would show, so the control never opens an empty sheet. Counting lines
-                against sources, as this once did, hid it whenever one token filled every funded
-                source and left the second token unreachable. */}
-            {pickableFor(null).length > 0 ? (
-              <SettingsGroup>
-                <Pressable style={({pressed}) => [styles.addRow, pressed && styles.pressed]} onPress={() => setPicker({k: null})}>
-                  <Text style={styles.addToken}>＋ {t('mobile.payments.add_token')}</Text>
-                </Pressable>
-              </SettingsGroup>
-            ) : null}
+            {/* Always offered. With every listed token already on the card the sheet still holds
+                the field for a token pasted by contract address, which is the only way to send one
+                the vault's list does not show — hiding the row once the last listed token was
+                added left that unreachable. */}
+            <SettingsGroup>
+              <Pressable style={({pressed}) => [styles.addRow, pressed && styles.pressed]} onPress={() => setPicker({k: null})}>
+                <Text style={styles.addToken}>＋ {t('mobile.payments.add_token')}</Text>
+              </Pressable>
+            </SettingsGroup>
 
         {sendsOff ? (
           <Text style={bookBlocked ? styles.err : styles.hint}>{t('mobile.payments.sends_off')}</Text>
@@ -583,7 +581,11 @@ export function SendScreen() {
           <AddByAddress
             onAdd={async (address) => {
               const x = await custom.add(address);
-              if (picker) choose(picker.k, x.address, 'free');
+              if (!picker) return;
+              // Already on the card: nothing to add, just close.
+              const taken = recipient.lines.some((l, j) => j !== picker.k && lineKey(l) === `${x.address}:free`);
+              if (taken) setPicker(null);
+              else choose(picker.k, x.address, 'free');
             }}
           />
         </ScrollView>
