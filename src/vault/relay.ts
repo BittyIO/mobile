@@ -22,6 +22,7 @@ import {knownAssets} from '@/core/assets';
 import {translate} from '@/i18n';
 import {useLanguage} from '@/core/language-store';
 import {SafeSignaturePending} from './safe';
+import {assertCanWrite, nameRevert} from './vault-abi';
 
 /** One vault call, unencoded — used to compose a multicall. */
 export type VaultCall = {abi: Abi; functionName: string; args?: readonly unknown[]};
@@ -163,6 +164,9 @@ function offerOtherPayer(title: string, message: string, accept: string): Promis
 async function relayEncoded(opts: EncodedWrite): Promise<RelayResult> {
   const t = (key: string) => translate(useLanguage.getState().language, key);
   const {account, network, vault} = opts;
+  // Every vault write passes here, so this is where a vault on a release newer than this build is
+  // stopped — before a signature is asked for.
+  await assertCanWrite(vault, network);
   const payer = opts.payer ?? (ownerCanPay(account) ? feePayerFor(network, vault) : 'vault');
   const asked = opts.payer !== undefined;
 
@@ -363,7 +367,9 @@ function relayError(json: {reason?: string; error?: string; code?: string} | nul
  * indexer RPC URL and its API key.
  */
 function withCode(message: string, reason?: string, code?: string): string {
-  const tail = [reason, code].filter(Boolean).join(' · ');
+  // A revert the server could not name arrives as its bare selector; a vault ABI this device has
+  // (shipped, or downloaded for a newer release) may know it.
+  const tail = [reason, code ? nameRevert(code) : code].filter(Boolean).join(' · ');
   return tail ? `${message}\n\n${tail.slice(0, 140)}` : message;
 }
 

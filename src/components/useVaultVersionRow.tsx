@@ -17,6 +17,7 @@ import {usePending} from '@/vault/pending';
 import {useConfirmAction} from '@/components/ConfirmAction';
 import {relayGasFor} from '@/vault/fee-quote';
 import {useAssetCatalog} from '@/core/asset-catalog';
+import {canRunVault, forgetVaultVersion, vaultAbiFor} from '@/vault/vault-abi';
 
 /**
  * The Version row of Settings › Vault, as on the web's Security tab: the running release, an arrow to
@@ -60,11 +61,23 @@ export function useVaultVersionRow(): {
 
   // Cleared first and guarded, so a switch never shows the last network's version — or lets its
   // late answer land on the new one.
+  // Whether this build can run the vault's release, and the one on offer (see vault-abi): an upgrade
+  // to a release that needs a newer app is not offered, since it cannot be undone.
+  const [runs, setRuns] = useState<{current: boolean; latest: boolean}>({current: true, latest: true});
   const load = useCallback(() => {
     setUp(null);
+    setRuns({current: true, latest: true});
     if (!vault) return;
     let live = true;
-    checkVaultUpgrade(vault, network).then((u) => live && setUp(u));
+    checkVaultUpgrade(vault, network).then(async (u) => {
+      if (!live) return;
+      setUp(u);
+      const [current, latest] = await Promise.all([canRunVault(u.currentVersion, network), canRunVault(u.latestVersion, network)]);
+      if (live) setRuns({current, latest});
+      // The vault's own ABI, if it is a release this build does not ship: fetched now, so its
+      // errors read by name.
+      vaultAbiFor(u.currentVersion, network).catch(() => null);
+    });
     return () => {
       live = false;
     };
@@ -89,6 +102,7 @@ export function useVaultVersionRow(): {
   useEffect(() => {
     if (submitted && !inFlight) {
       setSubmitted(null);
+      if (vault) forgetVaultVersion(vault, network);
       load();
     }
   }, [submitted, inFlight, load]);
@@ -115,7 +129,7 @@ export function useVaultVersionRow(): {
     }
   };
 
-  const upgradeable = !!up?.available && !working;
+  const upgradeable = !!up?.available && runs.latest && !working;
   // The app's own confirmation rather than a system alert, so an upgrade is agreed to the same way
   // every other on-chain action is: a Face ID button with the fee it will cost beside it.
   const onPress = () => {
@@ -154,10 +168,14 @@ export function useVaultVersionRow(): {
    * will be born on, so the row is already telling the truth; announcing that nothing exists on
    * chain yet invites a question — do I have to do something? — whose answer is no.
    */
-  const sub = up.available
-    ? t('vault.upgrade_available')
-    : up.latestVersion
-      ? t('mobile.settings.vault_no_new_version')
-      : undefined;
+  const sub = !runs.current
+    ? t('mobile.settings.vault_needs_app_update')
+    : up.available && !runs.latest
+      ? t('mobile.settings.vault_upgrade_needs_app_update', {version: up.latestVersion ?? ''})
+      : up.available
+        ? t('vault.upgrade_available')
+        : up.latestVersion
+          ? t('mobile.settings.vault_no_new_version')
+          : undefined;
   return {value, sub, upgradeable, confirming: false, onPress, reload: load, sheet};
 }
