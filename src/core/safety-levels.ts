@@ -34,14 +34,16 @@ export const RISK_FIELDS: RiskField[] = ['timelock', 'sendDailyAllowance', 'mark
 const STANDARD = SAFETY_LEVELS.find((l) => l.id === 'standard')!.values;
 
 /**
- * The numbers in force, from a risk read. A v1.0.0+ vault never holds a 0 — it reads an unset number
- * as its default — so a 0 here is a vault not activated yet, shown as the Standard it will start on.
+ * The numbers in force, from a risk read. A vault reads an unset number as its default, so a read
+ * that did not land is a vault not activated yet, shown as the Standard it will start on. An
+ * allowance of 0 that was read is real: the owner turned regular sends or market trading off.
  */
-export function valuesInForce(r: RiskValues): RiskValues {
+export function valuesInForce(r: RiskValues & {read: boolean}): RiskValues {
+  if (!r.read) return {...STANDARD};
   return {
     timelock: r.timelock || STANDARD.timelock,
-    sendDailyAllowance: r.sendDailyAllowance || STANDARD.sendDailyAllowance,
-    marketTradeDailyLossAllowance: r.marketTradeDailyLossAllowance || STANDARD.marketTradeDailyLossAllowance,
+    sendDailyAllowance: r.sendDailyAllowance,
+    marketTradeDailyLossAllowance: r.marketTradeDailyLossAllowance,
   };
 }
 

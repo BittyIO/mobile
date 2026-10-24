@@ -3,6 +3,7 @@ import type {MobileTable} from './index';
 // Payments tab (Send / Scheduled / Address Book), plus first-run onboarding and the lock screen.
 export const payments: MobileTable = {
   en: {
+    sends_off: 'Plain sends are off: your daily send allowance is $0. Choose a saved recipient whose waiting period is over.',
     whitelisted_book: 'Whitelisted',
     pending_whitelisted: 'Pending whitelisted',
     recipient_n: 'Recipient #{{n}}',
@@ -67,6 +68,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Unlock',
   },
   zh: {
+    sends_off: '普通发送已关闭：您的每日发送限额为 $0。请选择已过等待期的已保存收款人。',
     whitelisted_book: '白名单',
     pending_whitelisted: '待生效白名单',
     recipient_n: '收款地址 #{{n}}',
@@ -131,6 +133,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: '解锁',
   },
   'zh-TW': {
+    sends_off: '一般傳送已關閉：您的每日傳送限額為 $0。請選擇已過等待期的已儲存收款人。',
     whitelisted_book: '白名單',
     pending_whitelisted: '待生效白名單',
     recipient_n: '收款位址 #{{n}}',
@@ -195,6 +198,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: '解鎖',
   },
   ja: {
+    sends_off: '通常の送金はオフです（1日の送金上限が $0）。待機期間を終えた保存済みの受取人を選んでください。',
     token_address_warning: 'これはトークンのコントラクトアドレスで、ウォレットではありません。送金すると取り戻せません。',
     select_recipient: '送金先を選択',
     my_vaults: '自分のボールト',
@@ -244,6 +248,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'ロック解除',
   },
   ko: {
+    sends_off: '일반 송금이 꺼져 있습니다(일일 송금 한도 $0). 대기 기간이 지난 저장된 수취인을 선택하세요.',
     token_address_warning: '이 주소는 지갑이 아니라 토큰 컨트랙트입니다. 보낸 자금은 되찾을 수 없습니다.',
     select_recipient: '받는 주소 선택',
     my_vaults: '내 볼트',
@@ -293,6 +298,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: '잠금 해제',
   },
   fr: {
+    sends_off: 'Envois simples désactivés : votre plafond d\'envoi quotidien est de 0 $. Choisissez un destinataire enregistré dont le délai d\'attente est écoulé.',
     token_address_warning: 'Ceci est un contrat de token, pas un portefeuille. Les fonds envoyés seraient irrécupérables.',
     select_recipient: 'Choisir un destinataire',
     my_vaults: 'Mes coffres',
@@ -342,6 +348,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Déverrouiller',
   },
   es: {
+    sends_off: 'Envíos simples desactivados: tu límite diario de envío es 0 $. Elige un destinatario guardado cuyo periodo de espera haya terminado.',
     token_address_warning: 'Esta es la dirección de un contrato de token, no una cartera. Los fondos enviados no se podrían recuperar.',
     select_recipient: 'Elegir destinatario',
     my_vaults: 'Mis bóvedas',
@@ -391,6 +398,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Desbloquear',
   },
   de: {
+    sends_off: 'Einfache Sendungen sind aus: dein tägliches Sendelimit ist 0 $. Wähle einen gespeicherten Empfänger, dessen Wartezeit abgelaufen ist.',
     token_address_warning: 'Das ist ein Token-Contract, keine Wallet. Dorthin gesendete Mittel sind verloren.',
     select_recipient: 'Empfänger wählen',
     my_vaults: 'Meine Tresore',
@@ -440,6 +448,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Entsperren',
   },
   'pt-BR': {
+    sends_off: 'Envios simples desativados: seu limite diário de envio é $0. Escolha um destinatário salvo cujo período de espera terminou.',
     token_address_warning: 'Este é um contrato de token, não uma carteira. Fundos enviados não podem ser recuperados.',
     select_recipient: 'Escolher destinatário',
     my_vaults: 'Meus cofres',
@@ -489,6 +498,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Desbloquear',
   },
   hi: {
+    sends_off: 'सामान्य भेजना बंद है: आपकी दैनिक भेजने की सीमा $0 है। ऐसा सहेजा गया प्राप्तकर्ता चुनें जिसकी प्रतीक्षा अवधि पूरी हो चुकी है।',
     token_address_warning: 'यह टोकन कॉन्ट्रैक्ट पता है, वॉलेट नहीं। यहां भेजी गई राशि वापस नहीं मिलेगी।',
     select_recipient: 'प्राप्तकर्ता चुनें',
     my_vaults: 'मेरे वॉल्ट',
@@ -538,6 +548,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'अनलॉक करें',
   },
   tr: {
+    sends_off: 'Düz gönderimler kapalı: günlük gönderim limitiniz $0. Bekleme süresi dolmuş kayıtlı bir alıcı seçin.',
     token_address_warning: 'Bu bir token sözleşmesi, cüzdan değil. Buraya gönderilen varlıklar geri alınamaz.',
     select_recipient: 'Alıcı seç',
     my_vaults: 'Kasalarım',
@@ -587,6 +598,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Kilidi aç',
   },
   ru: {
+    sends_off: 'Обычные отправки отключены: дневной лимит отправки $0. Выберите сохранённого получателя, у которого истёк период ожидания.',
     token_address_warning: 'Это адрес контракта токена, а не кошелёк. Отправленные туда средства вернуть нельзя.',
     select_recipient: 'Выбрать получателя',
     my_vaults: 'Мои хранилища',
@@ -636,6 +648,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Разблокировать',
   },
   id: {
+    sends_off: 'Pengiriman biasa dimatikan: batas kirim harian Anda $0. Pilih penerima tersimpan yang masa tunggunya sudah lewat.',
     token_address_warning: 'Ini alamat kontrak token, bukan dompet. Dana yang dikirim ke sana tidak bisa diambil kembali.',
     select_recipient: 'Pilih penerima',
     my_vaults: 'Brankas saya',
@@ -685,6 +698,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Buka kunci',
   },
   vi: {
+    sends_off: 'Gửi thông thường đang tắt: hạn mức gửi hằng ngày của bạn là $0. Hãy chọn người nhận đã lưu đã qua thời gian chờ.',
     token_address_warning: 'Đây là địa chỉ hợp đồng token, không phải ví. Tiền gửi tới đó không thể lấy lại.',
     select_recipient: 'Chọn người nhận',
     my_vaults: 'Kho của tôi',
@@ -734,6 +748,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Mở khóa',
   },
   th: {
+    sends_off: 'ปิดการส่งแบบปกติอยู่: วงเงินส่งรายวันของคุณคือ $0 เลือกผู้รับที่บันทึกไว้ซึ่งพ้นระยะรอแล้ว',
     token_address_warning: 'นี่คือที่อยู่สัญญาโทเคน ไม่ใช่กระเป๋าเงิน เงินที่ส่งไปจะไม่สามารถนำกลับมาได้',
     select_recipient: 'เลือกผู้รับ',
     my_vaults: 'วอลต์ของฉัน',

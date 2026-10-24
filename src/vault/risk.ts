@@ -1,7 +1,7 @@
 /**
  * Owner risk & controls — the vault's risk surface, plus the locks.
  *
- *  Risk is three numbers, none of which can be turned off:
+ *  Risk is three numbers, none of which can be lifted:
  *   - timelock: seconds a LOOSENING of anything deferred waits out (tightening is immediate).
  *     1 to 30 days.
  *   - sendDailyAllowance: the ceiling on what regular sends may move per rolling day, in whole USD,
@@ -9,8 +9,9 @@
  *   - marketTradeDailyLossAllowance: what market trades may lose against oracle value per rolling
  *     day, in whole USD, 1 to 10,000 — a leaked key selling into a pool it set up loses value
  *     without sending anything. Kept apart from the send cap so neither uses up the other.
- *  A vault that never set one reads 1 day and 10,000 (see {RISK_BOUNDS}); the contract refuses
- *  anything outside the bounds.
+ *  From vault {ZERO_ALLOWANCE_SINCE} either allowance may also be 0, which turns regular sends or
+ *  market trading off; an older vault refuses 0. A vault that never set one reads 1 day and 10,000
+ *  (see {RISK_BOUNDS}); the contract refuses anything outside the bounds.
  *  Each setter writes only its field (the others go in as UNCHANGED = type(uint256).max).
  *
  *  The locks, which the risk numbers exist to serve:
@@ -26,7 +27,10 @@
  */
 import type {Address, Hex} from 'viem';
 import {publicClientFor, type Network} from '@/core/chain';
+import {useCallback, useState} from 'react';
+import {useFocusEffect} from '@react-navigation/native';
 import {VAULT_RISK_ABI, WHITELIST_STATUS} from '@/core/abi';
+import {runningVaultVersion} from './vault-abi';
 import {relayVaultWrite} from './relay';
 import {fetchWhitelist} from './payments';
 
@@ -45,11 +49,25 @@ export const RISK_BOUNDS: Record<'timelock' | 'sendDailyAllowance' | 'marketTrad
   marketTradeDailyLossAllowance: {min: 1n, max: 10_000n},
 };
 
+/** The first vault release that accepts an allowance of 0 (regular sends or market trading off). */
+export const ZERO_ALLOWANCE_SINCE = '1.0.5';
+
+/** Whether a vault on `version` accepts an allowance of 0. */
+export function allowsZeroAllowance(version: string | null): boolean {
+  if (!version) return false;
+  const a = version.split('.').map(Number);
+  const b = ZERO_ALLOWANCE_SINCE.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((a[i] ?? 0) !== b[i]) return (a[i] ?? 0) > b[i];
+  return true;
+}
+
 export type RiskConfig = {
+  /** False for an un-activated vault or a failed read: every number is then 0 and means nothing. */
+  read: boolean;
   timelock: bigint; // seconds
-  /** Whole USD regular sends may move per day, 0 = no cap. */
+  /** Whole USD regular sends may move per day; 0 = regular sends are off. */
   sendDailyAllowance: bigint;
-  /** Whole USD market trades may lose against oracle value per day, 0 = unprotected. */
+  /** Whole USD market trades may lose against oracle value per day; 0 = market trading is off. */
   marketTradeDailyLossAllowance: bigint;
   /**
    * A loosening still waiting out the timelock: the value it will take and when (unix seconds).
@@ -61,7 +79,7 @@ export type RiskConfig = {
 /** 0 unlocked, 1 emergency locked, 2 locked for ever — the contract's own numbering. */
 export type LockLevel = 0 | 1 | 2;
 
-const zeroRisk = (): RiskConfig => ({timelock: 0n, sendDailyAllowance: 0n, marketTradeDailyLossAllowance: 0n, pending: {}});
+const zeroRisk = (): RiskConfig => ({read: false, timelock: 0n, sendDailyAllowance: 0n, marketTradeDailyLossAllowance: 0n, pending: {}});
 
 /** The risk numbers in force. Zeros for an un-activated vault or a failed read. */
 export async function getRiskConfig(vault: Address, network: Network): Promise<RiskConfig> {
@@ -77,10 +95,48 @@ export async function getRiskConfig(vault: Address, network: Network): Promise<R
     if (changes?.sendDailyAllowanceAt) pending.sendDailyAllowance = {value: changes.sendDailyAllowance, at: changes.sendDailyAllowanceAt};
     if (changes?.marketTradeDailyLossAllowanceAt)
       pending.marketTradeDailyLossAllowance = {value: changes.marketTradeDailyLossAllowance, at: changes.marketTradeDailyLossAllowanceAt};
-    return {timelock, sendDailyAllowance, marketTradeDailyLossAllowance, pending};
+    return {read: true, timelock, sendDailyAllowance, marketTradeDailyLossAllowance, pending};
   } catch {
     return zeroRisk();
   }
+}
+
+/**
+ * What the owner has turned off by setting an allowance to 0: regular sends, market trading. Read
+ * from the vault on every focus, so a change made on another device shows on return. Both false
+ * until the read lands, or when it fails — the vault still refuses what is off.
+ */
+export function useAllowancesOff(vault: Address | null | undefined, network: Network) {
+  const [off, setOff] = useState({sends: false, marketTrades: false});
+  useFocusEffect(
+    useCallback(() => {
+      if (!vault) return setOff({sends: false, marketTrades: false});
+      let live = true;
+      getRiskConfig(vault, network).then((r) => {
+        if (live && r.read) setOff({sends: r.sendDailyAllowance === 0n, marketTrades: r.marketTradeDailyLossAllowance === 0n});
+      });
+      return () => {
+        live = false;
+      };
+    }, [vault, network]),
+  );
+  return off;
+}
+
+/** Whether the vault accepts an allowance of 0, from its running version. False until known. */
+export function useAllowsZeroAllowance(vault: Address | null | undefined, network: Network): boolean {
+  const [ok, setOk] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (!vault) return setOk(false);
+      let live = true;
+      runningVaultVersion(vault, network).then((v) => live && setOk(allowsZeroAllowance(v)));
+      return () => {
+        live = false;
+      };
+    }, [vault, network]),
+  );
+  return ok;
 }
 
 /** The lock level. 0 on a failed read — the screen then simply offers the unlocked controls. */

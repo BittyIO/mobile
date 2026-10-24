@@ -22,6 +22,7 @@ import {useVaultPositions} from '@/vault/useVaultPositions';
 import {balanceOfSymbol} from '@/vault/read';
 import {useActiveVaultAddress} from '@/core/active-vault';
 import {fetchWhitelist, sendToWhitelisted, sendWithWhitelist, type WhitelistedRecipient} from '@/vault/payments';
+import {useAllowancesOff} from '@/vault/risk';
 import {useCustomTokens} from '@/vault/custom-tokens';
 import {WHITELIST_STATUS} from '@/core/abi';
 import type {Position} from '@/vault/positions';
@@ -129,6 +130,8 @@ export function SendScreen() {
   const stable = assets.find((a) => a.kind === 'stable');
   const first = assets[0]?.symbol ?? 'USDC';
   const vault = useActiveVaultAddress(network);
+  // A daily send allowance of $0 turns plain sends off: the vault then pays only a saved recipient.
+  const sendsOff = useAllowancesOff(vault, network).sends;
 
   const bal = useVaultBalances(network);
   const weth = useWethFeeCoin(network, vault);
@@ -380,7 +383,9 @@ export function SendScreen() {
           (b.status === undefined || b.status === WHITELIST_STATUS.payable || b.status === WHITELIST_STATUS.removalQueued),
       )
     : undefined;
-  const bookBlocked = bookOnly.length > 0 && !!recipient.to && !entry;
+  // With plain sends off, every funded card goes as a whitelisted payment.
+  const viaBook = bookOnly.length > 0 || (sendsOff && recipient.lines.some((l) => Number(l.amount) > 0));
+  const bookBlocked = viaBook && !!recipient.to && !entry;
   const canSubmit = unlocked && !!stable && status !== 'busy' && rows.length > 0 && !anyOver && !bookBlocked;
 
   const onSubmit = async () => {
@@ -398,7 +403,7 @@ export function SendScreen() {
     try {
       const acct = await getSigner();
       const h =
-        bookOnly.length > 0 && entry
+        viaBook && entry
           ? await sendToWhitelisted({account: acct, vault, network, id: entry.id, rows, stableCoin: stable.address})
           : await sendWithWhitelist({
               account: acct,
@@ -527,7 +532,9 @@ export function SendScreen() {
               </SettingsGroup>
             ) : null}
 
-        {bookOnly.length > 0 ? (
+        {sendsOff ? (
+          <Text style={bookBlocked ? styles.err : styles.hint}>{t('mobile.payments.sends_off')}</Text>
+        ) : bookOnly.length > 0 ? (
           <Text style={bookBlocked ? styles.err : styles.hint}>
             {t('mobile.payments.whitelisted_only', {tokens: bookOnly.join(', ')})}
           </Text>

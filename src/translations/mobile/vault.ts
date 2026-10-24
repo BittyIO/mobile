@@ -3,6 +3,8 @@ import type {MobileTable} from './index';
 // Settings › Security / Manage / StableCoinAsGas / Auto-yield / Delegation screens.
 export const vault: MobileTable = {
   en: {
+    send_allowance_zero_hint: '$0 turns plain sends off: money then leaves only to saved recipients whose waiting period is over.',
+    market_trade_allowance_zero_hint: '$0 turns market trading off. Limit orders still work.',
     timelock_page: 'Pending',
     timelock_page_title: 'Pending changes',
     unsaved_from: 'Unsaved · now {{value}}',
@@ -139,6 +141,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'The delegate loses trading access immediately.',
   },
   zh: {
+    send_allowance_zero_hint: '$0 将关闭普通发送：资金只能发送给已过等待期的已保存收款人。',
+    market_trade_allowance_zero_hint: '$0 将关闭市价交易。限价单仍可使用。',
     timelock_page: '待生效',
     timelock_page_title: '待生效的更改',
     unsaved_from: '未保存 · 当前 {{value}}',
@@ -269,6 +273,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: '受托人将立即失去交易权限。',
   },
   'zh-TW': {
+    send_allowance_zero_hint: '$0 會關閉一般傳送：資金只能傳送給已過等待期的已儲存收款人。',
+    market_trade_allowance_zero_hint: '$0 會關閉市價交易。限價單仍可使用。',
     timelock_page: '待生效',
     timelock_page_title: '待生效的變更',
     permissions: '權限',
@@ -365,6 +371,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: '受託人將立即失去交易權限。',
   },
   ja: {
+    send_allowance_zero_hint: '$0 にすると通常の送金がオフになり、資金は待機期間を終えた保存済みの受取人にのみ送れます。',
+    market_trade_allowance_zero_hint: '$0 にすると成行取引がオフになります。指値注文は引き続き使えます。',
     timelock_page: '保留中',
     timelock_page_title: '保留中の変更',
     permissions: '権限',
@@ -458,6 +466,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: '委任先は直ちに取引アクセスを失います。',
   },
   ko: {
+    send_allowance_zero_hint: '$0으로 설정하면 일반 송금이 꺼지고, 대기 기간이 지난 저장된 수취인에게만 자금을 보낼 수 있습니다.',
+    market_trade_allowance_zero_hint: '$0으로 설정하면 시장가 거래가 꺼집니다. 지정가 주문은 계속 사용할 수 있습니다.',
     timelock_page: '대기 중',
     timelock_page_title: '대기 중인 변경',
     permissions: '권한',
@@ -551,6 +561,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: '위임자는 즉시 거래 권한을 잃습니다.',
   },
   fr: {
+    send_allowance_zero_hint: '0 $ désactive les envois simples : l\'argent ne part plus que vers des destinataires enregistrés dont le délai d\'attente est écoulé.',
+    market_trade_allowance_zero_hint: '0 $ désactive les trades au marché. Les ordres à cours limité fonctionnent toujours.',
     timelock_page: 'En attente',
     timelock_page_title: 'Changements en attente',
     permissions: 'Autorisations',
@@ -644,6 +656,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Le délégué perd immédiatement l’accès au trading.',
   },
   es: {
+    send_allowance_zero_hint: '0 $ desactiva los envíos simples: el dinero solo sale hacia destinatarios guardados cuyo periodo de espera haya terminado.',
+    market_trade_allowance_zero_hint: '0 $ desactiva las operaciones de mercado. Las órdenes límite siguen funcionando.',
     timelock_page: 'Pendientes',
     timelock_page_title: 'Cambios pendientes',
     permissions: 'Permisos',
@@ -737,6 +751,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'El delegado pierde el acceso al trading de inmediato.',
   },
   de: {
+    send_allowance_zero_hint: '0 $ schaltet einfache Sendungen aus: Geld geht dann nur noch an gespeicherte Empfänger, deren Wartezeit abgelaufen ist.',
+    market_trade_allowance_zero_hint: '0 $ schaltet den Markthandel aus. Limit-Orders funktionieren weiterhin.',
     timelock_page: 'Ausstehend',
     timelock_page_title: 'Ausstehende Änderungen',
     permissions: 'Berechtigungen',
@@ -830,6 +846,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Der Delegierte verliert sofort den Handelszugriff.',
   },
   'pt-BR': {
+    send_allowance_zero_hint: '$0 desativa os envios simples: o dinheiro só sai para destinatários salvos cujo período de espera terminou.',
+    market_trade_allowance_zero_hint: '$0 desativa a negociação a mercado. Ordens limitadas continuam funcionando.',
     timelock_page: 'Pendentes',
     timelock_page_title: 'Alterações pendentes',
     permissions: 'Permissões',
@@ -922,6 +940,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'O delegado perde o acesso de negociação imediatamente.',
   },
   tr: {
+    send_allowance_zero_hint: '$0 düz gönderimleri kapatır: para yalnızca bekleme süresi dolmuş kayıtlı alıcılara gider.',
+    market_trade_allowance_zero_hint: '$0 piyasa işlemlerini kapatır. Limit emirler çalışmaya devam eder.',
     timelock_page: 'Bekleyenler',
     timelock_page_title: 'Bekleyen değişiklikler',
     permissions: 'İzinler',
@@ -1014,6 +1034,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Yetkili işlem erişimini hemen kaybeder.',
   },
   ru: {
+    send_allowance_zero_hint: '$0 отключает обычные отправки: средства уходят только сохранённым получателям, у которых истёк период ожидания.',
+    market_trade_allowance_zero_hint: '$0 отключает рыночную торговлю. Лимитные ордера по-прежнему работают.',
     timelock_page: 'Ожидают',
     timelock_page_title: 'Ожидающие изменения',
     permissions: 'Разрешения',
@@ -1106,6 +1128,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Делегат немедленно теряет доступ к торговле.',
   },
   id: {
+    send_allowance_zero_hint: '$0 mematikan pengiriman biasa: dana hanya bisa keluar ke penerima tersimpan yang masa tunggunya sudah lewat.',
+    market_trade_allowance_zero_hint: '$0 mematikan perdagangan pasar. Order limit tetap berfungsi.',
     timelock_page: 'Tertunda',
     timelock_page_title: 'Perubahan tertunda',
     permissions: 'Izin',
@@ -1198,6 +1222,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Delegasi langsung kehilangan akses perdagangan.',
   },
   vi: {
+    send_allowance_zero_hint: '$0 sẽ tắt gửi thông thường: tiền chỉ được gửi tới người nhận đã lưu đã qua thời gian chờ.',
+    market_trade_allowance_zero_hint: '$0 sẽ tắt giao dịch thị trường. Lệnh giới hạn vẫn hoạt động.',
     timelock_page: 'Đang chờ',
     timelock_page_title: 'Thay đổi đang chờ',
     permissions: 'Quyền',
@@ -1290,6 +1316,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Người được ủy quyền mất quyền giao dịch ngay lập tức.',
   },
   th: {
+    send_allowance_zero_hint: '$0 จะปิดการส่งแบบปกติ เงินจะออกได้เฉพาะไปยังผู้รับที่บันทึกไว้ซึ่งพ้นระยะรอแล้ว',
+    market_trade_allowance_zero_hint: '$0 จะปิดการซื้อขายแบบตลาด คำสั่งแบบลิมิตยังใช้ได้',
     timelock_page: 'รอดำเนินการ',
     timelock_page_title: 'การเปลี่ยนแปลงที่รอดำเนินการ',
     permissions: 'สิทธิ์',
@@ -1382,6 +1410,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'ผู้รับมอบสิทธิ์จะเสียสิทธิ์เทรดทันที',
   },
   hi: {
+    send_allowance_zero_hint: '$0 सामान्य भेजना बंद कर देता है: पैसा तब केवल उन सहेजे गए प्राप्तकर्ताओं को जाता है जिनकी प्रतीक्षा अवधि पूरी हो चुकी है।',
+    market_trade_allowance_zero_hint: '$0 मार्केट ट्रेडिंग बंद कर देता है। लिमिट ऑर्डर अब भी काम करते हैं।',
     timelock_page: 'लंबित',
     timelock_page_title: 'लंबित बदलाव',
     permissions: 'अनुमतियाँ',

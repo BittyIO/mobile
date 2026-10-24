@@ -9,10 +9,17 @@ export const RISK_TITLE = {
   marketTradeDailyLossAllowance: 'mobile.vault.market_trade_loss_allowance',
 } as const satisfies Record<RiskField, string>;
 
-/** The explanation under a risk field. Every number is bounded and has no "off". */
+/** The explanation under a risk field. Every number is bounded; an allowance's 0 is {riskZeroHintKey}. */
 export function riskHintKey(field: RiskField): string {
   if (field === 'marketTradeDailyLossAllowance') return `${RISK_TITLE[field]}_hint`;
   return field === 'timelock' ? 'mobile.vault.change_timelock_bounded_hint' : 'mobile.vault.send_daily_allowance_bounded_hint';
+}
+
+/** What 0 does to an allowance, shown where the vault accepts 0. */
+export function riskZeroHintKey(field: RiskField): string | null {
+  if (field === 'sendDailyAllowance') return 'mobile.vault.send_allowance_zero_hint';
+  if (field === 'marketTradeDailyLossAllowance') return 'mobile.vault.market_trade_allowance_zero_hint';
+  return null;
 }
 
 const HOUR = 3600n;
@@ -26,14 +33,14 @@ export function fmtDuration(s: bigint, t: T): string {
   return t('mobile.vault.duration_hours', {n: Number.isInteger(h) ? h : Number(h.toFixed(2))});
 }
 
-/** The send cap, whole USD a day. 0 is no cap. */
+/** The send cap, whole USD a day. 0 turns regular sends off. */
 export function fmtAllowance(v: bigint, t: T): string {
-  return v === 0n ? t('mobile.vault.no_cap') : `$${Number(v).toLocaleString()}`;
+  return v === 0n ? `$0 · ${t('mobile.vault.protection_off')}` : `$${Number(v).toLocaleString()}`;
 }
 
-/** The market-trade loss cap, whole USD. 0 leaves the protection off. */
+/** The market-trade loss cap, whole USD. 0 turns market trading off. */
 export function fmtLossAllowance(v: bigint, t: T): string {
-  return v === 0n ? t('mobile.vault.protection_off') : `$${Number(v).toLocaleString()}`;
+  return fmtAllowance(v, t);
 }
 
 export function fmtRiskValue(field: RiskField, v: bigint, t: T): string {
