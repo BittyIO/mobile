@@ -90,8 +90,6 @@ export function VaultListScreen() {
   const {found, notYours} = useVaultDirectory(network, vaults, `${refresh}:${current?.key ?? ''}`);
   const mine = vaults.filter((v) => current && ownerOf(v) === current.key);
   const foundMine = found.filter((f) => current && !current.safe && f.key.address.toLowerCase() === current.key);
-  const [editing, setEditing] = useState<number | null>(null);
-  const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [safeOpen, setSafeOpen] = useState(false);
   const [safeDraft, setSafeDraft] = useState('');
@@ -100,13 +98,24 @@ export function VaultListScreen() {
   const {ask, sheet} = useConfirmAction();
 
   const label = (n: number) => t('mobile.app.vault_n', {n});
-  const commit = () => {
-    if (editing != null) rename(editing, draft);
-    setEditing(null);
-  };
+  /**
+   * Renaming a vault: the pencil opens the system text dialog — the name in a field, the vault's
+   * address under the title, Cancel and Save — as an address-book entry is renamed. The name is
+   * this phone's; saved empty, the vault goes back to "Vault {n}".
+   */
+  const renameVault = (v: VaultRef) =>
+    Alert.prompt(
+      t('mobile.payments.edit_name'),
+      vaultAddressOf(v, network) ?? undefined,
+      [
+        {text: t('common.cancel'), style: 'cancel'},
+        {text: t('vault.save'), onPress: (name?: string) => rename(v.index, name ?? '')},
+      ],
+      'plain-text',
+      v.name,
+    );
 
   const choose = (v: VaultRef) => {
-    commit();
     if (!v.owner || notYours.has(v.index)) return;
     if (v.vault && v.network && v.network !== network) setNetwork(v.network as Network);
     selectVault(v.index);
@@ -215,42 +224,21 @@ export function VaultListScreen() {
         key={v.index}
         style={({pressed}) => [styles.vaultRow, i < list.length - 1 && styles.rowDivider, gone && styles.gone, pressed && styles.pressed]}
         onPress={() => choose(v)}
-        onLongPress={() => askRemove(v)}
-        disabled={editing === v.index}>
+        onLongPress={() => askRemove(v)}>
         <View style={styles.vaultText}>
           <View style={styles.nameLine}>
-            {editing === v.index ? (
-              <TextInput
-                style={[styles.name, styles.nameInput]}
-                value={draft}
-                onChangeText={setDraft}
-                onBlur={commit}
-                onSubmitEditing={commit}
-                placeholder={label(v.index + 1)}
-                placeholderTextColor={c.subtext}
-                returnKeyType="done"
-                autoFocus
-                maxLength={24}
-              />
-            ) : (
-              <>
-                <Text style={styles.name} numberOfLines={1}>
-                  {vaultLabel(v, label)}
-                </Text>
-                <Pressable
-                  hitSlop={10}
-                  onPress={() => {
-                    setDraft(v.name);
-                    setEditing(v.index);
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('vault.edit')}>
-                  <Svg width={14} height={14} viewBox="0 0 24 24">
-                    <Path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke={c.subtext} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                  </Svg>
-                </Pressable>
-              </>
-            )}
+            <Text style={styles.name} numberOfLines={1}>
+              {vaultLabel(v, label)}
+            </Text>
+            <Pressable
+              hitSlop={10}
+              onPress={() => renameVault(v)}
+              accessibilityRole="button"
+              accessibilityLabel={t('vault.edit')}>
+              <Svg width={14} height={14} viewBox="0 0 24 24">
+                <Path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke={c.subtext} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+              </Svg>
+            </Pressable>
             {tag ? <Text style={styles.tag}>{tag}</Text> : null}
           </View>
           <Text style={styles.addr}>
@@ -379,7 +367,6 @@ const makeStyles = (c: Colors) =>
     vaultText: {flex: 1, gap: 3},
     nameLine: {flexDirection: 'row', alignItems: 'center', gap: 6},
     name: {color: c.text, fontSize: 15, fontWeight: '600', flexShrink: 1},
-    nameInput: {flex: 1, padding: 0, margin: 0},
     tag: {color: c.subtext, fontSize: 11, fontWeight: '600', borderWidth: StyleSheet.hairlineWidth, borderColor: c.border, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1, overflow: 'hidden'},
     // Full, and small enough to wrap to two lines rather than be cut: vaults are told apart by
     // their address, and an elided middle is where two would differ.
