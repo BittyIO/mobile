@@ -3,6 +3,7 @@ import type {MobileTable} from './index';
 // Settings › Security / Manage / StableCoinAsGas / Auto-yield / Delegation screens.
 export const vault: MobileTable = {
   en: {
+    pending_not_me: 'No, it wasn\'t me',
     safety_needs_version: 'Needs vault {{version}}+',
     send_allowance_zero_hint: '$0 turns sends to new addresses off: money then leaves only to saved recipients whose waiting period is over.',
     market_trade_allowance_zero_hint: '$0 turns market trading off. Limit orders still work.',
@@ -15,7 +16,6 @@ export const vault: MobileTable = {
     keep_editing: 'Keep editing',
     pending_changes: 'Pending',
     pending_none: 'Nothing is waiting to take effect.',
-    pending_not_me: 'I did not do these',
     pending_lock_hint: "Didn't ask for one of these? Lock the vault before it takes effect.",
     pending_gas_budget: 'Network fee daily budget',
     pending_max_fee: 'Network fee per operation',
@@ -142,6 +142,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'The delegate loses trading access immediately.',
   },
   zh: {
+    pending_not_me: '不，不是我',
     safety_needs_version: '需要金库 {{version}}+',
     send_allowance_zero_hint: '$0 将关闭发送给新地址：资金只能发送给已过等待期的已保存收款人。',
     market_trade_allowance_zero_hint: '$0 将关闭市价交易。限价单仍可使用。',
@@ -154,7 +155,6 @@ export const vault: MobileTable = {
     keep_editing: '继续编辑',
     pending_changes: '待生效',
     pending_none: '没有待生效的变更。',
-    pending_not_me: '这些不是我操作的',
     pending_lock_hint: '不是你发起的？请在生效前锁定金库。',
     pending_gas_budget: '网络费每日预算',
     pending_max_fee: '单笔网络费上限',
@@ -275,6 +275,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: '受托人将立即失去交易权限。',
   },
   'zh-TW': {
+    pending_not_me: '不，不是我',
     safety_needs_version: '需要金庫 {{version}}+',
     send_allowance_zero_hint: '$0 會關閉傳送給新地址：資金只能傳送給已過等待期的已儲存收款人。',
     market_trade_allowance_zero_hint: '$0 會關閉市價交易。限價單仍可使用。',
@@ -374,6 +375,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: '受託人將立即失去交易權限。',
   },
   ja: {
+    pending_not_me: 'いいえ、私ではありません',
     safety_needs_version: 'Vault {{version}} 以降が必要',
     send_allowance_zero_hint: '$0 にすると新しい宛先への送金がオフになり、資金は待機期間を終えた保存済みの受取人にのみ送れます。',
     market_trade_allowance_zero_hint: '$0 にすると成行取引がオフになります。指値注文は引き続き使えます。',
@@ -470,6 +472,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: '委任先は直ちに取引アクセスを失います。',
   },
   ko: {
+    pending_not_me: '아니요, 제가 아닙니다',
     safety_needs_version: '볼트 {{version}} 이상 필요',
     send_allowance_zero_hint: '$0으로 설정하면 새 주소로 송금이 꺼지고, 대기 기간이 지난 저장된 수취인에게만 자금을 보낼 수 있습니다.',
     market_trade_allowance_zero_hint: '$0으로 설정하면 시장가 거래가 꺼집니다. 지정가 주문은 계속 사용할 수 있습니다.',
@@ -566,6 +569,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: '위임자는 즉시 거래 권한을 잃습니다.',
   },
   fr: {
+    pending_not_me: 'Non, ce n’était pas moi',
     safety_needs_version: 'Coffre {{version}}+ requis',
     send_allowance_zero_hint: '0 $ désactive les envois vers de nouvelles adresses : l’argent ne part plus que vers des destinataires enregistrés dont le délai d’attente est écoulé.',
     market_trade_allowance_zero_hint: '0 $ désactive les trades au marché. Les ordres à cours limité fonctionnent toujours.',
@@ -662,6 +666,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Le délégué perd immédiatement l’accès au trading.',
   },
   es: {
+    pending_not_me: 'No, no fui yo',
     safety_needs_version: 'Requiere bóveda {{version}}+',
     send_allowance_zero_hint: '0 $ desactiva los envíos a direcciones nuevas: el dinero solo sale hacia destinatarios guardados cuyo periodo de espera haya terminado.',
     market_trade_allowance_zero_hint: '0 $ desactiva las operaciones de mercado. Las órdenes límite siguen funcionando.',
@@ -758,6 +763,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'El delegado pierde el acceso al trading de inmediato.',
   },
   de: {
+    pending_not_me: 'Nein, das war ich nicht',
     safety_needs_version: 'Tresor {{version}}+ nötig',
     send_allowance_zero_hint: '0 $ schaltet Sendungen an neue Adressen aus: Geld geht dann nur noch an gespeicherte Empfänger, deren Wartezeit abgelaufen ist.',
     market_trade_allowance_zero_hint: '0 $ schaltet den Markthandel aus. Limit-Orders funktionieren weiterhin.',
@@ -854,6 +860,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Der Delegierte verliert sofort den Handelszugriff.',
   },
   'pt-BR': {
+    pending_not_me: 'Não, não fui eu',
     safety_needs_version: 'Requer cofre {{version}}+',
     send_allowance_zero_hint: '$0 desativa os envios para novos endereços: o dinheiro só sai para destinatários salvos cujo período de espera terminou.',
     market_trade_allowance_zero_hint: '$0 desativa a negociação a mercado. Ordens limitadas continuam funcionando.',
@@ -949,6 +956,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'O delegado perde o acesso de negociação imediatamente.',
   },
   tr: {
+    pending_not_me: 'Hayır, ben değildim',
     safety_needs_version: 'Kasa {{version}}+ gerekir',
     send_allowance_zero_hint: '$0 yeni adreslere gönderimi kapatır: para yalnızca bekleme süresi dolmuş kayıtlı alıcılara gider.',
     market_trade_allowance_zero_hint: '$0 piyasa işlemlerini kapatır. Limit emirler çalışmaya devam eder.',
@@ -1044,6 +1052,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Yetkili işlem erişimini hemen kaybeder.',
   },
   ru: {
+    pending_not_me: 'Нет, это был не я',
     safety_needs_version: 'Нужно хранилище {{version}}+',
     send_allowance_zero_hint: '$0 отключает отправку на новые адреса: средства уходят только сохранённым получателям, у которых истёк период ожидания.',
     market_trade_allowance_zero_hint: '$0 отключает рыночную торговлю. Лимитные ордера по-прежнему работают.',
@@ -1139,6 +1148,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Делегат немедленно теряет доступ к торговле.',
   },
   id: {
+    pending_not_me: 'Tidak, bukan saya',
     safety_needs_version: 'Perlu vault {{version}}+',
     send_allowance_zero_hint: '$0 mematikan pengiriman ke alamat baru: dana hanya bisa keluar ke penerima tersimpan yang masa tunggunya sudah lewat.',
     market_trade_allowance_zero_hint: '$0 mematikan perdagangan pasar. Order limit tetap berfungsi.',
@@ -1234,6 +1244,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Delegasi langsung kehilangan akses perdagangan.',
   },
   vi: {
+    pending_not_me: 'Không, không phải tôi',
     safety_needs_version: 'Cần vault {{version}}+',
     send_allowance_zero_hint: '$0 sẽ tắt gửi tới địa chỉ mới: tiền chỉ được gửi tới người nhận đã lưu đã qua thời gian chờ.',
     market_trade_allowance_zero_hint: '$0 sẽ tắt giao dịch thị trường. Lệnh giới hạn vẫn hoạt động.',
@@ -1329,6 +1340,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Người được ủy quyền mất quyền giao dịch ngay lập tức.',
   },
   th: {
+    pending_not_me: 'ไม่ ไม่ใช่ฉัน',
     safety_needs_version: 'ต้องใช้ห้องนิรภัย {{version}}+',
     send_allowance_zero_hint: '$0 จะปิดการส่งไปยังที่อยู่ใหม่ เงินจะออกได้เฉพาะไปยังผู้รับที่บันทึกไว้ซึ่งพ้นระยะรอแล้ว',
     market_trade_allowance_zero_hint: '$0 จะปิดการซื้อขายแบบตลาด คำสั่งแบบลิมิตยังใช้ได้',
@@ -1424,6 +1436,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'ผู้รับมอบสิทธิ์จะเสียสิทธิ์เทรดทันที',
   },
   hi: {
+    pending_not_me: 'नहीं, यह मैं नहीं था',
     safety_needs_version: 'वॉल्ट {{version}}+ चाहिए',
     send_allowance_zero_hint: '$0 नए पतों पर भेजना बंद कर देता है: पैसा तब केवल उन सहेजे गए प्राप्तकर्ताओं को जाता है जिनकी प्रतीक्षा अवधि पूरी हो चुकी है।',
     market_trade_allowance_zero_hint: '$0 मार्केट ट्रेडिंग बंद कर देता है। लिमिट ऑर्डर अब भी काम करते हैं।',

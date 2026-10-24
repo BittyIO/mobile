@@ -60,7 +60,7 @@ export function pendingValue(p: PendingChange, t: T): string {
  * Overview › Pending — everything the vault has been told to do and has not done yet: a loosened
  * risk number, a handover, an asset-manager grant, an address-book entry maturing or leaving. Each
  * counts down to the second to when it takes effect, because that is the owner's window to lock the
- * vault if they did not ask for it — which "I did not do these" under the list goes straight to.
+ * vault if they did not ask for it — which "No, it wasn't me" under the list goes straight to.
  *
  * One clock for the page, ticking only while it is in view. When an item comes due the list is read
  * again, so a change that has taken effect leaves it; at most every few seconds, since the chain's
