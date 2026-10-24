@@ -20,7 +20,9 @@ export type RiskValues = Record<RiskField, bigint>;
 const DAY = 86_400n;
 
 export const SAFETY_LEVELS: {id: SafetyLevel; values: RiskValues; recommended?: boolean}[] = [
-  {id: 'maximum', values: {timelock: 7n * DAY, sendDailyAllowance: 1_000n, marketTradeDailyLossAllowance: 1_000n}},
+  // Both allowances at 0: nothing goes to a new address and nothing trades at market — money leaves
+  // only to a saved recipient, and trades go as limit orders. Needs a vault that accepts 0 (1.0.5+).
+  {id: 'maximum', values: {timelock: 7n * DAY, sendDailyAllowance: 0n, marketTradeDailyLossAllowance: 0n}},
   {
     id: 'balanced',
     values: {timelock: 3n * DAY, sendDailyAllowance: 5_000n, marketTradeDailyLossAllowance: 5_000n},
