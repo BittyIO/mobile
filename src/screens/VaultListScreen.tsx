@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useMemo, useState} from 'react';
 import {ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import Svg, {Path} from 'react-native-svg';
@@ -10,7 +10,8 @@ import type {Network} from '@/core/chain';
 import {useWallet} from '@/wallet/store';
 import * as keyring from '@/wallet/keyring';
 import {fetchSafe, SafeApiError} from '@/vault/safe';
-import {useVaultDirectory, type FoundVault} from '@/vault/owned-vaults';
+import {deviceKeys, useVaultDirectory, type FoundVault} from '@/vault/owned-vaults';
+import {PickerSheet} from '@/components/AssetPicker';
 import {acceptOwnership} from '@/vault/ownership';
 import {relayGasFor} from '@/vault/fee-quote';
 import {useAssetCatalog} from '@/core/asset-catalog';
@@ -34,6 +35,11 @@ const SAFE_KEY_SCAN = 10;
  *
  * Choosing a vault makes it the one in front and goes back. One received on another chain switches
  * to that chain first — it exists nowhere else.
+ *
+ * The owner comes first: one of this phone's keys, or a Safe added here. The list below is that
+ * owner's vaults alone — the one the factory derives from it, those transferred to it, and any the
+ * server finds for it — so a phone with several keys does not show every key's vaults in one heap.
+ * It starts on the owner of the vault in front, and changing it asks the server again.
  */
 export function VaultListScreen() {
   const {t} = useT();
@@ -49,7 +55,40 @@ export function VaultListScreen() {
 
   const [refresh, setRefresh] = useState(0);
   const [pulled, setPulled] = useState(false);
-  const {found, notYours} = useVaultDirectory(network, vaults, refresh);
+
+  /**
+   * Who owns a listed vault: a Safe vault its Safe, every other the key that signs for it. A key
+   * whose address has not been derived on this phone yet (that takes Face ID, once) goes by its
+   * index until it has one, so its vault is still listed under it.
+   */
+  const ownerOf = (v: VaultRef): string => (v.safe ?? v.owner)?.toLowerCase() ?? `index:${v.index}`;
+  // Every owner this phone can act as: its keys, then the Safes it has added.
+  const owners = useMemo(() => {
+    const keys: {key: string; address: string | null; keyIndex: number; safe: boolean}[] = deviceKeys(vaults).map((k) => ({
+      key: k.address.toLowerCase(),
+      address: k.address,
+      keyIndex: k.index,
+      safe: false,
+    }));
+    for (const v of vaults)
+      if (!v.safe && !v.vault && !v.owner) keys.push({key: `index:${v.index}`, address: null, keyIndex: v.index, safe: false});
+    const safes = vaults
+      .filter((v) => v.safe)
+      .map((v) => ({key: v.safe!.toLowerCase(), address: v.safe!, keyIndex: v.signerIndex ?? 0, safe: true}));
+    return [...keys, ...safes.filter((s) => !keys.some((k) => k.key === s.key))].sort((a, b) =>
+      a.safe === b.safe ? a.keyIndex - b.keyIndex : a.safe ? 1 : -1,
+    );
+  }, [vaults]);
+  const active = vaults.find((v) => v.index === activeIndex);
+  const [owner, setOwner] = useState<string | null>(() => (active ? ownerOf(active) : null));
+  const current = owners.find((o) => o.key === owner) ?? owners[0];
+  const [ownerOpen, setOwnerOpen] = useState(false);
+  const ownerLabel = (o: (typeof owners)[number]) =>
+    o.safe ? t('mobile.vaults.tag_safe') : t('mobile.vaults.owner_n', {n: o.keyIndex + 1});
+  // Asked again whenever the owner changes, as on a pull.
+  const {found, notYours} = useVaultDirectory(network, vaults, `${refresh}:${current?.key ?? ''}`);
+  const mine = vaults.filter((v) => current && ownerOf(v) === current.key);
+  const foundMine = found.filter((f) => current && !current.safe && f.key.address.toLowerCase() === current.key);
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -243,12 +282,25 @@ export function VaultListScreen() {
           tintColor={c.text}
         />
       }>
-      <SettingsGroup>{vaults.map(row)}</SettingsGroup>
+      {/* The owner first: everything below is its vaults. */}
+      {current ? (
+        <SettingsGroup label={t('mobile.vaults.owner')}>
+          <Pressable style={({pressed}) => [styles.vaultRow, pressed && styles.pressed]} onPress={() => setOwnerOpen(true)}>
+            <View style={styles.vaultText}>
+              <Text style={styles.name}>{ownerLabel(current)}</Text>
+              <Text style={styles.addr}>{current.address ?? t('mobile.settings.vault_unlock_first')}</Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+        </SettingsGroup>
+      ) : null}
 
-      {found.length > 0 ? (
+      <SettingsGroup label={t('mobile.vaults.vaults_of_owner')}>{mine.map(row)}</SettingsGroup>
+
+      {foundMine.length > 0 ? (
         <SettingsGroup label={t('mobile.vaults.found')}>
-          {found.map((f, i) => (
-            <View key={f.vault} style={[styles.vaultRow, i < found.length - 1 && styles.rowDivider]}>
+          {foundMine.map((f, i) => (
+            <View key={f.vault} style={[styles.vaultRow, i < foundMine.length - 1 && styles.rowDivider]}>
               <View style={styles.vaultText}>
                 <Text style={styles.addr}>{f.vault}</Text>
                 {/* Handed to this key and waiting for it to accept: it is not this key's until then. */}
@@ -293,6 +345,17 @@ export function VaultListScreen() {
           </View>
         ) : null}
       </SettingsGroup>
+      <PickerSheet
+        visible={ownerOpen}
+        title={t('mobile.vaults.choose_owner')}
+        items={owners.map((o) => ({key: o.key, label: ownerLabel(o), sub: o.address ?? undefined}))}
+        selected={current?.key}
+        onSelect={(k) => {
+          setOwner(k);
+          setOwnerOpen(false);
+        }}
+        onClose={() => setOwnerOpen(false)}
+      />
       {sheet}
     </ScrollView>
   );
@@ -316,6 +379,7 @@ const makeStyles = (c: Colors) =>
     goneText: {color: c.warning, fontSize: 12},
     pressed: {opacity: 0.6},
     checkHidden: {opacity: 0},
+    chevron: {color: c.subtext, fontSize: 22, fontWeight: '300'},
     link: {color: c.accent, fontSize: 15, fontWeight: '600'},
     form: {gap: 12, paddingHorizontal: 16, paddingBottom: 16},
     intro: {color: c.subtext, fontSize: 13, lineHeight: 18},
