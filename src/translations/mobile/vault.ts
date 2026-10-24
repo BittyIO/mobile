@@ -3,6 +3,8 @@ import type {MobileTable} from './index';
 // Settings › Security / Manage / StableCoinAsGas / Auto-yield / Delegation screens.
 export const vault: MobileTable = {
   en: {
+    not_me_title: 'Stop these changes',
+    not_me_intro: 'Lock the vault before they land. A lock cancels every change still waiting, and money can then only go to your saved whitelisted addresses.',
     pending_whitelist_add: 'New whitelisted',
     pending_whitelist_remove: 'Remove whitelisted',
     pending_named: '{{title}}: {{name}}',
@@ -143,6 +145,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'The delegate loses trading access immediately.',
   },
   zh: {
+    not_me_title: '阻止这些变更',
+    not_me_intro: '在这些变更生效前锁定金库。锁定会取消所有仍在等待的变更，之后资金只能转到地址簿中已有的地址。',
     pending_whitelist_add: '加入地址簿',
     pending_whitelist_remove: '移出地址簿',
     pending_named: '{{title}}：{{name}}',
@@ -277,6 +281,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: '受托人将立即失去交易权限。',
   },
   'zh-TW': {
+    not_me_title: '阻止這些變更',
+    not_me_intro: '在這些變更生效前鎖定金庫。鎖定會取消所有仍在等待的變更，之後資金只能轉到地址簿中已有的地址。',
     pending_whitelist_add: '加入地址簿',
     pending_whitelist_remove: '移出地址簿',
     pending_named: '{{title}}：{{name}}',
@@ -380,6 +386,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: '受託人將立即失去交易權限。',
   },
   ja: {
+    not_me_title: 'これらの変更を止める',
+    not_me_intro: '反映される前に Vault をロックしてください。ロックすると待機中の変更はすべて取り消され、その後は保存済みのホワイトリストのアドレスにのみ送金できます。',
     pending_whitelist_add: 'ホワイトリストに追加',
     pending_whitelist_remove: 'ホワイトリストから削除',
     pending_named: '{{title}}：{{name}}',
@@ -480,6 +488,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: '委任先は直ちに取引アクセスを失います。',
   },
   ko: {
+    not_me_title: '이 변경 막기',
+    not_me_intro: '적용되기 전에 볼트를 잠그세요. 잠그면 대기 중인 모든 변경이 취소되고, 이후 자금은 저장된 화이트리스트 주소로만 보낼 수 있습니다.',
     pending_whitelist_add: '새 화이트리스트',
     pending_whitelist_remove: '화이트리스트 제거',
     pending_named: '{{title}}: {{name}}',
@@ -580,6 +590,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: '위임자는 즉시 거래 권한을 잃습니다.',
   },
   fr: {
+    not_me_title: 'Arrêter ces changements',
+    not_me_intro: 'Verrouillez le coffre avant qu’ils ne s’appliquent. Un verrouillage annule tout changement encore en attente, et l’argent ne peut alors aller qu’à vos adresses en liste blanche.',
     pending_whitelist_add: 'Ajout en liste blanche',
     pending_whitelist_remove: 'Retrait de la liste blanche',
     pending_named: '{{title}} : {{name}}',
@@ -680,6 +692,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Le délégué perd immédiatement l’accès au trading.',
   },
   es: {
+    not_me_title: 'Detener estos cambios',
+    not_me_intro: 'Bloquea la bóveda antes de que se apliquen. Un bloqueo cancela todo cambio aún en espera, y el dinero solo podrá ir a tus direcciones en lista blanca.',
     pending_whitelist_add: 'Nuevo en lista blanca',
     pending_whitelist_remove: 'Quitar de la lista blanca',
     pending_named: '{{title}}: {{name}}',
@@ -780,6 +794,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'El delegado pierde el acceso al trading de inmediato.',
   },
   de: {
+    not_me_title: 'Diese Änderungen stoppen',
+    not_me_intro: 'Sperre den Tresor, bevor sie greifen. Eine Sperre bricht jede noch wartende Änderung ab, und Geld kann dann nur noch an deine freigegebenen Adressen gehen.',
     pending_whitelist_add: 'Neu auf der Whitelist',
     pending_whitelist_remove: 'Von der Whitelist entfernen',
     pending_named: '{{title}}: {{name}}',
@@ -880,6 +896,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Der Delegierte verliert sofort den Handelszugriff.',
   },
   'pt-BR': {
+    not_me_title: 'Impedir estas alterações',
+    not_me_intro: 'Bloqueie o cofre antes que elas entrem em vigor. Um bloqueio cancela toda alteração ainda em espera, e o dinheiro só poderá ir para seus endereços da lista branca.',
     pending_whitelist_add: 'Novo na lista branca',
     pending_whitelist_remove: 'Remover da lista branca',
     pending_named: '{{title}}: {{name}}',
@@ -979,6 +997,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'O delegado perde o acesso de negociação imediatamente.',
   },
   tr: {
+    not_me_title: 'Bu değişiklikleri durdur',
+    not_me_intro: 'Uygulanmadan önce kasayı kilitleyin. Kilit, hâlâ bekleyen her değişikliği iptal eder ve para artık yalnızca kayıtlı beyaz listedeki adreslerinize gidebilir.',
     pending_whitelist_add: 'Yeni beyaz liste',
     pending_whitelist_remove: 'Beyaz listeden çıkarma',
     pending_named: '{{title}}: {{name}}',
@@ -1078,6 +1098,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Yetkili işlem erişimini hemen kaybeder.',
   },
   ru: {
+    not_me_title: 'Остановить эти изменения',
+    not_me_intro: 'Заблокируйте хранилище, пока они не вступили в силу. Блокировка отменяет все ожидающие изменения, и средства смогут уходить только на ваши адреса из белого списка.',
     pending_whitelist_add: 'Новый в белом списке',
     pending_whitelist_remove: 'Удаление из белого списка',
     pending_named: '{{title}}: {{name}}',
@@ -1177,6 +1199,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Делегат немедленно теряет доступ к торговле.',
   },
   id: {
+    not_me_title: 'Hentikan perubahan ini',
+    not_me_intro: 'Kunci vault sebelum perubahan ini berlaku. Kunci membatalkan semua perubahan yang masih menunggu, lalu dana hanya bisa dikirim ke alamat whitelist yang tersimpan.',
     pending_whitelist_add: 'Whitelist baru',
     pending_whitelist_remove: 'Hapus dari whitelist',
     pending_named: '{{title}}: {{name}}',
@@ -1276,6 +1300,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Delegasi langsung kehilangan akses perdagangan.',
   },
   vi: {
+    not_me_title: 'Chặn các thay đổi này',
+    not_me_intro: 'Hãy khóa vault trước khi chúng có hiệu lực. Khóa sẽ hủy mọi thay đổi còn đang chờ, và sau đó tiền chỉ có thể gửi tới các địa chỉ trong danh sách trắng đã lưu.',
     pending_whitelist_add: 'Thêm vào danh sách trắng',
     pending_whitelist_remove: 'Xóa khỏi danh sách trắng',
     pending_named: '{{title}}: {{name}}',
@@ -1375,6 +1401,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Người được ủy quyền mất quyền giao dịch ngay lập tức.',
   },
   th: {
+    not_me_title: 'หยุดการเปลี่ยนแปลงเหล่านี้',
+    not_me_intro: 'ล็อกห้องนิรภัยก่อนที่การเปลี่ยนแปลงจะมีผล การล็อกจะยกเลิกการเปลี่ยนแปลงที่ยังรออยู่ทั้งหมด และเงินจะส่งได้เฉพาะไปยังที่อยู่ในไวท์ลิสต์ที่บันทึกไว้',
     pending_whitelist_add: 'เพิ่มในไวท์ลิสต์',
     pending_whitelist_remove: 'นำออกจากไวท์ลิสต์',
     pending_named: '{{title}}: {{name}}',
@@ -1474,6 +1502,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'ผู้รับมอบสิทธิ์จะเสียสิทธิ์เทรดทันที',
   },
   hi: {
+    not_me_title: 'इन बदलावों को रोकें',
+    not_me_intro: 'इनके लागू होने से पहले वॉल्ट लॉक करें। लॉक करने से प्रतीक्षा में मौजूद हर बदलाव रद्द हो जाता है, और फिर पैसा केवल आपके सहेजे गए व्हाइटलिस्ट पतों पर जा सकता है।',
     pending_whitelist_add: 'नया व्हाइटलिस्ट',
     pending_whitelist_remove: 'व्हाइटलिस्ट से हटाना',
     pending_named: '{{title}}: {{name}}',

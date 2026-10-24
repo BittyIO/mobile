@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text} from 'react-native';
+import {ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {PendingRow} from '@/components/PendingRow';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -12,6 +12,7 @@ import {OptionRow, SettingsGroup} from '@/components/SettingsRow';
 import {RISK_TITLE, fmtRiskValue} from '@/components/riskFormat';
 import {PERM_ROWS} from '@/components/useAssetManagerRow';
 import {Sheet} from '@/components/Sheet';
+import {Button} from '@/components/Button';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {useActiveVaultAddress} from '@/core/active-vault';
@@ -122,6 +123,16 @@ export function PendingChangesScreen() {
   };
 
   const [permsOf, setPermsOf] = useState<number | null>(null);
+  /**
+   * "No, it wasn't me" opens the two ways to stop what is waiting, each with what it means, and
+   * goes straight to the one picked — rather than to the Lock page, where the owner would have to
+   * find them. The sheet is a modal, so it is closed first and the push waits for it to go.
+   */
+  const [notMe, setNotMe] = useState(false);
+  const lockWith = (action: 'emergency' | 'forever') => {
+    setNotMe(false);
+    setTimeout(() => nav.navigate('VaultLockAction', {action}), 320);
+  };
   const [refreshing, setRefreshing] = useState(false);
   const onPull = () => {
     setRefreshing(true);
@@ -180,12 +191,25 @@ export function PendingChangesScreen() {
         </SettingsGroup>
         {/* The one thing to do about a change the owner did not ask for: lock before it lands. */}
         <SettingsGroup>
-          <Pressable style={({pressed}) => [styles.notMe, pressed && styles.pressed]} onPress={() => nav.navigate('VaultLock')}>
+          <Pressable style={({pressed}) => [styles.notMe, pressed && styles.pressed]} onPress={() => setNotMe(true)}>
             <Text style={styles.notMeText}>{t('mobile.vault.pending_not_me')}</Text>
           </Pressable>
         </SettingsGroup>
         </>
       )}
+      <Sheet visible={notMe} title={t('mobile.vault.not_me_title')} onClose={() => setNotMe(false)}>
+        <View style={styles.notMeBody}>
+          <Text style={styles.notMeIntro}>{t('mobile.vault.not_me_intro')}</Text>
+          <View style={styles.notMeOption}>
+            <Text style={styles.notMeHint}>{t('mobile.vault.emergency_lock_hint')}</Text>
+            <Button title={t('mobile.vault.emergency_lock')} onPress={() => lockWith('emergency')} />
+          </View>
+          <View style={styles.notMeOption}>
+            <Text style={styles.notMeHint}>{t('mobile.vault.forever_lock_hint')}</Text>
+            <Button title={t('mobile.vault.forever_lock')} variant="danger" onPress={() => lockWith('forever')} />
+          </View>
+        </View>
+      </Sheet>
       <Sheet visible={permsOf !== null} title={t('mobile.vault.permissions')} onClose={() => setPermsOf(null)}>
         <SettingsGroup>
           {PERM_ROWS.map((r, i) => (
@@ -206,5 +230,9 @@ const makeStyles = (c: Colors) =>
     // Sized to the bar's 44 like the trade menu's: the native bar anchors a custom view by its bottom.
     notMe: {minHeight: 52, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16},
     notMeText: {color: c.danger, fontSize: 16, fontWeight: '600'},
+    notMeBody: {gap: 20, paddingTop: 4},
+    notMeIntro: {color: c.text, fontSize: 15, lineHeight: 21},
+    notMeOption: {gap: 10},
+    notMeHint: {color: c.subtext, fontSize: 13, lineHeight: 19},
     pressed: {opacity: 0.6},
   });
