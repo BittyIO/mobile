@@ -30,6 +30,13 @@ export type VaultCall = {abi: Abi; functionName: string; args?: readonly unknown
 const encodeCall = (c: VaultCall): Hex =>
   encodeFunctionData({abi: c.abi, functionName: c.functionName, args: c.args} as Parameters<typeof encodeFunctionData>[0]);
 
+/** What the forwarder will call on the vault for these calls: the one call, or a multicall of them. */
+export function encodeVaultCalls(calls: VaultCall[]): Hex {
+  return calls.length === 1
+    ? encodeCall(calls[0])
+    : encodeCall({abi: VAULT_MULTICALL_ABI, functionName: 'multicall', args: [calls.map(encodeCall)]});
+}
+
 /**
  * The floor for the inner call's gas, and the ceiling on what will be asked for.
  *
