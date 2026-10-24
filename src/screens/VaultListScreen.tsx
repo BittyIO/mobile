@@ -1,8 +1,8 @@
-import React, {useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import Svg, {Path} from 'react-native-svg';
-import {getAddress, isAddress} from 'viem';
+import {getAddress, isAddress, type Address} from 'viem';
 import {useVaults, vaultLabel, type VaultRef} from '@/core/vault-store';
 import {vaultAddressOf} from '@/core/active-vault';
 import {networkLabel, useNetwork} from '@/core/network-store';
@@ -10,7 +10,7 @@ import type {Network} from '@/core/chain';
 import {useWallet} from '@/wallet/store';
 import * as keyring from '@/wallet/keyring';
 import {fetchSafe, SafeApiError} from '@/vault/safe';
-import {deviceKeys, useVaultDirectory, type FoundVault} from '@/vault/owned-vaults';
+import {deviceKeys, fetchOwnedVaults, useVaultDirectory, type FoundVault} from '@/vault/owned-vaults';
 import {PickerSheet} from '@/components/AssetPicker';
 import {acceptOwnership} from '@/vault/ownership';
 import {relayGasFor} from '@/vault/fee-quote';
@@ -86,10 +86,32 @@ export function VaultListScreen() {
   const [ownerOpen, setOwnerOpen] = useState(false);
   const ownerLabel = (o: (typeof owners)[number]) =>
     o.safe ? t('mobile.vaults.tag_safe') : t('mobile.vaults.owner_n', {n: o.keyIndex + 1});
-  // Asked again whenever the owner changes, as on a pull.
-  const {found, notYours} = useVaultDirectory(network, vaults, `${refresh}:${current?.key ?? ''}`);
+  const {notYours} = useVaultDirectory(network, vaults, refresh);
   const mine = vaults.filter((v) => current && ownerOf(v) === current.key);
-  const foundMine = found.filter((f) => current && !current.safe && f.key.address.toLowerCase() === current.key);
+
+  /**
+   * What the server says the chosen owner holds on this chain, asked each time the owner changes
+   * and on a pull. Every one is offered under it unless that owner's own entry for it is already
+   * listed — a vault this phone still lists under the key that GAVE it away (greyed as no longer
+   * yours) used to hide it here, which is how a transfer between this phone's own keys went missing.
+   */
+  const [owned, setOwned] = useState<{owned: Address[]; pending: Address[]} | null>(null);
+  useEffect(() => {
+    setOwned(null);
+    if (!current?.address || current.safe) return;
+    let live = true;
+    fetchOwnedVaults(network, current.address as Address).then((r) => live && setOwned(r));
+    return () => {
+      live = false;
+    };
+  }, [network, current?.key, current?.address, current?.safe, refresh]);
+  const listedHere = new Set(mine.map((v) => vaultAddressOf(v, network)?.toLowerCase()).filter(Boolean) as string[]);
+  const foundMine: FoundVault[] =
+    owned && current?.address
+      ? [...owned.owned.map((vault) => ({vault, pending: false})), ...owned.pending.map((vault) => ({vault, pending: true}))]
+          .filter((f) => !listedHere.has(f.vault.toLowerCase()))
+          .map((f) => ({...f, key: {index: current.keyIndex, address: current.address as Address}}))
+      : [];
   const [busy, setBusy] = useState(false);
   const [safeOpen, setSafeOpen] = useState(false);
   const [safeDraft, setSafeDraft] = useState('');
