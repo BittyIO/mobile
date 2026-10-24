@@ -73,10 +73,13 @@ const TINT: Record<SettingsIconName, string> = {
 /** `round` draws it in a circle rather than the rounded square of a Settings row (the header's lock). */
 export function SettingsIcon({name, size = 29, round = false}: {name: SettingsIconName; size?: number; round?: boolean}) {
   const c = {stroke: '#fff', strokeWidth: 2, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const};
-  const g = size * 0.62;
+  // In a circle the glyph gets a little more room, and a padlock is lifted: its body is the heavy
+  // part and sits in the lower half, so geometrically centred it reads as low in a round badge.
+  const g = size * (round ? 0.56 : 0.62);
+  const lift = round && (name === 'lock' || name === 'lockTemp' || name === 'lockOpen') ? 1.5 : 0;
   return (
     <View style={[styles.box, {width: size, height: size, borderRadius: round ? size / 2 : size * 0.24, backgroundColor: TINT[name]}]}>
-      <Svg width={g} height={g} viewBox="0 0 24 24">
+      <Svg width={g} height={g} viewBox={`0 ${lift} 24 24`}>
         {name === 'language' ? (
           <>
             <Circle cx={12} cy={12} r={9} {...c} />
