@@ -301,7 +301,7 @@ function OwnerFee({fee}: {fee: bigint}) {
     <>
       <GasIcon color={c.subtext} size={12} />
       <Text style={styles.fee}>
-        −<Amount v={formatEth(fee)} size={12} color={c.subtext} /> ETH
+        <Amount v={formatEth(fee)} size={12} color={c.subtext} /> ETH
       </Text>
     </>
   );
@@ -369,13 +369,14 @@ function Op({
       <View style={styles.footer}>
         <View style={styles.meta}>
           {/* The gasless relay fee, split out of the transfer legs so it never inflates a send, is
-              shown on every row: it left the vault, whatever the operation was. */}
+              shown on every row: it left the vault, whatever the operation was. No minus: beside
+              the gas mark a fee is only ever a cost. */}
           <Text style={styles.date}>{fmtDate(op.timestamp, language)}</Text>
           {v.fee ? (
             <>
               <GasIcon color={c.subtext} size={12} />
               <Text style={styles.fee}>
-                −<Amount v={fmtAmt(v.fee.amount)} /> {displaySymbol(v.fee.assetSymbol)}
+                <Amount v={fmtAmt(v.fee.amount)} /> {displaySymbol(v.fee.assetSymbol)}
               </Text>
             </>
           ) : op.ownerFee ? (
