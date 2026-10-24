@@ -140,7 +140,7 @@ export function SettingsScreen() {
           title={t('mobile.settings.vault_version')}
           value={version.value}
           sub={version.sub}
-          right={version.confirming ? <ActivityIndicator color={c.subtext} size="small" /> : undefined}
+          right={version.confirming || version.checking ? <ActivityIndicator color={c.subtext} size="small" /> : undefined}
           onPress={version.confirming ? undefined : version.onPress}
           chevron={version.upgradeable}
           last

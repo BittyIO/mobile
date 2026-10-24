@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import type {Network} from '@/core/chain';
@@ -22,7 +22,8 @@ import {canRunVault, forgetVaultVersion, vaultAbiFor} from '@/vault/vault-abi';
 /**
  * The Version row of Settings › Vault, as on the web's Security tab: the running release, an arrow to
  * the offered one when the guard has a newer build, and a status line. Tapping an offered upgrade
- * confirms, then signs the UUPS upgrade (relayed, gasless).
+ * confirms, then signs the UUPS upgrade (relayed, gasless); tapping it with none on offer checks
+ * the chain again for a newer release.
  */
 export function useVaultVersionRow(): {
   value?: string;
@@ -30,6 +31,8 @@ export function useVaultVersionRow(): {
   upgradeable: boolean;
   /** A submitted upgrade is still being mined: the row shows it and refuses a second tap. */
   confirming: boolean;
+  /** A tap is checking the chain for a newer release. */
+  checking: boolean;
   onPress: () => void;
   /**
    * Re-read the vault's implementation from the chain.
@@ -85,6 +88,31 @@ export function useVaultVersionRow(): {
   useEffect(load, [load]);
 
   /**
+   * Check for a newer release now, from a tap on the row. Everything is read fresh — the guard's
+   * latest build, the vault's own, the release notes — and the vault's cached version is dropped,
+   * so a release that went out a minute ago is offered at once.
+   */
+  const [checking, setChecking] = useState(false);
+  const netRef = useRef(network);
+  netRef.current = network;
+  const recheck = async () => {
+    if (!vault || checking) return;
+    const net = network;
+    setChecking(true);
+    forgetVaultVersion(vault, net);
+    try {
+      const [u, cat] = await Promise.all([checkVaultUpgrade(vault, net), fetchVaultVersions(net)]);
+      const [current, latest] = await Promise.all([canRunVault(u.currentVersion, net), canRunVault(u.latestVersion, net)]);
+      if (netRef.current !== net) return;
+      setUp(u);
+      setCatalog(cat);
+      setRuns({current, latest});
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  /**
    * The upgrade this screen submitted, while it is still in flight.
    *
    * `busy` only covers the await — and that await ends when the RELAYER accepts, not when the
@@ -133,7 +161,11 @@ export function useVaultVersionRow(): {
   // The app's own confirmation rather than a system alert, so an upgrade is agreed to the same way
   // every other on-chain action is: a Face ID button with the fee it will cost beside it.
   const onPress = () => {
-    if (!upgradeable || !up) return;
+    if (working) return;
+    if (!upgradeable || !up) {
+      recheck();
+      return;
+    }
     // The release note for the build being upgraded TO (the vault implementation is note-category 0),
     // resolved through the app's own translations from the catalog's i18n stems. Absent note → the
     // prompt is just the version jump, as before.
@@ -153,8 +185,8 @@ export function useVaultVersionRow(): {
 
   // Confirming: the row says so and does nothing. Tapping it again would submit a second
   // upgrade to the same implementation.
-  if (working) return {value: t('vault.confirming'), upgradeable: false, confirming: true, onPress, reload: load, sheet};
-  if (!up) return {upgradeable: false, confirming: false, onPress, reload: load, sheet};
+  if (working) return {value: t('vault.confirming'), upgradeable: false, confirming: true, checking: false, onPress, reload: load, sheet};
+  if (!up) return {upgradeable: false, confirming: false, checking, onPress, reload: load, sheet};
   // Before activation the vault will be born on the guard's latest build, so that is its version.
   const shown = up.currentVersion ?? (!up.current ? up.latestVersion : null);
   const value = up.available && up.latestVersion ? `${shown ?? '?'} → ${up.latestVersion}` : shown ?? t('vault.upgrade_version_unknown');
@@ -168,7 +200,9 @@ export function useVaultVersionRow(): {
    * will be born on, so the row is already telling the truth; announcing that nothing exists on
    * chain yet invites a question — do I have to do something? — whose answer is no.
    */
-  const sub = !runs.current
+  const sub = checking
+    ? t('mobile.settings.vault_checking')
+    : !runs.current
     ? t('mobile.settings.vault_needs_app_update')
     : up.available && !runs.latest
       ? t('mobile.settings.vault_upgrade_needs_app_update', {version: up.latestVersion ?? ''})
@@ -177,5 +211,5 @@ export function useVaultVersionRow(): {
         : up.latestVersion
           ? t('mobile.settings.vault_no_new_version')
           : undefined;
-  return {value, sub, upgradeable, confirming: false, onPress, reload: load, sheet};
+  return {value, sub, upgradeable, confirming: false, checking, onPress, reload: load, sheet};
 }
