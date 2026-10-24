@@ -1,12 +1,16 @@
 import React, {useEffect, useMemo, useState} from 'react';
-import {Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {Alert, Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Button} from '@/components/Button';
 import {useWallet} from '@/wallet/store';
+import {markPhraseVerified} from '@/wallet/phrase-backup';
 import {generateNewMnemonic} from '@/wallet/keyring';
 import {useRevealGuard} from '@/core/device-security';
+import {PhraseInput} from '@/components/PhraseInput';
+import {validateMnemonic} from '@scure/bip39';
+import {wordlist} from '@scure/bip39/wordlists/english';
 import {useT} from '@/i18n';
-import {useColors, useStyles, type Colors} from '@/theme';
+import {useStyles, type Colors} from '@/theme';
 
 type Step = 'choose' | 'reveal' | 'confirm' | 'import';
 
@@ -39,7 +43,6 @@ function randomPositions(): number[] {
  */
 export function OnboardingScreen() {
   const {t} = useT();
-  const c = useColors();
   const styles = useStyles(makeStyles);
   const createWallet = useWallet((s) => s.createWallet);
 
@@ -48,7 +51,10 @@ export function OnboardingScreen() {
   const [challengePositions, setChallengePositions] = useState<number[]>([]);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState(false);
-  const [phrase, setPhrase] = useState('');
+  // The phrase being restored, word by word: always 24 slots, the first `importCount` of them used.
+  const [importWords, setImportWords] = useState<string[]>(() => Array(24).fill(''));
+  const [importCount, setImportCount] = useState<12 | 24>(12);
+  const phrase = importWords.slice(0, importCount).join(' ');
 
   const words = useMemo(() => (mnemonic ? mnemonic.split(' ') : []), [mnemonic]);
   const wordChoices = useMemo(() => shuffled(Array.from(new Set(words))), [words]);
@@ -85,6 +91,7 @@ export function OnboardingScreen() {
     setBusy(true);
     try {
       await createWallet(mnemonic);
+      markPhraseVerified(useWallet.getState().account?.address);
     } catch (e) {
       Alert.alert(t('vault.failed'), String((e as Error)?.message ?? e));
     } finally {
@@ -96,19 +103,28 @@ export function OnboardingScreen() {
     setBusy(true);
     try {
       await createWallet(phrase);
+      // Typed in from the backup, so the backup is proven.
+      markPhraseVerified(useWallet.getState().account?.address);
     } catch (e) {
       Alert.alert(t('mobile.payments.onboarding_invalid_phrase'), String((e as Error)?.message ?? e));
     } finally {
       setBusy(false);
     }
   };
-  const phraseWords = phrase.trim().split(/\s+/).filter(Boolean).length;
+  const allFilled = importWords.slice(0, importCount).every(Boolean);
+  const phraseValid = allFilled && validateMnemonic(phrase, wordlist);
 
   const phraseHidden = reveal.captured && (step === 'reveal' || step === 'confirm' || step === 'import');
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.body}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        alwaysBounceVertical
+        contentInsetAdjustmentBehavior="automatic"
+        automaticallyAdjustKeyboardInsets
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.body}>
         {step === 'choose' ? (
           <>
             <View style={styles.hero}>
@@ -134,30 +150,20 @@ export function OnboardingScreen() {
                 </Text>
               </View>
             ) : (
-              <TextInput
-                style={styles.input}
-                placeholder={t('mobile.payments.onboarding_import_placeholder')}
-                placeholderTextColor={c.subtext}
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="off"
-                spellCheck={false}
-                multiline
-                value={phrase}
-                onChangeText={setPhrase}
-              />
+              <PhraseInput words={importWords} count={importCount} onChange={setImportWords} onCount={setImportCount} />
             )}
+            {allFilled && !phraseValid ? <Text style={styles.bad}>{t('mobile.payments.onboarding_phrase_invalid')}</Text> : null}
             <Button
               title={busy ? t('mobile.payments.onboarding_importing') : t('mobile.payments.onboarding_import_btn')}
               onPress={onImport}
               loading={busy}
-              disabled={phraseHidden || busy || (phraseWords !== 12 && phraseWords !== 24)}
+              disabled={phraseHidden || busy || !phraseValid}
             />
             <Button
               title={t('common.back')}
               variant="secondary"
               onPress={() => {
-                setPhrase('');
+                setImportWords(Array(24).fill(''));
                 setStep('choose');
               }}
               disabled={busy}
@@ -276,5 +282,6 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   choiceSelected: {backgroundColor: c.accent, borderColor: c.accent},
   choiceText: {color: c.text, fontSize: 14, fontWeight: '600'},
   choiceTextSelected: {color: c.onAccent},
+  bad: {color: c.danger, fontSize: 13, lineHeight: 18},
   input: {minHeight: 96, borderRadius: 12, backgroundColor: c.input, color: c.text, padding: 16, fontSize: 17, textAlignVertical: 'top'},
 });

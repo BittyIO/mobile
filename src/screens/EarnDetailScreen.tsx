@@ -20,6 +20,7 @@ import {balanceOfSymbol} from '@/vault/read';
 import {getAutoYields, setAutoYield} from '@/vault/autoyield';
 import {fetchProtocolApy, EMPTY_APY, type ProtocolApy} from '@/vault/apy';
 import {relayGasFor} from '@/vault/fee-quote';
+import {useActiveFeePayer} from '@/vault/useFeePayer';
 
 import {protocolDisplayName} from '@/core/protocols';
 import {formatUnits} from 'viem';
@@ -139,6 +140,10 @@ export function EarnDetailScreen() {
   // ── auto-yield ────────────────────────────────────────────────────────
   const [autoOn, setAutoOn] = useState(false);
   const [autoBusy, setAutoBusy] = useState(false);
+  // The keeper's sweeps are relayed and billed to the vault, so with the owner's wallet paying the
+  // network fee nothing ever sweeps. Turning it on is refused and says why; one already on can
+  // still be turned off.
+  const ownerPays = useActiveFeePayer(network).payer === 'owner';
   const stable = catalog.find((a) => a.kind === 'stable');
   const loadAuto = () => {
     if (bal.vault) {
@@ -238,6 +243,7 @@ export function EarnDetailScreen() {
           <PendingSwitch
             value={autoOn}
             pending={autoBusy}
+            disabled={ownerPays && !autoOn}
             onValueChange={() =>
               ask({
                 title: autoLabel,
@@ -249,6 +255,11 @@ export function EarnDetailScreen() {
           />
         </View>
         <Text style={styles.explain}>{t(lend ? 'mobile.earn.auto_supply_what' : 'mobile.earn.auto_yield_what', {symbol: sym})}</Text>
+        {ownerPays ? (
+          <Pressable onPress={() => nav.navigate('NetworkFee')} hitSlop={6}>
+            <Text style={styles.ownerPays}>{t('mobile.earn.auto_needs_vault_fee')}</Text>
+          </Pressable>
+        ) : null}
         {/* No protocol mark here. The venue is already named at the top of the page, and under a
             sentence explaining what the switch does a logo read as part of the explanation —
             as if the paragraph were about the protocol rather than about the switch. */}
@@ -315,6 +326,7 @@ const makeStyles = (c: Colors) =>
     autoRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingRight: 4},
     autoLabel: {color: c.text, fontSize: 15, fontWeight: '600', flex: 1},
     explain: {color: c.subtext, fontSize: 13, lineHeight: 19},
+    ownerPays: {color: c.warning, fontSize: 13, lineHeight: 19},
     actions: {flexDirection: 'row', gap: 12, marginTop: 8},
     btn: {flex: 1, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12},
     depBtn: {backgroundColor: c.accent},

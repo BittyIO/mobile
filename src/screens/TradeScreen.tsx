@@ -4,7 +4,7 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList, TradeParams} from '@/App';
 import {BottomTabBarHeightContext} from '@react-navigation/bottom-tabs';
 import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {Animated, Keyboard, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type TextStyle} from 'react-native';
+import {Alert, Animated, Keyboard, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type TextStyle} from 'react-native';
 import Svg, {Circle, Ellipse, Path} from 'react-native-svg';
 import {TokenIcon} from '@/components/TokenIcon';
 import {TradeMenu} from '@/components/TradeMenu';
@@ -52,6 +52,7 @@ import {marketSell, buildMarketSell, poolSpotPrice, quotePreview} from '@/vault/
 import {PositionPanel} from '@/components/PositionPanel';
 import {AssetPickRow} from '@/components/AssetPickRow';
 import {fetchPosition, type Position} from '@/vault/position';
+import {placeUniswapXLimit, uniswapXAdapter, UniswapXNoQuoteError} from '@/vault/uniswapx';
 import {placeLimitOrder, prepareIntent, cancelLimitOrders, fetchRecentOrders, type CowOrder} from '@/vault/limit';
 import {cancelledAt, cancelledAtAny, recordCancelled} from '@/vault/cancel-log';
 import {placeTwap, fetchTwapSchedules, cancelTwap, type TwapSchedule} from '@/vault/twap';
@@ -722,7 +723,11 @@ export function TradeScreen() {
   const [pulled, setPulled] = useState(false);
   const prices = usePrices(network, refreshNonce);
   const base = assets.find((a) => a.symbol === baseSym);
-  const intent = adapterByName(network, 'CoW Swap');
+  // The intent adapter Limit goes to: CoW, or UniswapX where it stands in for CoW (Robinhood).
+  // TWAP is CoW's alone.
+  const cowIntent = adapterByName(network, 'CoW Swap');
+  const uxIntent = cowIntent ? null : uniswapXAdapter(network);
+  const intent = cowIntent ?? uxIntent;
 
   // The base asset's position + P&L, computed on the server from the vault's swap history. Re-read
   // whenever the asset, network or a pull changes — the panel above the action shows it when the
@@ -1761,7 +1766,13 @@ export function TradeScreen() {
           return;
         }
         const minRecv = recvNum.toFixed(Math.min(recvAsset.decimals, 8));
-        if (mode === 'Limit') {
+        if (mode === 'Limit' && uxIntent) {
+          // A UniswapX limit order sells the token itself: the free balance, not a position's share.
+          if (pt) throw new Error(t('mobile.trade.uniswapx_free_only'));
+          await placeUniswapXLimit({account: acct, vault, network, sellToken: payToken, buyToken, sellAmount: payAmount, buyAmount: minRecv, validSeconds: validSec}).catch((e) => {
+            throw e instanceof UniswapXNoQuoteError ? new Error(t('mobile.trade.uniswapx_no_quote')) : e;
+          });
+        } else if (mode === 'Limit') {
           await placeLimitOrder({account: acct, vault, network, intentProtocol: intent, sellToken: payToken, buyToken, sellAmount: payAmount, buyAmount: minRecv, kind: 'sell', validSeconds: validSec});
         } else {
           const n = Math.max(1, parseInt(parts || '1', 10));
@@ -2202,9 +2213,9 @@ export function TradeScreen() {
   // (no Uniswap market prices them) and the savings share has no pool either, so those pairs offer
   // the intent modes only.
   const marketable = pairAmmLiquid;
-  // Limit and TWAP are CoW orders, so they are offered only where a CoW adapter is registered. An
-  // intent adapter of another kind (UniswapX on Robinhood) takes orders this sheet cannot build.
+  // Limit goes to the intent adapter, CoW or UniswapX; TWAP is a CoW order, offered only with CoW.
   const intentable = !!intent;
+  const twapable = !!cowIntent;
   // Until the catalog has served guard categories, "not marketable" means "not known yet" — demoting
   // the default Market mode to Limit then would stick after the answer turned out to be yes.
   const ammKnown = ammLiquidKnown(network);
@@ -2215,10 +2226,11 @@ export function TradeScreen() {
     if (!ammKnown) return;
     const avail: Mode[] = [
       ...(marketable ? (['Market'] as Mode[]) : []),
-      ...(intentable ? (['Limit', 'TWAP'] as Mode[]) : []),
+      ...(intentable ? (['Limit'] as Mode[]) : []),
+      ...(twapable ? (['TWAP'] as Mode[]) : []),
     ];
     if (avail.length && !avail.includes(mode)) setMode(avail[0]);
-  }, [marketable, intentable, mode, ammKnown]);
+  }, [marketable, intentable, twapable, mode, ammKnown]);
   // Market spends the vault balance and tops up from the positions by itself, so a named source has
   // no meaning there.
   useEffect(() => {
@@ -2253,6 +2265,8 @@ export function TradeScreen() {
     setValidSec(clamped * 86400);
   };
 
+  const explainUntradable = () => Alert.alert(t('mobile.trade.not_tradable_title'), t('mobile.trade.not_tradable', {token: displaySymbol(baseSym)}));
+
   const pickMode = (next: Mode) => {
     if (next === mode) return;
     setMode(next);
@@ -2266,14 +2280,17 @@ export function TradeScreen() {
     setStatus('idle');
   };
 
+  /**
+   * No way to trade this pair here at all: no Market (a leg the guard cannot price, or no pool) and
+   * no intent adapter for a Limit. The mode tabs were simply empty then, the sheet stayed on
+   * Market, and a Buy or Sell opened a market form whose trade the vault refuses.
+   */
+  const untradable = ammKnown && !marketable && !intentable;
+
   const MODES: {key: Mode; label: string}[] = [
     ...(marketable ? [{key: 'Market' as Mode, label: t('vault.market')}] : []),
-    ...(intentable
-      ? [
-          {key: 'Limit' as Mode, label: t('vault.limit')},
-          {key: 'TWAP' as Mode, label: t('vault.twap')},
-        ]
-      : []),
+    ...(intentable ? [{key: 'Limit' as Mode, label: t('vault.limit')}] : []),
+    ...(twapable ? [{key: 'TWAP' as Mode, label: t('vault.twap')}] : []),
   ];
   /**
    * Who settles the order type currently selected.
@@ -3347,10 +3364,10 @@ export function TradeScreen() {
         // BAR_HEIGHT / BAR_SLIDE / the content padding stay consistent (the bar grows down by
         // exactly the gap it used to float above). When hidden it slides its full height clear.
         style={[styles.bar, {bottom: 0, paddingBottom: 18 + barBottom, transform: [{translateY: barY}]}]}>
-        <Pressable style={[styles.barBtn, {backgroundColor: c.buy}]} onPress={() => openSheet('buy')}>
+        <Pressable style={[styles.barBtn, {backgroundColor: c.buy}, untradable && styles.dim]} onPress={() => (untradable ? explainUntradable() : openSheet('buy'))}>
           <Text style={styles.barText}>{t('vault.buy')}</Text>
         </Pressable>
-        <Pressable style={[styles.barBtn, {backgroundColor: c.sell}]} onPress={() => openSheet('sell')}>
+        <Pressable style={[styles.barBtn, {backgroundColor: c.sell}, untradable && styles.dim]} onPress={() => (untradable ? explainUntradable() : openSheet('sell'))}>
           <Text style={styles.barText}>{t('vault.sell')}</Text>
         </Pressable>
       </Animated.View>

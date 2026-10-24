@@ -32,6 +32,8 @@ type ApiItem = {
   hidden?: boolean;
   /** The row's category on the guard. See {isAmmLiquid}. */
   guardCategory?: number;
+  /** Whether the guard has a price feed for it. See {isAmmLiquid}. */
+  priced?: boolean;
 };
 
 // In-memory cache so screens don't refetch on every mount; the catalog changes rarely. Keyed by
@@ -87,6 +89,7 @@ function toAsset(it: ApiItem): Asset {
     tokenName: it.tokenName,
     icon: iconUrl(it.icon),
     guardCategory: it.guardCategory,
+    priced: it.priced,
   };
 }
 
@@ -139,7 +142,7 @@ async function loadCatalog(network: Network): Promise<Asset[] | null> {
     if (
       !before ||
       before.length !== list.length ||
-      before.some((a, i) => a.address !== list[i].address || a.guardCategory !== list[i].guardCategory)
+      before.some((a, i) => a.address !== list[i].address || a.guardCategory !== list[i].guardCategory || a.priced !== list[i].priced)
     ) {
       version++;
       for (const fn of listeners) fn();

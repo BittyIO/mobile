@@ -97,7 +97,19 @@ const ICONS: Record<string, number> = {
  * catalog rows point at .svg (CRCL, SPY, GLD, HIMS), which drew nothing at all — an empty hole
  * where a logo goes, rather than the badge that is meant to stand in for a missing one.
  */
-export function TokenIcon({symbol, size = 28, uri}: {symbol: string; size?: number; uri?: string}) {
+export function TokenIcon({
+  symbol,
+  size = 28,
+  uri,
+  badgeOnly,
+}: {
+  symbol: string;
+  size?: number;
+  uri?: string;
+  /** Always the lettered badge — for a token pasted in by address, which must not borrow the
+   *  logo of a real token just by naming itself after it. */
+  badgeOnly?: boolean;
+}) {
   const styles = useStyles(makeStyles);
   const network = useNetwork((s) => s.network);
   // Redraw when the rows land: the lookup below is a snapshot, and on a cold launch the first
@@ -109,11 +121,11 @@ export function TokenIcon({symbol, size = 28, uri}: {symbol: string; size?: numb
   // displaySymbol): the same icon.
   const shown = displaySymbol(symbol);
   const src = ICONS[symbol] ?? ICONS[shown] ?? (shown.toUpperCase() === 'ETH' ? ICONS.ETH : undefined);
-  if (src) return <Image source={src} style={dim} resizeMode="contain" />;
+  if (src && !badgeOnly) return <Image source={src} style={dim} resizeMode="contain" />;
   const remote = uri ?? catalogIcon(network, symbol);
   // A 404, a host that is down, or a format the decoder refuses: fall through to the badge rather
   // than leave a gap, the same way the protocol marks do.
-  if (remote && !remoteFailed && !/\.svgx?(?:[?#]|$)/i.test(remote))
+  if (remote && !badgeOnly && !remoteFailed && !/\.svgx?(?:[?#]|$)/i.test(remote))
     return <Image source={{uri: remote}} style={dim} resizeMode="contain" onError={() => setRemoteFailed(true)} />;
   // No logo asset: draw a colored badge with the ticker, so tokens without an icon read clearly
   // instead of fading into the card.

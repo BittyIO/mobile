@@ -57,7 +57,7 @@ function EyeIcon({off, color, size = 20}: {off: boolean; color: string; size?: n
   );
 }
 
-/** Send (arrow out, up-right) / Receive (arrow in, down-left) / History (clock) / Security (shield) action icons. */
+/** Send (arrow out, up-right) / Receive (arrow in, down-left) / History (clock) / Pending (hourglass) action icons. */
 function ActionIcon({name, color, size = 22}: {name: 'send' | 'receive' | 'history' | 'pending'; color: string; size?: number}) {
   const c = {stroke: color, strokeWidth: 2.2, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const};
   return (
@@ -75,8 +75,13 @@ function ActionIcon({name, color, size = 22}: {name: 'send' | 'receive' | 'histo
           <Path d="M16 17H7V8" {...c} />
         </>
       ) : name === 'pending' ? (
-        // Security: what is waiting out the timelock (lucide shield).
-        <Path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" {...c} />
+        // Pending: what is waiting out the timelock (lucide hourglass, as on the web).
+        <>
+          <Path d="M5 22h14" {...c} />
+          <Path d="M5 2h14" {...c} />
+          <Path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22" {...c} />
+          <Path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2" {...c} />
+        </>
       ) : (
         <>
           <Circle cx={12} cy={12} r={9} {...c} />
@@ -462,16 +467,14 @@ export function VaultHomeScreen() {
 
   // Category filter, the web's grouping: whichever categories this network's assets use, Crypto
   /**
-   * What the Overview lists: the starred assets, plus anything the vault holds worth more than a
-   * dime.
+   * What the Overview lists: the starred assets, plus anything the vault holds at all — dust
+   * included, and a token with no price, so no balance is ever missing from the vault's own list.
    *
    * Starring happens on an asset's trade page, and the defaults are the assets any vault is
    * expected to hold. A balance shows whether or not it is starred — money must not be able to
-   * disappear from this screen because of a display preference — but it is judged by VALUE, not
-   * amount: a holding worth over $0.10 earns a row, so a dust leftover or a scrap of a near-zero
-   * token does not clutter the list. A starred asset shows at any balance, dust included, because
-   * the user asked for it; the stablecoins, BTC and ETH are seeded starred, so none of them is
-   * ever hidden by this.
+   * disappear from this screen because of a display preference. It used to need $0.10 of value to
+   * earn a row, which left a leftover after a send or a sold-down position looking like nothing.
+   * The stablecoins, BTC and ETH are seeded starred, so they show even at zero.
    */
   /**
    * Every watch list on this network, and the orders for all of them.
@@ -563,7 +566,7 @@ export function VaultHomeScreen() {
     const held = isAssetsList(listId);
     const starred = new Set(watch.lists.find((l) => l.id === listId)?.symbols ?? []);
     const visible = held
-      ? rows.filter((r) => starred.has(r.symbol) || (r.usd ?? 0) > 0.1)
+      ? rows.filter((r) => starred.has(r.symbol) || r.total > 0)
       : rows.filter((r) => starred.has(r.symbol));
     // A list of the user's own keeps the order they dragged it into: they chose what is on it,
     // so they choose the sequence, and it shows no balance to sort by anyway.

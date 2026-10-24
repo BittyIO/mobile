@@ -40,6 +40,9 @@ export type Asset = {
   // The asset's category bit field on the guard, served by the catalog API.
   // Absent on bundled rows and when the server could not read the guard. See {isAmmLiquid}.
   guardCategory?: number;
+  // Whether the guard holds a price feed for it: served only for an AMM-liquid, non-stable row.
+  // false makes it limit-only. See {isAmmLiquid}.
+  priced?: boolean;
 };
 
 /**
@@ -146,7 +149,10 @@ export function isAmmLiquid(network: Network, symbolOrAddress: string): boolean 
   const a = knownAssets(network).find(
     (x) => x.symbol === symbolOrAddress || x.address.toLowerCase() === symbolOrAddress.toLowerCase(),
   );
-  return a?.guardCategory != null && (a.guardCategory & ASSET_AMM_LIQUID) !== 0;
+  // The vault values a non-stable leg off the guard's price feed and reverts without one, so an
+  // asset flagged liquid with no feed (UNI on Robinhood) is not market-tradeable either. Unknown
+  // (an older server) is not "no".
+  return a?.guardCategory != null && (a.guardCategory & ASSET_AMM_LIQUID) !== 0 && a.priced !== false;
 }
 
 /** Whether the catalog has delivered guard categories for this network yet. */
