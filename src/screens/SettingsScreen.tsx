@@ -59,6 +59,8 @@ function AppearanceIcon({name, color}: {name: string; color: string}) {
  */
 export function SettingsScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  // First: the vault row's label below calls it, for a vault with no name of its own.
+  const {t} = useT();
   const {language, setLanguage} = useLanguage();
   // The vault in front, named as the Vaults page names it.
   const currentVault = useVaults((s) => s.vaults.find((v) => v.index === s.activeIndex) ?? s.vaults[0]);
@@ -67,7 +69,6 @@ export function SettingsScreen() {
   const version = useVaultVersionRow();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
-  const {t} = useT();
   const styles = useStyles(makeStyles);
   const {appearance, setAppearance} = useAppearance();
   const c = useColors();
