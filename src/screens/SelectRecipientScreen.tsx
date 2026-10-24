@@ -1,6 +1,6 @@
 import React, {useCallback, useEffect, useLayoutEffect, useMemo, useState} from 'react';
 import Svg, {Path} from 'react-native-svg';
-import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {Address} from 'viem';
@@ -129,17 +129,22 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
   const setName = useRecipientNames((st) => st.setName);
 
   /**
-   * Renaming an entry, in place: the pencil after its name turns the name into a field, and it is
-   * saved on return or when the field loses focus — as a vault is renamed in the vault picker.
-   * The name is this device's (see core/recipient-names), so this is a local edit with no prompt
-   * and no fee; clearing it falls back to the entry's place in the book.
+   * Renaming an entry: the pencil after its name opens a dialog with the name in a field and the
+   * address under the title, so the row never turns into a form. The name is this device's (see
+   * core/recipient-names), a local edit with no signature and no fee; saving it empty falls back to
+   * the entry's place in the book.
    */
-  const [editing, setEditing] = useState<string | null>(null);
-  const [draft, setDraft] = useState('');
-  const commitName = () => {
-    if (editing) setName(network, editing, draft);
-    setEditing(null);
-  };
+  const rename = (address: string, current: string | undefined) =>
+    Alert.prompt(
+      t('mobile.payments.edit_name'),
+      address,
+      [
+        {text: t('common.cancel'), style: 'cancel'},
+        {text: t('vault.save'), onPress: (v?: string) => setName(network, address, v ?? '')},
+      ],
+      'plain-text',
+      current ?? '',
+    );
 
   const pick = (address: string, label?: string) => {
     setPicked({address: address as Address, label, addToBook: false});
@@ -169,62 +174,39 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
       : b.status === WHITELIST_STATUS.voided
           ? t('mobile.payments.voided_by_lock')
           : null;
-    const isEditing = editing?.toLowerCase() === b.recipientAddress.toLowerCase();
     return (
       <Pressable
         key={b.id}
-        style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === list.length - 1 && styles.rowLast, pressed && !isEditing && styles.pressed]}
-        // While the name is being edited the row is a form, not a choice: a tap must not pay it.
-        // Managing the book, a tap chooses nothing either.
-        disabled={isEditing || manage}
+        style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === list.length - 1 && styles.rowLast, pressed && styles.pressed]}
+        // Managing the book, a tap chooses nothing.
+        disabled={manage}
         onPress={() => pick(b.recipientAddress, named)}
         onLongPress={() => copy(b.recipientAddress)}>
         {/* Every entry under a name: the one saved on this device, or its place in the
             book where none was given. The full address below, since that is what gets paid. */}
         <View style={styles.entryCol}>
           <View style={styles.nameLine}>
-            {isEditing ? (
-              <TextInput
-                style={[styles.entryName, styles.nameInput]}
-                value={draft}
-                onChangeText={setDraft}
-                onBlur={commitName}
-                onSubmitEditing={commitName}
-                placeholder={t('mobile.payments.recipient_n', {n: b.id})}
-                placeholderTextColor={c.subtext}
-                autoCapitalize="words"
-                returnKeyType="done"
-                autoFocus
-                maxLength={32}
-              />
-            ) : (
-              <>
-                <Text style={[styles.entryName, !named && styles.entryNameOff]} numberOfLines={1}>
-                  {named ?? t('mobile.payments.recipient_n', {n: b.id})}
-                </Text>
-                {/* Its own target, like the ✕: a tap on the row chooses the recipient. */}
-                <Pressable
-                  hitSlop={10}
-                  onPress={() => {
-                    setDraft(named ?? '');
-                    setEditing(b.recipientAddress);
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('vault.edit')}
-                  style={({pressed}) => pressed && styles.pressed}>
-                  <Svg width={14} height={14} viewBox="0 0 24 24">
-                    <Path
-                      d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"
-                      stroke={c.subtext}
-                      strokeWidth={2}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      fill="none"
-                    />
-                  </Svg>
-                </Pressable>
-              </>
-            )}
+            <Text style={[styles.entryName, !named && styles.entryNameOff]} numberOfLines={1}>
+              {named ?? t('mobile.payments.recipient_n', {n: b.id})}
+            </Text>
+            {/* Its own target, like the ✕: a tap on the row chooses the recipient. */}
+            <Pressable
+              hitSlop={10}
+              onPress={() => rename(b.recipientAddress, named)}
+              accessibilityRole="button"
+              accessibilityLabel={t('vault.edit')}
+              style={({pressed}) => pressed && styles.pressed}>
+              <Svg width={14} height={14} viewBox="0 0 24 24">
+                <Path
+                  d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"
+                  stroke={c.subtext}
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              </Svg>
+            </Pressable>
             {/* Still waiting out the timelock: how far it has run, and what is left. */}
             {b.status === WHITELIST_STATUS.pending && b.effectiveAt ? (
               <>
@@ -379,8 +361,6 @@ const makeStyles = (c: Colors) =>
     entryName: {color: c.text, fontSize: 16, fontWeight: '600', flexShrink: 1},
     left: {color: c.subtext, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums']},
     entryNameOff: {color: c.subtext},
-    // The field sits where the name was, at the name's size, so editing does not move the row.
-    nameInput: {flex: 1, padding: 0, margin: 0},
     // Sized to the bar's 44, as the Pending page's lock: the native bar anchors a custom view by its bottom.
     headerBtn: {width: 44, height: 44, paddingBottom: 9, alignItems: 'center', justifyContent: 'center'},
     addrMuted: {color: c.subtext, fontSize: 13, fontVariant: ['tabular-nums']},

@@ -3,6 +3,7 @@ import type {MobileTable} from './index';
 // Payments tab (Send / Scheduled / Address Book), plus first-run onboarding and the lock screen.
 export const payments: MobileTable = {
   en: {
+    edit_name: 'Edit name',
     sends_off: 'Sends to new addresses are off: send to new in 24 hours is $0. Choose a saved recipient whose waiting period is over.',
     whitelisted_book: 'Whitelisted',
     pending_whitelisted: 'Pending whitelisted',
@@ -68,6 +69,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Unlock',
   },
   zh: {
+    edit_name: '编辑名称',
     sends_off: '发送给新地址已关闭：24 小时内发送给新地址为 $0。请选择已过等待期的已保存收款人。',
     whitelisted_book: '地址簿',
     pending_whitelisted: '待生效的地址簿地址',
@@ -133,6 +135,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: '解锁',
   },
   'zh-TW': {
+    edit_name: '編輯名稱',
     sends_off: '傳送給新地址已關閉：24 小時內傳送給新地址為 $0。請選擇已過等待期的已儲存收款人。',
     whitelisted_book: '地址簿',
     pending_whitelisted: '待生效的地址簿地址',
@@ -198,6 +201,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: '解鎖',
   },
   ja: {
+    edit_name: '名前を編集',
     sends_off: '新しい宛先への送金はオフです（24時間以内の新しい宛先への送金が $0）。待機期間を終えた保存済みの受取人を選んでください。',
     token_address_warning: 'これはトークンのコントラクトアドレスで、ウォレットではありません。送金すると取り戻せません。',
     select_recipient: '送金先を選択',
@@ -248,6 +252,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'ロック解除',
   },
   ko: {
+    edit_name: '이름 편집',
     sends_off: '새 주소로 송금이 꺼져 있습니다(24시간 내 새 주소로 송금 $0). 대기 기간이 지난 저장된 수취인을 선택하세요.',
     token_address_warning: '이 주소는 지갑이 아니라 토큰 컨트랙트입니다. 보낸 자금은 되찾을 수 없습니다.',
     select_recipient: '받는 주소 선택',
@@ -298,6 +303,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: '잠금 해제',
   },
   fr: {
+    edit_name: 'Modifier le nom',
     sends_off: 'Envois vers de nouvelles adresses désactivés : l’envoi vers de nouvelles adresses sur 24 h est de 0 $. Choisissez un destinataire enregistré dont le délai d’attente est écoulé.',
     token_address_warning: 'Ceci est un contrat de token, pas un portefeuille. Les fonds envoyés seraient irrécupérables.',
     select_recipient: 'Choisir un destinataire',
@@ -348,6 +354,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Déverrouiller',
   },
   es: {
+    edit_name: 'Editar nombre',
     sends_off: 'Envíos a direcciones nuevas desactivados: los envíos a direcciones nuevas en 24 horas están en 0 $. Elige un destinatario guardado cuyo periodo de espera haya terminado.',
     token_address_warning: 'Esta es la dirección de un contrato de token, no una cartera. Los fondos enviados no se podrían recuperar.',
     select_recipient: 'Elegir destinatario',
@@ -398,6 +405,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Desbloquear',
   },
   de: {
+    edit_name: 'Namen bearbeiten',
     sends_off: 'Sendungen an neue Adressen sind aus: „An neue Adressen in 24 Stunden“ ist 0 $. Wähle einen gespeicherten Empfänger, dessen Wartezeit abgelaufen ist.',
     token_address_warning: 'Das ist ein Token-Contract, keine Wallet. Dorthin gesendete Mittel sind verloren.',
     select_recipient: 'Empfänger wählen',
@@ -448,6 +456,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Entsperren',
   },
   'pt-BR': {
+    edit_name: 'Editar nome',
     sends_off: 'Envios para novos endereços desativados: o envio para novos endereços em 24 horas é $0. Escolha um destinatário salvo cujo período de espera terminou.',
     token_address_warning: 'Este é um contrato de token, não uma carteira. Fundos enviados não podem ser recuperados.',
     select_recipient: 'Escolher destinatário',
@@ -498,6 +507,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Desbloquear',
   },
   hi: {
+    edit_name: 'नाम संपादित करें',
     sends_off: 'नए पतों पर भेजना बंद है: 24 घंटे में नए पतों पर भेजना $0 है। ऐसा सहेजा गया प्राप्तकर्ता चुनें जिसकी प्रतीक्षा अवधि पूरी हो चुकी है।',
     token_address_warning: 'यह टोकन कॉन्ट्रैक्ट पता है, वॉलेट नहीं। यहां भेजी गई राशि वापस नहीं मिलेगी।',
     select_recipient: 'प्राप्तकर्ता चुनें',
@@ -548,6 +558,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'अनलॉक करें',
   },
   tr: {
+    edit_name: 'Adı düzenle',
     sends_off: 'Yeni adreslere gönderim kapalı: 24 saatte yeni adreslere gönderim $0. Bekleme süresi dolmuş kayıtlı bir alıcı seçin.',
     token_address_warning: 'Bu bir token sözleşmesi, cüzdan değil. Buraya gönderilen varlıklar geri alınamaz.',
     select_recipient: 'Alıcı seç',
@@ -598,6 +609,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Kilidi aç',
   },
   ru: {
+    edit_name: 'Изменить имя',
     sends_off: 'Отправка на новые адреса отключена: отправка на новые адреса за 24 часа — $0. Выберите сохранённого получателя, у которого истёк период ожидания.',
     token_address_warning: 'Это адрес контракта токена, а не кошелёк. Отправленные туда средства вернуть нельзя.',
     select_recipient: 'Выбрать получателя',
@@ -648,6 +660,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Разблокировать',
   },
   id: {
+    edit_name: 'Edit nama',
     sends_off: 'Pengiriman ke alamat baru dimatikan: kirim ke alamat baru dalam 24 jam adalah $0. Pilih penerima tersimpan yang masa tunggunya sudah lewat.',
     token_address_warning: 'Ini alamat kontrak token, bukan dompet. Dana yang dikirim ke sana tidak bisa diambil kembali.',
     select_recipient: 'Pilih penerima',
@@ -698,6 +711,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Buka kunci',
   },
   vi: {
+    edit_name: 'Sửa tên',
     sends_off: 'Gửi tới địa chỉ mới đang tắt: gửi tới địa chỉ mới trong 24 giờ là $0. Hãy chọn người nhận đã lưu đã qua thời gian chờ.',
     token_address_warning: 'Đây là địa chỉ hợp đồng token, không phải ví. Tiền gửi tới đó không thể lấy lại.',
     select_recipient: 'Chọn người nhận',
@@ -748,6 +762,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Mở khóa',
   },
   th: {
+    edit_name: 'แก้ไขชื่อ',
     sends_off: 'ปิดการส่งไปยังที่อยู่ใหม่อยู่: ส่งไปยังที่อยู่ใหม่ใน 24 ชั่วโมงคือ $0 เลือกผู้รับที่บันทึกไว้ซึ่งพ้นระยะรอแล้ว',
     token_address_warning: 'นี่คือที่อยู่สัญญาโทเคน ไม่ใช่กระเป๋าเงิน เงินที่ส่งไปจะไม่สามารถนำกลับมาได้',
     select_recipient: 'เลือกผู้รับ',
