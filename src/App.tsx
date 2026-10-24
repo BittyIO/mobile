@@ -209,7 +209,14 @@ function MainTabs() {
          * corner is usually empty.
          */
         headerTitleAlign: 'center',
-        headerTitle: ({children}) => <Text style={styles.headerTitle}>{children}</Text>,
+        // The vault's lock, while it has one, right after the tab's title: on every tab, tapped
+        // through to Lock status.
+        headerTitle: ({children}) => (
+          <View style={styles.headerTitleRow}>
+            <Text style={styles.headerTitle}>{children}</Text>
+            <LockBadge />
+          </View>
+        ),
         /**
          * The chain in the right-hand corner, where it started.
          *
@@ -220,8 +227,7 @@ function MainTabs() {
          * already goes for it.
          */
         headerRight: () => <NetworkSwitcher />,
-        // The vault's lock, while it has one: on every tab, tapped through to Lock status.
-        headerLeft: () => <LockBadge />,
+        headerLeft: undefined,
         /**
          * The same surface as the header, at the other end of the screen.
          *
@@ -253,7 +259,15 @@ function MainTabs() {
           below — `title` does that — so only the header differs. */}
       <Tab.Screen
         name="Overview"
-        options={{title: t('mobile.app.overview'), headerTitle: () => <Text style={styles.headerTitle}>{t('mobile.app.name')}</Text>}}
+        options={{
+          title: t('mobile.app.overview'),
+          headerTitle: () => (
+            <View style={styles.headerTitleRow}>
+              <Text style={styles.headerTitle}>{t('mobile.app.name')}</Text>
+              <LockBadge />
+            </View>
+          ),
+        }}
         component={VaultHomeScreen}
       />
       <Tab.Screen name="Earn" options={{title: t('mobile.app.earn')}} getComponent={() => require('@/screens/EarnScreen').EarnScreen} />
@@ -522,4 +536,5 @@ const makeStyles = (colors: Colors) =>
   StyleSheet.create({
     splash: {flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center'},
     headerTitle: {color: colors.text, fontSize: 17, fontWeight: '700'},
+    headerTitleRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
   });

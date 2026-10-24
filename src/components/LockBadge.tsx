@@ -12,7 +12,7 @@ import {usePending} from '@/vault/pending';
 import {useT} from '@/i18n';
 
 /**
- * The tab header's left corner: the vault's lock, while it has one.
+ * After the tab header's title: the vault's lock, while it has one.
  *
  * A locked vault behaves differently everywhere — settings frozen, money only to the address book —
  * so the state is shown on every tab rather than only on the Security page, in the same icon the
@@ -54,6 +54,6 @@ export function LockBadge() {
 }
 
 const styles = StyleSheet.create({
-  // The network switcher's mirror: the same 16 from the edge, at the other end of the bar.
-  badge: {marginLeft: 16},
+  // Sits after the title in the header's title row, which sets the gap.
+  badge: {},
 });
