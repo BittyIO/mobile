@@ -133,7 +133,7 @@ export function SettingsScreen() {
             is a vault setting that happens to read like a credit, and it sat among the links to
             the website where nobody looking to upgrade would think to open it. */}
         {/* While the upgrade is being mined the row is inert and says so: a spinner beside
-            "Confirming", no chevron, and `onPress` already refuses. Tapping again would submit
+            "Upgrading", no chevron, and `onPress` already refuses. Tapping again would submit
             a second upgrade to the same implementation and pay for it. */}
         <Row
           icon="settings"

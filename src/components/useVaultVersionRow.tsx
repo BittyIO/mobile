@@ -183,9 +183,9 @@ export function useVaultVersionRow(): {
     });
   };
 
-  // Confirming: the row says so and does nothing. Tapping it again would submit a second
+  // Upgrading: the row says so and does nothing. Tapping it again would submit a second
   // upgrade to the same implementation.
-  if (working) return {value: t('vault.confirming'), upgradeable: false, confirming: true, checking: false, onPress, reload: load, sheet};
+  if (working) return {value: t('mobile.settings.vault_upgrading'), upgradeable: false, confirming: true, checking: false, onPress, reload: load, sheet};
   if (!up) return {upgradeable: false, confirming: false, checking, onPress, reload: load, sheet};
   // Before activation the vault will be born on the guard's latest build, so that is its version.
   const shown = up.currentVersion ?? (!up.current ? up.latestVersion : null);

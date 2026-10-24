@@ -2,6 +2,7 @@ import type {MobileTable} from './index';
 
 export const settings: MobileTable = {
   en: {
+    vault_upgrading: 'Upgrading…',
     vault_checking: 'Checking for a new version…',
     gas_max_per_op: 'Max per transaction',
     gas_max_daily: 'Max per 24 hours',
@@ -53,6 +54,7 @@ export const settings: MobileTable = {
     gas: 'Network fee',
   },
   zh: {
+    vault_upgrading: '正在升级…',
     vault_checking: '正在检查新版本…',
     gas_max_per_op: '单笔上限',
     gas_max_daily: '24 小时上限',
@@ -104,6 +106,7 @@ export const settings: MobileTable = {
     gas: '网络费',
   },
   'zh-TW': {
+    vault_upgrading: '正在升級…',
     vault_checking: '正在檢查新版本…',
     choose_vault: '選擇金庫',
     choose_network: '選擇網路',
@@ -145,6 +148,7 @@ export const settings: MobileTable = {
     gas: '網路費',
   },
   ja: {
+    vault_upgrading: 'アップグレード中…',
     vault_checking: '新しいバージョンを確認中…',
     choose_vault: 'ボールトを選択',
     choose_network: 'ネットワークを選択',
@@ -186,6 +190,7 @@ export const settings: MobileTable = {
     gas: 'ネットワーク手数料',
   },
   ko: {
+    vault_upgrading: '업그레이드 중…',
     vault_checking: '새 버전 확인 중…',
     choose_vault: '볼트 선택',
     choose_network: '네트워크 선택',
@@ -227,6 +232,7 @@ export const settings: MobileTable = {
     gas: '네트워크 수수료',
   },
   fr: {
+    vault_upgrading: 'Mise à niveau…',
     vault_checking: 'Recherche d’une nouvelle version…',
     choose_vault: 'Choisir un coffre',
     choose_network: 'Choisir un réseau',
@@ -268,6 +274,7 @@ export const settings: MobileTable = {
     gas: 'Frais de réseau',
   },
   es: {
+    vault_upgrading: 'Actualizando…',
     vault_checking: 'Buscando una nueva versión…',
     choose_vault: 'Elegir bóveda',
     choose_network: 'Elegir red',
@@ -309,6 +316,7 @@ export const settings: MobileTable = {
     gas: 'Comisión de red',
   },
   de: {
+    vault_upgrading: 'Wird aktualisiert…',
     vault_checking: 'Suche nach neuer Version…',
     choose_vault: 'Tresor wählen',
     choose_network: 'Netzwerk wählen',
@@ -350,6 +358,7 @@ export const settings: MobileTable = {
     gas: 'Netzwerkgebühr',
   },
   'pt-BR': {
+    vault_upgrading: 'Atualizando…',
     vault_checking: 'Procurando nova versão…',
     choose_vault: 'Escolher cofre',
     choose_network: 'Escolher rede',
@@ -391,6 +400,7 @@ export const settings: MobileTable = {
     gas: 'Taxa de rede',
   },
   hi: {
+    vault_upgrading: 'अपग्रेड हो रहा है…',
     vault_checking: 'नया संस्करण जाँचा जा रहा है…',
     choose_vault: 'वॉल्ट चुनें',
     choose_network: 'नेटवर्क चुनें',
@@ -432,6 +442,7 @@ export const settings: MobileTable = {
     gas: 'नेटवर्क फीस',
   },
   tr: {
+    vault_upgrading: 'Yükseltiliyor…',
     vault_checking: 'Yeni sürüm kontrol ediliyor…',
     choose_vault: 'Kasa seç',
     choose_network: 'Ağ seç',
@@ -473,6 +484,7 @@ export const settings: MobileTable = {
     gas: 'Ağ ücreti',
   },
   ru: {
+    vault_upgrading: 'Обновление…',
     vault_checking: 'Проверка новой версии…',
     choose_vault: 'Выбрать хранилище',
     choose_network: 'Выбрать сеть',
@@ -514,6 +526,7 @@ export const settings: MobileTable = {
     gas: 'Комиссия сети',
   },
   id: {
+    vault_upgrading: 'Meningkatkan…',
     vault_checking: 'Memeriksa versi baru…',
     choose_vault: 'Pilih brankas',
     choose_network: 'Pilih jaringan',
@@ -555,6 +568,7 @@ export const settings: MobileTable = {
     gas: 'Biaya jaringan',
   },
   vi: {
+    vault_upgrading: 'Đang nâng cấp…',
     vault_checking: 'Đang kiểm tra phiên bản mới…',
     choose_vault: 'Chọn kho',
     choose_network: 'Chọn mạng',
@@ -596,6 +610,7 @@ export const settings: MobileTable = {
     gas: 'Phí mạng',
   },
   th: {
+    vault_upgrading: 'กำลังอัปเกรด…',
     vault_checking: 'กำลังตรวจหาเวอร์ชันใหม่…',
     choose_vault: 'เลือกวอลต์',
     choose_network: 'เลือกเครือข่าย',
