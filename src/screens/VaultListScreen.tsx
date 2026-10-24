@@ -16,7 +16,8 @@ import {acceptOwnership} from '@/vault/ownership';
 import {relayGasFor} from '@/vault/fee-quote';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {useConfirmAction} from '@/components/ConfirmAction';
-import {showTx} from '@/components/Toast';
+import {showToast, showTx} from '@/components/Toast';
+import Clipboard from '@react-native-clipboard/clipboard';
 import {SettingsGroup, makeSettingsStyles} from '@/components/SettingsRow';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
@@ -285,7 +286,15 @@ export function VaultListScreen() {
       {/* The owner first: everything below is its vaults. */}
       {current ? (
         <SettingsGroup label={t('mobile.vaults.owner')}>
-          <Pressable style={({pressed}) => [styles.vaultRow, pressed && styles.pressed]} onPress={() => setOwnerOpen(true)}>
+          {/* Long press copies the owner's address, as it does on every address in the app. */}
+          <Pressable
+            style={({pressed}) => [styles.vaultRow, pressed && styles.pressed]}
+            onPress={() => setOwnerOpen(true)}
+            onLongPress={() => {
+              if (!current.address) return;
+              Clipboard.setString(current.address);
+              showToast('success', t('common.copied'), current.address, 1500);
+            }}>
             <View style={styles.vaultText}>
               <Text style={styles.name}>{ownerLabel(current)}</Text>
               <Text style={styles.addr}>{current.address ?? t('mobile.settings.vault_unlock_first')}</Text>
