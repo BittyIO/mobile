@@ -1005,6 +1005,6 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   chev: {color: c.subtext, fontSize: 18, width: 16, textAlign: 'right'},
   // The card's padding frames the list: the last row (or its open details) adds no bottom padding,
   // so the space below the last asset equals the space above the header.
-  depositBtn: {backgroundColor: c.accent, borderRadius: 10, paddingVertical: 10, alignItems: 'center', marginTop: 2},
+  depositBtn: {backgroundColor: c.accent, borderRadius: 999, paddingVertical: 10, alignItems: 'center', marginTop: 2},
   depositText: {color: c.onAccent, fontSize: 14, fontWeight: '700'},
 });

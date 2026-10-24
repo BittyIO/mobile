@@ -172,7 +172,7 @@ const makeStyles = (c: Colors) =>
     saveBtn: {
       height: 40,
       paddingHorizontal: 16,
-      borderRadius: 10,
+      borderRadius: 20,
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: 1,

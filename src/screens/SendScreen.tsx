@@ -648,7 +648,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   addAddrTitle: {color: c.text, fontSize: 15, fontWeight: '600'},
   addAddrBar: {flexDirection: 'row', alignItems: 'center', gap: 8},
   addAddrInput: {flex: 1, minWidth: 0, backgroundColor: c.input, color: c.text, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, fontVariant: ['tabular-nums']},
-  addAddrBtn: {backgroundColor: c.accent, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10},
+  addAddrBtn: {backgroundColor: c.accent, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 10},
   addAddrBtnOff: {opacity: 0.5},
   addAddrBtnText: {color: c.onAccent, fontSize: 14, fontWeight: '700'},
   pickSub: {color: c.subtext, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums']},

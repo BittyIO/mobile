@@ -556,7 +556,7 @@ const makeStyles = (c: Colors) =>
       textAlignVertical: 'top',
     },
     error: {color: c.danger, fontSize: 12, lineHeight: 17, marginTop: 8},
-    use: {height: 44, borderRadius: 12, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', marginVertical: 16},
+    use: {height: 52, borderRadius: 26, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', marginVertical: 16},
     useOff: {backgroundColor: c.neutralSoft},
     useText: {color: '#fff', fontSize: 15, fontWeight: '700'},
     useTextOff: {color: c.subtext},
