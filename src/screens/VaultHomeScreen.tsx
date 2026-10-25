@@ -32,7 +32,7 @@ import {fmtNum, displaySymbol} from '@/core/format';
 import {useAssetCatalog, useCatalogSettled} from '@/core/asset-catalog';
 import {assetCategory, type AssetCategory} from '@/core/assets';
 import {isAssetsList, useFavorites, useWatchLists, watchListLabel, watchListNumber} from '@/core/favorites-store';
-import {getFlag, setFlag, HIDE_BALANCES} from '@/core/prefs';
+import {getFlag, setFlag, getPref, setPref, HIDE_BALANCES} from '@/core/prefs';
 import {useWatchDraft} from '@/core/watch-draft';
 import {balanceOfSymbol} from '@/vault/read';
 import {getPendingChanges} from '@/vault/risk';
@@ -502,7 +502,7 @@ export function VaultHomeScreen() {
    */
   const marketStats = useMarketStats(network, catalogSymbols, priceNonce);
   const unstakeKey = bal.vault ? `${network}:${bal.vault.toLowerCase()}` : '';
-  const rows = useMemo<Row[]>(() => {
+  const rowsLive = useMemo<Row[]>(() => {
     // Stablecoins lead the list, then the rest in catalog order.
     const assets = [...catalog].sort((x, y) => Number(y.kind === 'stable') - Number(x.kind === 'stable'));
     return assets.map((a) => {
@@ -545,6 +545,35 @@ export function VaultHomeScreen() {
       return {legs, symbol: a.symbol, icon: a.icon, address: a.address, free, yielding, lending, earned, total, usd: usdValue(total, a.symbol, prices), price: usdValue(1, a.symbol, prices), stable: a.kind === 'stable', category: assetCategory(a.category)};
     });
   }, [catalog, bal.balances, pos.positions, flows.flows, network, prices, unstake, unstakeKey]);
+
+  /**
+   * The last complete Overview of this vault, shown at once while the fresh one loads.
+   *
+   * Waiting for every source (see `ready`) keeps the total from climbing, but on a cold launch that
+   * is several seconds of spinner for numbers that have usually barely moved. So each complete set
+   * of rows is kept on the phone, and the next launch opens on it; the live rows replace it in one
+   * step once all of them are in. Never shown for a vault it was not saved for.
+   */
+  const snapKey = readyKey ? `overview.snapshot.${readyKey}` : '';
+  const snapshot = useMemo<Row[] | null>(() => {
+    if (!snapKey) return null;
+    try {
+      const raw = getPref(snapKey);
+      return raw ? (JSON.parse(raw) as Row[]) : null;
+    } catch {
+      return null;
+    }
+  }, [snapKey]);
+  React.useEffect(() => {
+    if (!ready || !snapKey) return;
+    try {
+      setPref(snapKey, JSON.stringify(rowsLive));
+    } catch {
+      // Storage unavailable: the next launch simply waits, as it did before.
+    }
+  }, [ready, snapKey, rowsLive]);
+  const showingSnapshot = !ready && !!snapshot;
+  const rows = ready || !snapshot ? rowsLive : snapshot;
 
   /**
    * Tapping an asset's name opens Trade on a pair for it.
@@ -868,7 +897,7 @@ export function VaultHomeScreen() {
         <View style={styles.totalRow}>
           {hidden ? (
             <Text style={styles.totalValue}>{MASK_TOTAL}</Text>
-          ) : !ready ? (
+          ) : !ready && !showingSnapshot ? (
             // The figure's own line height, so the card does not jump when it lands.
             <View style={styles.totalLoading}>
               <ActivityIndicator color={c.subtext} />
@@ -1008,7 +1037,7 @@ export function VaultHomeScreen() {
                     rows={rowsForList(l.id)}
                     // Holdings wait with the total, so the rows never show the half-read sum either.
                     // A watch list shows market data, not balances, and does not.
-                    loading={isAssetsList(l.id) ? !ready && !bal.error : bal.loading && !bal.balances}
+                    loading={isAssetsList(l.id) ? !ready && !showingSnapshot && !bal.error : bal.loading && !bal.balances}
                     error={bal.error}
                     hidden={hidden}
                     markets={!isAssetsList(l.id)}
