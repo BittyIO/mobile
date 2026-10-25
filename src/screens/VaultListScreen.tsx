@@ -422,9 +422,9 @@ const makeStyles = (c: Colors) =>
     tag: {color: c.subtext, fontSize: 11, fontWeight: '600', borderWidth: StyleSheet.hairlineWidth, borderColor: c.border, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1, overflow: 'hidden'},
     // Full, and small enough to wrap to two lines rather than be cut: vaults are told apart by
     // their address, and an elided middle is where two would differ.
-    addr: {color: c.subtext, fontSize: 11, fontFamily: 'Menlo', lineHeight: 15},
+    addr: {color: c.subtext, fontSize: 13, fontFamily: 'Menlo', lineHeight: 18},
     // A group's header when it is an address: the address font, small enough to fit on one line.
-    ownerAddr: {fontSize: 12, fontFamily: 'Menlo'},
+    ownerAddr: {fontSize: 13, fontFamily: 'Menlo', fontWeight: '400'},
     gone: {opacity: 0.45},
     goneText: {color: c.warning, fontSize: 12},
     fromText: {color: c.subtext, fontSize: 12},
