@@ -11,7 +11,9 @@ import {MMKV} from 'react-native-mmkv';
 import type {HDAccount} from 'viem/accounts';
 import type {Signer} from './signer';
 import * as keyring from './keyring';
+import {learnKeys, vaultSigner} from './rotation';
 import {keyIndexOf, useVaults} from '@/core/vault-store';
+import {activeVaultAddress} from '@/core/active-vault';
 import {useNetwork} from '@/core/network-store';
 import {fetchSafe, safeSigner} from '@/vault/safe';
 import {translate} from '@/i18n';
@@ -115,11 +117,13 @@ export const useWallet = create<WalletState>((set) => ({
   },
 
   unlock: async () => {
-    const account = await keyring.unlock(active());
-    if (account) {
-      remember(account);
-      set({account, address: ownerFor(account), status: 'unlocked', unlocked: true});
-    }
+    const root = await keyring.unlockRoot();
+    if (!root) return;
+    const account = keyring.accountAt(root, active());
+    remember(account);
+    set({account, address: ownerFor(account), status: 'unlocked', unlocked: true});
+    // So a vault already handed to one of this phrase's one-time keys reads as this phone's own.
+    learnKeys(root, useVaults.getState().vaults.filter((v) => !v.safe).map(keyIndexOf));
   },
 
   lock: () => set({account: null, unlocked: false, status: 'locked', lockedBy: 'user'}),
@@ -132,13 +136,19 @@ export const useWallet = create<WalletState>((set) => ({
 
   signer: async () => {
     // The ACTIVE index, not index 0: a write must be signed by the owner of the vault on screen.
-    const account = await keyring.unlock(active());
-    if (!account) throw new Error('Unlock cancelled');
+    const root = await keyring.unlockRoot();
+    if (!root) throw new Error('Unlock cancelled');
+    const account = keyring.accountAt(root, active());
     const safe = activeVault()?.safe;
-    if (!safe) return account;
+    const network = useNetwork.getState().network;
+    if (!safe) {
+      // Whichever of this account's keys owns the vault now: on quantum-safe keys, that is the
+      // one-time key it was last handed, not the account's own (see ./rotation).
+      const vault = activeVaultAddress(network);
+      return vault ? vaultSigner({root, index: active(), network, vault}) : account;
+    }
     // A Safe vault signs as the Safe. Its owners and threshold are read now, for this operation:
     // they can change on chain at any time, and a key that has been removed must not sign.
-    const network = useNetwork.getState().network;
     const info = await fetchSafe(network, safe);
     const t = (key: string, params?: Record<string, string | number>) => translate(useLanguage.getState().language, key, params);
     if (!info.supported) throw new Error(t('mobile.safe.unsupported', {problems: info.problems.join(', ')}));

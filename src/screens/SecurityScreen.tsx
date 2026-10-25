@@ -13,11 +13,13 @@ import {useNetwork} from '@/core/network-store';
 import {useActiveVaultAddress} from '@/core/active-vault';
 import {LOCK_ICON, LOCK_TITLE} from '@/core/lock-status';
 import {isPhraseVerified} from '@/wallet/phrase-backup';
+import {useRotationOn} from '@/wallet/rotation-store';
+import {useVaults} from '@/core/vault-store';
 
 /**
  * Security — three groups of rows, each opening what it names: Safety settings (the timelock and the
  * two daily allowances, with the vault's safety level beside it) and the allow list; the asset
- * manager and Transfer ownership; Lock status (temporarily / forever locked) and the recovery
+ * manager, Transfer ownership and Quantum-safe keys; Lock status (temporarily / forever locked) and the recovery
  * phrase. The writes live on the pages the rows open.
  */
 export function SecurityScreen() {
@@ -31,6 +33,8 @@ export function SecurityScreen() {
   useFocusEffect(useCallback(() => setPhraseOk(isPhraseVerified(signer)), [signer]));
   const network = useNetwork((s) => s.network);
   const vault = useActiveVaultAddress(network);
+  const isSafe = useVaults((s) => !!s.vaults.find((v) => v.index === s.activeIndex)?.safe);
+  const quantumOn = useRotationOn(network, vault);
 
   // The lock state answers the Vault lock row. Re-read on focus: the row's own page changes it.
   const [lockLevel, setLockLevel] = useState<LockLevel | null>(null);
@@ -65,7 +69,17 @@ export function SecurityScreen() {
       <SettingsGroup>
         {/* No status here: who it is and what is pending live on the asset manager's own page. */}
         <SettingsRow icon="delegation" title={t('vault.asset_manager')} onPress={() => nav.navigate('VaultAssetManager')} />
-        <SettingsRow icon="ownership" title={t('mobile.vault.transfer_ownership')} onPress={() => nav.navigate('VaultTransferOwnership')} last />
+        <SettingsRow icon="ownership" title={t('mobile.vault.transfer_ownership')} onPress={() => nav.navigate('VaultTransferOwnership')} last={isSafe} />
+        {/* A Safe's keys are its owners' to manage: there is no one key here to retire. */}
+        {isSafe ? null : (
+          <SettingsRow
+            icon="quantum"
+            title={t('mobile.quantum.title')}
+            value={t(quantumOn ? 'mobile.quantum.on' : 'mobile.quantum.off')}
+            onPress={() => nav.navigate('QuantumSafe')}
+            last
+          />
+        )}
       </SettingsGroup>
       {/* The last resorts: freezing the vault, and the phrase that restores the key. */}
       <SettingsGroup>

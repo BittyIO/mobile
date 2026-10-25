@@ -30,7 +30,8 @@ export type SettingsIconName =
   | 'whitelist'
   | 'follow'
   | 'terms'
-  | 'privacy';
+  | 'privacy'
+  | 'quantum';
 
 // iOS Settings row icons: a white glyph on a small rounded square, one tint per row. Glyphs follow
 // the lucide set the web uses (Globe, Coins, Wrench, Shield, Key, Lock, Zap, Users, Fuel, CalendarClock, Receipt), drawn on a
@@ -68,6 +69,7 @@ const TINT: Record<SettingsIconName, string> = {
   follow: '#0E85FF',
   terms: '#8E8E93',
   privacy: '#5856D6',
+  quantum: '#32ADE6',
 };
 
 /** `round` draws it in a circle rather than the rounded square of a Settings row (the header's lock). */
@@ -186,6 +188,13 @@ export function SettingsIcon({name, size = 29, round = false}: {name: SettingsIc
             {/* A page with ruled lines. */}
             <Path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" {...c} />
             <Path d="M14 3v5h5M9 13h6M9 17h4" {...c} />
+          </>
+        ) : name === 'quantum' ? (
+          <>
+            {/* lucide Atom: quantum-safe keys. */}
+            <Circle cx={12} cy={12} r={1} {...c} />
+            <Path d="M20.2 20.2c2-2 0-7.4-4.5-11.9S5.8 1.8 3.8 3.8s0 7.4 4.5 11.9 9.9 6.5 11.9 4.5z" {...c} />
+            <Path d="M15.7 15.7c4.5-4.5 6.5-9.9 4.5-11.9s-7.4 0-11.9 4.5-6.5 9.9-4.5 11.9 7.4 0 11.9-4.5z" {...c} />
           </>
         ) : name === 'privacy' ? (
           <>

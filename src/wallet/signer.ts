@@ -1,4 +1,4 @@
-import type {Hex, LocalAccount, TypedDataDefinition} from 'viem';
+import type {Address, Hex, LocalAccount, TypedDataDefinition} from 'viem';
 
 /**
  * The only capability the vault modules need from "whoever owns this vault": an address, and the
@@ -34,4 +34,10 @@ export interface Signer {
    * own, so its signer leaves this out and its vault always pays through the relayer.
    */
   signTransaction?: LocalAccount['signTransaction'];
+  /**
+   * For a vault on quantum-safe keys (see ./rotation): the fresh key this write hands the vault to,
+   * appended to the write itself by the relay — or why this one does not. Absent for a vault that
+   * does not use them.
+   */
+  rotation?: {to: Address} | {held: import('./rotation').RotationHold};
 }

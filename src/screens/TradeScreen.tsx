@@ -1663,6 +1663,20 @@ export function TradeScreen() {
     try {
       const acct = await getSigner();
       const vault = activeVaultAddress(network)!;
+      /**
+       * Quantum-safe keys: the vault checks an order's signature against its owner at every fill, so
+       * one signed while the vault is being handed to its next key stops filling when that handover
+       * completes. Said before anything is signed, and only then.
+       */
+      if (mode !== 'Market' && acct.rotation && 'held' in acct.rotation && acct.rotation.held === 'pending') {
+        const go = await new Promise<boolean>((resolve) =>
+          Alert.alert(t('mobile.quantum.order_title'), t('mobile.quantum.order_body'), [
+            {text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false)},
+            {text: t('mobile.quantum.order_continue'), onPress: () => resolve(true)},
+          ], {cancelable: true, onDismiss: () => resolve(false)}),
+        );
+        if (!go) return tx.done();
+      }
       // You always sell the PAY leg for the RECEIVE leg: sell base→quote, buy quote→base. Exact-in.
       const recvAsset = (paysBase ? quoteAsset : base);
       // Nothing was sent, so the header's spinner has to come down with it.

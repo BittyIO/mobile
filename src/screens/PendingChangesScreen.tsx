@@ -14,6 +14,7 @@ import {PERM_ROWS} from '@/components/useAssetManagerRow';
 import {Sheet} from '@/components/Sheet';
 import {Button} from '@/components/Button';
 import {useWallet} from '@/wallet/store';
+import {keyPathOf} from '@/wallet/rotation-store';
 import {useNetwork} from '@/core/network-store';
 import {useActiveVaultAddress} from '@/core/active-vault';
 import {recipientName, useRecipientNames} from '@/core/recipient-names';
@@ -38,7 +39,8 @@ export function pendingTitle(p: PendingChange, t: T, nameOf?: (address: string) 
     case 'maxFeePerOp':
       return t('mobile.vault.pending_max_fee');
     case 'newOwner':
-      return t('mobile.vault.pending_new_owner');
+      // One of this phrase's one-time keys: the vault moving to a fresh key, not to someone else.
+      return t(keyPathOf(p.address) ? 'mobile.quantum.pending_fresh_key' : 'mobile.vault.pending_new_owner');
     case 'newAssetManager':
       return t('mobile.vault.pending_new_asset_manager');
     case 'whitelistAdd':

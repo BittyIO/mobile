@@ -276,8 +276,8 @@ export async function prepareIntent(o: {
 
   const {hash} =
     calls.length > 1
-      ? await relayVaultMulticall({account: o.account, vault: o.vault, network: o.network, calls, stableCoin: o.stableCoin})
-      : await relayVaultWrite({account: o.account, vault: o.vault, network: o.network, ...calls[0], stableCoin: o.stableCoin});
+      ? await relayVaultMulticall({account: o.account, vault: o.vault, network: o.network, calls, stableCoin: o.stableCoin, noRotate: true})
+      : await relayVaultWrite({account: o.account, vault: o.vault, network: o.network, ...calls[0], stableCoin: o.stableCoin, noRotate: true});
   await publicClientFor(o.network).waitForTransactionReceipt({hash});
 }
 

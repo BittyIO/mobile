@@ -13,6 +13,8 @@ import {PendingRow} from '@/components/PendingRow';
 import {SettingsGroup, SettingsRow} from '@/components/SettingsRow';
 import {useVaultWrite} from '@/components/useVaultWrite';
 import {useWallet} from '@/wallet/store';
+import {isOwnKey} from '@/wallet/rotation';
+import {keyPathOf} from '@/wallet/rotation-store';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 
@@ -75,7 +77,8 @@ export function TransferOwnershipScreen() {
     isAddress(addr.trim()) && isPayableAddress(addr.trim(), network) && lc !== owner?.toLowerCase() && lc !== vault?.toLowerCase();
   const bad = addr.trim().length > 0 && !valid;
   // Once a handover has run, this key is no longer the owner and the vault would refuse it anything.
-  const isOwner = !!owner && owner.toLowerCase() === me?.toLowerCase();
+  // On quantum-safe keys the owner is one of this phrase's one-time keys, and still this phone's.
+  const isOwner = isOwnKey(owner, me);
   const canTransfer = ready && valid && !locked && !pending && isOwner;
 
   const transfer = () =>
@@ -110,7 +113,7 @@ export function TransferOwnershipScreen() {
               at={pending.at}
               now={now}
               timelock={Number(timelock ?? 0)}
-              title={t('mobile.vault.pending_new_owner')}
+              title={t(keyPathOf(pending.address) ? 'mobile.quantum.pending_fresh_key' : 'mobile.vault.pending_new_owner')}
               value={pending.address}
               onCancel={cancel}
               cancelling={busy === 'cancel'}

@@ -128,6 +128,8 @@ export type RootStackParamList = {
   /** Overview › Pending: changes the vault has queued and not applied yet. */
   PendingChanges: undefined;
   VaultTransferOwnership: undefined;
+  /** Security › Quantum-safe keys: a fresh key after every operation (see wallet/rotation). */
+  QuantumSafe: undefined;
   /** For a vault owned by a Safe: what is waiting for the Safe's owners to sign. */
   SafeApprovals: undefined;
   VaultRecoveryPhrase: undefined;
@@ -522,6 +524,7 @@ function Root() {
         />
         <Stack.Screen name="PendingChanges" getComponent={() => require('@/screens/PendingChangesScreen').PendingChangesScreen} options={{title: t('mobile.vault.timelock_page_title')}} />
         <Stack.Screen name="VaultTransferOwnership" getComponent={() => require('@/screens/TransferOwnershipScreen').TransferOwnershipScreen} options={{title: t('mobile.vault.transfer_ownership')}} />
+        <Stack.Screen name="QuantumSafe" getComponent={() => require('@/screens/QuantumSafeScreen').QuantumSafeScreen} options={{title: t('mobile.quantum.title')}} />
         <Stack.Screen name="SafeApprovals" getComponent={() => require('@/screens/SafeApprovalsScreen').SafeApprovalsScreen} options={{title: t('mobile.safe.approvals')}} />
         <Stack.Screen name="VaultAssetManager" getComponent={() => require('@/screens/AssetManagerScreen').AssetManagerScreen} options={{title: t('vault.asset_manager')}} />
         <Stack.Screen

@@ -12,7 +12,8 @@
 import {useEffect, useState} from 'react';
 import {getAddress, parseAbi, type Address} from 'viem';
 import {apiFetch, apiUrl, publicClientFor, type Network} from '@/core/chain';
-import type {VaultRef} from '@/core/vault-store';
+import {keyIndexOf, type VaultRef} from '@/core/vault-store';
+import {keyPathOf} from '@/wallet/rotation-store';
 import {vaultAddressOf} from '@/core/active-vault';
 
 const OWNER_ABI = parseAbi(['function owner() view returns (address)']);
@@ -98,7 +99,9 @@ export function useVaultDirectory(
           const expected = v.safe ?? v.owner;
           if (!vault || !expected) return;
           const now = await vaultOwnerOf(network, vault);
-          if (now && now.toLowerCase() !== expected.toLowerCase()) gone.set(v.index, now);
+          // Handed to one of its own key's one-time keys (quantum-safe keys): still this phone's.
+          const ownKey = !v.safe && !!now && keyPathOf(now)?.index === keyIndexOf(v);
+          if (now && now.toLowerCase() !== expected.toLowerCase() && !ownKey) gone.set(v.index, now);
         }),
       );
       if (!live) return;
