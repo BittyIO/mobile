@@ -46,6 +46,7 @@ const SAFE_KEY_SCAN = 10;
  * only says whose it is.
  */
 const SHOW_OWNERS = 'vaults.showOwners';
+const SHOW_TRANSFERRED = 'vaults.showTransferred';
 
 /**
  * The Vaults page's header-right: a ⋯ like the Trade screen's, holding how the list is shown. Owner
@@ -53,7 +54,17 @@ const SHOW_OWNERS = 'vaults.showOwners';
  * "Show owners" is turned on here; then it is grouped under each owner's address. Remembered on this
  * phone. Module scope so the header's right side keeps one element type across renders.
  */
-function VaultsMenu({showOwners, onShowOwners}: {showOwners: boolean; onShowOwners: (on: boolean) => void}) {
+function VaultsMenu({
+  showOwners,
+  onShowOwners,
+  showTransferred,
+  onShowTransferred,
+}: {
+  showOwners: boolean;
+  onShowOwners: (on: boolean) => void;
+  showTransferred: boolean;
+  onShowTransferred: (on: boolean) => void;
+}) {
   const {t} = useT();
   const c = useColors();
   const styles = useStyles(makeStyles);
@@ -63,11 +74,16 @@ function VaultsMenu({showOwners, onShowOwners}: {showOwners: boolean; onShowOwne
       <Pressable onPress={() => setOpen(true)} style={styles.moreBtn} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('mobile.trade.more')}>
         <MoreIcon color={c.text} />
       </Pressable>
-      <Sheet visible={open} title={t('mobile.vaults.title')} onClose={() => setOpen(false)}>
+      <Sheet visible={open} title={t('mobile.settings.choose_vault')} onClose={() => setOpen(false)}>
         <View style={styles.menuCard}>
-          <View style={styles.menuRow}>
+          <View style={[styles.menuRow, styles.rowDivider]}>
             <Text style={styles.menuLabel}>{t('mobile.vaults.show_owners')}</Text>
             <Switch value={showOwners} onValueChange={onShowOwners} />
+          </View>
+          {/* Vaults given away stay on the phone's list; they are shown only when asked for. */}
+          <View style={styles.menuRow}>
+            <Text style={styles.menuLabel}>{t('mobile.vaults.show_transferred')}</Text>
+            <Switch value={showTransferred} onValueChange={onShowTransferred} />
           </View>
         </View>
       </Sheet>
@@ -94,10 +110,20 @@ export function VaultListScreen() {
     setShowOwners(on);
     setPref(SHOW_OWNERS, on ? '1' : '0');
   };
+  // Vaults transferred away: hidden unless asked for (the ⋯ menu); remembered on this phone.
+  const [showTransferred, setShowTransferred] = useState(() => getPref(SHOW_TRANSFERRED) === '1');
+  const toggleTransferred = (on: boolean) => {
+    setShowTransferred(on);
+    setPref(SHOW_TRANSFERRED, on ? '1' : '0');
+  };
   useLayoutEffect(() => {
-    nav.setOptions({headerRight: () => <VaultsMenu showOwners={showOwners} onShowOwners={toggleOwners} />});
+    nav.setOptions({
+      headerRight: () => (
+        <VaultsMenu showOwners={showOwners} onShowOwners={toggleOwners} showTransferred={showTransferred} onShowTransferred={toggleTransferred} />
+      ),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nav, showOwners]);
+  }, [nav, showOwners, showTransferred]);
   const [pulled, setPulled] = useState(false);
 
   /**
@@ -154,7 +180,8 @@ export function VaultListScreen() {
    */
   const groups = owners
     .map((o) => {
-      const listed = vaults.filter((v) => ownerOf(v) === o.key);
+      // A vault transferred away is listed only with "Show transferred vaults" on.
+      const listed = vaults.filter((v) => ownerOf(v) === o.key && (showTransferred || !notYours.has(v.index)));
       const here = new Set(listed.map((v) => vaultAddressOf(v, network)?.toLowerCase()).filter(Boolean) as string[]);
       const key = {index: o.keyIndex, address: (o.address ?? '0x') as Address};
       const h = held[o.key];

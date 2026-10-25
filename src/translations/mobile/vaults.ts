@@ -3,6 +3,7 @@ import type {MobileTable} from './index';
 // Settings › Vaults: the vault list, the vaults found for this device's keys, and removing one.
 export const vaults: MobileTable = {
   en: {
+    show_transferred: 'Show transferred vaults',
     show_owners: 'Show owners',
     owner_header: 'Owner: {{address}}',
     transferred_from: 'Transferred from {{address}}',
@@ -19,6 +20,7 @@ export const vaults: MobileTable = {
     add: 'Add',
   },
   zh: {
+    show_transferred: '显示已转移的金库',
     show_owners: '显示所有者',
     owner_header: '所有者：{{address}}',
     transferred_from: '转移自 {{address}}',
@@ -35,6 +37,7 @@ export const vaults: MobileTable = {
     add: '添加',
   },
   'zh-TW': {
+    show_transferred: '顯示已轉移的金庫',
     show_owners: '顯示擁有者',
     owner_header: '擁有者：{{address}}',
     transferred_from: '轉移自 {{address}}',
@@ -51,6 +54,7 @@ export const vaults: MobileTable = {
     add: '新增',
   },
   ja: {
+    show_transferred: '移転済みの Vault を表示',
     show_owners: 'オーナーを表示',
     owner_header: 'オーナー：{{address}}',
     transferred_from: '{{address}} から移転',
@@ -67,6 +71,7 @@ export const vaults: MobileTable = {
     add: '追加',
   },
   ko: {
+    show_transferred: '이전된 볼트 표시',
     show_owners: '소유자 표시',
     owner_header: '소유자: {{address}}',
     transferred_from: '{{address}}에서 이전됨',
@@ -83,6 +88,7 @@ export const vaults: MobileTable = {
     add: '추가',
   },
   fr: {
+    show_transferred: 'Afficher les coffres transférés',
     show_owners: 'Afficher les propriétaires',
     owner_header: 'Propriétaire : {{address}}',
     transferred_from: 'Transféré depuis {{address}}',
@@ -99,6 +105,7 @@ export const vaults: MobileTable = {
     add: 'Ajouter',
   },
   es: {
+    show_transferred: 'Mostrar bóvedas transferidas',
     show_owners: 'Mostrar propietarios',
     owner_header: 'Propietario: {{address}}',
     transferred_from: 'Transferido desde {{address}}',
@@ -115,6 +122,7 @@ export const vaults: MobileTable = {
     add: 'Añadir',
   },
   de: {
+    show_transferred: 'Übertragene Tresore anzeigen',
     show_owners: 'Eigentümer anzeigen',
     owner_header: 'Eigentümer: {{address}}',
     transferred_from: 'Übertragen von {{address}}',
@@ -131,6 +139,7 @@ export const vaults: MobileTable = {
     add: 'Hinzufügen',
   },
   'pt-BR': {
+    show_transferred: 'Mostrar cofres transferidos',
     show_owners: 'Mostrar proprietários',
     owner_header: 'Proprietário: {{address}}',
     transferred_from: 'Transferido de {{address}}',
@@ -147,6 +156,7 @@ export const vaults: MobileTable = {
     add: 'Adicionar',
   },
   hi: {
+    show_transferred: 'हस्तांतरित वॉल्ट दिखाएँ',
     show_owners: 'मालिक दिखाएँ',
     owner_header: 'मालिक: {{address}}',
     transferred_from: '{{address}} से हस्तांतरित',
@@ -163,6 +173,7 @@ export const vaults: MobileTable = {
     add: 'जोड़ें',
   },
   tr: {
+    show_transferred: 'Devredilen kasaları göster',
     show_owners: 'Sahipleri göster',
     owner_header: 'Sahip: {{address}}',
     transferred_from: '{{address}} adresinden devredildi',
@@ -179,6 +190,7 @@ export const vaults: MobileTable = {
     add: 'Ekle',
   },
   ru: {
+    show_transferred: 'Показать переданные хранилища',
     show_owners: 'Показать владельцев',
     owner_header: 'Владелец: {{address}}',
     transferred_from: 'Передано от {{address}}',
@@ -195,6 +207,7 @@ export const vaults: MobileTable = {
     add: 'Добавить',
   },
   id: {
+    show_transferred: 'Tampilkan vault yang dialihkan',
     show_owners: 'Tampilkan pemilik',
     owner_header: 'Pemilik: {{address}}',
     transferred_from: 'Dialihkan dari {{address}}',
@@ -211,6 +224,7 @@ export const vaults: MobileTable = {
     add: 'Tambah',
   },
   vi: {
+    show_transferred: 'Hiện vault đã chuyển',
     show_owners: 'Hiện chủ sở hữu',
     owner_header: 'Chủ sở hữu: {{address}}',
     transferred_from: 'Đã chuyển từ {{address}}',
@@ -227,6 +241,7 @@ export const vaults: MobileTable = {
     add: 'Thêm',
   },
   th: {
+    show_transferred: 'แสดงห้องนิรภัยที่โอนแล้ว',
     show_owners: 'แสดงเจ้าของ',
     owner_header: 'เจ้าของ: {{address}}',
     transferred_from: 'โอนมาจาก {{address}}',

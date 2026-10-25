@@ -502,7 +502,7 @@ function Root() {
           getComponent={() => require('@/screens/RiskValueScreen').RiskValueScreen}
           options={({route}) => ({title: t(RISK_TITLE[route.params.field])})}
         />
-        <Stack.Screen name="VaultList" getComponent={() => require('@/screens/VaultListScreen').VaultListScreen} options={{title: t('mobile.vaults.title')}} />
+        <Stack.Screen name="VaultList" getComponent={() => require('@/screens/VaultListScreen').VaultListScreen} options={{title: t('mobile.settings.choose_vault')}} />
         <Stack.Screen name="VaultLock" getComponent={() => require('@/screens/VaultLockScreen').VaultLockScreen} options={{title: t('mobile.vault.vault_lock')}} />
         <Stack.Screen
           name="VaultLockAction"

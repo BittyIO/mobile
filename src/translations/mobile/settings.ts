@@ -17,7 +17,7 @@ export const settings: MobileTable = {
     rpc_reset: 'Use default',
     rpc_invalid: 'Enter an https:// URL.',
     rpc_wrong_chain: 'This RPC did not answer as {{network}}.',
-    choose_vault: 'Choose Vault',
+    choose_vault: 'Choose vault',
     choose_network: 'Choose Network',
     add_vault: 'Add a vault',
     vault_unlock_first: 'Unlock to derive',
