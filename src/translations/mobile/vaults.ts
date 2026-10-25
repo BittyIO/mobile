@@ -16,9 +16,6 @@ export const vaults: MobileTable = {
     on_network: 'On {{network}}',
     found: 'Found for your keys',
     add: 'Add',
-    remove_title: 'Remove from this phone?',
-    remove_msg: 'The vault stays on chain with everything in it. You can add it again later.',
-    remove: 'Remove',
   },
   zh: {
     owner_header: '所有者：{{address}}',
@@ -34,9 +31,6 @@ export const vaults: MobileTable = {
     on_network: '在 {{network}} 上',
     found: '你的密钥拥有的其他金库',
     add: '添加',
-    remove_title: '从本机移除？',
-    remove_msg: '金库及其资产仍在链上，以后可以再次添加。',
-    remove: '移除',
   },
   'zh-TW': {
     owner_header: '擁有者：{{address}}',
@@ -52,9 +46,6 @@ export const vaults: MobileTable = {
     on_network: '在 {{network}} 上',
     found: '你的金鑰擁有的其他金庫',
     add: '新增',
-    remove_title: '從本機移除？',
-    remove_msg: '金庫及其資產仍在鏈上，之後可以再次新增。',
-    remove: '移除',
   },
   ja: {
     owner_header: 'オーナー：{{address}}',
@@ -70,9 +61,6 @@ export const vaults: MobileTable = {
     on_network: '{{network}} 上',
     found: 'あなたのキーが所有するボールト',
     add: '追加',
-    remove_title: 'このスマホから削除しますか？',
-    remove_msg: 'ボールトと中の資産はチェーン上に残ります。後でまた追加できます。',
-    remove: '削除',
   },
   ko: {
     owner_header: '소유자: {{address}}',
@@ -88,9 +76,6 @@ export const vaults: MobileTable = {
     on_network: '{{network}}에 있음',
     found: '내 키가 소유한 볼트',
     add: '추가',
-    remove_title: '이 휴대폰에서 제거할까요?',
-    remove_msg: '볼트와 자산은 체인에 그대로 남습니다. 나중에 다시 추가할 수 있습니다.',
-    remove: '제거',
   },
   fr: {
     owner_header: 'Propriétaire : {{address}}',
@@ -106,9 +91,6 @@ export const vaults: MobileTable = {
     on_network: 'Sur {{network}}',
     found: 'Trouvés pour vos clés',
     add: 'Ajouter',
-    remove_title: 'Retirer de ce téléphone ?',
-    remove_msg: 'Le coffre reste sur la chaîne avec tout son contenu. Vous pourrez le rajouter plus tard.',
-    remove: 'Retirer',
   },
   es: {
     owner_header: 'Propietario: {{address}}',
@@ -124,9 +106,6 @@ export const vaults: MobileTable = {
     on_network: 'En {{network}}',
     found: 'Encontradas para tus claves',
     add: 'Añadir',
-    remove_title: '¿Quitar de este teléfono?',
-    remove_msg: 'La bóveda sigue en la cadena con todo lo que contiene. Puedes volver a añadirla más tarde.',
-    remove: 'Quitar',
   },
   de: {
     owner_header: 'Eigentümer: {{address}}',
@@ -142,9 +121,6 @@ export const vaults: MobileTable = {
     on_network: 'Auf {{network}}',
     found: 'Für deine Schlüssel gefunden',
     add: 'Hinzufügen',
-    remove_title: 'Von diesem Telefon entfernen?',
-    remove_msg: 'Der Tresor bleibt mit allem darin auf der Chain. Du kannst ihn später wieder hinzufügen.',
-    remove: 'Entfernen',
   },
   'pt-BR': {
     owner_header: 'Proprietário: {{address}}',
@@ -160,9 +136,6 @@ export const vaults: MobileTable = {
     on_network: 'Na {{network}}',
     found: 'Encontrados para suas chaves',
     add: 'Adicionar',
-    remove_title: 'Remover deste celular?',
-    remove_msg: 'O cofre continua na blockchain com tudo dentro. Você pode adicioná-lo de novo depois.',
-    remove: 'Remover',
   },
   hi: {
     owner_header: 'मालिक: {{address}}',
@@ -178,9 +151,6 @@ export const vaults: MobileTable = {
     on_network: '{{network}} पर',
     found: 'आपकी कुंजियों के लिए मिले',
     add: 'जोड़ें',
-    remove_title: 'इस फ़ोन से हटाएँ?',
-    remove_msg: 'वॉल्ट और उसमें सब कुछ चेन पर बना रहता है। आप इसे बाद में फिर जोड़ सकते हैं।',
-    remove: 'हटाएँ',
   },
   tr: {
     owner_header: 'Sahip: {{address}}',
@@ -196,9 +166,6 @@ export const vaults: MobileTable = {
     on_network: '{{network}} üzerinde',
     found: 'Anahtarlarınız için bulunanlar',
     add: 'Ekle',
-    remove_title: 'Bu telefondan kaldırılsın mı?',
-    remove_msg: 'Kasa ve içindekiler zincirde kalır. Daha sonra tekrar ekleyebilirsiniz.',
-    remove: 'Kaldır',
   },
   ru: {
     owner_header: 'Владелец: {{address}}',
@@ -214,9 +181,6 @@ export const vaults: MobileTable = {
     on_network: 'В {{network}}',
     found: 'Найдено для ваших ключей',
     add: 'Добавить',
-    remove_title: 'Убрать с этого телефона?',
-    remove_msg: 'Хранилище и всё в нём остаются в блокчейне. Позже его можно добавить снова.',
-    remove: 'Убрать',
   },
   id: {
     owner_header: 'Pemilik: {{address}}',
@@ -232,9 +196,6 @@ export const vaults: MobileTable = {
     on_network: 'Di {{network}}',
     found: 'Ditemukan untuk kunci Anda',
     add: 'Tambah',
-    remove_title: 'Hapus dari ponsel ini?',
-    remove_msg: 'Brankas tetap ada di chain beserta isinya. Anda bisa menambahkannya lagi nanti.',
-    remove: 'Hapus',
   },
   vi: {
     owner_header: 'Chủ sở hữu: {{address}}',
@@ -250,9 +211,6 @@ export const vaults: MobileTable = {
     on_network: 'Trên {{network}}',
     found: 'Tìm thấy cho các khóa của bạn',
     add: 'Thêm',
-    remove_title: 'Gỡ khỏi điện thoại này?',
-    remove_msg: 'Két và mọi thứ bên trong vẫn ở trên chuỗi. Bạn có thể thêm lại sau.',
-    remove: 'Gỡ',
   },
   th: {
     owner_header: 'เจ้าของ: {{address}}',
@@ -268,8 +226,5 @@ export const vaults: MobileTable = {
     on_network: 'บน {{network}}',
     found: 'พบสำหรับกุญแจของคุณ',
     add: 'เพิ่ม',
-    remove_title: 'ลบออกจากโทรศัพท์นี้?',
-    remove_msg: 'วอลต์และทุกอย่างในนั้นยังอยู่บนเชน คุณเพิ่มกลับมาได้ภายหลัง',
-    remove: 'ลบ',
   },
 };

@@ -32,8 +32,8 @@ const SAFE_KEY_SCAN = 10;
  * stand behind several. Those it was given are found by asking the server which vaults each key
  * owns (vault/owned-vaults), each time the page opens and on a pull, and offered under Found with
  * an Add. A vault that has been transferred AWAY is still listed, greyed and marked as no longer
- * yours, so it does not just vanish; it cannot be opened, and a tap offers to take it off the
- * phone. A long press on any vault, or on an owner's header, copies the address.
+ * yours, so it does not just vanish; it cannot be opened. A long press on any vault, or on an
+ * owner's header, copies the address.
  *
  * Choosing a vault makes it the one in front and goes back. One received on another chain switches
  * to that chain first — it exists nowhere else.
@@ -165,20 +165,11 @@ export function VaultListScreen() {
     );
 
   const choose = (v: VaultRef) => {
-    // Transferred away: it cannot be opened, so a tap is the way to take it off the phone.
-    if (notYours.has(v.index)) return askRemove(v);
-    if (!v.owner) return;
+    // Transferred away: it cannot be opened.
+    if (!v.owner || notYours.has(v.index)) return;
     if (v.vault && v.network && v.network !== network) setNetwork(v.network as Network);
     selectVault(v.index);
     nav.goBack();
-  };
-
-  const askRemove = (v: VaultRef) => {
-    if (vaults.length <= 1) return;
-    Alert.alert(t('mobile.vaults.remove_title'), t('mobile.vaults.remove_msg'), [
-      {text: t('common.cancel'), style: 'cancel'},
-      {text: t('mobile.vaults.remove'), style: 'destructive', onPress: () => useVaults.getState().remove(v.index)},
-    ]);
   };
 
   /**
