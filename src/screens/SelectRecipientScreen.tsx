@@ -174,6 +174,7 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
   const entryRow = (b: WhitelistedRecipient, i: number, list: WhitelistedRecipient[]) => {
     const named = recipientName(names, network, b.recipientAddress);
     const removeAt = b.status === WHITELIST_STATUS.removalQueued ? b.removeAt : undefined;
+    const waitUntil = removeAt ?? (b.status === WHITELIST_STATUS.pending ? b.effectiveAt : undefined);
     const onDate = (at: number) => t('mobile.vault.on_date', {date: new Date(at * 1000).toLocaleDateString()});
     const note = removeAt
       ? t('mobile.payments.removal_pending', {when: onDate(removeAt)})
@@ -213,11 +214,12 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
                 />
               </Svg>
             </Pressable>
-            {/* Still waiting out the timelock: how far it has run, and what is left. */}
-            {b.status === WHITELIST_STATUS.pending && b.effectiveAt ? (
+            {/* Still waiting out the timelock — to be added, or to be removed: how far it has run,
+                and what is left. The note under the address says which. */}
+            {waitUntil ? (
               <>
-                <ProgressRing size={16} done={waitDone(b.effectiveAt, now, Number(risk?.timelock ?? 0))} left={b.effectiveAt - now} />
-                <Text style={styles.left}>{leftUnit(b.effectiveAt - now, t).join(' ')}</Text>
+                <ProgressRing size={16} done={waitDone(waitUntil, now, Number(risk?.timelock ?? 0))} left={waitUntil - now} />
+                <Text style={styles.left}>{leftUnit(waitUntil - now, t).join(' ')}</Text>
               </>
             ) : null}
           </View>
