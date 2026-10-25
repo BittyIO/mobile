@@ -3,7 +3,6 @@ import type {MobileTable} from './index';
 // Settings › Vaults: the vault list, the vaults found for this device's keys, and removing one.
 export const vaults: MobileTable = {
   en: {
-    owner_of: 'Owner of {{name}}',
     owner_n: 'Owner {{n}}',
     accept: 'Accept',
     accept_title: 'Accept ownership',
@@ -20,7 +19,6 @@ export const vaults: MobileTable = {
     remove: 'Remove',
   },
   zh: {
-    owner_of: '{{name}} 的所有者',
     owner_n: '所有者 {{n}}',
     accept: '接受',
     accept_title: '接受所有权',
@@ -37,7 +35,6 @@ export const vaults: MobileTable = {
     remove: '移除',
   },
   'zh-TW': {
-    owner_of: '{{name}} 的擁有者',
     owner_n: '擁有者 {{n}}',
     accept: '接受',
     accept_title: '接受所有權',
@@ -54,7 +51,6 @@ export const vaults: MobileTable = {
     remove: '移除',
   },
   ja: {
-    owner_of: '{{name}} のオーナー',
     owner_n: 'オーナー {{n}}',
     accept: '受け入れる',
     accept_title: '所有権を受け入れる',
@@ -71,7 +67,6 @@ export const vaults: MobileTable = {
     remove: '削除',
   },
   ko: {
-    owner_of: '{{name}}의 소유자',
     owner_n: '소유자 {{n}}',
     accept: '수락',
     accept_title: '소유권 수락',
@@ -88,7 +83,6 @@ export const vaults: MobileTable = {
     remove: '제거',
   },
   fr: {
-    owner_of: 'Propriétaire de {{name}}',
     owner_n: 'Propriétaire {{n}}',
     accept: 'Accepter',
     accept_title: 'Accepter la propriété',
@@ -105,7 +99,6 @@ export const vaults: MobileTable = {
     remove: 'Retirer',
   },
   es: {
-    owner_of: 'Propietario de {{name}}',
     owner_n: 'Propietario {{n}}',
     accept: 'Aceptar',
     accept_title: 'Aceptar la propiedad',
@@ -122,7 +115,6 @@ export const vaults: MobileTable = {
     remove: 'Quitar',
   },
   de: {
-    owner_of: 'Eigentümer von {{name}}',
     owner_n: 'Eigentümer {{n}}',
     accept: 'Annehmen',
     accept_title: 'Eigentum annehmen',
@@ -139,7 +131,6 @@ export const vaults: MobileTable = {
     remove: 'Entfernen',
   },
   'pt-BR': {
-    owner_of: 'Proprietário de {{name}}',
     owner_n: 'Proprietário {{n}}',
     accept: 'Aceitar',
     accept_title: 'Aceitar a propriedade',
@@ -156,7 +147,6 @@ export const vaults: MobileTable = {
     remove: 'Remover',
   },
   hi: {
-    owner_of: '{{name}} का मालिक',
     owner_n: 'मालिक {{n}}',
     accept: 'स्वीकार करें',
     accept_title: 'स्वामित्व स्वीकार करें',
@@ -173,7 +163,6 @@ export const vaults: MobileTable = {
     remove: 'हटाएँ',
   },
   tr: {
-    owner_of: '{{name}} sahibi',
     owner_n: 'Sahip {{n}}',
     accept: 'Kabul et',
     accept_title: 'Sahipliği kabul et',
@@ -190,7 +179,6 @@ export const vaults: MobileTable = {
     remove: 'Kaldır',
   },
   ru: {
-    owner_of: 'Владелец {{name}}',
     owner_n: 'Владелец {{n}}',
     accept: 'Принять',
     accept_title: 'Принять владение',
@@ -207,7 +195,6 @@ export const vaults: MobileTable = {
     remove: 'Убрать',
   },
   id: {
-    owner_of: 'Pemilik {{name}}',
     owner_n: 'Pemilik {{n}}',
     accept: 'Terima',
     accept_title: 'Terima kepemilikan',
@@ -224,7 +211,6 @@ export const vaults: MobileTable = {
     remove: 'Hapus',
   },
   vi: {
-    owner_of: 'Chủ sở hữu {{name}}',
     owner_n: 'Chủ sở hữu {{n}}',
     accept: 'Chấp nhận',
     accept_title: 'Chấp nhận quyền sở hữu',
@@ -241,7 +227,6 @@ export const vaults: MobileTable = {
     remove: 'Gỡ',
   },
   th: {
-    owner_of: 'เจ้าของ {{name}}',
     owner_n: 'เจ้าของ {{n}}',
     accept: 'ยอมรับ',
     accept_title: 'ยอมรับความเป็นเจ้าของ',

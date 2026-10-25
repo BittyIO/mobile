@@ -37,8 +37,8 @@ const SAFE_KEY_SCAN = 10;
  * to that chain first — it exists nowhere else.
  *
  * One list of every vault, grouped by the owner that holds it — a key on this phone, or a Safe added
- * here — under a header named after that owner's own vault ("Owner of Savings"). Choosing a vault is
- * one tap whatever its owner; the grouping only says whose it is.
+ * here — under that owner's address. Choosing a vault is one tap whatever its owner; the grouping
+ * only says whose it is.
  */
 export function VaultListScreen() {
   const {t} = useT();
@@ -79,15 +79,6 @@ export function VaultListScreen() {
     );
   }, [vaults]);
   const label = (n: number) => t('mobile.app.vault_n', {n});
-  /**
-   * An owner is named after the vault it was made for — "Owner of Savings" — since that is the name
-   * the user gave: a key's own vault (the one the factory derives from it), a Safe's vault. A key
-   * with no vault of its own here (it only signs for a Safe, or only received one) keeps its number.
-   */
-  const ownerLabel = (o: (typeof owners)[number]) => {
-    const own = vaults.find((v) => (o.safe ? v.safe?.toLowerCase() === o.key : !v.safe && !v.vault && v.index === o.keyIndex));
-    return own ? t('mobile.vaults.owner_of', {name: vaultLabel(own, label)}) : t('mobile.vaults.owner_n', {n: o.keyIndex + 1});
-  };
   const {notYours} = useVaultDirectory(network, vaults, refresh);
 
   /**
@@ -136,7 +127,6 @@ export function VaultListScreen() {
     Clipboard.setString(address);
     showToast('success', t('common.copied'), address, 1500);
   };
-  const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
   const [busy, setBusy] = useState(false);
   const [safeOpen, setSafeOpen] = useState(false);
   const [safeDraft, setSafeDraft] = useState('');
@@ -318,15 +308,16 @@ export function VaultListScreen() {
         />
       }>
       {/* Every vault on one list, grouped by owner: switching is one tap from anywhere, and the
-          header says which key — or Safe — holds what. Long press a header to copy its address. */}
+          header is the address of the key — or Safe — that holds them. Long press it to copy. */}
       {groups.map(({owner: o, listed, received, waiting}) => {
         const count = listed.length + received.length + waiting.length;
         return (
           <View key={o.key} style={styles.section}>
             <Pressable onLongPress={() => copyOwner(o.address)} hitSlop={4}>
-              <Text style={styles.groupLabel} numberOfLines={1}>
-                {ownerLabel(o)}
-                {o.address ? ` · ${short(o.address)}` : ''}
+              {/* The owner's address, in full — it is what tells two keys apart. A key whose
+                  address is not derived yet goes by its number until it is. */}
+              <Text style={[styles.groupLabel, o.address && styles.ownerAddr]}>
+                {o.address ?? t('mobile.vaults.owner_n', {n: o.keyIndex + 1})}
               </Text>
             </Pressable>
             <View style={styles.group}>
@@ -414,6 +405,8 @@ const makeStyles = (c: Colors) =>
     // Full, and small enough to wrap to two lines rather than be cut: vaults are told apart by
     // their address, and an elided middle is where two would differ.
     addr: {color: c.subtext, fontSize: 11, fontFamily: 'Menlo', lineHeight: 15},
+    // A group's header when it is an address: the address font, small enough to fit on one line.
+    ownerAddr: {fontSize: 12, fontFamily: 'Menlo'},
     gone: {opacity: 0.45},
     goneText: {color: c.warning, fontSize: 12},
     pressed: {opacity: 0.6},
