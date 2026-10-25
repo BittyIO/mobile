@@ -175,7 +175,6 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
     const named = recipientName(names, network, b.recipientAddress);
     const removeAt = b.status === WHITELIST_STATUS.removalQueued ? b.removeAt : undefined;
     const waitUntil = removeAt ?? (b.status === WHITELIST_STATUS.pending ? b.effectiveAt : undefined);
-    // A queued removal says so at the end of the name line, beside its ring; the time left is there.
     const note = b.status === WHITELIST_STATUS.voided ? t('mobile.payments.voided_by_lock') : null;
     return (
       <Pressable
@@ -210,15 +209,16 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
                 />
               </Svg>
             </Pressable>
-            {/* Still waiting out the timelock — to be added, or to be removed: how far it has run,
-                and what is left. The note under the address says which. */}
+            {/* Still waiting out the timelock, to be added or to be removed: how far it has run,
+                and in one phrase what happens when. */}
             {waitUntil ? (
               <>
                 <ProgressRing size={16} done={waitDone(waitUntil, now, Number(risk?.timelock ?? 0))} left={waitUntil - now} />
-                <Text style={styles.left}>{leftUnit(waitUntil - now, t).join(' ')}</Text>
+                <Text style={styles.left}>
+                  {t(removeAt ? 'mobile.payments.removed_in' : 'mobile.payments.added_in', {time: leftUnit(waitUntil - now, t).join(' ')})}
+                </Text>
               </>
             ) : null}
-            {removeAt ? <Text style={styles.removing}>{t('mobile.payments.removing')}</Text> : null}
           </View>
           <Text style={styles.addrMuted}>{b.recipientAddress}</Text>
           {note ? (
@@ -366,7 +366,6 @@ const makeStyles = (c: Colors) =>
     entryName: {color: c.text, fontSize: 16, fontWeight: '600', flexShrink: 1},
     left: {color: c.subtext, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums']},
     entryNameOff: {color: c.subtext},
-    removing: {marginLeft: 'auto', color: c.subtext, fontSize: 13, fontWeight: '600'},
     // Sized to the bar's 44, as the Pending page's lock: the native bar anchors a custom view by its bottom.
     headerBtn: {width: 44, height: 44, paddingBottom: 9, alignItems: 'center', justifyContent: 'center'},
     addrMuted: {color: c.subtext, fontSize: 13, fontVariant: ['tabular-nums']},
