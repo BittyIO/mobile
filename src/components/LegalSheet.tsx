@@ -1,11 +1,12 @@
-import React from 'react';
+import React, {useEffect, useState} from 'react';
 import {Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {TERMS, TERMS_UPDATED} from '@/core/terms';
+import {TERMS, TERMS_UPDATED, type TermsSection} from '@/core/terms';
+import {PRIVACY, PRIVACY_UPDATED} from '@/core/privacy';
 import {useT} from '@/i18n';
 import {useStyles, type Colors} from '@/theme';
 
-/** `**bold**` runs as nested Text; the Terms use no other markup. */
+/** `**bold**` runs as nested Text; the documents use no other markup. */
 function Rich({text, style, bold}: {text: string; style: object; bold: object}) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g).filter(Boolean);
   return (
@@ -23,28 +24,39 @@ function Rich({text, style, bold}: {text: string; style: object; bold: object}) 
   );
 }
 
+const DOCS: Record<'terms' | 'privacy', {title: string; updated: string; sections: TermsSection[]}> = {
+  terms: {title: 'mobile.settings.terms_of_use', updated: TERMS_UPDATED, sections: TERMS},
+  privacy: {title: 'mobile.settings.privacy_policy', updated: PRIVACY_UPDATED, sections: PRIVACY},
+};
+
 /**
- * Settings › Terms of Use: the Terms in a sheet that scrolls, read in the app rather than on the
- * website. The text ships with the app (core/terms), so it opens offline and is the version this
- * build was released with.
+ * Settings › Terms of Use and Privacy Policy: the document in a sheet that scrolls, read in the app
+ * rather than on the website. The text ships with the app (core/terms, core/privacy), so it opens
+ * offline and is the version this build was released with.
  *
  * Its own modal rather than the shared {Sheet}: there the card is a tap-swallowing Pressable inside
  * a backdrop Pressable, with a swipe-down to close, and this one long scroll view could not be
  * scrolled through all of that. Here nothing touchable wraps the text — the backdrop is a sibling
  * behind the card — and it closes with ✕ or a tap on the backdrop, never a swipe.
  */
-export function TermsSheet({visible, onClose}: {visible: boolean; onClose: () => void}) {
+export function LegalSheet({doc, onClose}: {doc: 'terms' | 'privacy' | null; onClose: () => void}) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const {height} = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  // The last one shown stays put while the sheet slides away.
+  const [shown, setShown] = useState(doc ?? 'terms');
+  useEffect(() => {
+    if (doc) setShown(doc);
+  }, [doc]);
+  const {title, updated, sections} = DOCS[doc ?? shown];
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={!!doc} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.root}>
         <Pressable style={[StyleSheet.absoluteFill, styles.shade]} onPress={onClose} accessibilityLabel={t('common.close')} />
         <View style={[styles.card, {height: Math.round(height * 0.85), paddingBottom: insets.bottom}]}>
           <View style={styles.head}>
-            <Text style={styles.title}>{t('mobile.settings.terms_of_use')}</Text>
+            <Text style={styles.title}>{t(title)}</Text>
             <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button">
               <Text style={styles.close}>✕</Text>
             </Pressable>
@@ -52,10 +64,10 @@ export function TermsSheet({visible, onClose}: {visible: boolean; onClose: () =>
           <ScrollView style={styles.scroll} showsVerticalScrollIndicator contentContainerStyle={styles.body}>
             <Text style={styles.updated}>
               {t('mobile.settings.terms_updated', {
-                date: new Date(`${TERMS_UPDATED}T00:00:00`).toLocaleDateString(),
+                date: new Date(`${updated}T00:00:00`).toLocaleDateString(),
               })}
             </Text>
-            {TERMS.map((s) => (
+            {sections.map((s) => (
               <View key={s.title} style={styles.section}>
                 <Text style={styles.heading}>{s.title}</Text>
                 {s.blocks.map((b, i) =>
