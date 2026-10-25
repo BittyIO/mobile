@@ -11,7 +11,6 @@ import {useWallet} from '@/wallet/store';
 import * as keyring from '@/wallet/keyring';
 import {fetchSafe, SafeApiError} from '@/vault/safe';
 import {deviceKeys, fetchOwnedVaults, useVaultDirectory, type FoundVault} from '@/vault/owned-vaults';
-import {PickerSheet} from '@/components/AssetPicker';
 import {acceptOwnership} from '@/vault/ownership';
 import {relayGasFor} from '@/vault/fee-quote';
 import {useAssetCatalog} from '@/core/asset-catalog';
@@ -37,10 +36,9 @@ const SAFE_KEY_SCAN = 10;
  * Choosing a vault makes it the one in front and goes back. One received on another chain switches
  * to that chain first — it exists nowhere else.
  *
- * The owner comes first: one of this phone's keys, or a Safe added here. The list below is that
- * owner's vaults alone — the one the factory derives from it, those transferred to it, and any the
- * server finds for it — so a phone with several keys does not show every key's vaults in one heap.
- * It starts on the owner of the vault in front, and changing it asks the server again.
+ * One list of every vault, grouped by the owner that holds it — a key on this phone, or a Safe added
+ * here — under a header named after that owner's own vault ("Owner of Savings"). Choosing a vault is
+ * one tap whatever its owner; the grouping only says whose it is.
  */
 export function VaultListScreen() {
   const {t} = useT();
@@ -80,10 +78,6 @@ export function VaultListScreen() {
       a.safe === b.safe ? a.keyIndex - b.keyIndex : a.safe ? 1 : -1,
     );
   }, [vaults]);
-  const active = vaults.find((v) => v.index === activeIndex);
-  const [owner, setOwner] = useState<string | null>(() => (active ? ownerOf(active) : null));
-  const current = owners.find((o) => o.key === owner) ?? owners[0];
-  const [ownerOpen, setOwnerOpen] = useState(false);
   const label = (n: number) => t('mobile.app.vault_n', {n});
   /**
    * An owner is named after the vault it was made for — "Owner of Savings" — since that is the name
@@ -95,35 +89,54 @@ export function VaultListScreen() {
     return own ? t('mobile.vaults.owner_of', {name: vaultLabel(own, label)}) : t('mobile.vaults.owner_n', {n: o.keyIndex + 1});
   };
   const {notYours} = useVaultDirectory(network, vaults, refresh);
-  const mine = vaults.filter((v) => current && ownerOf(v) === current.key);
 
   /**
-   * What the server says the chosen owner holds on this chain, asked each time the owner changes
-   * and on a pull. Every one is offered under it unless that owner's own entry for it is already
-   * listed — a vault this phone still lists under the key that GAVE it away (greyed as no longer
-   * yours) used to hide it here, which is how a transfer between this phone's own keys went missing.
+   * What the server says each of this phone's keys holds on this chain, asked when the page opens,
+   * when the chain or the keys change, and on a pull. A vault one of them holds is listed under it
+   * unless that key's own entry for it already is — a vault the phone still lists under the key
+   * that GAVE it away (greyed, no longer yours) must not hide it from the key that has it now.
    */
-  const [owned, setOwned] = useState<{owned: Address[]; pending: Address[]} | null>(null);
+  const [held, setHeld] = useState<Record<string, {owned: Address[]; pending: Address[]}>>({});
+  const keySig = owners.filter((o) => !o.safe && o.address).map((o) => o.key).join(',');
   useEffect(() => {
-    setOwned(null);
-    if (!current?.address || current.safe) return;
     let live = true;
-    fetchOwnedVaults(network, current.address as Address).then((r) => live && setOwned(r));
+    const keys = owners.filter((o) => !o.safe && o.address);
+    Promise.all(keys.map((o) => fetchOwnedVaults(network, o.address as Address))).then((rs) => {
+      if (live) setHeld(Object.fromEntries(keys.map((o, i) => [o.key, rs[i]])));
+    });
     return () => {
       live = false;
     };
-  }, [network, current?.key, current?.address, current?.safe, refresh]);
-  const listedHere = new Set(mine.map((v) => vaultAddressOf(v, network)?.toLowerCase()).filter(Boolean) as string[]);
-  const foundMine: FoundVault[] =
-    owned && current?.address
-      ? [...owned.owned.map((vault) => ({vault, pending: false})), ...owned.pending.map((vault) => ({vault, pending: true}))]
-          .filter((f) => !listedHere.has(f.vault.toLowerCase()))
-          .map((f) => ({...f, key: {index: current.keyIndex, address: current.address as Address}}))
-      : [];
-  // Owned now: listed with the rest. Handed over and waiting to be accepted (the handover older
-  // vaults used): offered on their own, since accepting is a signature.
-  const received = foundMine.filter((f) => !f.pending);
-  const waiting = foundMine.filter((f) => f.pending);
+    // `keySig` stands for the keys: the same keys are the same question.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [network, keySig, refresh]);
+
+  /**
+   * Every vault, grouped by the owner that holds it: those on this phone, then those the server says
+   * it holds that are not on the phone yet (listed the same way — a transfer needs nothing from the
+   * receiver), and any handover still waiting for that owner to accept. An owner with none is left out.
+   */
+  const groups = owners
+    .map((o) => {
+      const listed = vaults.filter((v) => ownerOf(v) === o.key);
+      const here = new Set(listed.map((v) => vaultAddressOf(v, network)?.toLowerCase()).filter(Boolean) as string[]);
+      const key = {index: o.keyIndex, address: (o.address ?? '0x') as Address};
+      const h = held[o.key];
+      const received: FoundVault[] = (h?.owned ?? []).filter((v) => !here.has(v.toLowerCase())).map((vault) => ({vault, key, pending: false}));
+      const waiting: FoundVault[] = (h?.pending ?? []).filter((v) => !here.has(v.toLowerCase())).map((vault) => ({vault, key, pending: true}));
+      return {owner: o, listed, received, waiting};
+    })
+    .filter((g) => g.listed.length + g.received.length + g.waiting.length > 0);
+  // The name a vault not on the phone yet will have once it is: the next free indexes, in order.
+  const nextIndex = Math.max(...vaults.map((v) => v.index)) + 1;
+  let pendingName = 0;
+
+  const copyOwner = (address: string | null) => {
+    if (!address) return;
+    Clipboard.setString(address);
+    showToast('success', t('common.copied'), address, 1500);
+  };
+  const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
   const [busy, setBusy] = useState(false);
   const [safeOpen, setSafeOpen] = useState(false);
   const [safeDraft, setSafeDraft] = useState('');
@@ -304,68 +317,53 @@ export function VaultListScreen() {
           tintColor={c.text}
         />
       }>
-      {/* The owner first: everything below is its vaults. */}
-      {current ? (
-        <SettingsGroup label={t('mobile.vaults.owner')}>
-          {/* Long press copies the owner's address, as it does on every address in the app. */}
-          <Pressable
-            style={({pressed}) => [styles.vaultRow, pressed && styles.pressed]}
-            onPress={() => setOwnerOpen(true)}
-            onLongPress={() => {
-              if (!current.address) return;
-              Clipboard.setString(current.address);
-              showToast('success', t('common.copied'), current.address, 1500);
-            }}>
-            <View style={styles.vaultText}>
-              <Text style={styles.name}>{ownerLabel(current)}</Text>
-              <Text style={styles.addr}>{current.address ?? t('mobile.settings.vault_unlock_first')}</Text>
+      {/* Every vault on one list, grouped by owner: switching is one tap from anywhere, and the
+          header says which key — or Safe — holds what. Long press a header to copy its address. */}
+      {groups.map(({owner: o, listed, received, waiting}) => {
+        const count = listed.length + received.length + waiting.length;
+        return (
+          <View key={o.key} style={styles.section}>
+            <Pressable onLongPress={() => copyOwner(o.address)} hitSlop={4}>
+              <Text style={styles.groupLabel} numberOfLines={1}>
+                {ownerLabel(o)}
+                {o.address ? ` · ${short(o.address)}` : ''}
+              </Text>
+            </Pressable>
+            <View style={styles.group}>
+              {listed.map((v, i) => row(v, i, count))}
+              {received.map((f, i) => (
+                <Pressable
+                  key={f.vault}
+                  style={({pressed}) => [styles.vaultRow, listed.length + i < count - 1 && styles.rowDivider, pressed && styles.pressed]}
+                  onPress={() => onAddFound(f)}>
+                  <View style={styles.vaultText}>
+                    <View style={styles.nameLine}>
+                      <Text style={styles.name} numberOfLines={1}>
+                        {label(nextIndex + pendingName++ + 1)}
+                      </Text>
+                      <Text style={styles.tag}>{t('mobile.vaults.tag_received')}</Text>
+                    </View>
+                    <Text style={styles.addr}>{f.vault}</Text>
+                  </View>
+                  <Text style={[styles.check, styles.checkHidden]}>✓</Text>
+                </Pressable>
+              ))}
+              {/* Handed to this owner and waiting for it to accept (older vaults): a signature. */}
+              {waiting.map((f, i) => (
+                <View key={f.vault} style={[styles.vaultRow, listed.length + received.length + i < count - 1 && styles.rowDivider]}>
+                  <View style={styles.vaultText}>
+                    <Text style={styles.addr}>{f.vault}</Text>
+                    <Text style={styles.goneText}>{t('mobile.vaults.pending_note')}</Text>
+                  </View>
+                  <Pressable onPress={() => onAccept(f)} hitSlop={8} accessibilityRole="button">
+                    <Text style={styles.link}>{t('mobile.vaults.accept')}</Text>
+                  </Pressable>
+                </View>
+              ))}
             </View>
-            <Text style={styles.chevron}>›</Text>
-          </Pressable>
-        </SettingsGroup>
-      ) : null}
-
-      {/* The owner's vaults: those on this phone, then those the server says it holds that are not
-          on the phone yet — listed the same way, since a transfer needs nothing from the receiver.
-          Choosing one of those puts it on the phone's list (nothing on chain) and opens it. */}
-      <SettingsGroup label={t('mobile.vaults.vaults_of_owner')}>
-        {mine.map((v, i) => row(v, i, mine.length + received.length))}
-        {received.map((f, i) => (
-          <Pressable
-            key={f.vault}
-            style={({pressed}) => [styles.vaultRow, i < received.length - 1 && styles.rowDivider, pressed && styles.pressed]}
-            onPress={() => onAddFound(f)}>
-            <View style={styles.vaultText}>
-              <View style={styles.nameLine}>
-                <Text style={styles.name} numberOfLines={1}>
-                  {/* The name it will have once on the phone's list: the next free index. */}
-                  {label(Math.max(...vaults.map((v) => v.index)) + i + 2)}
-                </Text>
-                <Text style={styles.tag}>{t('mobile.vaults.tag_received')}</Text>
-              </View>
-              <Text style={styles.addr}>{f.vault}</Text>
-            </View>
-            <Text style={[styles.check, styles.checkHidden]}>✓</Text>
-          </Pressable>
-        ))}
-      </SettingsGroup>
-
-      {waiting.length > 0 ? (
-        <SettingsGroup label={t('mobile.vaults.found')}>
-          {waiting.map((f, i) => (
-            <View key={f.vault} style={[styles.vaultRow, i < waiting.length - 1 && styles.rowDivider]}>
-              <View style={styles.vaultText}>
-                <Text style={styles.addr}>{f.vault}</Text>
-                {/* Handed to this key and waiting for it to accept: it is not this key's until then. */}
-                {f.pending ? <Text style={styles.goneText}>{t('mobile.vaults.pending_note')}</Text> : null}
-              </View>
-              <Pressable onPress={() => (f.pending ? onAccept(f) : onAddFound(f))} hitSlop={8} accessibilityRole="button">
-                <Text style={styles.link}>{t(f.pending ? 'mobile.vaults.accept' : 'mobile.vaults.add')}</Text>
-              </Pressable>
-            </View>
-          ))}
-        </SettingsGroup>
-      ) : null}
+          </View>
+        );
+      })}
 
       <SettingsGroup>
         <Pressable style={[styles.row, styles.rowDivider]} onPress={onAdd} disabled={busy}>
@@ -398,17 +396,6 @@ export function VaultListScreen() {
           </View>
         ) : null}
       </SettingsGroup>
-      <PickerSheet
-        visible={ownerOpen}
-        title={t('mobile.vaults.choose_owner')}
-        items={owners.map((o) => ({key: o.key, label: ownerLabel(o), sub: o.address ?? undefined}))}
-        selected={current?.key}
-        onSelect={(k) => {
-          setOwner(k);
-          setOwnerOpen(false);
-        }}
-        onClose={() => setOwnerOpen(false)}
-      />
       {sheet}
     </ScrollView>
   );
@@ -431,7 +418,6 @@ const makeStyles = (c: Colors) =>
     goneText: {color: c.warning, fontSize: 12},
     pressed: {opacity: 0.6},
     checkHidden: {opacity: 0},
-    chevron: {color: c.subtext, fontSize: 22, fontWeight: '300'},
     link: {color: c.accent, fontSize: 15, fontWeight: '600'},
     form: {gap: 12, paddingHorizontal: 16, paddingBottom: 16},
     intro: {color: c.subtext, fontSize: 13, lineHeight: 18},
