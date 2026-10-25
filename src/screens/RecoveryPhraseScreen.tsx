@@ -203,7 +203,6 @@ export function RecoveryPhraseScreen() {
             </View>
           )}
           {!phrase && verified ? <Text style={styles.ok}>✓ {t('mobile.settings.phrase_verified')}</Text> : null}
-          <Text style={styles.warn}>{t('mobile.settings.never_share')}</Text>
           {/* Hidden: one wide button to reveal. Showing: Hide beside the check. */}
           {!phrase ? (
             <Pressable style={({pressed}) => [styles.revealBtn, pressed && styles.btnOff]} onPress={onReveal}>
