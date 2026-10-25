@@ -21,6 +21,8 @@ import {getAutoYields, setAutoYield} from '@/vault/autoyield';
 import {fetchProtocolApy, EMPTY_APY, type ProtocolApy} from '@/vault/apy';
 import {relayGasFor} from '@/vault/fee-quote';
 import {useActiveFeePayer} from '@/vault/useFeePayer';
+import {claimLido, getLidoUnstake, NO_UNSTAKE, type LidoUnstake} from '@/vault/lido';
+import {useVaultWrite} from '@/components/useVaultWrite';
 
 import {protocolDisplayName} from '@/core/protocols';
 import {formatUnits} from 'viem';
@@ -191,6 +193,28 @@ export function EarnDetailScreen() {
 
   const autoLabel = t(lend ? 'mobile.earn.auto_supply' : 'mobile.earn.auto_yield');
 
+  // ── Lido's withdrawal queue ───────────────────────────────────────────
+  /**
+   * A Lido withdraw files a request that finalizes days later and then has to be claimed, as WETH,
+   * back into the vault. Until then the ETH is in neither the position nor the balance above, so
+   * it is shown here — still unstaking, then claimable with the button to claim it.
+   */
+  const isLido = name === 'Lido';
+  const [unstake, setUnstake] = useState<LidoUnstake>(NO_UNSTAKE);
+  const loadUnstake = useCallback(() => {
+    if (!isLido || !bal.vault) return;
+    getLidoUnstake(bal.vault, protocol as Address, network)
+      .then(setUnstake)
+      .catch(() => {});
+  }, [isLido, bal.vault, protocol, network]);
+  // Again with every pull, and after a withdraw (this page is where that form returns to).
+  useEffect(loadUnstake, [loadUnstake, pos.positions]);
+  const claim = useVaultWrite(() => {
+    loadUnstake();
+    bal.refresh();
+  });
+  const fmtEth = (wei: bigint) => fmtNum(Number(formatUnits(wei, 18)));
+
   return (
     <ScrollView
       style={styles.container}
@@ -235,7 +259,25 @@ export function EarnDetailScreen() {
             float the answer is none of it — so calling the figure available was the one thing it
             could not be called. */}
         <Row label={t('vault.balance')} value={free != null ? `${fmtNum(Number(free))} ${sym}` : '—'} />
+        {unstake.unstaking > 0n ? <Row label={t('vault.unstaking')} value={`${fmtEth(unstake.unstaking)} ETH`} /> : null}
+        {unstake.claimable > 0n ? <Row label={t('vault.claimable')} value={`${fmtEth(unstake.claimable)} ETH`} tone="good" /> : null}
       </View>
+
+      {/* Finalized and waiting: one tap brings it back into the vault as WETH. */}
+      {unstake.claimableIds.length > 0 ? (
+        <Pressable
+          style={[styles.btn, styles.depBtn, (!claim.ready || claim.busy !== null) && styles.btnFaded]}
+          disabled={!claim.ready}
+          onPress={() =>
+            claim.run('claim', `${t('vault.claim')} · ${fmtEth(unstake.claimable)} ETH`, (b) =>
+              claimLido({...b, protocol: protocol as Address, ids: unstake.claimableIds}),
+            )
+          }>
+          <Text style={styles.priText} numberOfLines={1}>
+            {t('vault.claim')} {fmtEth(unstake.claimable)} ETH
+          </Text>
+        </Pressable>
+      ) : null}
 
       <View style={styles.card}>
         <View style={styles.autoRow}>
@@ -289,6 +331,7 @@ export function EarnDetailScreen() {
         </Pressable>
       </View>
       {sheet}
+      {claim.sheet}
     </ScrollView>
   );
 }
