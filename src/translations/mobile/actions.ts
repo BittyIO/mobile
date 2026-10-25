@@ -170,7 +170,7 @@ export const actions: MobileTable = {
     relay_no_liquid: '金庫中沒有穩定幣可支付網路手續費。請先從理財或借貸部位取出一些。',
     relay_budget: '金庫的每日網路手續費額度已用完，將在首次扣費後 24 小時重置。',
     relay_stable_coin_as_gas_off: '該金庫已關閉代付。請在「網路手續費」頁面重新啟用一種手續費代幣。',
-    relay_refused: '金庫拒絕了本次操作，因此未送出任何交易。請檢查資產是否在允許清單中，以及交易是否被暫停。',
+    relay_refused: '金庫拒絕了本次操作，因此未送出任何交易。請檢查資產是否在白名單中，以及交易是否被暫停。',
     relay_failed: '代付服務拒絕了本次操作（{{reason}}），因此未送出任何交易。',
     app_update_required: '此金庫執行的是 {{version}} 版本，需要較新的應用程式版本。請從 App Store 更新 Bitty Vault 後再試一次。未傳送任何交易。',
     withdraw_from: '從 {{name}} 取出',
