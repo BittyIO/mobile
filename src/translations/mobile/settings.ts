@@ -2,6 +2,7 @@ import type {MobileTable} from './index';
 
 export const settings: MobileTable = {
   en: {
+    terms_updated: 'Last updated {{date}}',
     whitelisted_addresses: 'Whitelisted',
     add_whitelisted: 'Add whitelisted address',
     vault_upgrading: 'Upgrading…',
@@ -56,6 +57,7 @@ export const settings: MobileTable = {
     gas: 'Network fee',
   },
   zh: {
+    terms_updated: '最后更新：{{date}}',
     whitelisted_addresses: '地址簿',
     add_whitelisted: '添加到地址簿',
     vault_upgrading: '正在升级…',
@@ -110,6 +112,7 @@ export const settings: MobileTable = {
     gas: '网络费',
   },
   'zh-TW': {
+    terms_updated: '最後更新：{{date}}',
     whitelisted_addresses: '地址簿',
     add_whitelisted: '新增到地址簿',
     vault_upgrading: '正在升級…',
@@ -154,6 +157,7 @@ export const settings: MobileTable = {
     gas: '網路費',
   },
   ja: {
+    terms_updated: '最終更新：{{date}}',
     whitelisted_addresses: 'ホワイトリスト',
     add_whitelisted: 'ホワイトリストにアドレスを追加',
     vault_upgrading: 'アップグレード中…',
@@ -198,6 +202,7 @@ export const settings: MobileTable = {
     gas: 'ネットワーク手数料',
   },
   ko: {
+    terms_updated: '최종 업데이트: {{date}}',
     whitelisted_addresses: '화이트리스트',
     add_whitelisted: '화이트리스트 주소 추가',
     vault_upgrading: '업그레이드 중…',
@@ -242,6 +247,7 @@ export const settings: MobileTable = {
     gas: '네트워크 수수료',
   },
   fr: {
+    terms_updated: 'Dernière mise à jour : {{date}}',
     whitelisted_addresses: 'Liste blanche',
     add_whitelisted: 'Ajouter une adresse à la liste blanche',
     vault_upgrading: 'Mise à niveau…',
@@ -286,6 +292,7 @@ export const settings: MobileTable = {
     gas: 'Frais de réseau',
   },
   es: {
+    terms_updated: 'Última actualización: {{date}}',
     whitelisted_addresses: 'Lista blanca',
     add_whitelisted: 'Añadir dirección a la lista blanca',
     vault_upgrading: 'Actualizando…',
@@ -330,6 +337,7 @@ export const settings: MobileTable = {
     gas: 'Comisión de red',
   },
   de: {
+    terms_updated: 'Zuletzt aktualisiert: {{date}}',
     whitelisted_addresses: 'Whitelist',
     add_whitelisted: 'Freigegebene Adresse hinzufügen',
     vault_upgrading: 'Wird aktualisiert…',
@@ -374,6 +382,7 @@ export const settings: MobileTable = {
     gas: 'Netzwerkgebühr',
   },
   'pt-BR': {
+    terms_updated: 'Última atualização: {{date}}',
     whitelisted_addresses: 'Lista branca',
     add_whitelisted: 'Adicionar endereço à lista branca',
     vault_upgrading: 'Atualizando…',
@@ -418,6 +427,7 @@ export const settings: MobileTable = {
     gas: 'Taxa de rede',
   },
   hi: {
+    terms_updated: 'अंतिम अपडेट: {{date}}',
     whitelisted_addresses: 'व्हाइटलिस्ट',
     add_whitelisted: 'व्हाइटलिस्ट पता जोड़ें',
     vault_upgrading: 'अपग्रेड हो रहा है…',
@@ -462,6 +472,7 @@ export const settings: MobileTable = {
     gas: 'नेटवर्क फीस',
   },
   tr: {
+    terms_updated: 'Son güncelleme: {{date}}',
     whitelisted_addresses: 'Beyaz liste',
     add_whitelisted: 'Beyaz listeye adres ekle',
     vault_upgrading: 'Yükseltiliyor…',
@@ -506,6 +517,7 @@ export const settings: MobileTable = {
     gas: 'Ağ ücreti',
   },
   ru: {
+    terms_updated: 'Последнее обновление: {{date}}',
     whitelisted_addresses: 'Белый список',
     add_whitelisted: 'Добавить адрес в белый список',
     vault_upgrading: 'Обновление…',
@@ -550,6 +562,7 @@ export const settings: MobileTable = {
     gas: 'Комиссия сети',
   },
   id: {
+    terms_updated: 'Terakhir diperbarui: {{date}}',
     whitelisted_addresses: 'Whitelist',
     add_whitelisted: 'Tambah alamat whitelist',
     vault_upgrading: 'Meningkatkan…',
@@ -594,6 +607,7 @@ export const settings: MobileTable = {
     gas: 'Biaya jaringan',
   },
   vi: {
+    terms_updated: 'Cập nhật lần cuối: {{date}}',
     whitelisted_addresses: 'Danh sách trắng',
     add_whitelisted: 'Thêm địa chỉ vào danh sách trắng',
     vault_upgrading: 'Đang nâng cấp…',
@@ -638,6 +652,7 @@ export const settings: MobileTable = {
     gas: 'Phí mạng',
   },
   th: {
+    terms_updated: 'อัปเดตล่าสุด: {{date}}',
     whitelisted_addresses: 'ไวท์ลิสต์',
     add_whitelisted: 'เพิ่มที่อยู่ในไวท์ลิสต์',
     vault_upgrading: 'กำลังอัปเกรด…',

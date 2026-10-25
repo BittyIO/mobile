@@ -16,6 +16,7 @@ import {API_BASE} from '@/core/chain';
 import {SettingsRow as Row, makeSettingsStyles} from '@/components/SettingsRow';
 import {useVaults, vaultLabel} from '@/core/vault-store';
 import {useVaultVersionRow} from '@/components/useVaultVersionRow';
+import {TermsSheet} from '@/components/TermsSheet';
 import {PickerSheet} from '@/components/AssetPicker';
 
 import {useT} from '@/i18n';
@@ -77,6 +78,7 @@ export function SettingsScreen() {
   // use: it is part of the React tree, so it opens on the next frame, where the native action sheet
   // waits on a round trip to UIKit and a presentation animation of its own.
   const [picker, setPicker] = useState<'language' | 'currency' | 'appearance' | null>(null);
+  const [termsOpen, setTermsOpen] = useState(false);
   // The currency in force (explicit choice, else US dollars) and the setter. Independent of the
   // language: changing one never changes the other.
   const currency = useDisplayCurrency();
@@ -156,7 +158,8 @@ export function SettingsScreen() {
 
       <View style={styles.group}>
         <Row icon="follow" title={t('mobile.settings.follow_us')} onPress={() => openLink('https://x.com/bitty_io', 'X')} />
-        <Row icon="terms" title={t('mobile.settings.terms_of_use')} onPress={() => openLink(`${API_BASE}/content/terms-of-use`, t('mobile.settings.terms_of_use'))} />
+        {/* The Terms ship with the app and open in a sheet, offline, in this build's version. */}
+        <Row icon="terms" title={t('mobile.settings.terms_of_use')} onPress={() => setTermsOpen(true)} />
         <Row icon="privacy" title={t('mobile.settings.privacy_policy')} onPress={() => openLink(`${API_BASE}/content/privacy-policy`, t('mobile.settings.privacy_policy'))} last />
       </View>
 
@@ -190,6 +193,7 @@ export function SettingsScreen() {
         onSelect={(a) => setAppearance(a as (typeof APPEARANCES)[number])}
         onClose={() => setPicker(null)}
       />
+      <TermsSheet visible={termsOpen} onClose={() => setTermsOpen(false)} />
     </ScrollView>
   );
 }
