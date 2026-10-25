@@ -7,6 +7,8 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import Svg, {Circle, Line, Path} from 'react-native-svg';
 import type {RootStackParamList} from '@/App';
 import {MarketRow} from '@/components/MarketRow';
+import {ProtocolIcon} from '@/components/ProtocolIcon';
+import {TokenIcon} from '@/components/TokenIcon';
 import {HoldingRow, MASK} from '@/components/HoldingRow';
 import {Amount} from '@/components/Amount';
 import {ReceiveDialog} from '@/components/ReceiveDialog';
@@ -21,7 +23,7 @@ import {useFlows} from '@/vault/useFlows';
 import {earnedRaw} from '@/vault/flows';
 import {usePriceFeed} from '@/vault/usePrices';
 import {getLidoUnstake, NO_UNSTAKE, type LidoUnstake} from '@/vault/lido';
-import {adapterByName} from '@/core/protocols';
+import {adapterByName, protocolDisplayName} from '@/core/protocols';
 import {useMarketStats, type MarketStat, type MarketStatMap} from '@/vault/useMarketStats';
 
 import {usdValue, fmtUsd} from '@/core/prices';
@@ -291,11 +293,30 @@ function AssetRow({
           under the row: the list keeps its shape, and the breakdown has room for its own lines. */}
       <Sheet visible={open} title={displaySymbol(row.symbol)} onClose={() => setOpen(false)}>
         <View style={styles.legsSheet}>
-          {/* Balance first: it is the part that can be spent without unwinding anything. */}
-          <Leg label={t('vault.balance')} amount={row.free} symbol={row.symbol} hidden={hidden} />
+          {/* The whole holding, as the row shows it: the asset's own mark, the total and its value. */}
+          <View style={styles.legHead}>
+            <TokenIcon symbol={row.symbol} uri={row.icon} size={40} />
+            <View style={styles.legText}>
+              <Text style={styles.legHeadAmt}>
+                {hidden ? MASK : <Amount v={fmt(row.total)} size={20} weight="700" />} {displaySymbol(row.symbol)}
+              </Text>
+              {row.usd != null ? <Text style={styles.legSub}>{hidden ? MASK : fmtUsd(row.usd)}</Text> : null}
+            </View>
+          </View>
+          {/* Balance first: it is the part that can be spent without unwinding anything. Each
+              position after it under its protocol's mark, so where the money sits is seen. */}
+          <Leg
+            label={t('vault.balance')}
+            icon={<TokenIcon symbol={row.symbol} uri={row.icon} size={28} />}
+            amount={row.free}
+            symbol={row.symbol}
+            hidden={hidden}
+          />
           {row.legs.map((leg, i) => (
             <Leg
               key={`${leg.protocol}-${leg.kind}-${i}`}
+              icon={<ProtocolIcon name={leg.protocol} size={28} />}
+              sub={protocolDisplayName(leg.protocol)}
               label={t(leg.kind === 'staked' ? 'vault.yielding' : leg.kind === 'unstaking' ? 'vault.unstaking' : 'vault.lending')}
               amount={leg.amount}
               earned={leg.earned}
@@ -315,14 +336,39 @@ function AssetRow({
  * A position splits into what was put in and what it has made, the same way the row's total does
  * above it, so the green figure answers "which of these is actually earning, and how much".
  */
-function Leg({label, amount, earned = 0, symbol, hidden}: {label: string; amount: number; earned?: number; symbol: string; hidden: boolean}) {
+function Leg({
+  label,
+  sub,
+  icon,
+  amount,
+  earned = 0,
+  symbol,
+  hidden,
+}: {
+  label: string;
+  /** The protocol holding this part, under the label. */
+  sub?: string;
+  icon: React.ReactNode;
+  amount: number;
+  earned?: number;
+  symbol: string;
+  hidden: boolean;
+}) {
   const styles = useStyles(makeStyles);
   const c = useColors();
   return (
     <View style={styles.legRow}>
-      <Text style={styles.legLabel} numberOfLines={1}>
-        {label}
-      </Text>
+      {icon}
+      <View style={styles.legText}>
+        <Text style={styles.legLabel} numberOfLines={1}>
+          {label}
+        </Text>
+        {sub ? (
+          <Text style={styles.legSub} numberOfLines={1}>
+            {sub}
+          </Text>
+        ) : null}
+      </View>
       <Text style={styles.legAmt}>
         {hidden ? (
           <>{MASK} </>
@@ -1080,9 +1126,13 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   listCard: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 4},
   list: {gap: 0},
   // Indented to the asset NAME, not its icon: a 28pt icon and the cell's 10pt gap above it.
-  legsSheet: {gap: 14, paddingTop: 12},
-  legRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
-  legLabel: {flex: 1, color: c.subtext, fontSize: 15},
+  legsSheet: {gap: 16, paddingTop: 12},
+  legHead: {flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},
+  legHeadAmt: {color: c.text, fontSize: 20, fontWeight: '700'},
+  legText: {flex: 1, gap: 2, minWidth: 0},
+  legSub: {color: c.subtext, fontSize: 12},
+  legRow: {flexDirection: 'row', alignItems: 'center', gap: 12},
+  legLabel: {color: c.text, fontSize: 15, fontWeight: '600'},
   legAmt: {color: c.text, fontSize: 15, fontVariant: ['tabular-nums']},
   legEarned: {color: c.success, fontSize: 14},
   // Sized to the icon and the name, never to the cell: the gap to its right is the row's.
