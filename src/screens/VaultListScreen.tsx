@@ -6,7 +6,7 @@ import {getAddress, isAddress, type Address} from 'viem';
 import {useVaults, vaultLabel, type VaultRef} from '@/core/vault-store';
 import {vaultAddressOf} from '@/core/active-vault';
 import {ownerVaultAddress} from '@/vault/read';
-import {networkLabel, useNetwork} from '@/core/network-store';
+import {useNetwork} from '@/core/network-store';
 import type {Network} from '@/core/chain';
 import {useWallet} from '@/wallet/store';
 import * as keyring from '@/wallet/keyring';
@@ -328,7 +328,7 @@ export function VaultListScreen() {
     const on = v.index === activeIndex;
     const gone = notYours.has(v.index);
     const address = vaultAddressOf(v, network);
-    // A received vault on another chain: say which, since it does not exist on this one.
+    // A received vault on another chain: its own address, the one it has there.
     const elsewhere = !!v.vault && v.network !== network;
     const from = v.vault && !elsewhere ? fromOf(v.vault) : null;
     const tag = v.safe ? t('mobile.vaults.tag_safe') : v.vault && !from ? t('mobile.vaults.tag_received') : null;
@@ -360,7 +360,7 @@ export function VaultListScreen() {
           </View>
           {/* Full, on one line: vaults are told apart by their address, so none of it is cut. */}
           <Text style={styles.addr} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-            {elsewhere ? t('mobile.vaults.on_network', {network: networkLabel(v.network as Network, t)}) : (address ?? t('mobile.settings.vault_unlock_first'))}
+            {elsewhere ? v.vault : (address ?? t('mobile.settings.vault_unlock_first'))}
           </Text>
           {from ? <Text style={styles.fromText}>{t('mobile.vaults.transferred_from', {address: shortAddr(from)})}</Text> : null}
           {/* Transferred away: to whom, in full, so it can be checked against the receiving key. */}
