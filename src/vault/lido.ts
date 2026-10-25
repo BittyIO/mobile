@@ -35,9 +35,11 @@ export type LidoUnstake = {
   claimable: bigint;
   /** The finalized, unclaimed request ids — what a claim takes. */
   claimableIds: bigint[];
+  /** The ids still in the queue, which {fetchLidoEta} estimates. */
+  pendingIds: bigint[];
 };
 
-export const NO_UNSTAKE: LidoUnstake = {unstaking: 0n, claimable: 0n, claimableIds: []};
+export const NO_UNSTAKE: LidoUnstake = {unstaking: 0n, claimable: 0n, claimableIds: [], pendingIds: []};
 
 /** The vault's open requests with one Lido adapter, split into still-queued and claimable. */
 export async function getLidoUnstake(vault: Address, protocol: Address, network: Network): Promise<LidoUnstake> {
@@ -57,7 +59,7 @@ export async function getLidoUnstake(vault: Address, protocol: Address, network:
     functionName: 'getWithdrawalStatus',
     args: [ids],
   });
-  const out: LidoUnstake = {unstaking: 0n, claimable: 0n, claimableIds: []};
+  const out: LidoUnstake = {unstaking: 0n, claimable: 0n, claimableIds: [], pendingIds: []};
   statuses.forEach((s, i) => {
     if (s.isClaimed) return;
     if (s.isFinalized) {
@@ -65,6 +67,7 @@ export async function getLidoUnstake(vault: Address, protocol: Address, network:
       out.claimableIds.push(ids[i]);
     } else {
       out.unstaking += s.amountOfStETH;
+      out.pendingIds.push(ids[i]);
     }
   });
   return out;
@@ -83,4 +86,33 @@ export async function claimLido(o: VaultWriteBase & {protocol: Address; ids: big
     stableCoin: o.stableCoin,
   });
   return hash;
+}
+
+/** Lido's own estimate of when queued requests finalize. Mainnet only: it covers no testnet we use. */
+const WQ_API: Partial<Record<Network, string>> = {mainnet: 'https://wq-api.lido.fi'};
+
+/**
+ * When the queued requests are expected to be claimable: from the earliest request to the LATEST
+ * estimated finalization, in unix seconds — the wait for all of it. Null where there is no estimate
+ * (another chain, the API down, nothing calculated yet), and the caller shows the amount alone.
+ *
+ * An estimate, recalculated by Lido as the queue and validator exits move: it is shown as "~2 days",
+ * never as a countdown to the second.
+ */
+export async function fetchLidoEta(network: Network, ids: bigint[]): Promise<{start: number; end: number} | null> {
+  const base = WQ_API[network];
+  if (!base || ids.length === 0) return null;
+  const q = ids.map((id) => `ids=${id}`).join('&');
+  const res = await fetch(`${base}/v2/request-time?${q}`);
+  if (!res.ok) return null;
+  const rows = (await res.json()) as {requestInfo?: {requestedAt?: string; finalizationAt?: string}}[];
+  let start = Infinity;
+  let end = 0;
+  for (const r of rows) {
+    const at = Date.parse(r.requestInfo?.requestedAt ?? '');
+    const fin = Date.parse(r.requestInfo?.finalizationAt ?? '');
+    if (Number.isFinite(at)) start = Math.min(start, at / 1000);
+    if (Number.isFinite(fin)) end = Math.max(end, fin / 1000);
+  }
+  return Number.isFinite(start) && end > start ? {start, end} : null;
 }

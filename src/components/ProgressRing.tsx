@@ -24,15 +24,18 @@ export function waitDone(at: number, now: number, length: number): number {
  * How far an item is through its timelock: the arc is the time passed, the track the time left.
  * Red in the last tenth, the window that is nearly shut. Large enough, the middle says the time
  * left; small, it is the ring alone and the caller writes the time beside it.
+ *
+ * `calm` keeps it blue to the end: for an ESTIMATE (Lido's queue), where nothing shuts and red
+ * would claim a deadline there is not.
  */
-export function ProgressRing({done, left, size = 56}: {done: number; left: number; size?: number}) {
+export function ProgressRing({done, left, size = 56, calm = false}: {done: number; left: number; size?: number; calm?: boolean}) {
   const {t} = useT();
   const c = useColors();
   const styles = useStyles(makeStyles);
   const stroke = size >= 40 ? 5 : 2.5;
   const r = (size - stroke) / 2;
   const len = 2 * Math.PI * r;
-  const color = done >= 0.9 ? c.danger : c.accent;
+  const color = done >= 0.9 && !calm ? c.danger : c.accent;
   const [n, unit] = leftUnit(left, t);
   return (
     <View style={[styles.ring, {width: size, height: size}]}>

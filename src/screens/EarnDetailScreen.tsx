@@ -21,7 +21,8 @@ import {getAutoYields, setAutoYield} from '@/vault/autoyield';
 import {fetchProtocolApy, EMPTY_APY, type ProtocolApy} from '@/vault/apy';
 import {relayGasFor} from '@/vault/fee-quote';
 import {useActiveFeePayer} from '@/vault/useFeePayer';
-import {claimLido, getLidoUnstake, NO_UNSTAKE, type LidoUnstake} from '@/vault/lido';
+import {claimLido, fetchLidoEta, getLidoUnstake, NO_UNSTAKE, type LidoUnstake} from '@/vault/lido';
+import {ProgressRing, leftUnit} from '@/components/ProgressRing';
 import {useVaultWrite} from '@/components/useVaultWrite';
 
 import {protocolDisplayName} from '@/core/protocols';
@@ -209,6 +210,27 @@ export function EarnDetailScreen() {
   }, [isLido, bal.vault, protocol, network]);
   // Again with every pull, and after a withdraw (this page is where that form returns to).
   useEffect(loadUnstake, [loadUnstake, pos.positions]);
+  // Lido's estimate for what is still queued, and a clock for its ring (a minute is plenty: it is
+  // shown in days or hours).
+  const [eta, setEta] = useState<{start: number; end: number} | null>(null);
+  const pendingKey = unstake.pendingIds.join(',');
+  useEffect(() => {
+    let live = true;
+    setEta(null);
+    fetchLidoEta(network, unstake.pendingIds)
+      .then((e) => live && setEta(e))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [network, pendingKey]);
+  const [now, setNow] = useState(() => Date.now() / 1000);
+  useEffect(() => {
+    if (!eta) return;
+    const id = setInterval(() => setNow(Date.now() / 1000), 60_000);
+    return () => clearInterval(id);
+  }, [eta]);
   const claim = useVaultWrite(() => {
     loadUnstake();
     bal.refresh();
@@ -266,7 +288,27 @@ export function EarnDetailScreen() {
           on the web, so the place to look exists before there is anything in it. */}
       {isLido ? (
         <View style={styles.card}>
-          <Row label={t('vault.unstaking')} value={`${fmtEth(unstake.unstaking)} ETH`} />
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>{t('vault.unstaking')}</Text>
+            <View style={styles.claimRight}>
+              {/* Lido's estimate, while anything is queued: the ring runs from the first request to
+                  the last one's expected finalization. Approximate, so "~" and never red. */}
+              {unstake.unstaking > 0n && eta ? (
+                <View style={styles.etaRow}>
+                  <ProgressRing
+                    size={16}
+                    calm
+                    done={Math.min(1, Math.max(0, (now - eta.start) / (eta.end - eta.start)))}
+                    left={eta.end - now}
+                  />
+                  <Text style={styles.eta}>~{leftUnit(eta.end - now, t).join(' ')}</Text>
+                </View>
+              ) : null}
+              <Text style={styles.rowValue}>
+                <Amount v={`${fmtEth(unstake.unstaking)} ETH`} size={15} />
+              </Text>
+            </View>
+          </View>
           <View style={styles.row}>
             <Text style={styles.rowLabel}>{t('vault.claimable')}</Text>
             <View style={styles.claimRight}>
@@ -364,6 +406,8 @@ const makeStyles = (c: Colors) =>
     priText: {color: c.onAccent, fontSize: 17, fontWeight: '700'},
     secText: {color: c.textMuted, fontSize: 17, fontWeight: '700'},
     claimRight: {flexDirection: 'row', alignItems: 'center', gap: 10},
+    etaRow: {flexDirection: 'row', alignItems: 'center', gap: 4},
+    eta: {color: c.subtext, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums']},
     claimBtn: {backgroundColor: c.accent, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 6},
     claimText: {color: c.onAccent, fontSize: 14, fontWeight: '700'},
     pressed: {opacity: 0.7},
