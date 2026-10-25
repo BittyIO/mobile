@@ -259,59 +259,35 @@ export function EarnDetailScreen() {
             float the answer is none of it — so calling the figure available was the one thing it
             could not be called. */}
         <Row label={t('vault.balance')} value={free != null ? `${fmtNum(Number(free))} ${sym}` : '—'} />
-        {/* Always on Lido, as on the web: the queue is part of where this position's ETH can be,
-            and a row that appears only once there is something in it is a row nobody knows to
-            look for. */}
-        {isLido ? <Row label={t('vault.unstaking')} value={`${fmtEth(unstake.unstaking)} ETH`} /> : null}
-        {isLido ? (
-          <Row label={t('vault.claimable')} value={`${fmtEth(unstake.claimable)} ETH`} tone={unstake.claimable > 0n ? 'good' : undefined} />
-        ) : null}
       </View>
 
-      {/* Finalized and waiting: one tap brings it back into the vault as WETH. Drawn whenever this
-          is Lido, greyed with nothing to claim, as the Withdraw button below is with nothing held. */}
+      {/* Lido's withdrawal queue, a card of its own: what is still unstaking, and what is ready —
+          with the claim on that row, where the amount it brings back is. Always drawn on Lido, as
+          on the web, so the place to look exists before there is anything in it. */}
       {isLido ? (
-        <Pressable
-          style={[styles.btn, styles.depBtn, (!claim.ready || unstake.claimableIds.length === 0) && styles.btnFaded]}
-          disabled={!claim.ready || unstake.claimableIds.length === 0}
-          onPress={() =>
-            claim.run('claim', `${t('vault.claim')} · ${fmtEth(unstake.claimable)} ETH`, (b) =>
-              claimLido({...b, protocol: protocol as Address, ids: unstake.claimableIds}),
-            )
-          }>
-          <Text style={styles.priText} numberOfLines={1}>
-            {unstake.claimable > 0n ? `${t('vault.claim')} ${fmtEth(unstake.claimable)} ETH` : t('vault.claim')}
-          </Text>
-        </Pressable>
-      ) : null}
-
-      <View style={styles.card}>
-        <View style={styles.autoRow}>
-          <Text style={styles.autoLabel}>{autoLabel}</Text>
-          <PendingSwitch
-            value={autoOn}
-            pending={autoBusy}
-            disabled={ownerPays && !autoOn}
-            onValueChange={() =>
-              ask({
-                title: autoLabel,
-                message: protocolDisplayName(name),
-                gas: relayGasFor({}),
-                run: toggleAuto,
-              })
-            }
-          />
+        <View style={styles.card}>
+          <Row label={t('vault.unstaking')} value={`${fmtEth(unstake.unstaking)} ETH`} />
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>{t('vault.claimable')}</Text>
+            <View style={styles.claimRight}>
+              <Text style={[styles.rowValue, unstake.claimable > 0n && styles.rowValueGood]}>
+                <Amount v={`${fmtEth(unstake.claimable)} ETH`} size={15} color={unstake.claimable > 0n ? c.success : undefined} />
+              </Text>
+              <Pressable
+                style={({pressed}) => [styles.claimBtn, (!claim.ready || unstake.claimableIds.length === 0) && styles.btnFaded, pressed && styles.pressed]}
+                disabled={!claim.ready || unstake.claimableIds.length === 0}
+                hitSlop={6}
+                onPress={() =>
+                  claim.run('claim', `${t('vault.claim')} · ${fmtEth(unstake.claimable)} ETH`, (b) =>
+                    claimLido({...b, protocol: protocol as Address, ids: unstake.claimableIds}),
+                  )
+                }>
+                <Text style={styles.claimText}>{t('vault.claim')}</Text>
+              </Pressable>
+            </View>
+          </View>
         </View>
-        <Text style={styles.explain}>{t(lend ? 'mobile.earn.auto_supply_what' : 'mobile.earn.auto_yield_what', {symbol: sym})}</Text>
-        {ownerPays ? (
-          <Pressable onPress={() => nav.navigate('NetworkFee')} hitSlop={6}>
-            <Text style={styles.ownerPays}>{t('mobile.earn.auto_needs_vault_fee')}</Text>
-          </Pressable>
-        ) : null}
-        {/* No protocol mark here. The venue is already named at the top of the page, and under a
-            sentence explaining what the switch does a logo read as part of the explanation —
-            as if the paragraph were about the protocol rather than about the switch. */}
-      </View>
+      ) : null}
 
       {/* Side by side, the same pills the pair screen's Buy / Sell bar uses — and in the same
           order it puts them: the quiet one left, the one that commits money right. */}
@@ -387,4 +363,8 @@ const makeStyles = (c: Colors) =>
     secTextOff: {color: c.subtext},
     priText: {color: c.onAccent, fontSize: 17, fontWeight: '700'},
     secText: {color: c.textMuted, fontSize: 17, fontWeight: '700'},
+    claimRight: {flexDirection: 'row', alignItems: 'center', gap: 10},
+    claimBtn: {backgroundColor: c.accent, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 6},
+    claimText: {color: c.onAccent, fontSize: 14, fontWeight: '700'},
+    pressed: {opacity: 0.7},
   });
