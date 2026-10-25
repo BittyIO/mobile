@@ -109,9 +109,10 @@ export function SettingsIcon({name, size = 29, round = false}: {name: SettingsIc
             <Path d="M18.1 8.5a6 6 0 1 1-8.6 8.6M7 6h1v4M16.7 13.1l.7.7-2.8 2.8" {...c} />
           </>
         ) : name === 'protocols' ? (
+          // Building blocks (lucide Blocks), the web's mark for the protocol list.
           <>
-            <Path d="M12 3l9 4.5-9 4.5-9-4.5z" {...c} />
-            <Path d="M3 12l9 4.5 9-4.5M3 16.5L12 21l9-4.5" {...c} />
+            <Rect x={14} y={3} width={7} height={7} rx={1} {...c} />
+            <Path d="M10 21V8a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H3" {...c} />
           </>
         ) : name === 'services' ? (
           <Path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z" {...c} />
