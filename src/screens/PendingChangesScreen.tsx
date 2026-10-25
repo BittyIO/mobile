@@ -168,27 +168,30 @@ export function PendingChangesScreen() {
         <Text style={styles.empty}>{t('mobile.vault.pending_none')}</Text>
       ) : (
         <>
-        <SettingsGroup>
-          {items.map((p, i) => {
+        {/* One card each: every one is a change to the vault that lands unless it is stopped, and
+            set apart none of them can be skimmed past as one more line of a list. */}
+        <View style={styles.cards}>
+          {items.map((p) => {
             const cancel = cancelFor(p);
             return (
-              <PendingRow
-                key={`${p.kind}:${'address' in p ? p.address : ''}:${p.at}`}
-                at={Number(p.at)}
-                now={now}
-                timelock={timelock}
-                title={pendingTitle(p, t, nameOf)}
-                value={pendingValue(p, t)}
-                // A new asset manager's permissions are a list, so they open in a sheet rather than crowd the row.
-                onPress={p.kind === 'newAssetManager' ? () => setPermsOf(p.perms) : undefined}
-                onCancel={cancel ?? undefined}
-                cancelling={busy === `cancel-${p.kind}`}
-                cancelDisabled={!ready || busy !== null}
-                last={i === items.length - 1}
-              />
+              <SettingsGroup key={`${p.kind}:${'address' in p ? p.address : ''}:${p.at}`}>
+                <PendingRow
+                  at={Number(p.at)}
+                  now={now}
+                  timelock={timelock}
+                  title={pendingTitle(p, t, nameOf)}
+                  value={pendingValue(p, t)}
+                  // A new asset manager's permissions are a list, so they open in a sheet rather than crowd the row.
+                  onPress={p.kind === 'newAssetManager' ? () => setPermsOf(p.perms) : undefined}
+                  onCancel={cancel ?? undefined}
+                  cancelling={busy === `cancel-${p.kind}`}
+                  cancelDisabled={!ready || busy !== null}
+                  last
+                />
+              </SettingsGroup>
             );
           })}
-        </SettingsGroup>
+        </View>
         {/* The one thing to do about a change the owner did not ask for: lock before it lands. */}
         <SettingsGroup>
           <Pressable style={({pressed}) => [styles.notMe, pressed && styles.pressed]} onPress={() => setNotMe(true)}>
@@ -226,6 +229,7 @@ const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: {flex: 1, backgroundColor: c.bg},
     body: {flexGrow: 1, padding: 16, gap: 24},
+    cards: {gap: 10},
     empty: {color: c.subtext, fontSize: 15, textAlign: 'center', marginTop: 24},
     // Sized to the bar's 44 like the trade menu's: the native bar anchors a custom view by its bottom.
     notMe: {minHeight: 52, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16},
