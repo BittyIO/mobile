@@ -293,16 +293,18 @@ export function VaultListScreen() {
               </Svg>
             </Pressable>
             {tag ? <Text style={styles.tag}>{tag}</Text> : null}
+            {/* The one in front, at the end of its name's line — the address below gets the
+                row's full width. */}
+            {on ? <Text style={[styles.check, styles.checkEnd]}>✓</Text> : null}
           </View>
-          <Text style={styles.addr}>
+          {/* Full, on one line: vaults are told apart by their address, so none of it is cut. */}
+          <Text style={styles.addr} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
             {elsewhere ? t('mobile.vaults.on_network', {network: networkLabel(v.network as Network, t)}) : (address ?? t('mobile.settings.vault_unlock_first'))}
           </Text>
           {from ? <Text style={styles.fromText}>{t('mobile.vaults.transferred_from', {address: shortAddr(from)})}</Text> : null}
           {/* Transferred away: to whom, in full, so it can be checked against the receiving key. */}
           {gone ? <Text style={styles.goneText}>{t('mobile.vaults.transferred_to', {address: transferredTo.get(v.index) ?? ''})}</Text> : null}
         </View>
-        {/* Always laid out, shown only on the one in front, so rows keep their height. */}
-        <Text style={[styles.check, !on && styles.checkHidden]}>✓</Text>
       </Pressable>
     );
   };
@@ -354,12 +356,13 @@ export function VaultListScreen() {
                       </Text>
                       {fromOf(f.vault) ? null : <Text style={styles.tag}>{t('mobile.vaults.tag_received')}</Text>}
                     </View>
-                    <Text style={styles.addr}>{f.vault}</Text>
+                    <Text style={styles.addr} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                      {f.vault}
+                    </Text>
                     {fromOf(f.vault) ? (
                       <Text style={styles.fromText}>{t('mobile.vaults.transferred_from', {address: shortAddr(fromOf(f.vault)!)})}</Text>
                     ) : null}
                   </View>
-                  <Text style={[styles.check, styles.checkHidden]}>✓</Text>
                 </Pressable>
               ))}
               {/* Handed to this owner and waiting for it to accept (older vaults): a signature. */}
@@ -427,7 +430,9 @@ const makeStyles = (c: Colors) =>
     tag: {color: c.subtext, fontSize: 11, fontWeight: '600', borderWidth: StyleSheet.hairlineWidth, borderColor: c.border, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1, overflow: 'hidden'},
     // Full, and small enough to wrap to two lines rather than be cut: vaults are told apart by
     // their address, and an elided middle is where two would differ.
-    addr: {color: c.subtext, fontSize: 13, fontFamily: 'Menlo', lineHeight: 18},
+    addr: {color: c.subtext, fontSize: 13, fontFamily: 'Menlo', fontWeight: '700', lineHeight: 18},
+    // Pushed to the end of the name's line.
+    checkEnd: {marginLeft: 'auto'},
     // A group's header when it is an address: the address font, small enough to fit on one line.
     ownerAddr: {fontSize: 13, fontFamily: 'Menlo', fontWeight: '400'},
     gone: {opacity: 0.45},
