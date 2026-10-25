@@ -334,10 +334,10 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
               showsVerticalScrollIndicator={false}
               alwaysBounceVertical
               contentContainerStyle={styles.page}>
-              {/* What a payment to these addresses may be, as the page's heading. Cancelled ones
-                  cannot be paid at all, so that page has none. */}
-              {x.limit ? <Text style={styles.pageHead}>{x.limit}</Text> : null}
               {group(x.rows, x.empty)}
+              {/* What a payment to these addresses may be, as the card's footnote. Cancelled ones
+                  cannot be paid at all, so that page has none. */}
+              {x.limit ? <Text style={styles.pageFoot}>{x.limit}</Text> : null}
             </ScrollView>
           ))}
         </ScrollView>
@@ -421,7 +421,7 @@ const makeStyles = (c: Colors) =>
     tabText: {color: c.subtext, fontSize: 15, fontWeight: '600'},
     tabTextOn: {color: c.text},
     page: {padding: 16, paddingTop: 12, paddingBottom: 32},
-    pageHead: {color: c.subtext, fontSize: 13, fontWeight: '600', paddingHorizontal: 4, paddingBottom: 8},
+    pageFoot: {color: c.subtext, fontSize: 12, lineHeight: 17, paddingHorizontal: 16, marginTop: 6},
     // The same row metrics the asset picker uses, so a list is a list.
     row: {
       flexDirection: 'row',
