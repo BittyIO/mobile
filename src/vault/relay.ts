@@ -165,10 +165,50 @@ function offerOtherPayer(title: string, message: string, accept: string): Promis
 }
 
 /**
- * One vault write, paid the way the vault is set to pay — or, if that way cannot, the other way,
- * when the user says so. See core/fee-payer-store.
+ * Writes to one vault from one key, one at a time.
+ *
+ * The forwarder takes a single nonce sequence per (signer, vault) and a request is signed for the
+ * nonce it read — so two operations started together (a deposit while a trade is still mining) both
+ * signed the SAME nonce, and only one of them could ever land; the other failed at the relayer or on
+ * chain. The owner-paid path has the same problem with the owner's own account nonce.
+ *
+ * So a write waits for the one before it to be MINED before it reads a nonce and signs. The caller
+ * still gets its hash as soon as its own write is submitted; it is the next write that waits. A
+ * receipt that never comes frees the queue after {SETTLE_TIMEOUT_MS}, so one stuck transaction
+ * cannot block the vault for good.
  */
+const writeQueue = new Map<string, Promise<void>>();
+const SETTLE_TIMEOUT_MS = 120_000;
+
 async function relayEncoded(opts: EncodedWrite): Promise<RelayResult> {
+  const key = `${opts.network}:${opts.account.address.toLowerCase()}:${opts.vault.toLowerCase()}`;
+  const before = writeQueue.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const done = new Promise<void>((r) => (release = r));
+  const turn = before.then(() => done);
+  writeQueue.set(key, turn);
+  void turn.then(() => {
+    if (writeQueue.get(key) === turn) writeQueue.delete(key);
+  });
+  await before;
+  try {
+    const res = await relayEncodedNow(opts);
+    publicClientFor(opts.network)
+      .waitForTransactionReceipt({hash: res.hash, timeout: SETTLE_TIMEOUT_MS})
+      .catch(() => {})
+      .finally(release);
+    return res;
+  } catch (e) {
+    release();
+    throw e;
+  }
+}
+
+/**
+ * One vault write, paid the way the vault is set to pay — or, if that way cannot, the other way,
+ * when the user says so. See core/fee-payer-store. Called through {relayEncoded}'s queue.
+ */
+async function relayEncodedNow(opts: EncodedWrite): Promise<RelayResult> {
   const t = (key: string) => translate(useLanguage.getState().language, key);
   const {account, network, vault} = opts;
   // Every vault write passes here, so this is where a vault on a release newer than this build is
@@ -182,7 +222,7 @@ async function relayEncoded(opts: EncodedWrite): Promise<RelayResult> {
       return await viaOwner(opts);
     } catch (e) {
       if (!asked && e instanceof OwnerGasShort && (await offerOtherPayer(t('mobile.fees.fallback_vault_title'), e.message, t('mobile.fees.fallback_vault_button')))) {
-        return relayEncoded({...opts, payer: 'vault'});
+        return relayEncodedNow({...opts, payer: 'vault'});
       }
       throw e;
     }
@@ -197,7 +237,7 @@ async function relayEncoded(opts: EncodedWrite): Promise<RelayResult> {
       (await ownerEthBalance(network, account.address).catch(() => BigInt(0))) > BigInt(0) &&
       (await offerOtherPayer(t('mobile.fees.fallback_owner_title'), e.message, t('mobile.fees.fallback_owner_button')))
     ) {
-      return relayEncoded({...opts, payer: 'owner'});
+      return relayEncodedNow({...opts, payer: 'owner'});
     }
     throw e;
   }
