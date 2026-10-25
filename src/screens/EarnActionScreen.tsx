@@ -26,7 +26,7 @@ import {TokenIcon} from '@/components/TokenIcon';
 import {PickerSheet, type PickerItem} from '@/components/AssetPicker';
 import {adapterByName, protocolMeta} from '@/core/protocols';
 import {recordFlow} from '@/vault/flows';
-import {FEE_WETH, resolveFeeReserve, reserveHeld, useWethFeeCoin} from '@/vault/stableCoinAsGas';
+import {FEE_WETH, feeCoinForSpend, resolveFeeReserve, reserveHeld, useWethFeeCoin} from '@/vault/stableCoinAsGas';
 import type {RootStackParamList} from '@/App';
 import {FormSheet, FORM_SHEET_BODY} from '@/components/FormSheet';
 import {AvailableLine} from '@/components/AvailableLine';
@@ -342,6 +342,11 @@ export function EarnActionScreen() {
       nav.goBack();
       const vault = activeVaultAddress(network)!;
       const withdrawals = multi ? planWithdrawals() : [];
+      // A deposit spends its coin; bill the one the fee float sits in if that is another — see
+      // {feeCoinForSpend}. A withdrawal brings its coin back, so the usual hint stands.
+      const pinned = isDeposit ? feeCoinForSpend(network, reserve.coin, targetSymbol) : null;
+      const billCoin = pinned ?? feeCoin;
+      const pinFee = !!pinned;
       const h = withdrawals.length
         ? await depositFromSources({
             account: acct,
@@ -351,7 +356,8 @@ export function EarnActionScreen() {
             asset: targetAsset,
             raw: parseUnits(amount, targetDecimals),
             withdrawals,
-            stableCoin: feeCoin,
+            stableCoin: billCoin,
+            pinFee,
           })
         : offerStopAuto && stopAuto
           ? (
@@ -363,7 +369,8 @@ export function EarnActionScreen() {
                   stopAutoCall(targetAsset as Address),
                   {abi: VAULT_DEFI_ABI, functionName: 'withdraw', args: [protocol, targetAsset, parseUnits(amount, targetDecimals)]},
                 ],
-                stableCoin: feeCoin,
+                stableCoin: billCoin,
+                pinFee,
               })
             ).hash
           : await (isDeposit ? depositToProtocol : withdrawFromProtocol)({
@@ -374,7 +381,8 @@ export function EarnActionScreen() {
         asset: targetAsset,
         amount,
         decimals: targetDecimals,
-        stableCoin: feeCoin,
+        stableCoin: billCoin,
+        pinFee,
       });
       tx.success(h);
       /**

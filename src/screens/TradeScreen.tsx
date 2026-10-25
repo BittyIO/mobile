@@ -37,7 +37,7 @@ import {usePrices} from '@/vault/usePrices';
 import {getFlag, setFlag, getPref, setPref, SHOW_OTHER_ORDERS, LAST_PAIR} from '@/core/prefs';
 import {usdValue, fmtUsd} from '@/core/prices';
 import {balanceOfSymbol} from '@/vault/read';
-import {FEE_WETH, resolveFeeReserve, reserveHeld, useWethFeeCoin} from '@/vault/stableCoinAsGas';
+import {FEE_WETH, feeCoinForSpend, resolveFeeReserve, reserveHeld, useWethFeeCoin} from '@/vault/stableCoinAsGas';
 import {FINISHED_WINDOWS, finishedSince, setSlippageBps, slippageBps, useFinishedWindow, type FinishedWindow} from '@/core/prefs';
 import {relayGasFor} from '@/vault/fee-quote';
 import {intentPrepCalls, needsRelayerApproval} from '@/vault/limit';
@@ -1669,8 +1669,20 @@ export function TradeScreen() {
       if (!spendAsset || !recvAsset) return tx.done();
       const sellToken = spendAsset.address as Address;
       const buyToken = recvAsset.address as Address;
-      // Charge gas to a stablecoin that isn't the pay leg (so a max-USDC trade pays gas from USDT).
-      const feeCoin = pickFeeCoin(sellToken);
+      /**
+       * Which coin the relayer bills — the one the fee float was held back in.
+       *
+       * The float ({resolveFeeReserve}) sits in the first fee coin that COVERS it; this order then
+       * holds back nothing of a coin the float is not in, and may spend all of it. The relayer was
+       * told to bill the owner's first fee coin regardless, checks its balance BEFORE the call and
+       * charges AFTER it — so with 4 USDC against a $10 float (float in WETH), a USDC trade spent the
+       * USDC the relayer then tried to bill: `fee-leg-failed`. So when the float is in another coin,
+       * that coin is billed, pinned past the fee-coin order. Otherwise a stablecoin that is not the
+       * pay leg, as before (a max-USDC trade pays from USDT).
+       */
+      const pinned = feeCoinForSpend(network, reserve.coin, spendSym);
+      const pinFee = !!pinned;
+      const feeCoin = pinned ?? pickFeeCoin(sellToken);
 
       // What has to come out of a position before the tokens can be spent.
       //
@@ -1727,11 +1739,11 @@ export function TradeScreen() {
       if (mode === 'Market') {
         if (withdrawCalls.length) {
           const {setup, swap} = await buildMarketSell({network, vault, sellToken, buyToken, sellAmount: amount, slippageBps: slippage});
-          const {hash} = await relayVaultMulticall({account: acct, vault, network, calls: [...withdrawCalls, ...setup, swap], stableCoin: feeCoin});
+          const {hash} = await relayVaultMulticall({account: acct, vault, network, calls: [...withdrawCalls, ...setup, swap], stableCoin: feeCoin, pinFee});
           tx.success(hash);
         } else {
           // marketSell bundles any required allowlist setup ahead of the swap; exact-in, works both sides.
-          const {hash} = await marketSell({account: acct, vault, network, sellToken, buyToken, sellAmount: amount, slippageBps: slippage, stableCoin: feeCoin});
+          const {hash} = await marketSell({account: acct, vault, network, sellToken, buyToken, sellAmount: amount, slippageBps: slippage, stableCoin: feeCoin, pinFee});
           tx.success(hash);
         }
       } else {

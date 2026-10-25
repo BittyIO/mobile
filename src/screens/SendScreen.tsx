@@ -31,7 +31,7 @@ import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {displaySymbol, fmtNum, fmtShort} from '@/core/format';
 import {quoteRelayFeeUsd, relayGasFor} from '@/vault/fee-quote';
-import {FEE_WETH, reserveHeld, resolveFeeReserve, useWethFeeCoin} from '@/vault/stableCoinAsGas';
+import {FEE_WETH, feeCoinForSpend, reserveHeld, resolveFeeReserve, useWethFeeCoin} from '@/vault/stableCoinAsGas';
 
 import {useAssetCatalog} from '@/core/asset-catalog';
 
@@ -392,6 +392,25 @@ export function SendScreen() {
     if (!vault || !stable) return;
     setStatus('busy');
     setErr(null);
+    /**
+     * Bill the coin the fee float sits in when no line spends it — see {feeCoinForSpend}. Each line
+     * holds the float back only in its own coin, so a card paying out all of the owner's first fee
+     * coin (while the float sits in, say, WETH) left nothing for the charge the relayer was hinted.
+     */
+    const floatCoin = resolveFeeReserve({
+      network,
+      vault: bal.vault,
+      heldStables: [
+        ...assets
+          .filter((a) => a.kind === 'stable')
+          .map((a) => ({symbol: a.symbol, amount: Number(balanceOfSymbol(bal.balances, a.symbol))})),
+        ...(weth ? [{symbol: FEE_WETH, amount: Number(balanceOfSymbol(bal.balances, FEE_WETH) || 0), usd: weth.usd}] : []),
+      ],
+    }).coin;
+    const spent = recipient.lines.filter((l) => Number(l.amount) > 0).map((l) => l.sym.toUpperCase());
+    const pinned = floatCoin && !spent.includes(floatCoin.toUpperCase()) ? feeCoinForSpend(network, floatCoin, '') : null;
+    const billCoin = pinned ?? stable.address;
+    const pinFee = !!pinned;
     const tx = showTx(
       rows.length === 1
         ? // `fmtShort`, as the lists use: `fmtNum` keeps up to seven decimals under 1, which is right
@@ -404,7 +423,7 @@ export function SendScreen() {
       const acct = await getSigner();
       const h =
         viaBook && entry
-          ? await sendToWhitelisted({account: acct, vault, network, id: entry.id, rows, stableCoin: stable.address})
+          ? await sendToWhitelisted({account: acct, vault, network, id: entry.id, rows, stableCoin: billCoin, pinFee})
           : await sendWithWhitelist({
               account: acct,
               vault,
@@ -412,7 +431,8 @@ export function SendScreen() {
               recipient: recipient.to as Address,
               rows,
               addToWhitelist: !!recipient.needsWhitelist,
-              stableCoin: stable.address,
+              stableCoin: billCoin,
+              pinFee,
             });
       tx.success(h);
       setStatus('done');

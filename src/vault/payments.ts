@@ -22,6 +22,8 @@ export async function sendPayment(o: {
   amount: string; // human — the TOTAL to send (free + any protocol-sourced amounts)
   decimals?: number;
   stableCoin: Address;
+  /** Bill exactly `stableCoin`: see {relayVaultWrite}. */
+  pinFee?: boolean;
   /** Pull these amounts from these protocol positions to cover the send (e.g. an Aave/Sky position). */
   withdrawProtocols?: Address[];
   withdrawAmounts?: bigint[];
@@ -35,6 +37,7 @@ export async function sendPayment(o: {
     functionName: 'send',
     args: [o.recipient, o.asset, parseUnits(o.amount, decimals), o.withdrawProtocols ?? [], o.withdrawAmounts ?? []],
     stableCoin: o.stableCoin,
+    pinFee: o.pinFee,
   });
   return hash;
 }
@@ -76,9 +79,11 @@ export async function batchSendPayment(o: {
   recipient: Address;
   rows: SendRow[];
   stableCoin: Address;
+  /** Bill exactly `stableCoin`: see {relayVaultWrite}. */
+  pinFee?: boolean;
 }): Promise<Hex> {
   const call = batchSendCall(o.network, o.recipient, o.rows);
-  const {hash} = await relayVaultWrite({account: o.account, vault: o.vault, network: o.network, ...call, stableCoin: o.stableCoin});
+  const {hash} = await relayVaultWrite({account: o.account, vault: o.vault, network: o.network, ...call, stableCoin: o.stableCoin, pinFee: o.pinFee});
   return hash;
 }
 
@@ -101,11 +106,13 @@ export async function sendWithWhitelist(o: {
   /** Write the recipient into the book in the same transaction. */
   addToWhitelist: boolean;
   stableCoin: Address;
+  /** Bill exactly `stableCoin`: see {relayVaultWrite}. */
+  pinFee?: boolean;
 }): Promise<Hex> {
   if (!o.addToWhitelist) {
     return o.rows.length === 1
       ? sendPayment({...o, ...o.rows[0]})
-      : batchSendPayment({account: o.account, vault: o.vault, network: o.network, recipient: o.recipient, rows: o.rows, stableCoin: o.stableCoin});
+      : batchSendPayment({account: o.account, vault: o.vault, network: o.network, recipient: o.recipient, rows: o.rows, stableCoin: o.stableCoin, pinFee: o.pinFee});
   }
 
   const row = o.rows[0];
@@ -117,7 +124,7 @@ export async function sendWithWhitelist(o: {
           args: [o.recipient, row.asset, parseUnits(row.amount, row.decimals ?? assetMeta(o.network, row.asset).decimals), row.withdrawProtocols ?? [], row.withdrawAmounts ?? []],
         }
       : batchSendCall(o.network, o.recipient, o.rows, true);
-  const {hash} = await relayVaultWrite({account: o.account, vault: o.vault, network: o.network, ...call, stableCoin: o.stableCoin});
+  const {hash} = await relayVaultWrite({account: o.account, vault: o.vault, network: o.network, ...call, stableCoin: o.stableCoin, pinFee: o.pinFee});
   return hash;
 }
 
@@ -149,6 +156,8 @@ export async function addWhitelisted(o: {
   network: Network;
   recipient: Address;
   stableCoin: Address;
+  /** Bill exactly `stableCoin`: see {relayVaultWrite}. */
+  pinFee?: boolean;
 }): Promise<Hex> {
   const call = addRecipientCall(o.recipient);
   const {hash} = await relayVaultWrite({
@@ -159,6 +168,7 @@ export async function addWhitelisted(o: {
     functionName: call.functionName,
     args: call.args,
     stableCoin: o.stableCoin,
+    pinFee: o.pinFee,
   });
   return hash;
 }
@@ -169,6 +179,8 @@ export async function removeWhitelisted(o: {
   network: Network;
   id: string;
   stableCoin: Address;
+  /** Bill exactly `stableCoin`: see {relayVaultWrite}. */
+  pinFee?: boolean;
 }): Promise<Hex> {
   const {hash} = await relayVaultWrite({
     account: o.account,
@@ -178,6 +190,7 @@ export async function removeWhitelisted(o: {
     functionName: 'removeWhitelistedRecipients',
     args: [[BigInt(o.id)]],
     stableCoin: o.stableCoin,
+    pinFee: o.pinFee,
   });
   return hash;
 }
@@ -195,6 +208,8 @@ export async function sendToWhitelisted(o: {
   id: string;
   rows: SendRow[];
   stableCoin: Address;
+  /** Bill exactly `stableCoin`: see {relayVaultWrite}. */
+  pinFee?: boolean;
 }): Promise<Hex> {
   const calls: VaultCall[] = o.rows.map((r) => ({
     abi: VAULT_PAYMENTS_ABI,
@@ -207,7 +222,7 @@ export async function sendToWhitelisted(o: {
       r.withdrawAmounts ?? [],
     ],
   }));
-  const base = {account: o.account, vault: o.vault, network: o.network, stableCoin: o.stableCoin};
+  const base = {account: o.account, vault: o.vault, network: o.network, stableCoin: o.stableCoin, pinFee: o.pinFee};
   const {hash} = calls.length === 1 ? await relayVaultWrite({...base, ...calls[0]}) : await relayVaultMulticall({...base, calls});
   return hash;
 }

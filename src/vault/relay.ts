@@ -139,6 +139,8 @@ type EncodedWrite = {
   stableCoin: Address;
   /** Who pays the network fee for THIS write, over the vault's setting: a fallback the user accepted. */
   payer?: FeePayer;
+  /** Bill `stableCoin` as given, not the owner's first fee coin: see {relayVaultWrite}'s `pinFee`. */
+  pinFee?: boolean;
 };
 
 /**
@@ -327,6 +329,7 @@ async function viaRelayer(opts: EncodedWrite): Promise<RelayResult> {
     network,
     request: {from: account.address, to: vault, value: '0', gas: innerGas.toString(), deadline, data: opts.data, signature},
     stableCoin: opts.stableCoin,
+    pinFee: opts.pinFee,
   });
 }
 
@@ -339,13 +342,14 @@ export async function submitForwardRequest(o: {
   network: Network;
   request: {from: Address; to: Address; value: string; gas: string; deadline: number; data: Hex; signature: Hex};
   stableCoin: Address;
+  pinFee?: boolean;
 }): Promise<RelayResult> {
   const res = await fetch(apiUrl('/api/ethereum/vaults/relay', o.network), {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
       request: o.request,
-      stableCoinAddress: feeHint(o.network, o.request.to, o.stableCoin),
+      stableCoinAddress: o.pinFee ? o.stableCoin : feeHint(o.network, o.request.to, o.stableCoin),
     }),
   });
 
@@ -429,6 +433,15 @@ export async function relayVaultWrite(opts: {
   args?: readonly unknown[];
   /** The stable coin the relayer should charge its fee in (a hint — it will try others if needed). */
   stableCoin: Address;
+  /**
+   * Send `stableCoin` as the hint even when the owner's fee-coin order puts another coin first.
+   *
+   * For a write that SPENDS the owner's first coin: the relayer checks the hinted coin's balance
+   * before the call and charges it after, so hinting the coin the call is about to spend down passes
+   * the check and fails the charge (`fee-leg-failed`). A caller that has worked out which coin will
+   * still be there afterwards — the one it held the fee float back in — pins that one.
+   */
+  pinFee?: boolean;
 }): Promise<RelayResult> {
   const data = encodeCall({abi: opts.abi, functionName: opts.functionName, args: opts.args});
   return relayEncoded({
@@ -438,6 +451,7 @@ export async function relayVaultWrite(opts: {
     data,
     activationCalls: [data],
     stableCoin: opts.stableCoin,
+    pinFee: opts.pinFee,
   });
 }
 
@@ -452,6 +466,8 @@ export async function relayVaultMulticall(opts: {
   network: Network;
   calls: VaultCall[];
   stableCoin: Address;
+  /** See {relayVaultWrite}. */
+  pinFee?: boolean;
 }): Promise<RelayResult> {
   const datas = opts.calls.map(encodeCall);
   const data = encodeCall({abi: VAULT_MULTICALL_ABI, functionName: 'multicall', args: [datas]});
@@ -462,5 +478,6 @@ export async function relayVaultMulticall(opts: {
     data,
     activationCalls: datas,
     stableCoin: opts.stableCoin,
+    pinFee: opts.pinFee,
   });
 }
