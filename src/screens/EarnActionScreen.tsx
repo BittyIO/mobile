@@ -24,7 +24,8 @@ import {useVaultPositions} from '@/vault/useVaultPositions';
 import Svg, {Path} from 'react-native-svg';
 import {TokenIcon} from '@/components/TokenIcon';
 import {PickerSheet, type PickerItem} from '@/components/AssetPicker';
-import {adapterByName} from '@/core/protocols';
+import {adapterByName, protocolMeta} from '@/core/protocols';
+import {recordFlow} from '@/vault/flows';
 import {FEE_WETH, resolveFeeReserve, reserveHeld, useWethFeeCoin} from '@/vault/stableCoinAsGas';
 import type {RootStackParamList} from '@/App';
 import {FormSheet, FORM_SHEET_BODY} from '@/components/FormSheet';
@@ -376,6 +377,26 @@ export function EarnActionScreen() {
         stableCoin: feeCoin,
       });
       tx.success(h);
+      /**
+       * Ledger every move this transaction made, so "earned" has a principal to measure against:
+       * the vault emits no deposit or withdraw events, so the stake / supply ledgers are written by
+       * the client that sent it and by nothing else. The old Earn row did this; it was lost when
+       * deposit and withdraw moved into this form, and every position funded from the app since has
+       * shown no earned at all. Best-effort and idempotent per (tx, direction, asset).
+       */
+      const kindOf = (p: string) => (protocolMeta(network, p).category === 'lending' ? 'supply' : 'stake');
+      for (const w of withdrawals)
+        void recordFlow({vault, network, protocol: w.protocol, asset: targetAsset, kind: kindOf(w.protocol), direction: 'out', amount: w.raw, txHash: h});
+      void recordFlow({
+        vault,
+        network,
+        protocol,
+        asset: targetAsset,
+        kind: kindOf(protocol),
+        direction: isDeposit ? 'in' : 'out',
+        amount: parseUnits(amount, targetDecimals),
+        txHash: h,
+      });
       setStatus('done');
     } catch (e) {
       const msg = String((e as Error)?.message ?? e);
