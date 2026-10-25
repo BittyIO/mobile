@@ -280,9 +280,11 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
       contentContainerStyle={styles.body}>
       {/* The whitelist first, and always — even with nothing in it: paying somewhere this vault
           already pays is the common case, and an empty list still says the vault HAS one. */}
-      <Text style={styles.section}>
-        {t('mobile.payments.whitelisted_book')} · {t('mobile.payments.max_send_none')}
-      </Text>
+      {/* Each group's title on the left and what a payment to it may be on the right. */}
+      <View style={styles.sectionRow}>
+        <Text style={styles.sectionTitle}>{t('mobile.payments.whitelisted_book')}</Text>
+        <Text style={styles.sectionLimit}>{t('mobile.payments.max_send_none')}</Text>
+      </View>
       <View style={styles.card}>
         {loading ? (
           <View style={[styles.row, styles.rowFirst, styles.rowLast, styles.centered]}>
@@ -301,10 +303,10 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
           send allowance, which the title says. */}
       {waiting.length > 0 ? (
         <>
-          <Text style={styles.section}>
-            {t('mobile.payments.pending_whitelisted')}
-            {allowance ? ` · ${allowance}` : ''}
-          </Text>
+          <View style={styles.sectionRow}>
+            <Text style={styles.sectionTitle}>{t('mobile.payments.pending_whitelisted')}</Text>
+            {allowance ? <Text style={styles.sectionLimit}>{allowance}</Text> : null}
+          </View>
           <View style={styles.card}>{waiting.map((b, i) => entryRow(b, i, waiting))}</View>
         </>
       ) : null}
@@ -312,10 +314,10 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
       {!manage && mine.length > 0 ? (
         <>
           {/* Your own vaults are paid like anyone else: no limit once whitelisted, else the allowance. */}
-          <Text style={styles.section}>
-            {t('mobile.payments.my_vaults')}
-            {allowance ? ` · ${allowance}` : ''}
-          </Text>
+          <View style={styles.sectionRow}>
+            <Text style={styles.sectionTitle}>{t('mobile.payments.my_vaults')}</Text>
+            {allowance ? <Text style={styles.sectionLimit}>{allowance}</Text> : null}
+          </View>
           <View style={styles.card}>
             {mine.map((v, i) => (
               <Pressable
@@ -346,7 +348,9 @@ const makeStyles = (c: Colors) =>
   StyleSheet.create({
     flex: {flex: 1, backgroundColor: c.bg},
     body: {flexGrow: 1, padding: 16, paddingBottom: 32},
-    section: {color: c.subtext, fontSize: 13, fontWeight: '600', paddingHorizontal: 4, paddingTop: 18, paddingBottom: 8},
+    sectionRow: {flexDirection: 'row', alignItems: 'baseline', gap: 12, paddingHorizontal: 4, paddingTop: 18, paddingBottom: 8},
+    sectionTitle: {color: c.subtext, fontSize: 13, fontWeight: '600', flexShrink: 1},
+    sectionLimit: {marginLeft: 'auto', color: c.subtext, fontSize: 13, fontWeight: '600', textAlign: 'right'},
     card: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 16},
     // The same row metrics the asset picker uses, so a list is a list.
     row: {
