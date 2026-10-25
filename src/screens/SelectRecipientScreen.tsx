@@ -175,12 +175,8 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
     const named = recipientName(names, network, b.recipientAddress);
     const removeAt = b.status === WHITELIST_STATUS.removalQueued ? b.removeAt : undefined;
     const waitUntil = removeAt ?? (b.status === WHITELIST_STATUS.pending ? b.effectiveAt : undefined);
-    const onDate = (at: number) => t('mobile.vault.on_date', {date: new Date(at * 1000).toLocaleDateString()});
-    const note = removeAt
-      ? t('mobile.payments.removal_pending', {when: onDate(removeAt)})
-      : b.status === WHITELIST_STATUS.voided
-          ? t('mobile.payments.voided_by_lock')
-          : null;
+    // A queued removal says so at the end of the name line, beside its ring; the time left is there.
+    const note = b.status === WHITELIST_STATUS.voided ? t('mobile.payments.voided_by_lock') : null;
     return (
       <Pressable
         key={b.id}
@@ -222,6 +218,7 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
                 <Text style={styles.left}>{leftUnit(waitUntil - now, t).join(' ')}</Text>
               </>
             ) : null}
+            {removeAt ? <Text style={styles.removing}>{t('mobile.payments.removing')}</Text> : null}
           </View>
           <Text style={styles.addrMuted}>{b.recipientAddress}</Text>
           {note ? (
@@ -369,6 +366,7 @@ const makeStyles = (c: Colors) =>
     entryName: {color: c.text, fontSize: 16, fontWeight: '600', flexShrink: 1},
     left: {color: c.subtext, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums']},
     entryNameOff: {color: c.subtext},
+    removing: {marginLeft: 'auto', color: c.subtext, fontSize: 13, fontWeight: '600'},
     // Sized to the bar's 44, as the Pending page's lock: the native bar anchors a custom view by its bottom.
     headerBtn: {width: 44, height: 44, paddingBottom: 9, alignItems: 'center', justifyContent: 'center'},
     addrMuted: {color: c.subtext, fontSize: 13, fontVariant: ['tabular-nums']},
