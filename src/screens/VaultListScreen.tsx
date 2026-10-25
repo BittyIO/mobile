@@ -32,7 +32,8 @@ const SAFE_KEY_SCAN = 10;
  * stand behind several. Those it was given are found by asking the server which vaults each key
  * owns (vault/owned-vaults), each time the page opens and on a pull, and offered under Found with
  * an Add. A vault that has been transferred AWAY is still listed, greyed and marked as no longer
- * yours, so it does not just vanish; it cannot be chosen, and a long press removes it.
+ * yours, so it does not just vanish; it cannot be opened, and a tap offers to take it off the
+ * phone. A long press on any vault, or on an owner's header, copies the address.
  *
  * Choosing a vault makes it the one in front and goes back. One received on another chain switches
  * to that chain first — it exists nowhere else.
@@ -134,7 +135,7 @@ export function VaultListScreen() {
     owners.find((o) => !o.safe && o.address && ownerVaultAddress(o.address as Address, network).toLowerCase() === vault.toLowerCase())
       ?.address ?? null;
 
-  const copyOwner = (address: string | null) => {
+  const copyAddress = (address: string | null) => {
     if (!address) return;
     Clipboard.setString(address);
     showToast('success', t('common.copied'), address, 1500);
@@ -164,7 +165,9 @@ export function VaultListScreen() {
     );
 
   const choose = (v: VaultRef) => {
-    if (!v.owner || notYours.has(v.index)) return;
+    // Transferred away: it cannot be opened, so a tap is the way to take it off the phone.
+    if (notYours.has(v.index)) return askRemove(v);
+    if (!v.owner) return;
     if (v.vault && v.network && v.network !== network) setNetwork(v.network as Network);
     selectVault(v.index);
     nav.goBack();
@@ -273,7 +276,8 @@ export function VaultListScreen() {
         key={v.index}
         style={({pressed}) => [styles.vaultRow, i < count - 1 && styles.rowDivider, gone && styles.gone, pressed && styles.pressed]}
         onPress={() => choose(v)}
-        onLongPress={() => askRemove(v)}>
+        // Long press copies the vault's address, as it does on every address in the app.
+        onLongPress={() => address && copyAddress(address)}>
         <View style={styles.vaultText}>
           <View style={styles.nameLine}>
             <Text style={styles.name} numberOfLines={1}>
@@ -328,11 +332,11 @@ export function VaultListScreen() {
         const count = listed.length + received.length + waiting.length;
         return (
           <View key={o.key} style={styles.section}>
-            <Pressable onLongPress={() => copyOwner(o.address)} hitSlop={4}>
+            <Pressable onLongPress={() => copyAddress(o.address)} hitSlop={4}>
               {/* The owner's address, in full — it is what tells two keys apart. A key whose
                   address is not derived yet goes by its number until it is. */}
               <Text style={[styles.groupLabel, o.address && styles.ownerAddr]}>
-                {o.address ? shortAddr(o.address) : t('mobile.vaults.owner_n', {n: o.keyIndex + 1})}
+                {o.address ? t('mobile.vaults.owner_header', {address: shortAddr(o.address)}) : t('mobile.vaults.owner_n', {n: o.keyIndex + 1})}
               </Text>
             </Pressable>
             <View style={styles.group}>
@@ -341,7 +345,8 @@ export function VaultListScreen() {
                 <Pressable
                   key={f.vault}
                   style={({pressed}) => [styles.vaultRow, listed.length + i < count - 1 && styles.rowDivider, pressed && styles.pressed]}
-                  onPress={() => onAddFound(f)}>
+                  onPress={() => onAddFound(f)}
+                  onLongPress={() => copyAddress(f.vault)}>
                   <View style={styles.vaultText}>
                     <View style={styles.nameLine}>
                       <Text style={styles.name} numberOfLines={1}>

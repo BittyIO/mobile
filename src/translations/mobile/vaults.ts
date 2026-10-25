@@ -3,6 +3,7 @@ import type {MobileTable} from './index';
 // Settings › Vaults: the vault list, the vaults found for this device's keys, and removing one.
 export const vaults: MobileTable = {
   en: {
+    owner_header: 'Owner: {{address}}',
     transferred_from: 'Transferred from {{address}}',
     transferred_to: 'Transferred to {{address}}',
     owner_n: 'Owner {{n}}',
@@ -20,6 +21,7 @@ export const vaults: MobileTable = {
     remove: 'Remove',
   },
   zh: {
+    owner_header: '所有者：{{address}}',
     transferred_from: '转移自 {{address}}',
     transferred_to: '已转移给 {{address}}',
     owner_n: '所有者 {{n}}',
@@ -37,6 +39,7 @@ export const vaults: MobileTable = {
     remove: '移除',
   },
   'zh-TW': {
+    owner_header: '擁有者：{{address}}',
     transferred_from: '轉移自 {{address}}',
     transferred_to: '已轉移給 {{address}}',
     owner_n: '擁有者 {{n}}',
@@ -54,6 +57,7 @@ export const vaults: MobileTable = {
     remove: '移除',
   },
   ja: {
+    owner_header: 'オーナー：{{address}}',
     transferred_from: '{{address}} から移転',
     transferred_to: '{{address}} に移転済み',
     owner_n: 'オーナー {{n}}',
@@ -71,6 +75,7 @@ export const vaults: MobileTable = {
     remove: '削除',
   },
   ko: {
+    owner_header: '소유자: {{address}}',
     transferred_from: '{{address}}에서 이전됨',
     transferred_to: '{{address}}(으)로 이전됨',
     owner_n: '소유자 {{n}}',
@@ -88,6 +93,7 @@ export const vaults: MobileTable = {
     remove: '제거',
   },
   fr: {
+    owner_header: 'Propriétaire : {{address}}',
     transferred_from: 'Transféré depuis {{address}}',
     transferred_to: 'Transféré à {{address}}',
     owner_n: 'Propriétaire {{n}}',
@@ -105,6 +111,7 @@ export const vaults: MobileTable = {
     remove: 'Retirer',
   },
   es: {
+    owner_header: 'Propietario: {{address}}',
     transferred_from: 'Transferido desde {{address}}',
     transferred_to: 'Transferido a {{address}}',
     owner_n: 'Propietario {{n}}',
@@ -122,6 +129,7 @@ export const vaults: MobileTable = {
     remove: 'Quitar',
   },
   de: {
+    owner_header: 'Eigentümer: {{address}}',
     transferred_from: 'Übertragen von {{address}}',
     transferred_to: 'Übertragen an {{address}}',
     owner_n: 'Eigentümer {{n}}',
@@ -139,6 +147,7 @@ export const vaults: MobileTable = {
     remove: 'Entfernen',
   },
   'pt-BR': {
+    owner_header: 'Proprietário: {{address}}',
     transferred_from: 'Transferido de {{address}}',
     transferred_to: 'Transferido para {{address}}',
     owner_n: 'Proprietário {{n}}',
@@ -156,6 +165,7 @@ export const vaults: MobileTable = {
     remove: 'Remover',
   },
   hi: {
+    owner_header: 'मालिक: {{address}}',
     transferred_from: '{{address}} से हस्तांतरित',
     transferred_to: '{{address}} को हस्तांतरित',
     owner_n: 'मालिक {{n}}',
@@ -173,6 +183,7 @@ export const vaults: MobileTable = {
     remove: 'हटाएँ',
   },
   tr: {
+    owner_header: 'Sahip: {{address}}',
     transferred_from: '{{address}} adresinden devredildi',
     transferred_to: '{{address}} adresine devredildi',
     owner_n: 'Sahip {{n}}',
@@ -190,6 +201,7 @@ export const vaults: MobileTable = {
     remove: 'Kaldır',
   },
   ru: {
+    owner_header: 'Владелец: {{address}}',
     transferred_from: 'Передано от {{address}}',
     transferred_to: 'Передано {{address}}',
     owner_n: 'Владелец {{n}}',
@@ -207,6 +219,7 @@ export const vaults: MobileTable = {
     remove: 'Убрать',
   },
   id: {
+    owner_header: 'Pemilik: {{address}}',
     transferred_from: 'Dialihkan dari {{address}}',
     transferred_to: 'Dialihkan ke {{address}}',
     owner_n: 'Pemilik {{n}}',
@@ -224,6 +237,7 @@ export const vaults: MobileTable = {
     remove: 'Hapus',
   },
   vi: {
+    owner_header: 'Chủ sở hữu: {{address}}',
     transferred_from: 'Đã chuyển từ {{address}}',
     transferred_to: 'Đã chuyển cho {{address}}',
     owner_n: 'Chủ sở hữu {{n}}',
@@ -241,6 +255,7 @@ export const vaults: MobileTable = {
     remove: 'Gỡ',
   },
   th: {
+    owner_header: 'เจ้าของ: {{address}}',
     transferred_from: 'โอนมาจาก {{address}}',
     transferred_to: 'โอนให้ {{address}} แล้ว',
     owner_n: 'เจ้าของ {{n}}',
