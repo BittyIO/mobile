@@ -16,6 +16,7 @@
  */
 import {API_BASE, apiFetch, type Network} from '@/core/chain';
 import {displayFx, CURRENCY_SYMBOL} from '@/core/currency-store';
+import {fmtTiny} from '@/core/format';
 
 export type PriceMap = Map<string, number>; // SYMBOL -> usd
 
@@ -139,6 +140,11 @@ export function fmtUsd(v: number | null): string {
   // The symbol is OURS, not Intl's: Hermes has no currency-symbol data, so style:'currency' printed
   // the ISO code ("CNY"). Format the number on its own (style:'decimal', which Hermes does support)
   // and prepend the sign, with the minus ahead of the symbol so a loss reads "-¥12", not "¥-12".
-  const body = Math.abs(n).toLocaleString(undefined, {style: 'decimal', ...digits});
+  // Dust (four zeros or more after the point) counts its zeros, as the amounts do — "$0.0₁₄882",
+  // never "$0.00000000000000882", which nobody can read.
+  const body =
+    abs > 0 && Number(abs.toPrecision(3)) < 0.0001
+      ? fmtTiny(abs)
+      : Math.abs(n).toLocaleString(undefined, {style: 'decimal', ...digits});
   return `${n < 0 ? '-' : ''}${CURRENCY_SYMBOL[currency] ?? ''}${body}`;
 }
