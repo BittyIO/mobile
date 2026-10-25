@@ -301,9 +301,9 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
    */
   if (manage) {
     const tabs = [
-      {label: t('mobile.payments.whitelisted_book'), rows: live, empty: t('mobile.payments.book_empty_title')},
-      {label: t('mobile.payments.tab_pending'), rows: book.filter((b) => b.status === WHITELIST_STATUS.pending), empty: t('mobile.payments.none_here')},
-      {label: t('mobile.payments.tab_cancelled'), rows: book.filter((b) => b.status === WHITELIST_STATUS.voided), empty: t('mobile.payments.none_here')},
+      {label: t('mobile.payments.whitelisted_book'), rows: live, limit: t('mobile.payments.max_send_none'), empty: t('mobile.payments.book_empty_title')},
+      {label: t('mobile.payments.tab_pending'), rows: book.filter((b) => b.status === WHITELIST_STATUS.pending), limit: allowance, empty: t('mobile.payments.none_here')},
+      {label: t('mobile.payments.tab_cancelled'), rows: book.filter((b) => b.status === WHITELIST_STATUS.voided), limit: null, empty: t('mobile.payments.none_here')},
     ];
     const goTo = (i: number) => {
       setTab(i);
@@ -334,6 +334,9 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
               showsVerticalScrollIndicator={false}
               alwaysBounceVertical
               contentContainerStyle={styles.page}>
+              {/* What a payment to these addresses may be, as the page's heading. Cancelled ones
+                  cannot be paid at all, so that page has none. */}
+              {x.limit ? <Text style={styles.pageHead}>{x.limit}</Text> : null}
               {group(x.rows, x.empty)}
             </ScrollView>
           ))}
@@ -418,6 +421,7 @@ const makeStyles = (c: Colors) =>
     tabText: {color: c.subtext, fontSize: 15, fontWeight: '600'},
     tabTextOn: {color: c.text},
     page: {padding: 16, paddingTop: 12, paddingBottom: 32},
+    pageHead: {color: c.subtext, fontSize: 13, fontWeight: '600', paddingHorizontal: 4, paddingBottom: 8},
     // The same row metrics the asset picker uses, so a list is a list.
     row: {
       flexDirection: 'row',
