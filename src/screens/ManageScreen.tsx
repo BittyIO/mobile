@@ -237,7 +237,6 @@ export function ManageScreen() {
         {section === 'services' && versions.upgrades.length > 0 && (
           // One row per adapter clone behind its lineage's newest build; none when all are current.
           <View style={styles.section}>
-            <Text style={styles.header}>{t('vault.upgrade_action')}</Text>
             <View style={styles.group}>
               {versions.upgrades.map((r, i) => (
                 <Pressable
@@ -263,7 +262,6 @@ export function ManageScreen() {
           assetList
         ) : (
           <View style={styles.section}>
-            <Text style={styles.header}>{t('mobile.vault.current_protocols')}</Text>
             {serviceList}
           </View>
         )}
