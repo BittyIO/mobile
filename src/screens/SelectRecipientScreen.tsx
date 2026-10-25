@@ -230,7 +230,7 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
         </View>
         {busy === `rm-${b.id}` ? (
           <ActivityIndicator color={c.subtext} />
-        ) : removeAt ? null : (
+        ) : removeAt || b.status === WHITELIST_STATUS.voided ? null : (
           <Pressable
             hitSlop={10}
             disabled={!ready}
@@ -297,14 +297,13 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
   /**
    * Security › Whitelisted addresses: three categories, a page each, swiped between or picked from
    * the row above — Whitelisted (payable, removals in flight included), Pending (still waiting out
-   * the timelock), Cancelled (voided by a lock, never payable). Each page says what a payment to
-   * its addresses may be, on the right.
+   * the timelock), Cancelled (voided by a lock, never payable; nothing to remove, so no ✕).
    */
   if (manage) {
     const tabs = [
-      {label: t('mobile.payments.whitelisted_book'), rows: live, limit: t('mobile.payments.max_send_none'), empty: t('mobile.payments.book_empty_title')},
-      {label: t('mobile.payments.tab_pending'), rows: book.filter((b) => b.status === WHITELIST_STATUS.pending), limit: allowance, empty: t('mobile.payments.none_here')},
-      {label: t('mobile.payments.tab_cancelled'), rows: book.filter((b) => b.status === WHITELIST_STATUS.voided), limit: null, empty: t('mobile.payments.none_here')},
+      {label: t('mobile.payments.whitelisted_book'), rows: live, empty: t('mobile.payments.book_empty_title')},
+      {label: t('mobile.payments.tab_pending'), rows: book.filter((b) => b.status === WHITELIST_STATUS.pending), empty: t('mobile.payments.none_here')},
+      {label: t('mobile.payments.tab_cancelled'), rows: book.filter((b) => b.status === WHITELIST_STATUS.voided), empty: t('mobile.payments.none_here')},
     ];
     const goTo = (i: number) => {
       setTab(i);
@@ -315,10 +314,7 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
         <View style={styles.tabRow}>
           {tabs.map((x, i) => (
             <Pressable key={x.label} hitSlop={8} onPress={() => goTo(i)} accessibilityRole="tab" accessibilityState={{selected: tab === i}}>
-              <Text style={[styles.tabText, tab === i && styles.tabTextOn]}>
-                {x.label}
-                {!loading && i > 0 && x.rows.length > 0 ? ` ${x.rows.length}` : ''}
-              </Text>
+              <Text style={[styles.tabText, tab === i && styles.tabTextOn]}>{x.label}</Text>
             </Pressable>
           ))}
         </View>
@@ -338,11 +334,6 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
               showsVerticalScrollIndicator={false}
               alwaysBounceVertical
               contentContainerStyle={styles.page}>
-              {x.limit ? (
-                <View style={styles.limitRow}>
-                  <Text style={styles.sectionLimit}>{x.limit}</Text>
-                </View>
-              ) : null}
               {group(x.rows, x.empty)}
             </ScrollView>
           ))}
@@ -426,8 +417,7 @@ const makeStyles = (c: Colors) =>
     tabRow: {flexDirection: 'row', alignItems: 'center', gap: 20, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4},
     tabText: {color: c.subtext, fontSize: 15, fontWeight: '600'},
     tabTextOn: {color: c.text},
-    page: {padding: 16, paddingTop: 4, paddingBottom: 32},
-    limitRow: {flexDirection: 'row', paddingHorizontal: 4, paddingTop: 4, paddingBottom: 8},
+    page: {padding: 16, paddingTop: 12, paddingBottom: 32},
     // The same row metrics the asset picker uses, so a list is a list.
     row: {
       flexDirection: 'row',
