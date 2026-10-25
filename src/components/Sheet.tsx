@@ -30,6 +30,7 @@ export function Sheet({
   children,
   height,
   done,
+  right,
 }: {
   visible: boolean;
   title: string;
@@ -45,6 +46,11 @@ export function Sheet({
    * pick one thing and close, or that carry their own confirm button, keep the ✕.
    */
   done?: boolean;
+  /**
+   * Something to show at the right of the title INSTEAD of the dismiss control — a figure the sheet
+   * is about. The backdrop and the swipe still close it, so a read-only sheet needs no ✕.
+   */
+  right?: React.ReactNode;
 }) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
@@ -123,9 +129,11 @@ export function Sheet({
             <Pressable style={styles.sheet} onPress={() => {}}>
               <View style={styles.head}>
                 <Text style={styles.title}>{title}</Text>
-                <Pressable onPress={requestClose} hitSlop={10}>
-                  <Text style={done ? styles.done : styles.close}>{done ? t('vault.done') : '✕'}</Text>
-                </Pressable>
+                {right ?? (
+                  <Pressable onPress={requestClose} hitSlop={10}>
+                    <Text style={done ? styles.done : styles.close}>{done ? t('vault.done') : '✕'}</Text>
+                  </Pressable>
+                )}
               </View>
               {children}
             </Pressable>

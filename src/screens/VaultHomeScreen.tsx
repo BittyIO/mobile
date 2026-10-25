@@ -291,18 +291,19 @@ function AssetRow({
       />
       {/* Where the total sits — free balance, then each position — in a sheet rather than opened
           under the row: the list keeps its shape, and the breakdown has room for its own lines. */}
-      <Sheet visible={open} title={displaySymbol(row.symbol)} onClose={() => setOpen(false)}>
+      {/* Amounts only: the value is on the row already. The total sits where the ✕ would — the
+          sheet is read and dismissed by the backdrop or a swipe, so it needs no close control. */}
+      <Sheet
+        visible={open}
+        title={displaySymbol(row.symbol)}
+        onClose={() => setOpen(false)}
+        height={150 + (row.legs.length + 1) * 52}
+        right={
+          <Text style={styles.legHeadAmt}>
+            {hidden ? MASK : <Amount v={fmt(row.total)} size={17} weight="700" />} {displaySymbol(row.symbol)}
+          </Text>
+        }>
         <View style={styles.legsSheet}>
-          {/* The whole holding, as the row shows it: the asset's own mark, the total and its value. */}
-          <View style={styles.legHead}>
-            <TokenIcon symbol={row.symbol} uri={row.icon} size={40} />
-            <View style={styles.legText}>
-              <Text style={styles.legHeadAmt}>
-                {hidden ? MASK : <Amount v={fmt(row.total)} size={20} weight="700" />} {displaySymbol(row.symbol)}
-              </Text>
-              {row.usd != null ? <Text style={styles.legSub}>{hidden ? MASK : fmtUsd(row.usd)}</Text> : null}
-            </View>
-          </View>
           {/* Balance first: it is the part that can be spent without unwinding anything. Each
               position after it under its protocol's mark, so where the money sits is seen. */}
           <Leg
@@ -1127,8 +1128,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   list: {gap: 0},
   // Indented to the asset NAME, not its icon: a 28pt icon and the cell's 10pt gap above it.
   legsSheet: {gap: 16, paddingTop: 12},
-  legHead: {flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},
-  legHeadAmt: {color: c.text, fontSize: 20, fontWeight: '700'},
+  legHeadAmt: {color: c.text, fontSize: 17, fontWeight: '700'},
   legText: {flex: 1, gap: 2, minWidth: 0},
   legSub: {color: c.subtext, fontSize: 12},
   legRow: {flexDirection: 'row', alignItems: 'center', gap: 12},
