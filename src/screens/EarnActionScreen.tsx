@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View} from 'react-native';
 import type {RouteProp} from '@react-navigation/native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import {ConfirmButton} from '@/components/Button';
@@ -14,8 +14,8 @@ import {useVaultBalances} from '@/vault/useVaultBalances';
 import {balanceOfSymbol} from '@/vault/read';
 import {depositFromSources, depositToProtocol, withdrawFromProtocol} from '@/vault/actions';
 import {parseUnits, type Address} from 'viem';
-import {VAULT_DEFI_ABI} from '@/core/abi';
-import {encodeVaultCalls, type VaultCall} from '@/vault/relay';
+import {VAULT_AUTOYIELD_ABI, VAULT_DEFI_ABI} from '@/core/abi';
+import {encodeVaultCalls, relayVaultMulticall, type VaultCall} from '@/vault/relay';
 import {estimateRelayGas, relayGasFor} from '@/vault/fee-quote';
 import {Sheet} from '@/components/Sheet';
 import {FundRow} from '@/components/FundRow';
@@ -72,6 +72,18 @@ export function EarnActionScreen() {
   const [picker, setPicker] = useState(false);
   const [status, setStatus] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
   const [err, setErr] = useState<string | null>(null);
+  /**
+   * Withdrawing from a position Auto-Yield (or Auto-Supply) feeds: the keeper would sweep what comes
+   * out straight back in, so the form offers to turn the route off in the SAME transaction — on by
+   * default, as the web's dialog has it. Left on, the withdraw is a temporary one.
+   */
+  const offerStopAuto = !isDeposit && !!params.autoOn;
+  const [stopAuto, setStopAuto] = useState(true);
+  const stopAutoCall = (asset: Address): VaultCall => ({
+    abi: VAULT_AUTOYIELD_ABI,
+    functionName: 'setAutoYielding',
+    args: [{asset, protocol: '0x0000000000000000000000000000000000000000'}],
+  });
 
   const selected = stablecoins.find((s) => s.symbol === coin) ?? stablecoins[0];
   const protocol = specific
@@ -282,6 +294,7 @@ export function EarnActionScreen() {
       return;
     }
     const calls: VaultCall[] = [
+      ...(offerStopAuto && stopAuto ? [stopAutoCall(targetAsset as Address)] : []),
       ...plan.map((w) => ({abi: VAULT_DEFI_ABI, functionName: 'withdraw', args: [w.protocol, targetAsset, w.raw]})),
       {abi: VAULT_DEFI_ABI, functionName: isDeposit ? 'deposit' : 'withdraw', args: [protocol, targetAsset, raw]},
     ];
@@ -294,7 +307,7 @@ export function EarnActionScreen() {
       clearTimeout(id);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [network, owner, protocol, targetAsset, targetDecimals, amount, planKey, isDeposit]);
+  }, [network, owner, protocol, targetAsset, targetDecimals, amount, planKey, isDeposit, stopAuto]);
 
   const onSubmit = async () => {
     if (!unlocked || !owner || !protocol || !targetAsset || !feeCoin) return;
@@ -339,7 +352,20 @@ export function EarnActionScreen() {
             withdrawals,
             stableCoin: feeCoin,
           })
-        : await (isDeposit ? depositToProtocol : withdrawFromProtocol)({
+        : offerStopAuto && stopAuto
+          ? (
+              await relayVaultMulticall({
+                account: acct,
+                vault,
+                network,
+                calls: [
+                  stopAutoCall(targetAsset as Address),
+                  {abi: VAULT_DEFI_ABI, functionName: 'withdraw', args: [protocol, targetAsset, parseUnits(amount, targetDecimals)]},
+                ],
+                stableCoin: feeCoin,
+              })
+            ).hash
+          : await (isDeposit ? depositToProtocol : withdrawFromProtocol)({
         account: acct,
         vault,
         network,
@@ -457,6 +483,16 @@ export function EarnActionScreen() {
           disabled={!hasMax}
         />
 
+        {offerStopAuto ? (
+          <View style={styles.stopAuto}>
+            <View style={styles.stopAutoRow}>
+              <Text style={styles.stopAutoLabel}>{t(params.lend ? 'mobile.earn.stop_auto_supply' : 'mobile.earn.stop_auto_yield')}</Text>
+              <Switch value={stopAuto} onValueChange={setStopAuto} />
+            </View>
+            <Text style={styles.stopAutoWhy}>{t('mobile.earn.stop_auto_why', {symbol: displaySymbol(targetSymbol)})}</Text>
+          </View>
+        ) : null}
+
         {status === 'error' && err ? <Text style={styles.err}>{err}</Text> : null}
 
         {/* Directly under the field, the way the order sheet puts its confirm under the amount.
@@ -518,6 +554,10 @@ export function EarnActionScreen() {
 }
 
 const makeStyles = (c: Colors) => StyleSheet.create({
+    stopAuto: {gap: 6, marginTop: 4},
+    stopAutoRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12},
+    stopAutoLabel: {color: c.text, fontSize: 15, fontWeight: '600', flex: 1},
+    stopAutoWhy: {color: c.subtext, fontSize: 12, lineHeight: 17},
   submit: {marginTop: 6},
   // The order sheet's row, verbatim: label left, figure right, controls after it. See {payField}.
   field: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: c.input, borderRadius: 12, paddingHorizontal: 14, height: 52},

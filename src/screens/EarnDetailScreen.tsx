@@ -155,7 +155,8 @@ export function EarnDetailScreen() {
       );
     }
   };
-  useEffect(loadAuto, [bal.vault, network, asset, protocol]);
+  // Again once a write confirms (positions re-read then): a withdraw may have turned it off.
+  useEffect(loadAuto, [bal.vault, network, asset, protocol, pos.positions]);
 
   const toggleAuto = async () => {
     if (!bal.vault || !stable) return;
@@ -190,6 +191,9 @@ export function EarnDetailScreen() {
       symbol,
       decimals: meta?.decimals ?? 18,
       max: mode === 'deposit' ? free ?? '0' : position?.formatted ?? '0',
+      // On a withdraw the form offers to turn this off in the same transaction: see EarnAction.
+      autoOn: mode === 'withdraw' && autoOn,
+      lend,
     });
 
   const autoLabel = t(lend ? 'mobile.earn.auto_supply' : 'mobile.earn.auto_yield');

@@ -58,6 +58,9 @@ export type RootStackParamList = {
     symbol?: string;
     decimals?: number;
     max?: string;
+    /** A withdraw from a position whose asset Auto-Yield / Auto-Supply routes back into it. */
+    autoOn?: boolean;
+    lend?: boolean;
   };
   /**
    * The Trade screen again, PUSHED rather than switched to.
