@@ -4,6 +4,8 @@ import type {MobileTable} from './index';
 // as the action taken ("Cancel limit orders"), the way the button that caused it reads.
 export const actions: MobileTable = {
   en: {
+    deposit_amount: 'Deposit {{amount}}',
+    withdraw_amount: 'Withdraw {{amount}}',
     fee_coin_on: '{{token}}: network fee on',
     fee_coin_off: '{{token}}: network fee off',
     fee_coins: 'Network fee tokens: {{tokens}}',
@@ -70,6 +72,8 @@ export const actions: MobileTable = {
     network_fee: 'Network fee: {{amount}}',
   },
   zh: {
+    deposit_amount: '存入 {{amount}}',
+    withdraw_amount: '取出 {{amount}}',
     fee_coin_on: '{{token}}：开启网络手续费',
     fee_coin_off: '{{token}}：关闭网络手续费',
     fee_coins: '网络手续费代币：{{tokens}}',
@@ -136,6 +140,8 @@ export const actions: MobileTable = {
     network_fee: '网络费：{{amount}}',
   },
   'zh-TW': {
+    deposit_amount: '存入 {{amount}}',
+    withdraw_amount: '取出 {{amount}}',
     fee_coin_on: '{{token}}：開啟網路手續費',
     fee_coin_off: '{{token}}：關閉網路手續費',
     fee_coins: '網路手續費代幣：{{tokens}}',
@@ -202,6 +208,8 @@ export const actions: MobileTable = {
     network_fee: '網路費：{{amount}}',
   },
   ja: {
+    deposit_amount: '{{amount}} を入金',
+    withdraw_amount: '{{amount}} を引き出し',
     fee_coin_on: '{{token}}：ネットワーク手数料をオン',
     fee_coin_off: '{{token}}：ネットワーク手数料をオフ',
     fee_coins: 'ネットワーク手数料トークン：{{tokens}}',
@@ -268,6 +276,8 @@ export const actions: MobileTable = {
     network_fee: 'ネットワーク手数料：{{amount}}',
   },
   ko: {
+    deposit_amount: '{{amount}} 예치',
+    withdraw_amount: '{{amount}} 인출',
     fee_coin_on: '{{token}}: 네트워크 수수료 켜기',
     fee_coin_off: '{{token}}: 네트워크 수수료 끄기',
     fee_coins: '네트워크 수수료 토큰: {{tokens}}',
@@ -334,6 +344,8 @@ export const actions: MobileTable = {
     network_fee: '네트워크 수수료: {{amount}}',
   },
   fr: {
+    deposit_amount: 'Dépôt de {{amount}}',
+    withdraw_amount: 'Retrait de {{amount}}',
     fee_coin_on: '{{token}} : frais de réseau activés',
     fee_coin_off: '{{token}} : frais de réseau désactivés',
     fee_coins: 'Jetons de frais de réseau : {{tokens}}',
@@ -400,6 +412,8 @@ export const actions: MobileTable = {
     network_fee: 'Frais de réseau : {{amount}}',
   },
   es: {
+    deposit_amount: 'Depositar {{amount}}',
+    withdraw_amount: 'Retirar {{amount}}',
     fee_coin_on: '{{token}}: comisión de red activada',
     fee_coin_off: '{{token}}: comisión de red desactivada',
     fee_coins: 'Tokens de comisión de red: {{tokens}}',
@@ -466,6 +480,8 @@ export const actions: MobileTable = {
     network_fee: 'Comisión de red: {{amount}}',
   },
   de: {
+    deposit_amount: '{{amount}} einzahlen',
+    withdraw_amount: '{{amount}} abheben',
     fee_coin_on: '{{token}}: Netzwerkgebühr an',
     fee_coin_off: '{{token}}: Netzwerkgebühr aus',
     fee_coins: 'Token für Netzwerkgebühren: {{tokens}}',
@@ -532,6 +548,8 @@ export const actions: MobileTable = {
     network_fee: 'Netzwerkgebühr: {{amount}}',
   },
   'pt-BR': {
+    deposit_amount: 'Depositar {{amount}}',
+    withdraw_amount: 'Sacar {{amount}}',
     fee_coin_on: '{{token}}: taxa de rede ativada',
     fee_coin_off: '{{token}}: taxa de rede desativada',
     fee_coins: 'Tokens de taxa de rede: {{tokens}}',
@@ -598,6 +616,8 @@ export const actions: MobileTable = {
     network_fee: 'Taxa de rede: {{amount}}',
   },
   hi: {
+    deposit_amount: '{{amount}} जमा करें',
+    withdraw_amount: '{{amount}} निकालें',
     fee_coin_on: '{{token}}: नेटवर्क शुल्क चालू',
     fee_coin_off: '{{token}}: नेटवर्क शुल्क बंद',
     fee_coins: 'नेटवर्क शुल्क टोकन: {{tokens}}',
@@ -664,6 +684,8 @@ export const actions: MobileTable = {
     network_fee: 'नेटवर्क शुल्क: {{amount}}',
   },
   tr: {
+    deposit_amount: '{{amount}} yatır',
+    withdraw_amount: '{{amount}} çek',
     fee_coin_on: '{{token}}: ağ ücreti açık',
     fee_coin_off: '{{token}}: ağ ücreti kapalı',
     fee_coins: 'Ağ ücreti tokenleri: {{tokens}}',
@@ -730,6 +752,8 @@ export const actions: MobileTable = {
     network_fee: 'Ağ ücreti: {{amount}}',
   },
   ru: {
+    deposit_amount: 'Внести {{amount}}',
+    withdraw_amount: 'Вывести {{amount}}',
     fee_coin_on: '{{token}}: сетевая комиссия включена',
     fee_coin_off: '{{token}}: сетевая комиссия выключена',
     fee_coins: 'Токены сетевой комиссии: {{tokens}}',
@@ -796,6 +820,8 @@ export const actions: MobileTable = {
     network_fee: 'Сетевая комиссия: {{amount}}',
   },
   id: {
+    deposit_amount: 'Setor {{amount}}',
+    withdraw_amount: 'Tarik {{amount}}',
     fee_coin_on: '{{token}}: biaya jaringan aktif',
     fee_coin_off: '{{token}}: biaya jaringan nonaktif',
     fee_coins: 'Token biaya jaringan: {{tokens}}',
@@ -862,6 +888,8 @@ export const actions: MobileTable = {
     network_fee: 'Biaya jaringan: {{amount}}',
   },
   vi: {
+    deposit_amount: 'Nạp {{amount}}',
+    withdraw_amount: 'Rút {{amount}}',
     fee_coin_on: '{{token}}: bật phí mạng',
     fee_coin_off: '{{token}}: tắt phí mạng',
     fee_coins: 'Token trả phí mạng: {{tokens}}',
@@ -928,6 +956,8 @@ export const actions: MobileTable = {
     network_fee: 'Phí mạng: {{amount}}',
   },
   th: {
+    deposit_amount: 'ฝาก {{amount}}',
+    withdraw_amount: 'ถอน {{amount}}',
     fee_coin_on: '{{token}}: เปิดค่าธรรมเนียมเครือข่าย',
     fee_coin_off: '{{token}}: ปิดค่าธรรมเนียมเครือข่าย',
     fee_coins: 'โทเค็นค่าธรรมเนียมเครือข่าย: {{tokens}}',

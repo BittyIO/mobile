@@ -318,7 +318,13 @@ export function EarnActionScreen() {
     try {
       const acct = await getSigner();
       // Formatted, not the raw field: see the Trade screen's `payLeg`.
-      tx = showTx(`${title} · ${fmtShort(Number(amount))} ${displaySymbol(targetSymbol)}`, network);
+      // "Deposit 100 USDC": what moved and how much, not the form's own title.
+      tx = showTx(
+        t(isDeposit ? 'mobile.actions.deposit_amount' : 'mobile.actions.withdraw_amount', {
+          amount: `${fmtShort(Number(amount))} ${displaySymbol(targetSymbol)}`,
+        }),
+        network,
+      );
       nav.goBack();
       const vault = activeVaultAddress(network)!;
       const withdrawals = multi ? planWithdrawals() : [];
