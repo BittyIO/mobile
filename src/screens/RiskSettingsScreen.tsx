@@ -201,13 +201,15 @@ export function RiskSettingsScreen() {
         contentInsetAdjustmentBehavior="automatic"
         style={styles.container}
         contentContainerStyle={styles.body}>
-        {/* First the choice; the three numbers below follow it, and editing one makes it Custom. */}
-        <SettingsGroup label={t('mobile.vault.safety_level')} footer={locked ? t('mobile.vault.safety_locked') : waitingNote}>
+        {/* First the choice; the three numbers below follow it, and editing one makes it Custom.
+            No headings over the two cards: the page is titled Security level, and the rows say
+            what they are. */}
+        <SettingsGroup footer={locked ? t('mobile.vault.safety_locked') : waitingNote}>
           {SAFETY_LEVELS.map((l) => levelRow(l.id, () => pick(l.id), false))}
           {levelRow('custom', () => !locked && setCustomOpen(true), true)}
         </SettingsGroup>
 
-        <SettingsGroup label={t('mobile.vault.safety_parameters')} footer={preview}>
+        <SettingsGroup footer={preview}>
           {RISK_FIELDS.map((f, i) => (
             <SettingsRow
               key={f}
