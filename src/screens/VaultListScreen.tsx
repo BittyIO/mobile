@@ -1,5 +1,5 @@
-import React, {useEffect, useMemo, useState} from 'react';
-import {ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import React, {useEffect, useLayoutEffect, useMemo, useState} from 'react';
+import {ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import Svg, {Path} from 'react-native-svg';
 import {getAddress, isAddress, type Address} from 'viem';
@@ -17,6 +17,9 @@ import {relayGasFor} from '@/vault/fee-quote';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {useConfirmAction} from '@/components/ConfirmAction';
 import {showToast, showTx} from '@/components/Toast';
+import {Sheet} from '@/components/Sheet';
+import {MoreIcon} from '@/components/TradeMenu';
+import {getPref, setPref} from '@/core/prefs';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {SettingsGroup, makeSettingsStyles} from '@/components/SettingsRow';
 import {useT} from '@/i18n';
@@ -42,6 +45,36 @@ const SAFE_KEY_SCAN = 10;
  * here — under that owner's address. Choosing a vault is one tap whatever its owner; the grouping
  * only says whose it is.
  */
+const SHOW_OWNERS = 'vaults.showOwners';
+
+/**
+ * The Vaults page's header-right: a ⋯ like the Trade screen's, holding how the list is shown. Owner
+ * addresses are a detail most people never need, so the list is one plain list of vaults until
+ * "Show owners" is turned on here; then it is grouped under each owner's address. Remembered on this
+ * phone. Module scope so the header's right side keeps one element type across renders.
+ */
+function VaultsMenu({showOwners, onShowOwners}: {showOwners: boolean; onShowOwners: (on: boolean) => void}) {
+  const {t} = useT();
+  const c = useColors();
+  const styles = useStyles(makeStyles);
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Pressable onPress={() => setOpen(true)} style={styles.moreBtn} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('mobile.trade.more')}>
+        <MoreIcon color={c.text} />
+      </Pressable>
+      <Sheet visible={open} title={t('mobile.vaults.title')} onClose={() => setOpen(false)}>
+        <View style={styles.menuCard}>
+          <View style={styles.menuRow}>
+            <Text style={styles.menuLabel}>{t('mobile.vaults.show_owners')}</Text>
+            <Switch value={showOwners} onValueChange={onShowOwners} />
+          </View>
+        </View>
+      </Sheet>
+    </>
+  );
+}
+
 export function VaultListScreen() {
   const {t} = useT();
   const c = useColors();
@@ -55,6 +88,16 @@ export function VaultListScreen() {
   const selectVault = useWallet((s) => s.selectVault);
 
   const [refresh, setRefresh] = useState(0);
+  // Owner headers only on request (the ⋯ menu); remembered on this phone.
+  const [showOwners, setShowOwners] = useState(() => getPref(SHOW_OWNERS) === '1');
+  const toggleOwners = (on: boolean) => {
+    setShowOwners(on);
+    setPref(SHOW_OWNERS, on ? '1' : '0');
+  };
+  useLayoutEffect(() => {
+    nav.setOptions({headerRight: () => <VaultsMenu showOwners={showOwners} onShowOwners={toggleOwners} />});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nav, showOwners]);
   const [pulled, setPulled] = useState(false);
 
   /**
@@ -300,6 +343,53 @@ export function VaultListScreen() {
     );
   };
 
+  /**
+   * One owner's rows — its vaults on the phone, those the server says it holds, any handover still
+   * waiting — numbered from `start` of `total`, so the divider logic holds whether the rows stand in
+   * their own group or run on in one list.
+   */
+  const groupRows = (g: (typeof groups)[number], start: number, total: number) => {
+    const {listed, received, waiting} = g;
+    const last = (k: number) => start + k >= total - 1;
+    return [
+      ...listed.map((v, i) => row(v, start + i, total)),
+      ...received.map((f, i) => (
+        <Pressable
+          key={f.vault}
+          style={({pressed}) => [styles.vaultRow, !last(listed.length + i) && styles.rowDivider, pressed && styles.pressed]}
+          onPress={() => onAddFound(f)}
+          onLongPress={() => copyAddress(f.vault)}>
+          <View style={styles.vaultText}>
+            <View style={styles.nameLine}>
+              <Text style={styles.name} numberOfLines={1}>
+                {label(nextIndex + pendingName++ + 1)}
+              </Text>
+              {fromOf(f.vault) ? null : <Text style={styles.tag}>{t('mobile.vaults.tag_received')}</Text>}
+            </View>
+            <Text style={styles.addr} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+              {f.vault}
+            </Text>
+            {fromOf(f.vault) ? (
+              <Text style={styles.fromText}>{t('mobile.vaults.transferred_from', {address: shortAddr(fromOf(f.vault)!)})}</Text>
+            ) : null}
+          </View>
+        </Pressable>
+      )),
+      // Handed to this owner and waiting for it to accept (older vaults): a signature.
+      ...waiting.map((f, i) => (
+        <View key={f.vault} style={[styles.vaultRow, !last(listed.length + received.length + i) && styles.rowDivider]}>
+          <View style={styles.vaultText}>
+            <Text style={styles.addr}>{f.vault}</Text>
+            <Text style={styles.goneText}>{t('mobile.vaults.pending_note')}</Text>
+          </View>
+          <Pressable onPress={() => onAccept(f)} hitSlop={8} accessibilityRole="button">
+            <Text style={styles.link}>{t('mobile.vaults.accept')}</Text>
+          </Pressable>
+        </View>
+      )),
+    ];
+  };
+
   return (
     <ScrollView
       showsVerticalScrollIndicator={false}
@@ -321,57 +411,38 @@ export function VaultListScreen() {
       }>
       {/* Every vault on one list, grouped by owner: switching is one tap from anywhere, and the
           header is the address of the key — or Safe — that holds them. Long press it to copy. */}
-      {groups.map(({owner: o, listed, received, waiting}) => {
-        const count = listed.length + received.length + waiting.length;
-        return (
-          <View key={o.key} style={styles.section}>
-            <Pressable onLongPress={() => copyAddress(o.address)} hitSlop={4}>
-              {/* The owner's address, in full — it is what tells two keys apart. A key whose
-                  address is not derived yet goes by its number until it is. */}
-              <Text style={[styles.groupLabel, o.address && styles.ownerAddr]}>
-                {o.address ? t('mobile.vaults.owner_header', {address: shortAddr(o.address)}) : t('mobile.vaults.owner_n', {n: o.keyIndex + 1})}
-              </Text>
-            </Pressable>
-            <View style={styles.group}>
-              {listed.map((v, i) => row(v, i, count))}
-              {received.map((f, i) => (
-                <Pressable
-                  key={f.vault}
-                  style={({pressed}) => [styles.vaultRow, listed.length + i < count - 1 && styles.rowDivider, pressed && styles.pressed]}
-                  onPress={() => onAddFound(f)}
-                  onLongPress={() => copyAddress(f.vault)}>
-                  <View style={styles.vaultText}>
-                    <View style={styles.nameLine}>
-                      <Text style={styles.name} numberOfLines={1}>
-                        {label(nextIndex + pendingName++ + 1)}
-                      </Text>
-                      {fromOf(f.vault) ? null : <Text style={styles.tag}>{t('mobile.vaults.tag_received')}</Text>}
-                    </View>
-                    <Text style={styles.addr} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-                      {f.vault}
-                    </Text>
-                    {fromOf(f.vault) ? (
-                      <Text style={styles.fromText}>{t('mobile.vaults.transferred_from', {address: shortAddr(fromOf(f.vault)!)})}</Text>
-                    ) : null}
-                  </View>
-                </Pressable>
-              ))}
-              {/* Handed to this owner and waiting for it to accept (older vaults): a signature. */}
-              {waiting.map((f, i) => (
-                <View key={f.vault} style={[styles.vaultRow, listed.length + received.length + i < count - 1 && styles.rowDivider]}>
-                  <View style={styles.vaultText}>
-                    <Text style={styles.addr}>{f.vault}</Text>
-                    <Text style={styles.goneText}>{t('mobile.vaults.pending_note')}</Text>
-                  </View>
-                  <Pressable onPress={() => onAccept(f)} hitSlop={8} accessibilityRole="button">
-                    <Text style={styles.link}>{t('mobile.vaults.accept')}</Text>
-                  </Pressable>
-                </View>
-              ))}
+      {/* Every vault on one list: grouped under each owner's address when "Show owners" is on
+          (the ⋯ in the header), otherwise one plain list. Long press a header to copy it. */}
+      {showOwners ? (
+        groups.map((g) => {
+          const o = g.owner;
+          return (
+            <View key={o.key} style={styles.section}>
+              <Pressable onLongPress={() => copyAddress(o.address)} hitSlop={4}>
+                {/* A key whose address is not derived yet goes by its number until it is. */}
+                <Text style={[styles.groupLabel, o.address && styles.ownerAddr]}>
+                  {o.address ? t('mobile.vaults.owner_header', {address: shortAddr(o.address)}) : t('mobile.vaults.owner_n', {n: o.keyIndex + 1})}
+                </Text>
+              </Pressable>
+              <View style={styles.group}>{groupRows(g, 0, g.listed.length + g.received.length + g.waiting.length)}</View>
             </View>
+          );
+        })
+      ) : (
+        <View style={styles.section}>
+          <View style={styles.group}>
+            {(() => {
+              const total = groups.reduce((n, g) => n + g.listed.length + g.received.length + g.waiting.length, 0);
+              let at = 0;
+              return groups.map((g) => {
+                const out = groupRows(g, at, total);
+                at += g.listed.length + g.received.length + g.waiting.length;
+                return <React.Fragment key={g.owner.key}>{out}</React.Fragment>;
+              });
+            })()}
           </View>
-        );
-      })}
+        </View>
+      )}
 
       <SettingsGroup>
         <Pressable style={[styles.row, styles.rowDivider]} onPress={onAdd} disabled={busy}>
@@ -428,6 +499,11 @@ const makeStyles = (c: Colors) =>
     ownerAddr: {fontSize: 13, fontFamily: 'Menlo', fontWeight: '400'},
     gone: {opacity: 0.45},
     goneText: {color: c.warning, fontSize: 12},
+    // A pushed screen's header: sized to the bar's 44, as the Trade screen's ⋯ (see TradeMenu).
+    moreBtn: {width: 44, height: 44, paddingBottom: 6, alignItems: 'center', justifyContent: 'center'},
+    menuCard: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 16},
+    menuRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 56},
+    menuLabel: {color: c.text, fontSize: 16, fontWeight: '600'},
     fromText: {color: c.subtext, fontSize: 12},
     pressed: {opacity: 0.6},
     checkHidden: {opacity: 0},

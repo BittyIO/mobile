@@ -3,6 +3,7 @@ import type {MobileTable} from './index';
 // Settings › Vaults: the vault list, the vaults found for this device's keys, and removing one.
 export const vaults: MobileTable = {
   en: {
+    show_owners: 'Show owners',
     owner_header: 'Owner: {{address}}',
     transferred_from: 'Transferred from {{address}}',
     transferred_to: 'Transferred to {{address}}',
@@ -18,6 +19,7 @@ export const vaults: MobileTable = {
     add: 'Add',
   },
   zh: {
+    show_owners: '显示所有者',
     owner_header: '所有者：{{address}}',
     transferred_from: '转移自 {{address}}',
     transferred_to: '已转移给 {{address}}',
@@ -33,6 +35,7 @@ export const vaults: MobileTable = {
     add: '添加',
   },
   'zh-TW': {
+    show_owners: '顯示擁有者',
     owner_header: '擁有者：{{address}}',
     transferred_from: '轉移自 {{address}}',
     transferred_to: '已轉移給 {{address}}',
@@ -48,6 +51,7 @@ export const vaults: MobileTable = {
     add: '新增',
   },
   ja: {
+    show_owners: 'オーナーを表示',
     owner_header: 'オーナー：{{address}}',
     transferred_from: '{{address}} から移転',
     transferred_to: '{{address}} に移転済み',
@@ -63,6 +67,7 @@ export const vaults: MobileTable = {
     add: '追加',
   },
   ko: {
+    show_owners: '소유자 표시',
     owner_header: '소유자: {{address}}',
     transferred_from: '{{address}}에서 이전됨',
     transferred_to: '{{address}}(으)로 이전됨',
@@ -78,6 +83,7 @@ export const vaults: MobileTable = {
     add: '추가',
   },
   fr: {
+    show_owners: 'Afficher les propriétaires',
     owner_header: 'Propriétaire : {{address}}',
     transferred_from: 'Transféré depuis {{address}}',
     transferred_to: 'Transféré à {{address}}',
@@ -93,6 +99,7 @@ export const vaults: MobileTable = {
     add: 'Ajouter',
   },
   es: {
+    show_owners: 'Mostrar propietarios',
     owner_header: 'Propietario: {{address}}',
     transferred_from: 'Transferido desde {{address}}',
     transferred_to: 'Transferido a {{address}}',
@@ -108,6 +115,7 @@ export const vaults: MobileTable = {
     add: 'Añadir',
   },
   de: {
+    show_owners: 'Eigentümer anzeigen',
     owner_header: 'Eigentümer: {{address}}',
     transferred_from: 'Übertragen von {{address}}',
     transferred_to: 'Übertragen an {{address}}',
@@ -123,6 +131,7 @@ export const vaults: MobileTable = {
     add: 'Hinzufügen',
   },
   'pt-BR': {
+    show_owners: 'Mostrar proprietários',
     owner_header: 'Proprietário: {{address}}',
     transferred_from: 'Transferido de {{address}}',
     transferred_to: 'Transferido para {{address}}',
@@ -138,6 +147,7 @@ export const vaults: MobileTable = {
     add: 'Adicionar',
   },
   hi: {
+    show_owners: 'मालिक दिखाएँ',
     owner_header: 'मालिक: {{address}}',
     transferred_from: '{{address}} से हस्तांतरित',
     transferred_to: '{{address}} को हस्तांतरित',
@@ -153,6 +163,7 @@ export const vaults: MobileTable = {
     add: 'जोड़ें',
   },
   tr: {
+    show_owners: 'Sahipleri göster',
     owner_header: 'Sahip: {{address}}',
     transferred_from: '{{address}} adresinden devredildi',
     transferred_to: '{{address}} adresine devredildi',
@@ -168,6 +179,7 @@ export const vaults: MobileTable = {
     add: 'Ekle',
   },
   ru: {
+    show_owners: 'Показать владельцев',
     owner_header: 'Владелец: {{address}}',
     transferred_from: 'Передано от {{address}}',
     transferred_to: 'Передано {{address}}',
@@ -183,6 +195,7 @@ export const vaults: MobileTable = {
     add: 'Добавить',
   },
   id: {
+    show_owners: 'Tampilkan pemilik',
     owner_header: 'Pemilik: {{address}}',
     transferred_from: 'Dialihkan dari {{address}}',
     transferred_to: 'Dialihkan ke {{address}}',
@@ -198,6 +211,7 @@ export const vaults: MobileTable = {
     add: 'Tambah',
   },
   vi: {
+    show_owners: 'Hiện chủ sở hữu',
     owner_header: 'Chủ sở hữu: {{address}}',
     transferred_from: 'Đã chuyển từ {{address}}',
     transferred_to: 'Đã chuyển cho {{address}}',
@@ -213,6 +227,7 @@ export const vaults: MobileTable = {
     add: 'Thêm',
   },
   th: {
+    show_owners: 'แสดงเจ้าของ',
     owner_header: 'เจ้าของ: {{address}}',
     transferred_from: 'โอนมาจาก {{address}}',
     transferred_to: 'โอนให้ {{address}} แล้ว',

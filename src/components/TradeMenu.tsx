@@ -12,7 +12,7 @@ import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 
 /** Three dots, the system's own mark for "more of this screen's actions". */
-function MoreIcon({color}: {color: string}) {
+export function MoreIcon({color}: {color: string}) {
   return (
     <Svg width={21} height={21} viewBox="0 0 24 24">
       <Circle cx={5} cy={12} r={1.9} fill={color} />
