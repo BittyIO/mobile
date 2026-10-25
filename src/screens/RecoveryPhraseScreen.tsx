@@ -7,7 +7,7 @@ import {SettingsGroup} from '@/components/SettingsRow';
 import {revealMnemonic} from '@/wallet/keyring';
 import {useRevealGuard} from '@/core/device-security';
 import {useWallet} from '@/wallet/store';
-import {isPhraseVerified, markPhraseVerified} from '@/wallet/phrase-backup';
+import {backupChoices, isPhraseVerified, markPhraseVerified} from '@/wallet/phrase-backup';
 
 function randomIndex(max: number): number {
   const value = new Uint32Array(1);
@@ -99,7 +99,11 @@ export function RecoveryPhraseScreen() {
   const [ask, setAsk] = useState<number[] | null>(null);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const words = useMemo(() => (phrase ? phrase.split(' ') : []), [phrase]);
-  const choices = useMemo(() => shuffled(Array.from(new Set(words))), [words]);
+  // Three choices per position — the word and two others from the phrase. See {backupChoices}.
+  const choices = useMemo(
+    () => (ask ? (Object.fromEntries(ask.map((p) => [p, backupChoices(words, p)])) as Record<number, string[]>) : {}),
+    [words, ask],
+  );
 
   const startVerify = () => {
     setAnswers({});
@@ -175,7 +179,7 @@ export function RecoveryPhraseScreen() {
                     {answers[position] ? ` · ${answers[position]}` : ''}
                   </Text>
                   <View style={styles.choices}>
-                    {choices.map((word) => {
+                    {(choices[position] ?? []).map((word) => {
                       const selected = answers[position] === word;
                       return (
                         <Pressable
