@@ -5,6 +5,7 @@ import Svg, {Path} from 'react-native-svg';
 import {getAddress, isAddress, type Address} from 'viem';
 import {useVaults, vaultLabel, type VaultRef} from '@/core/vault-store';
 import {vaultAddressOf} from '@/core/active-vault';
+import {ownerVaultAddress} from '@/vault/read';
 import {networkLabel, useNetwork} from '@/core/network-store';
 import type {Network} from '@/core/chain';
 import {useWallet} from '@/wallet/store';
@@ -121,6 +122,17 @@ export function VaultListScreen() {
   // The name a vault not on the phone yet will have once it is: the next free indexes, in order.
   const nextIndex = Math.max(...vaults.map((v) => v.index)) + 1;
   let pendingName = 0;
+
+  /** An address shortened to its first and last six: 0x111111…000000. */
+  const shortAddr = (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}`;
+  /**
+   * Who a received vault came from, where this phone can tell: one of its own keys whose own vault
+   * (the one the factory derives from it) this is. A vault from anyone else stays just "Received" —
+   * the vault does not record its previous owner.
+   */
+  const fromOf = (vault: string): string | null =>
+    owners.find((o) => !o.safe && o.address && ownerVaultAddress(o.address as Address, network).toLowerCase() === vault.toLowerCase())
+      ?.address ?? null;
 
   const copyOwner = (address: string | null) => {
     if (!address) return;
@@ -254,7 +266,8 @@ export function VaultListScreen() {
     const address = vaultAddressOf(v, network);
     // A received vault on another chain: say which, since it does not exist on this one.
     const elsewhere = !!v.vault && v.network !== network;
-    const tag = v.safe ? t('mobile.vaults.tag_safe') : v.vault ? t('mobile.vaults.tag_received') : null;
+    const from = v.vault && !elsewhere ? fromOf(v.vault) : null;
+    const tag = v.safe ? t('mobile.vaults.tag_safe') : v.vault && !from ? t('mobile.vaults.tag_received') : null;
     return (
       <Pressable
         key={v.index}
@@ -280,6 +293,7 @@ export function VaultListScreen() {
           <Text style={styles.addr}>
             {elsewhere ? t('mobile.vaults.on_network', {network: networkLabel(v.network as Network, t)}) : (address ?? t('mobile.settings.vault_unlock_first'))}
           </Text>
+          {from ? <Text style={styles.fromText}>{t('mobile.vaults.transferred_from', {address: shortAddr(from)})}</Text> : null}
           {/* Transferred away: to whom, in full, so it can be checked against the receiving key. */}
           {gone ? <Text style={styles.goneText}>{t('mobile.vaults.transferred_to', {address: transferredTo.get(v.index) ?? ''})}</Text> : null}
         </View>
@@ -318,7 +332,7 @@ export function VaultListScreen() {
               {/* The owner's address, in full — it is what tells two keys apart. A key whose
                   address is not derived yet goes by its number until it is. */}
               <Text style={[styles.groupLabel, o.address && styles.ownerAddr]}>
-                {o.address ?? t('mobile.vaults.owner_n', {n: o.keyIndex + 1})}
+                {o.address ? shortAddr(o.address) : t('mobile.vaults.owner_n', {n: o.keyIndex + 1})}
               </Text>
             </Pressable>
             <View style={styles.group}>
@@ -333,9 +347,12 @@ export function VaultListScreen() {
                       <Text style={styles.name} numberOfLines={1}>
                         {label(nextIndex + pendingName++ + 1)}
                       </Text>
-                      <Text style={styles.tag}>{t('mobile.vaults.tag_received')}</Text>
+                      {fromOf(f.vault) ? null : <Text style={styles.tag}>{t('mobile.vaults.tag_received')}</Text>}
                     </View>
                     <Text style={styles.addr}>{f.vault}</Text>
+                    {fromOf(f.vault) ? (
+                      <Text style={styles.fromText}>{t('mobile.vaults.transferred_from', {address: shortAddr(fromOf(f.vault)!)})}</Text>
+                    ) : null}
                   </View>
                   <Text style={[styles.check, styles.checkHidden]}>✓</Text>
                 </Pressable>
@@ -410,6 +427,7 @@ const makeStyles = (c: Colors) =>
     ownerAddr: {fontSize: 12, fontFamily: 'Menlo'},
     gone: {opacity: 0.45},
     goneText: {color: c.warning, fontSize: 12},
+    fromText: {color: c.subtext, fontSize: 12},
     pressed: {opacity: 0.6},
     checkHidden: {opacity: 0},
     link: {color: c.accent, fontSize: 15, fontWeight: '600'},
