@@ -33,8 +33,9 @@ export function TermsSheet({visible, onClose}: {visible: boolean; onClose: () =>
   const styles = useStyles(makeStyles);
   const {height} = useWindowDimensions();
   return (
-    <Sheet visible={visible} title={t('mobile.settings.terms_of_use')} onClose={onClose} height={Math.round(height * 0.85)}>
-      <ScrollView showsVerticalScrollIndicator contentContainerStyle={styles.body}>
+    <Sheet visible={visible} title={t('mobile.settings.terms_of_use')} onClose={onClose} height={Math.round(height * 0.85)} noSwipe>
+      {/* Bounded to the sheet (flex 1), so it scrolls rather than growing past the card. */}
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator contentContainerStyle={styles.body}>
         <Text style={styles.updated}>{t('mobile.settings.terms_updated', {date: new Date(`${TERMS_UPDATED}T00:00:00`).toLocaleDateString()})}</Text>
         {TERMS.map((s) => (
           <View key={s.title} style={styles.section}>
@@ -62,6 +63,7 @@ export function TermsSheet({visible, onClose}: {visible: boolean; onClose: () =>
 
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
+    scroll: {flex: 1},
     body: {paddingBottom: 32, gap: 20},
     updated: {color: c.subtext, fontSize: 12},
     section: {gap: 8},
