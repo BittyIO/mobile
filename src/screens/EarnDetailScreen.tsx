@@ -331,6 +331,34 @@ export function EarnDetailScreen() {
         </View>
       ) : null}
 
+      <View style={styles.card}>
+        <View style={styles.autoRow}>
+          <Text style={styles.autoLabel}>{autoLabel}</Text>
+          <PendingSwitch
+            value={autoOn}
+            pending={autoBusy}
+            disabled={ownerPays && !autoOn}
+            onValueChange={() =>
+              ask({
+                title: autoLabel,
+                message: protocolDisplayName(name),
+                gas: relayGasFor({}),
+                run: toggleAuto,
+              })
+            }
+          />
+        </View>
+        <Text style={styles.explain}>{t(lend ? 'mobile.earn.auto_supply_what' : 'mobile.earn.auto_yield_what', {symbol: sym})}</Text>
+        {ownerPays ? (
+          <Pressable onPress={() => nav.navigate('NetworkFee')} hitSlop={6}>
+            <Text style={styles.ownerPays}>{t('mobile.earn.auto_needs_vault_fee')}</Text>
+          </Pressable>
+        ) : null}
+        {/* No protocol mark here. The venue is already named at the top of the page, and under a
+            sentence explaining what the switch does a logo read as part of the explanation —
+            as if the paragraph were about the protocol rather than about the switch. */}
+      </View>
+
       {/* Side by side, the same pills the pair screen's Buy / Sell bar uses — and in the same
           order it puts them: the quiet one left, the one that commits money right. */}
       <View style={styles.actions}>
