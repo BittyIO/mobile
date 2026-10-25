@@ -3,6 +3,9 @@ import type {MobileTable} from './index';
 // Payments tab (Send / Scheduled / Address Book), plus first-run onboarding and the lock screen.
 export const payments: MobileTable = {
   en: {
+    tab_pending: 'Pending',
+    tab_cancelled: 'Cancelled',
+    none_here: 'Nothing here',
     cant_pay_title: 'Can\'t pay this address',
     cant_pay_sends_off: 'Send to new in 24 hours is $0, so the vault only pays whitelisted addresses whose waiting period is over. This one isn\'t, so the payment would be refused. Pick a whitelisted address, or add this one to the whitelist and pay it once its wait is over.',
     edit_name: 'Edit name',
@@ -73,6 +76,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Unlock',
   },
   zh: {
+    tab_pending: '待生效',
+    tab_cancelled: '已作废',
+    none_here: '暂无',
     cant_pay_title: '无法向此地址付款',
     cant_pay_sends_off: '24 小时内发送给新地址为 $0，金库只向已过等待期的地址簿地址付款。此地址不在其中，付款会被拒绝。请选择地址簿中的地址，或先将此地址加入地址簿，等待期结束后再付款。',
     edit_name: '编辑名称',
@@ -143,6 +149,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: '解锁',
   },
   'zh-TW': {
+    tab_pending: '待生效',
+    tab_cancelled: '已作廢',
+    none_here: '暫無',
     cant_pay_title: '無法向此地址付款',
     cant_pay_sends_off: '24 小時內傳送給新地址為 $0，金庫只向已過等待期的地址簿地址付款。此地址不在其中，付款會被拒絕。請選擇地址簿中的地址，或先將此地址加入地址簿，等待期結束後再付款。',
     edit_name: '編輯名稱',
@@ -213,6 +222,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: '解鎖',
   },
   ja: {
+    tab_pending: '保留中',
+    tab_cancelled: 'キャンセル済み',
+    none_here: 'ありません',
     cant_pay_title: 'このアドレスには支払えません',
     cant_pay_sends_off: '24時間以内の新しい宛先への送金が $0 のため、Vault は待機期間を終えたホワイトリストのアドレスにのみ支払います。このアドレスは該当しないため、支払いは拒否されます。ホワイトリストのアドレスを選ぶか、このアドレスをホワイトリストに追加し、待機期間の後に支払ってください。',
     edit_name: '名前を編集',
@@ -268,6 +280,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'ロック解除',
   },
   ko: {
+    tab_pending: '대기 중',
+    tab_cancelled: '취소됨',
+    none_here: '없음',
     cant_pay_title: '이 주소로 지불할 수 없습니다',
     cant_pay_sends_off: '24시간 내 새 주소로 송금이 $0이므로 볼트는 대기 기간이 지난 화이트리스트 주소에만 지불합니다. 이 주소는 해당하지 않아 지불이 거부됩니다. 화이트리스트 주소를 선택하거나, 이 주소를 화이트리스트에 추가하고 대기 기간이 지난 후 지불하세요.',
     edit_name: '이름 편집',
@@ -323,6 +338,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: '잠금 해제',
   },
   fr: {
+    tab_pending: 'En attente',
+    tab_cancelled: 'Annulées',
+    none_here: 'Rien ici',
     cant_pay_title: 'Impossible de payer cette adresse',
     cant_pay_sends_off: 'L’envoi vers de nouvelles adresses sur 24 h est à 0 $ : le coffre ne paie que les adresses en liste blanche dont le délai d’attente est écoulé. Ce n’est pas le cas de celle-ci, le paiement serait refusé. Choisissez une adresse en liste blanche, ou ajoutez celle-ci et payez-la une fois son délai écoulé.',
     edit_name: 'Modifier le nom',
@@ -378,6 +396,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Déverrouiller',
   },
   es: {
+    tab_pending: 'Pendientes',
+    tab_cancelled: 'Canceladas',
+    none_here: 'Nada aquí',
     cant_pay_title: 'No se puede pagar a esta dirección',
     cant_pay_sends_off: 'Los envíos a direcciones nuevas en 24 horas están en 0 $, así que la bóveda solo paga a direcciones en lista blanca cuyo periodo de espera haya terminado. Esta no lo es, así que el pago sería rechazado. Elige una dirección en lista blanca, o añade esta y págala cuando termine su espera.',
     edit_name: 'Editar nombre',
@@ -433,6 +454,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Desbloquear',
   },
   de: {
+    tab_pending: 'Ausstehend',
+    tab_cancelled: 'Storniert',
+    none_here: 'Nichts hier',
     cant_pay_title: 'An diese Adresse kann nicht gezahlt werden',
     cant_pay_sends_off: '„An neue Adressen in 24 Stunden“ ist 0 $, daher zahlt der Tresor nur an freigegebene Adressen, deren Wartezeit abgelaufen ist. Diese gehört nicht dazu, die Zahlung würde abgelehnt. Wähle eine freigegebene Adresse oder füge diese hinzu und zahle nach Ablauf ihrer Wartezeit.',
     edit_name: 'Namen bearbeiten',
@@ -488,6 +512,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Entsperren',
   },
   'pt-BR': {
+    tab_pending: 'Pendentes',
+    tab_cancelled: 'Canceladas',
+    none_here: 'Nada aqui',
     cant_pay_title: 'Não é possível pagar este endereço',
     cant_pay_sends_off: 'O envio para novos endereços em 24 horas é $0, então o cofre só paga endereços da lista branca cujo período de espera terminou. Este não é um deles, e o pagamento seria recusado. Escolha um endereço da lista branca, ou adicione este e pague quando a espera terminar.',
     edit_name: 'Editar nome',
@@ -543,6 +570,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Desbloquear',
   },
   hi: {
+    tab_pending: 'लंबित',
+    tab_cancelled: 'रद्द',
+    none_here: 'कुछ नहीं',
     cant_pay_title: 'इस पते पर भुगतान नहीं हो सकता',
     cant_pay_sends_off: '24 घंटे में नए पतों पर भेजना $0 है, इसलिए वॉल्ट केवल उन व्हाइटलिस्ट पतों पर भुगतान करता है जिनकी प्रतीक्षा अवधि पूरी हो चुकी है। यह पता उनमें नहीं है, इसलिए भुगतान अस्वीकार हो जाएगा। कोई व्हाइटलिस्ट पता चुनें, या इसे व्हाइटलिस्ट में जोड़ें और प्रतीक्षा पूरी होने पर भुगतान करें।',
     edit_name: 'नाम संपादित करें',
@@ -598,6 +628,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'अनलॉक करें',
   },
   tr: {
+    tab_pending: 'Bekleyen',
+    tab_cancelled: 'İptal edilen',
+    none_here: 'Burada bir şey yok',
     cant_pay_title: 'Bu adrese ödeme yapılamaz',
     cant_pay_sends_off: '24 saatte yeni adreslere gönderim $0, bu yüzden kasa yalnızca bekleme süresi dolmuş beyaz listedeki adreslere ödeme yapar. Bu adres onlardan değil, ödeme reddedilir. Beyaz listeden bir adres seçin ya da bunu beyaz listeye ekleyip bekleme süresi bitince ödeyin.',
     edit_name: 'Adı düzenle',
@@ -653,6 +686,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Kilidi aç',
   },
   ru: {
+    tab_pending: 'Ожидают',
+    tab_cancelled: 'Отменённые',
+    none_here: 'Пусто',
     cant_pay_title: 'Нельзя заплатить на этот адрес',
     cant_pay_sends_off: 'Отправка на новые адреса за 24 часа — $0, поэтому хранилище платит только на адреса из белого списка, у которых истёк период ожидания. Этот адрес не из них, платёж будет отклонён. Выберите адрес из белого списка или добавьте этот и заплатите после окончания ожидания.',
     edit_name: 'Изменить имя',
@@ -708,6 +744,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Разблокировать',
   },
   id: {
+    tab_pending: 'Tertunda',
+    tab_cancelled: 'Dibatalkan',
+    none_here: 'Tidak ada',
     cant_pay_title: 'Tidak bisa membayar ke alamat ini',
     cant_pay_sends_off: 'Kirim ke alamat baru dalam 24 jam adalah $0, jadi vault hanya membayar alamat whitelist yang masa tunggunya sudah lewat. Alamat ini bukan salah satunya, jadi pembayaran akan ditolak. Pilih alamat whitelist, atau tambahkan alamat ini dan bayar setelah masa tunggunya selesai.',
     edit_name: 'Edit nama',
@@ -763,6 +802,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Buka kunci',
   },
   vi: {
+    tab_pending: 'Đang chờ',
+    tab_cancelled: 'Đã hủy',
+    none_here: 'Không có gì',
     cant_pay_title: 'Không thể thanh toán tới địa chỉ này',
     cant_pay_sends_off: 'Gửi tới địa chỉ mới trong 24 giờ là $0, nên vault chỉ thanh toán cho các địa chỉ trong danh sách trắng đã qua thời gian chờ. Địa chỉ này không thuộc số đó nên khoản thanh toán sẽ bị từ chối. Hãy chọn một địa chỉ trong danh sách trắng, hoặc thêm địa chỉ này và thanh toán khi hết thời gian chờ.',
     edit_name: 'Sửa tên',
@@ -818,6 +860,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Mở khóa',
   },
   th: {
+    tab_pending: 'รอดำเนินการ',
+    tab_cancelled: 'ยกเลิกแล้ว',
+    none_here: 'ไม่มีรายการ',
     cant_pay_title: 'ไม่สามารถชำระไปยังที่อยู่นี้',
     cant_pay_sends_off: 'ส่งไปยังที่อยู่ใหม่ใน 24 ชั่วโมงคือ $0 ห้องนิรภัยจึงชำระเฉพาะที่อยู่ในไวท์ลิสต์ที่พ้นระยะรอแล้ว ที่อยู่นี้ไม่ใช่ การชำระจะถูกปฏิเสธ เลือกที่อยู่ในไวท์ลิสต์ หรือเพิ่มที่อยู่นี้แล้วชำระเมื่อพ้นระยะรอ',
     edit_name: 'แก้ไขชื่อ',
