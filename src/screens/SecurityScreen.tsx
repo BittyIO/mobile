@@ -73,7 +73,9 @@ export function SecurityScreen() {
         <SettingsRow
           icon="recovery"
           title={t('mobile.settings.recovery_phrase')}
-          value={t(phraseOk ? 'mobile.settings.phrase_verified' : 'mobile.settings.phrase_not_verified')}
+          // "Verified" once the words have been checked; nothing otherwise — a standing "Not
+          // verified" read as a fault on every visit, where the page itself is where to deal with it.
+          value={phraseOk ? t('mobile.settings.phrase_verified') : undefined}
           onPress={() => nav.navigate('VaultRecoveryPhrase')} last />
       </SettingsGroup>
     </ScrollView>
