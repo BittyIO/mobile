@@ -259,22 +259,28 @@ export function EarnDetailScreen() {
             float the answer is none of it — so calling the figure available was the one thing it
             could not be called. */}
         <Row label={t('vault.balance')} value={free != null ? `${fmtNum(Number(free))} ${sym}` : '—'} />
-        {unstake.unstaking > 0n ? <Row label={t('vault.unstaking')} value={`${fmtEth(unstake.unstaking)} ETH`} /> : null}
-        {unstake.claimable > 0n ? <Row label={t('vault.claimable')} value={`${fmtEth(unstake.claimable)} ETH`} tone="good" /> : null}
+        {/* Always on Lido, as on the web: the queue is part of where this position's ETH can be,
+            and a row that appears only once there is something in it is a row nobody knows to
+            look for. */}
+        {isLido ? <Row label={t('vault.unstaking')} value={`${fmtEth(unstake.unstaking)} ETH`} /> : null}
+        {isLido ? (
+          <Row label={t('vault.claimable')} value={`${fmtEth(unstake.claimable)} ETH`} tone={unstake.claimable > 0n ? 'good' : undefined} />
+        ) : null}
       </View>
 
-      {/* Finalized and waiting: one tap brings it back into the vault as WETH. */}
-      {unstake.claimableIds.length > 0 ? (
+      {/* Finalized and waiting: one tap brings it back into the vault as WETH. Drawn whenever this
+          is Lido, greyed with nothing to claim, as the Withdraw button below is with nothing held. */}
+      {isLido ? (
         <Pressable
-          style={[styles.btn, styles.depBtn, (!claim.ready || claim.busy !== null) && styles.btnFaded]}
-          disabled={!claim.ready}
+          style={[styles.btn, styles.depBtn, (!claim.ready || unstake.claimableIds.length === 0) && styles.btnFaded]}
+          disabled={!claim.ready || unstake.claimableIds.length === 0}
           onPress={() =>
             claim.run('claim', `${t('vault.claim')} · ${fmtEth(unstake.claimable)} ETH`, (b) =>
               claimLido({...b, protocol: protocol as Address, ids: unstake.claimableIds}),
             )
           }>
           <Text style={styles.priText} numberOfLines={1}>
-            {t('vault.claim')} {fmtEth(unstake.claimable)} ETH
+            {unstake.claimable > 0n ? `${t('vault.claim')} ${fmtEth(unstake.claimable)} ETH` : t('vault.claim')}
           </Text>
         </Pressable>
       ) : null}
