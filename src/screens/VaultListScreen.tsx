@@ -79,7 +79,7 @@ export function VaultListScreen() {
     );
   }, [vaults]);
   const label = (n: number) => t('mobile.app.vault_n', {n});
-  const {notYours} = useVaultDirectory(network, vaults, refresh);
+  const {notYours, transferredTo} = useVaultDirectory(network, vaults, refresh);
 
   /**
    * What the server says each of this phone's keys holds on this chain, asked when the page opens,
@@ -280,7 +280,8 @@ export function VaultListScreen() {
           <Text style={styles.addr}>
             {elsewhere ? t('mobile.vaults.on_network', {network: networkLabel(v.network as Network, t)}) : (address ?? t('mobile.settings.vault_unlock_first'))}
           </Text>
-          {gone ? <Text style={styles.goneText}>{t('mobile.vaults.not_yours')}</Text> : null}
+          {/* Transferred away: to whom, in full, so it can be checked against the receiving key. */}
+          {gone ? <Text style={styles.goneText}>{t('mobile.vaults.transferred_to', {address: transferredTo.get(v.index) ?? ''})}</Text> : null}
         </View>
         {/* Always laid out, shown only on the one in front, so rows keep their height. */}
         <Text style={[styles.check, !on && styles.checkHidden]}>✓</Text>
