@@ -16,7 +16,17 @@ import {fetchPrices, type PriceMap} from '@/core/prices';
  * concurrent readers, so asking for thirty symbols costs about what asking for one does.
  */
 export function usePrices(network: Network, nonce = 0, symbols?: string[]): PriceMap {
+  return usePriceFeed(network, nonce, symbols).prices;
+}
+
+/**
+ * {usePrices}, plus whether the answer on hand is for the symbols asked for NOW. False until the
+ * first answer, and again while a grown list (the live catalog landing) is being priced — which is
+ * what lets the Overview hold its total back instead of showing a sum with assets missing.
+ */
+export function usePriceFeed(network: Network, nonce = 0, symbols?: string[]): {prices: PriceMap; loaded: boolean} {
   const [prices, setPrices] = useState<PriceMap>(new Map());
+  const [loadedKey, setLoadedKey] = useState('');
   // On a cold launch the first render runs BEFORE the live catalog has answered, so the fallback
   // list is the bundled one — and without this subscription it stayed that way: the memo below
   // never recomputed, a catalog-only asset (every Base tokenized stock) was never asked for, and
@@ -32,10 +42,13 @@ export function usePrices(network: Network, nonce = 0, symbols?: string[]): Pric
   );
   useEffect(() => {
     let live = true;
-    fetchPrices(key.split(','), network).then((p) => live && setPrices(p));
+    fetchPrices(key.split(','), network)
+      .then((p) => live && setPrices(p))
+      .catch(() => {})
+      .finally(() => live && setLoadedKey(`${network}|${key}`));
     return () => {
       live = false;
     };
   }, [key, network, nonce]);
-  return prices;
+  return {prices, loaded: loadedKey === `${network}|${key}`};
 }

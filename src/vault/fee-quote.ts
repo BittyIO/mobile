@@ -11,7 +11,7 @@
  * against a measured gas figure, which lands in the right place for a number whose job is to stop
  * a fee being a surprise.
  */
-import type {Address} from 'viem';
+import type {Address, Hex} from 'viem';
 import {publicClientFor, type Network} from '@/core/chain';
 import {PRICE_FEED_ABI} from '@/core/abi';
 import {fetchPrices} from '@/core/prices';
@@ -120,6 +120,29 @@ export async function quoteRelayFeeUsd(network: Network, gasUnits = TYPICAL_RELA
  * flat 21,000 every transaction does instead.
  */
 const RELAY_ONLY_GAS = RELAY_GAS.overhead - BigInt(21_000);
+
+/**
+ * Gas a relay of this exact vault call will burn: the call simulated as the owner (what the vault
+ * sees through the forwarder anyway) plus what only a relay spends. The parts model above cannot
+ * see state, and state is what moves the number most: the first deposit into an adapter also clones
+ * it, which is several times a repeat deposit (mainnet Aave USDC: 566,633 gas against a modelled
+ * 175,000). `fallback` when the simulation cannot run — a vault not activated yet, or a call that
+ * would revert.
+ */
+export async function estimateRelayGas(
+  network: Network,
+  owner: Address,
+  vault: Address,
+  data: Hex,
+  fallback: bigint,
+): Promise<bigint> {
+  try {
+    const used = await publicClientFor(network).estimateGas({account: owner, to: vault, data});
+    return used + RELAY_ONLY_GAS;
+  } catch {
+    return fallback;
+  }
+}
 
 /**
  * Estimated network fee in wei when the OWNER pays (see vault/direct), or null when gas cannot be

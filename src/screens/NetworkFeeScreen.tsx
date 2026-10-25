@@ -1,5 +1,6 @@
 import React, {useState} from 'react';
-import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {Alert, Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import Svg, {Path} from 'react-native-svg';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
@@ -9,7 +10,8 @@ import {OwnerWalletCard} from '@/components/FeePayer';
 import {useNetwork} from '@/core/network-store';
 import {useActiveFeePayer} from '@/vault/useFeePayer';
 import {setFeePayer, type FeePayer} from '@/core/fee-payer-store';
-import {useStyles, type Colors} from '@/theme';
+import {ownerEthBalance} from '@/vault/direct';
+import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 
 /**
@@ -27,9 +29,30 @@ import {useT} from '@/i18n';
 export function NetworkFeeScreen() {
   const {t} = useT();
   const styles = useStyles(makeStyles);
+  const c = useColors();
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const network = useNetwork((s) => s.network);
-  const {payer, canChoose, vault} = useActiveFeePayer(network);
+  const {payer, canChoose, vault, owner} = useActiveFeePayer(network);
+
+  /**
+   * Choosing a way to pay. The owner wallet with no ETH in it cannot pay a single fee, so choosing
+   * it then asks first: every write would stop at "not enough ETH" until the wallet is funded. A
+   * balance that cannot be read does not stand in the way.
+   */
+  const choose = async (p: FeePayer) => {
+    if (!vault || payer === p) return;
+    if (p === 'owner' && owner) {
+      const eth = await ownerEthBalance(network, owner).catch(() => null);
+      if (eth === 0n) {
+        Alert.alert(t('mobile.fees.owner_empty_title'), t('mobile.fees.owner_empty_body'), [
+          {text: t('common.cancel'), style: 'cancel'},
+          {text: t('mobile.fees.owner_empty_confirm'), onPress: () => setFeePayer(network, vault, 'owner')},
+        ]);
+        return;
+      }
+    }
+    setFeePayer(network, vault, p);
+  };
   // The page holds still while a fee coin is being dragged, as the Overview does for its lists.
   const [dragging, setDragging] = useState(false);
 
@@ -46,16 +69,36 @@ export function NetworkFeeScreen() {
    * space beyond — and only the chevron at the far end opens its settings. Choosing is what this
    * page is for, so it gets nearly all of the row; a tap anywhere but the end must not navigate.
    */
+  /**
+   * Each way's mark, as the web draws them: the Bitty logo for the vault, a wallet for the owner's
+   * own address.
+   */
+  const payerIcon = (p: FeePayer) =>
+    p === 'vault' ? (
+      <Image source={require('@/assets/logo.png')} style={styles.payerLogo} />
+    ) : (
+      <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+        <Path
+          d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"
+          stroke={c.subtext}
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </Svg>
+    );
+
   const way = (p: FeePayer, title: string, route: 'NetworkFeeVault' | 'NetworkFeeOwner', last?: boolean) => (
     <View style={[styles.wayRow, !last && styles.rowDivider]}>
       <Pressable
         // No pressed dimming: the check moving is the feedback, and dimming the title read as it
         // being highlighted.
         style={styles.wayPick}
-        onPress={() => vault && setFeePayer(network, vault, p)}
+        onPress={() => void choose(p)}
         accessibilityRole="radio"
         accessibilityState={{checked: payer === p}}>
         <View style={styles.titleLine}>
+          {payerIcon(p)}
           <Text style={styles.rowTitle}>{title}</Text>
           {/* Always laid out, shown only when chosen, so the row keeps its height (see OptionRow). */}
           <Text style={[styles.check, payer !== p && styles.checkHidden]}>✓</Text>
@@ -114,6 +157,7 @@ const makeStyles = (c: Colors) =>
     wayRow: {flexDirection: 'row', alignItems: 'stretch'},
     wayPick: {flex: 1, justifyContent: 'center', gap: 4, paddingVertical: 15, paddingLeft: 16},
     titleLine: {flexDirection: 'row', alignItems: 'center', gap: 8},
+    payerLogo: {width: 20, height: 20, borderRadius: 5},
     wayMore: {width: 56, alignItems: 'center', justifyContent: 'center'},
     pressed: {opacity: 0.6},
   });

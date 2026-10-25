@@ -65,9 +65,14 @@ export type FoundVault = {vault: Address; key: DeviceKey; pending: boolean};
  * vaults that no longer answer to this device. Re-read when the list or the chain changes, and on
  * `refreshKey` (a pull).
  */
-export function useVaultDirectory(network: Network, vaults: VaultRef[], refreshKey?: unknown): {found: FoundVault[]; notYours: Set<number>} {
+export function useVaultDirectory(
+  network: Network,
+  vaults: VaultRef[],
+  refreshKey?: unknown,
+): {found: FoundVault[]; notYours: Set<number>; transferredTo: Map<number, Address>} {
   const [found, setFound] = useState<FoundVault[]>([]);
-  const [notYours, setNotYours] = useState<Set<number>>(() => new Set());
+  // Each listed vault that no longer answers to this device, with whom it answers to now.
+  const [transferredTo, setTransferredTo] = useState<Map<number, Address>>(() => new Map());
   const sig = vaults.map((v) => `${v.index}:${v.owner}:${v.vault ?? ''}:${v.network ?? ''}`).join('|');
 
   useEffect(() => {
@@ -86,19 +91,19 @@ export function useVaultDirectory(network: Network, vaults: VaultRef[], refreshK
         }
       });
       // Whose each listed vault is now. A Safe vault answers to the Safe, every other to its key.
-      const gone = new Set<number>();
+      const gone = new Map<number, Address>();
       await Promise.all(
         vaults.map(async (v) => {
           const vault = vaultAddressOf(v, network);
           const expected = v.safe ?? v.owner;
           if (!vault || !expected) return;
           const now = await vaultOwnerOf(network, vault);
-          if (now && now.toLowerCase() !== expected.toLowerCase()) gone.add(v.index);
+          if (now && now.toLowerCase() !== expected.toLowerCase()) gone.set(v.index, now);
         }),
       );
       if (!live) return;
       setFound(add);
-      setNotYours(gone);
+      setTransferredTo(gone);
     })();
     return () => {
       live = false;
@@ -107,5 +112,5 @@ export function useVaultDirectory(network: Network, vaults: VaultRef[], refreshK
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [network, sig, refreshKey]);
 
-  return {found, notYours};
+  return {found, notYours: new Set(transferredTo.keys()), transferredTo};
 }

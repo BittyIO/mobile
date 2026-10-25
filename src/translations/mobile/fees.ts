@@ -18,6 +18,9 @@ export const fees: MobileTable = {
     fallback_vault_button: 'Let the vault pay',
     fallback_owner_title: 'The vault cannot pay this fee',
     fallback_owner_button: 'Pay with owner ETH',
+    owner_empty_title: 'Owner wallet has no ETH',
+    owner_empty_body: 'Your owner wallet has no ETH, so it can\'t pay network fees until you send ETH to it. Pay from owner anyway?',
+    owner_empty_confirm: 'Pay from owner',
   },
   zh: {
     advanced: '高级设置',
@@ -32,6 +35,9 @@ export const fees: MobileTable = {
     fallback_vault_button: '让金库支付',
     fallback_owner_title: '金库无法支付这笔手续费',
     fallback_owner_button: '用所有者的 ETH 支付',
+    owner_empty_title: '所有者钱包没有 ETH',
+    owner_empty_body: '所有者钱包里没有 ETH，在你向它转入 ETH 之前无法支付网络手续费。仍要从所有者支付吗？',
+    owner_empty_confirm: '从所有者支付',
   },
   'zh-TW': {
     advanced: '進階設定',
@@ -46,6 +52,9 @@ export const fees: MobileTable = {
     fallback_vault_button: '讓金庫支付',
     fallback_owner_title: '金庫無法支付這筆手續費',
     fallback_owner_button: '用擁有者的 ETH 支付',
+    owner_empty_title: '擁有者錢包沒有 ETH',
+    owner_empty_body: '擁有者錢包裡沒有 ETH，在你向它轉入 ETH 之前無法支付網路手續費。仍要從擁有者支付嗎？',
+    owner_empty_confirm: '從擁有者支付',
   },
   ja: {
     advanced: '詳細設定',
@@ -60,6 +69,9 @@ export const fees: MobileTable = {
     fallback_vault_button: 'ボールトで払う',
     fallback_owner_title: 'ボールトがこの手数料を払えません',
     fallback_owner_button: 'オーナーの ETH で払う',
+    owner_empty_title: 'オーナーウォレットに ETH がありません',
+    owner_empty_body: 'オーナーウォレットに ETH がないため、ETH を送金するまでネットワーク手数料を支払えません。それでもオーナーから支払いますか？',
+    owner_empty_confirm: 'オーナーから支払う',
   },
   ko: {
     advanced: '고급 설정',
@@ -74,6 +86,9 @@ export const fees: MobileTable = {
     fallback_vault_button: '볼트가 지불',
     fallback_owner_title: '볼트가 이 수수료를 낼 수 없습니다',
     fallback_owner_button: '소유자 ETH로 지불',
+    owner_empty_title: '소유자 지갑에 ETH가 없습니다',
+    owner_empty_body: '소유자 지갑에 ETH가 없어 ETH를 보내기 전까지 네트워크 수수료를 낼 수 없습니다. 그래도 소유자가 지불하도록 할까요?',
+    owner_empty_confirm: '소유자가 지불',
   },
   fr: {
     advanced: 'Paramètres avancés',
@@ -89,6 +104,9 @@ export const fees: MobileTable = {
     fallback_vault_button: 'Laisser le coffre payer',
     fallback_owner_title: 'Le coffre ne peut pas payer ces frais',
     fallback_owner_button: "Payer avec l'ETH du propriétaire",
+    owner_empty_title: 'Le portefeuille propriétaire n’a pas d’ETH',
+    owner_empty_body: 'Votre portefeuille propriétaire n’a pas d’ETH : il ne pourra pas payer les frais de réseau tant que vous n’y aurez pas envoyé d’ETH. Payer depuis le propriétaire quand même ?',
+    owner_empty_confirm: 'Payer depuis le propriétaire',
   },
   es: {
     advanced: 'Configuración avanzada',
@@ -104,6 +122,9 @@ export const fees: MobileTable = {
     fallback_vault_button: 'Que pague la bóveda',
     fallback_owner_title: 'La bóveda no puede pagar esta comisión',
     fallback_owner_button: 'Pagar con ETH del propietario',
+    owner_empty_title: 'La billetera propietaria no tiene ETH',
+    owner_empty_body: 'Tu billetera propietaria no tiene ETH, así que no podrá pagar las comisiones de red hasta que le envíes ETH. ¿Pagar desde el propietario de todos modos?',
+    owner_empty_confirm: 'Pagar desde el propietario',
   },
   de: {
     advanced: 'Erweiterte Einstellungen',
@@ -119,6 +140,9 @@ export const fees: MobileTable = {
     fallback_vault_button: 'Tresor zahlen lassen',
     fallback_owner_title: 'Der Tresor kann diese Gebühr nicht zahlen',
     fallback_owner_button: 'Mit Eigentümer-ETH zahlen',
+    owner_empty_title: 'Owner-Wallet hat kein ETH',
+    owner_empty_body: 'Deine Owner-Wallet hat kein ETH und kann keine Netzwerkgebühren zahlen, bis du ETH dorthin sendest. Trotzdem vom Owner zahlen?',
+    owner_empty_confirm: 'Vom Owner zahlen',
   },
   'pt-BR': {
     advanced: 'Configurações avançadas',
@@ -134,6 +158,9 @@ export const fees: MobileTable = {
     fallback_vault_button: 'Deixar o cofre pagar',
     fallback_owner_title: 'O cofre não pode pagar esta taxa',
     fallback_owner_button: 'Pagar com ETH do proprietário',
+    owner_empty_title: 'A carteira do proprietário não tem ETH',
+    owner_empty_body: 'Sua carteira do proprietário não tem ETH, então não pode pagar taxas de rede até você enviar ETH para ela. Pagar pelo proprietário mesmo assim?',
+    owner_empty_confirm: 'Pagar pelo proprietário',
   },
   hi: {
     advanced: 'उन्नत सेटिंग्स',
@@ -148,6 +175,9 @@ export const fees: MobileTable = {
     fallback_vault_button: 'वॉल्ट से भुगतान',
     fallback_owner_title: 'वॉल्ट यह शुल्क नहीं दे सकता',
     fallback_owner_button: 'ओनर के ETH से भुगतान',
+    owner_empty_title: 'ओनर वॉलेट में ETH नहीं है',
+    owner_empty_body: 'आपके ओनर वॉलेट में ETH नहीं है, इसलिए ETH भेजने तक यह नेटवर्क शुल्क नहीं दे सकता। फिर भी ओनर से भुगतान करें?',
+    owner_empty_confirm: 'ओनर से भुगतान करें',
   },
   tr: {
     advanced: 'Gelişmiş ayarlar',
@@ -162,6 +192,9 @@ export const fees: MobileTable = {
     fallback_vault_button: 'Kasa ödesin',
     fallback_owner_title: 'Kasa bu ücreti ödeyemiyor',
     fallback_owner_button: 'Sahip ETH’si ile öde',
+    owner_empty_title: 'Sahip cüzdanında ETH yok',
+    owner_empty_body: 'Sahip cüzdanınızda ETH yok; ETH gönderene kadar ağ ücretlerini ödeyemez. Yine de sahipten ödensin mi?',
+    owner_empty_confirm: 'Sahipten öde',
   },
   ru: {
     advanced: 'Расширенные настройки',
@@ -176,6 +209,9 @@ export const fees: MobileTable = {
     fallback_vault_button: 'Оплатить из хранилища',
     fallback_owner_title: 'Хранилище не может оплатить эту комиссию',
     fallback_owner_button: 'Оплатить ETH владельца',
+    owner_empty_title: 'В кошельке владельца нет ETH',
+    owner_empty_body: 'В кошельке владельца нет ETH, поэтому он не сможет оплачивать сетевые комиссии, пока вы не отправите на него ETH. Всё равно платить с кошелька владельца?',
+    owner_empty_confirm: 'Платить с кошелька владельца',
   },
   id: {
     advanced: 'Pengaturan lanjutan',
@@ -190,6 +226,9 @@ export const fees: MobileTable = {
     fallback_vault_button: 'Biarkan brankas membayar',
     fallback_owner_title: 'Brankas tidak dapat membayar biaya ini',
     fallback_owner_button: 'Bayar dengan ETH pemilik',
+    owner_empty_title: 'Dompet pemilik tidak punya ETH',
+    owner_empty_body: 'Dompet pemilik Anda tidak punya ETH, jadi tidak bisa membayar biaya jaringan sampai Anda mengirim ETH ke sana. Tetap bayar dari pemilik?',
+    owner_empty_confirm: 'Bayar dari pemilik',
   },
   vi: {
     advanced: 'Cài đặt nâng cao',
@@ -204,6 +243,9 @@ export const fees: MobileTable = {
     fallback_vault_button: 'Để két trả',
     fallback_owner_title: 'Két không thể trả phí này',
     fallback_owner_button: 'Trả bằng ETH của chủ sở hữu',
+    owner_empty_title: 'Ví chủ sở hữu không có ETH',
+    owner_empty_body: 'Ví chủ sở hữu của bạn không có ETH nên không thể trả phí mạng cho đến khi bạn gửi ETH vào. Vẫn trả từ chủ sở hữu?',
+    owner_empty_confirm: 'Trả từ chủ sở hữu',
   },
   th: {
     advanced: 'การตั้งค่าขั้นสูง',
@@ -218,5 +260,8 @@ export const fees: MobileTable = {
     fallback_vault_button: 'ให้วอลต์จ่าย',
     fallback_owner_title: 'วอลต์จ่ายค่าธรรมเนียมนี้ไม่ได้',
     fallback_owner_button: 'จ่ายด้วย ETH ของเจ้าของ',
+    owner_empty_title: 'กระเป๋าเจ้าของไม่มี ETH',
+    owner_empty_body: 'กระเป๋าเจ้าของของคุณไม่มี ETH จึงจ่ายค่าธรรมเนียมเครือข่ายไม่ได้จนกว่าคุณจะส่ง ETH เข้าไป ยังต้องการจ่ายจากเจ้าของหรือไม่?',
+    owner_empty_confirm: 'จ่ายจากเจ้าของ',
   },
 };

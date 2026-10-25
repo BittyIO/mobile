@@ -22,6 +22,7 @@ import {useVaultPositions} from '@/vault/useVaultPositions';
 import {balanceOfSymbol} from '@/vault/read';
 import {useActiveVaultAddress} from '@/core/active-vault';
 import {fetchWhitelist, sendToWhitelisted, sendWithWhitelist, type WhitelistedRecipient} from '@/vault/payments';
+import {useAllowancesOff} from '@/vault/risk';
 import {useCustomTokens} from '@/vault/custom-tokens';
 import {WHITELIST_STATUS} from '@/core/abi';
 import type {Position} from '@/vault/positions';
@@ -129,6 +130,8 @@ export function SendScreen() {
   const stable = assets.find((a) => a.kind === 'stable');
   const first = assets[0]?.symbol ?? 'USDC';
   const vault = useActiveVaultAddress(network);
+  // A daily send allowance of $0 turns plain sends off: the vault then pays only a saved recipient.
+  const sendsOff = useAllowancesOff(vault, network).sends;
 
   const bal = useVaultBalances(network);
   const weth = useWethFeeCoin(network, vault);
@@ -380,7 +383,9 @@ export function SendScreen() {
           (b.status === undefined || b.status === WHITELIST_STATUS.payable || b.status === WHITELIST_STATUS.removalQueued),
       )
     : undefined;
-  const bookBlocked = bookOnly.length > 0 && !!recipient.to && !entry;
+  // With plain sends off, every funded card goes as a whitelisted payment.
+  const viaBook = bookOnly.length > 0 || (sendsOff && recipient.lines.some((l) => Number(l.amount) > 0));
+  const bookBlocked = viaBook && !!recipient.to && !entry;
   const canSubmit = unlocked && !!stable && status !== 'busy' && rows.length > 0 && !anyOver && !bookBlocked;
 
   const onSubmit = async () => {
@@ -398,7 +403,7 @@ export function SendScreen() {
     try {
       const acct = await getSigner();
       const h =
-        bookOnly.length > 0 && entry
+        viaBook && entry
           ? await sendToWhitelisted({account: acct, vault, network, id: entry.id, rows, stableCoin: stable.address})
           : await sendWithWhitelist({
               account: acct,
@@ -515,19 +520,19 @@ export function SendScreen() {
             })}
         </SettingsGroup>
 
-            {/* Offered while the recipient still has a token left to take — the same list the
-                chooser would show, so the control never opens an empty sheet. Counting lines
-                against sources, as this once did, hid it whenever one token filled every funded
-                source and left the second token unreachable. */}
-            {pickableFor(null).length > 0 ? (
-              <SettingsGroup>
-                <Pressable style={({pressed}) => [styles.addRow, pressed && styles.pressed]} onPress={() => setPicker({k: null})}>
-                  <Text style={styles.addToken}>＋ {t('mobile.payments.add_token')}</Text>
-                </Pressable>
-              </SettingsGroup>
-            ) : null}
+            {/* Always offered. With every listed token already on the card the sheet still holds
+                the field for a token pasted by contract address, which is the only way to send one
+                the vault's list does not show — hiding the row once the last listed token was
+                added left that unreachable. */}
+            <SettingsGroup>
+              <Pressable style={({pressed}) => [styles.addRow, pressed && styles.pressed]} onPress={() => setPicker({k: null})}>
+                <Text style={styles.addToken}>＋ {t('mobile.payments.add_token')}</Text>
+              </Pressable>
+            </SettingsGroup>
 
-        {bookOnly.length > 0 ? (
+        {sendsOff ? (
+          <Text style={bookBlocked ? styles.err : styles.hint}>{t('mobile.payments.sends_off')}</Text>
+        ) : bookOnly.length > 0 ? (
           <Text style={bookBlocked ? styles.err : styles.hint}>
             {t('mobile.payments.whitelisted_only', {tokens: bookOnly.join(', ')})}
           </Text>
@@ -576,7 +581,11 @@ export function SendScreen() {
           <AddByAddress
             onAdd={async (address) => {
               const x = await custom.add(address);
-              if (picker) choose(picker.k, x.address, 'free');
+              if (!picker) return;
+              // Already on the card: nothing to add, just close.
+              const taken = recipient.lines.some((l, j) => j !== picker.k && lineKey(l) === `${x.address}:free`);
+              if (taken) setPicker(null);
+              else choose(picker.k, x.address, 'free');
             }}
           />
         </ScrollView>
@@ -639,7 +648,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   addAddrTitle: {color: c.text, fontSize: 15, fontWeight: '600'},
   addAddrBar: {flexDirection: 'row', alignItems: 'center', gap: 8},
   addAddrInput: {flex: 1, minWidth: 0, backgroundColor: c.input, color: c.text, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, fontVariant: ['tabular-nums']},
-  addAddrBtn: {backgroundColor: c.accent, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10},
+  addAddrBtn: {backgroundColor: c.accent, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 10},
   addAddrBtnOff: {opacity: 0.5},
   addAddrBtnText: {color: c.onAccent, fontSize: 14, fontWeight: '700'},
   pickSub: {color: c.subtext, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums']},

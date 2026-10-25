@@ -178,7 +178,7 @@ const makeStyles = (c: Colors) =>
     container: {flex: 1, backgroundColor: c.bg},
     body: {flexGrow: 1, padding: 16, gap: 20},
     box: {padding: 16, gap: 12},
-    btn: {backgroundColor: c.bg, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14, borderWidth: 1, borderColor: c.border, alignSelf: 'flex-start'},
+    btn: {backgroundColor: c.bg, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14, borderWidth: 1, borderColor: c.border, alignSelf: 'flex-start'},
     btnText: {color: c.text, fontSize: 13, fontWeight: '600'},
     grid: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between'},
     word: {width: '47%', flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.bg, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12},

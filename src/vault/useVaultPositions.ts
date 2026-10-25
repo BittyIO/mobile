@@ -7,6 +7,8 @@ import {usePending} from './pending';
 type State = {
   positions: Position[];
   loading: boolean;
+  /** The first read for this vault has answered (or failed). Stays true through later refreshes. */
+  loaded: boolean;
   error: string | null;
   refresh: () => void;
 };
@@ -30,8 +32,11 @@ const sameRow = (a: Position, b: Position) =>
 export function useVaultPositions(vault: Address | null, network: Network): State {
   const [positions, setPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(false);
+  // Which vault the last finished read was for, so a switch counts as not loaded yet.
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
+  const loadKey = vault ? `${network}:${vault.toLowerCase()}` : null;
 
   const refresh = useCallback(() => setNonce((n) => n + 1), []);
 
@@ -66,6 +71,7 @@ export function useVaultPositions(vault: Address | null, network: Network): Stat
       return;
     }
     let live = true;
+    const forKey = `${network}:${vault.toLowerCase()}`;
     let sky: Position | null = null;
     setLoading(true);
     setError(null);
@@ -98,7 +104,11 @@ export function useVaultPositions(vault: Address | null, network: Network): Stat
         setPositions(merged);
         setError(null);
       })
-      .finally(() => live && setLoading(false));
+      .finally(() => {
+        if (!live) return;
+        setLoading(false);
+        setLoadedFor(forKey);
+      });
 
     // After a write, ask the server for a chain re-read too, and take it if it answers in time.
     if (nonce > 0) {
@@ -112,5 +122,5 @@ export function useVaultPositions(vault: Address | null, network: Network): Stat
     };
   }, [vault, network, nonce]);
 
-  return {positions, loading, error, refresh};
+  return {positions, loading, loaded: loadKey != null && loadedFor === loadKey, error, refresh};
 }

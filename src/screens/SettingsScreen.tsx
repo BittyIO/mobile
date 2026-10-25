@@ -12,10 +12,10 @@ import {useLanguage, LANGUAGES, languageLabel} from '@/core/language-store';
 import {useCurrency, useDisplayCurrency, CURRENCIES, currencyLabel, type Currency} from '@/core/currency-store';
 import Svg, {Circle, Path, Rect} from 'react-native-svg';
 import {useAppearance, APPEARANCES, useColors, useStyles, type Colors} from '@/theme';
-import {API_BASE} from '@/core/chain';
 import {SettingsRow as Row, makeSettingsStyles} from '@/components/SettingsRow';
 import {useVaults, vaultLabel} from '@/core/vault-store';
 import {useVaultVersionRow} from '@/components/useVaultVersionRow';
+import {LegalSheet} from '@/components/LegalSheet';
 import {PickerSheet} from '@/components/AssetPicker';
 
 import {useT} from '@/i18n';
@@ -59,6 +59,8 @@ function AppearanceIcon({name, color}: {name: string; color: string}) {
  */
 export function SettingsScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  // First: the vault row's label below calls it, for a vault with no name of its own.
+  const {t} = useT();
   const {language, setLanguage} = useLanguage();
   // The vault in front, named as the Vaults page names it.
   const currentVault = useVaults((s) => s.vaults.find((v) => v.index === s.activeIndex) ?? s.vaults[0]);
@@ -67,7 +69,6 @@ export function SettingsScreen() {
   const version = useVaultVersionRow();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
-  const {t} = useT();
   const styles = useStyles(makeStyles);
   const {appearance, setAppearance} = useAppearance();
   const c = useColors();
@@ -76,6 +77,7 @@ export function SettingsScreen() {
   // use: it is part of the React tree, so it opens on the next frame, where the native action sheet
   // waits on a round trip to UIKit and a presentation animation of its own.
   const [picker, setPicker] = useState<'language' | 'currency' | 'appearance' | null>(null);
+  const [legal, setLegal] = useState<'terms' | 'privacy' | null>(null);
   // The currency in force (explicit choice, else US dollars) and the setter. Independent of the
   // language: changing one never changes the other.
   const currency = useDisplayCurrency();
@@ -133,14 +135,14 @@ export function SettingsScreen() {
             is a vault setting that happens to read like a credit, and it sat among the links to
             the website where nobody looking to upgrade would think to open it. */}
         {/* While the upgrade is being mined the row is inert and says so: a spinner beside
-            "Confirming", no chevron, and `onPress` already refuses. Tapping again would submit
+            "Upgrading", no chevron, and `onPress` already refuses. Tapping again would submit
             a second upgrade to the same implementation and pay for it. */}
         <Row
           icon="settings"
           title={t('mobile.settings.vault_version')}
           value={version.value}
           sub={version.sub}
-          right={version.confirming ? <ActivityIndicator color={c.subtext} size="small" /> : undefined}
+          right={version.confirming || version.checking ? <ActivityIndicator color={c.subtext} size="small" /> : undefined}
           onPress={version.confirming ? undefined : version.onPress}
           chevron={version.upgradeable}
           last
@@ -155,8 +157,9 @@ export function SettingsScreen() {
 
       <View style={styles.group}>
         <Row icon="follow" title={t('mobile.settings.follow_us')} onPress={() => openLink('https://x.com/bitty_io', 'X')} />
-        <Row icon="terms" title={t('mobile.settings.terms_of_use')} onPress={() => openLink(`${API_BASE}/content/terms-of-use`, t('mobile.settings.terms_of_use'))} />
-        <Row icon="privacy" title={t('mobile.settings.privacy_policy')} onPress={() => openLink(`${API_BASE}/content/privacy-policy`, t('mobile.settings.privacy_policy'))} last />
+        {/* Both ship with the app and open in a sheet, offline, in this build's version. */}
+        <Row icon="terms" title={t('mobile.settings.terms_of_use')} onPress={() => setLegal('terms')} />
+        <Row icon="privacy" title={t('mobile.settings.privacy_policy')} onPress={() => setLegal('privacy')} last />
       </View>
 
       <PickerSheet
@@ -189,6 +192,7 @@ export function SettingsScreen() {
         onSelect={(a) => setAppearance(a as (typeof APPEARANCES)[number])}
         onClose={() => setPicker(null)}
       />
+      <LegalSheet doc={legal} onClose={() => setLegal(null)} />
     </ScrollView>
   );
 }

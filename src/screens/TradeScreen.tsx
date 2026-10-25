@@ -85,7 +85,8 @@ import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {useAssetPick} from '@/core/asset-pick';
-import {activeVaultAddress} from '@/core/active-vault';
+import {activeVaultAddress, useActiveVaultAddress} from '@/core/active-vault';
+import {useAllowancesOff} from '@/vault/risk';
 
 /**
  * What a market swap may fill from its quote before the router refuses it.
@@ -581,6 +582,9 @@ export function TradeScreen() {
   if (sheetSide) lastSide.current = sheetSide;
   const shownSide = sheetSide ?? lastSide.current;
   const [mode, setMode] = useState<Mode>('Market');
+  // Market trade slippage in 24 hours at $0: the owner turned market trading off (see `marketOk`).
+  const tradeVault = useActiveVaultAddress(network);
+  const marketOff = useAllowancesOff(tradeVault, network).marketTrades;
   /**
    * Which balance of the PAY asset funds the order: the vault's free balance, its Sky savings, or its
    * Aave supply. Chosen in the order sheet, and it never hides Market — a market swap withdraws from
@@ -1487,6 +1491,7 @@ export function TradeScreen() {
 
   const openSheet = (side: Side) => {
     setSheetSide(side);
+    if (marketOff && intentable && mode === 'Market') setMode('Limit');
     setSpendSource('free');
     setStatus('idle');
     setErr(null);
@@ -1599,7 +1604,7 @@ export function TradeScreen() {
   const canConfirm =
     !!sheetSide && unlocked && !!owner && !!base && !!quoteAsset &&
     Number(amount) > 0 &&
-    (mode === 'Market' || Number(price) > 0) &&
+    (mode === 'Market' ? !marketOff : Number(price) > 0) &&
     (mode !== 'TWAP' || Number(parts) >= 2) &&
     !overBalance;
 
@@ -2213,6 +2218,10 @@ export function TradeScreen() {
   // (no Uniswap market prices them) and the savings share has no pool either, so those pairs offer
   // the intent modes only.
   const marketable = pairAmmLiquid;
+  // The owner can turn market trading off by setting market trade slippage in 24 hours to $0. Market
+  // stays on the tabs, greyed: the sheet opens on Limit, and picking Market shows why it cannot be
+  // placed — only there, never under Limit or TWAP.
+  const marketOk = marketable && !marketOff;
   // Limit goes to the intent adapter, CoW or UniswapX; TWAP is a CoW order, offered only with CoW.
   const intentable = !!intent;
   const twapable = !!cowIntent;
@@ -2231,6 +2240,11 @@ export function TradeScreen() {
     ];
     if (avail.length && !avail.includes(mode)) setMode(avail[0]);
   }, [marketable, intentable, twapable, mode, ammKnown]);
+  // Off when the read lands (the sheet may already be open on Market): over to Limit.
+  useEffect(() => {
+    if (marketOff && intentable && mode === 'Market') setMode('Limit');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marketOff, intentable]);
   // Market spends the vault balance and tops up from the positions by itself, so a named source has
   // no meaning there.
   useEffect(() => {
@@ -2265,7 +2279,21 @@ export function TradeScreen() {
     setValidSec(clamped * 86400);
   };
 
-  const explainUntradable = () => Alert.alert(t('mobile.trade.not_tradable_title'), t('mobile.trade.not_tradable', {token: displaySymbol(baseSym)}));
+  const explainMarketOff = () =>
+    Alert.alert(t('mobile.trade.market_off_title'), t('mobile.trade.market_off'), [
+      {text: t('common.cancel'), style: 'cancel'},
+      {
+        text: t('mobile.vault.market_trade_loss_allowance'),
+        onPress: () => {
+          setSheetSide(null);
+          nav.navigate('VaultRiskValue', {field: 'marketTradeDailyLossAllowance'});
+        },
+      },
+    ]);
+  const explainUntradable = () =>
+    marketable && marketOff
+      ? explainMarketOff()
+      : Alert.alert(t('mobile.trade.not_tradable_title'), t('mobile.trade.not_tradable', {token: displaySymbol(baseSym)}));
 
   const pickMode = (next: Mode) => {
     if (next === mode) return;
@@ -2285,7 +2313,7 @@ export function TradeScreen() {
    * no intent adapter for a Limit. The mode tabs were simply empty then, the sheet stayed on
    * Market, and a Buy or Sell opened a market form whose trade the vault refuses.
    */
-  const untradable = ammKnown && !marketable && !intentable;
+  const untradable = ammKnown && !marketOk && !intentable;
 
   const MODES: {key: Mode; label: string}[] = [
     ...(marketable ? [{key: 'Market' as Mode, label: t('vault.market')}] : []),
@@ -3387,7 +3415,10 @@ export function TradeScreen() {
                 than a segmented control stretched across the sheet. */}
             <View style={styles.segTrack}>
               {MODES.map((m) => (
-                <Pressable key={m.key} style={styles.segBtn} onPress={() => pickMode(m.key)}>
+                <Pressable
+                  key={m.key}
+                  style={[styles.segBtn, m.key === 'Market' && marketOff && styles.dim]}
+                  onPress={() => pickMode(m.key)}>
                   <Text style={[styles.segText, mode === m.key && styles.segTextOn]}>{m.label}</Text>
                 </Pressable>
               ))}
@@ -3401,6 +3432,11 @@ export function TradeScreen() {
                 </View>
               ) : null}
             </View>
+            {mode === 'Market' && marketOff ? (
+              <Pressable onPress={explainMarketOff} hitSlop={6}>
+                <Text style={styles.marketOff}>{t('mobile.trade.market_off_line')}</Text>
+              </Pressable>
+            ) : null}
 
             {/* Limit and TWAP lead with the price, as on the web. A market order has no user
                 price — it fills at the live quote — so the field is simply absent. */}
@@ -3726,6 +3762,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   segBtn: {paddingVertical: 6},
   segText: {color: c.subtext, fontSize: 15, fontWeight: '600'},
   segTextOn: {color: c.text, fontWeight: '700'},
+  marketOff: {color: c.warning, fontSize: 13, lineHeight: 19},
   // web-style inline field: left label + right value + token adornment
   field: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: c.input, borderRadius: 12, paddingHorizontal: 14, height: 52},
   fieldLabel: {color: c.subtext, fontSize: 12, fontWeight: '600'},

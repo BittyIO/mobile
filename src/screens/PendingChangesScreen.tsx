@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text} from 'react-native';
+import {ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {PendingRow} from '@/components/PendingRow';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -12,15 +12,22 @@ import {OptionRow, SettingsGroup} from '@/components/SettingsRow';
 import {RISK_TITLE, fmtRiskValue} from '@/components/riskFormat';
 import {PERM_ROWS} from '@/components/useAssetManagerRow';
 import {Sheet} from '@/components/Sheet';
+import {Button} from '@/components/Button';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {useActiveVaultAddress} from '@/core/active-vault';
+import {recipientName, useRecipientNames} from '@/core/recipient-names';
+import type {Network} from '@/core/chain';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 
 type T = ReturnType<typeof useT>['t'];
 
-export function pendingTitle(p: PendingChange, t: T): string {
+/**
+ * A pending item's title. An address-book entry carries the name given on this device after it —
+ * "New whitelisted: Alice" — and the plain title where it has none.
+ */
+export function pendingTitle(p: PendingChange, t: T, nameOf?: (address: string) => string | undefined): string {
   switch (p.kind) {
     case 'timelock':
     case 'sendDailyAllowance':
@@ -35,12 +42,21 @@ export function pendingTitle(p: PendingChange, t: T): string {
     case 'newAssetManager':
       return t('mobile.vault.pending_new_asset_manager');
     case 'whitelistAdd':
-      return t('mobile.vault.pending_whitelist_add');
-    case 'whitelistRemove':
-      return t('mobile.vault.pending_whitelist_remove');
+    case 'whitelistRemove': {
+      const title = t(p.kind === 'whitelistAdd' ? 'mobile.vault.pending_whitelist_add' : 'mobile.vault.pending_whitelist_remove');
+      const name = nameOf?.(p.address);
+      return name ? t('mobile.vault.pending_named', {title, name}) : title;
+    }
   }
 }
 
+/** The name an address-book entry goes by on this device, as the book shows it. */
+export function useEntryLabel(network: Network) {
+  const names = useRecipientNames((s) => s.names);
+  return (address: string) => recipientName(names, network, address);
+}
+
+/** A pending item's value: the number it changes to, or the address it is about. */
 export function pendingValue(p: PendingChange, t: T): string {
   switch (p.kind) {
     case 'timelock':
@@ -60,7 +76,7 @@ export function pendingValue(p: PendingChange, t: T): string {
  * Overview › Pending — everything the vault has been told to do and has not done yet: a loosened
  * risk number, a handover, an asset-manager grant, an address-book entry maturing or leaving. Each
  * counts down to the second to when it takes effect, because that is the owner's window to lock the
- * vault if they did not ask for it — which "I did not do these" under the list goes straight to.
+ * vault if they did not ask for it — which "No, it wasn't me" under the list goes straight to.
  *
  * One clock for the page, ticking only while it is in view. When an item comes due the list is read
  * again, so a change that has taken effect leaves it; at most every few seconds, since the chain's
@@ -74,6 +90,7 @@ export function PendingChangesScreen() {
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
   const vault = useActiveVaultAddress(network);
+  const nameOf = useEntryLabel(network);
   const [items, setItems] = useState<PendingChange[] | null>(null);
   const [timelock, setTimelock] = useState(0);
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
@@ -106,6 +123,16 @@ export function PendingChangesScreen() {
   };
 
   const [permsOf, setPermsOf] = useState<number | null>(null);
+  /**
+   * "No, it wasn't me" opens the two ways to stop what is waiting, each with what it means, and
+   * goes straight to the one picked — rather than to the Lock page, where the owner would have to
+   * find them. The sheet is a modal, so it is closed first and the push waits for it to go.
+   */
+  const [notMe, setNotMe] = useState(false);
+  const lockWith = (action: 'emergency' | 'forever') => {
+    setNotMe(false);
+    setTimeout(() => nav.navigate('VaultLockAction', {action}), 320);
+  };
   const [refreshing, setRefreshing] = useState(false);
   const onPull = () => {
     setRefreshing(true);
@@ -141,35 +168,54 @@ export function PendingChangesScreen() {
         <Text style={styles.empty}>{t('mobile.vault.pending_none')}</Text>
       ) : (
         <>
-        <SettingsGroup>
-          {items.map((p, i) => {
-            const cancel = cancelFor(p);
-            return (
-              <PendingRow
-                key={`${p.kind}:${'address' in p ? p.address : ''}:${p.at}`}
-                at={Number(p.at)}
-                now={now}
-                timelock={timelock}
-                title={pendingTitle(p, t)}
-                value={pendingValue(p, t)}
-                // A new asset manager's permissions are a list, so they open in a sheet rather than crowd the row.
-                onPress={p.kind === 'newAssetManager' ? () => setPermsOf(p.perms) : undefined}
-                onCancel={cancel ?? undefined}
-                cancelling={busy === `cancel-${p.kind}`}
-                cancelDisabled={!ready || busy !== null}
-                last={i === items.length - 1}
-              />
-            );
-          })}
-        </SettingsGroup>
+        {/* Two cards: what is being added or changed, then what is being removed — a removal is
+            the one that takes something away, so it is never mixed into the rest. */}
+        {[items.filter((p) => p.kind !== 'whitelistRemove'), items.filter((p) => p.kind === 'whitelistRemove')].map((group, g) =>
+          group.length === 0 ? null : (
+            <SettingsGroup key={g}>
+              {group.map((p, i) => {
+                const cancel = cancelFor(p);
+                return (
+                  <PendingRow
+                    key={`${p.kind}:${'address' in p ? p.address : ''}:${p.at}`}
+                    at={Number(p.at)}
+                    now={now}
+                    timelock={timelock}
+                    title={pendingTitle(p, t, nameOf)}
+                    value={pendingValue(p, t)}
+                    // A new asset manager's permissions are a list, so they open in a sheet rather than crowd the row.
+                    onPress={p.kind === 'newAssetManager' ? () => setPermsOf(p.perms) : undefined}
+                    onCancel={cancel ?? undefined}
+                    cancelling={busy === `cancel-${p.kind}`}
+                    cancelDisabled={!ready || busy !== null}
+                    last={i === group.length - 1}
+                  />
+                );
+              })}
+            </SettingsGroup>
+          ),
+        )}
         {/* The one thing to do about a change the owner did not ask for: lock before it lands. */}
         <SettingsGroup>
-          <Pressable style={({pressed}) => [styles.notMe, pressed && styles.pressed]} onPress={() => nav.navigate('VaultLock')}>
+          <Pressable style={({pressed}) => [styles.notMe, pressed && styles.pressed]} onPress={() => setNotMe(true)}>
             <Text style={styles.notMeText}>{t('mobile.vault.pending_not_me')}</Text>
           </Pressable>
         </SettingsGroup>
         </>
       )}
+      <Sheet visible={notMe} title={t('mobile.vault.not_me_title')} onClose={() => setNotMe(false)}>
+        <View style={styles.notMeBody}>
+          <Text style={styles.notMeIntro}>{t('mobile.vault.not_me_intro')}</Text>
+          <View style={styles.notMeOption}>
+            <Text style={styles.notMeHint}>{t('mobile.vault.emergency_lock_hint')}</Text>
+            <Button title={t('mobile.vault.emergency_lock')} onPress={() => lockWith('emergency')} />
+          </View>
+          <View style={styles.notMeOption}>
+            <Text style={styles.notMeHint}>{t('mobile.vault.forever_lock_hint')}</Text>
+            <Button title={t('mobile.vault.forever_lock')} variant="danger" onPress={() => lockWith('forever')} />
+          </View>
+        </View>
+      </Sheet>
       <Sheet visible={permsOf !== null} title={t('mobile.vault.permissions')} onClose={() => setPermsOf(null)}>
         <SettingsGroup>
           {PERM_ROWS.map((r, i) => (
@@ -190,5 +236,9 @@ const makeStyles = (c: Colors) =>
     // Sized to the bar's 44 like the trade menu's: the native bar anchors a custom view by its bottom.
     notMe: {minHeight: 52, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16},
     notMeText: {color: c.danger, fontSize: 16, fontWeight: '600'},
+    notMeBody: {gap: 20, paddingTop: 4},
+    notMeIntro: {color: c.text, fontSize: 15, lineHeight: 21},
+    notMeOption: {gap: 10},
+    notMeHint: {color: c.subtext, fontSize: 13, lineHeight: 19},
     pressed: {opacity: 0.6},
   });

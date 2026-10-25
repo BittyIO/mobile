@@ -20,7 +20,9 @@ export type RiskValues = Record<RiskField, bigint>;
 const DAY = 86_400n;
 
 export const SAFETY_LEVELS: {id: SafetyLevel; values: RiskValues; recommended?: boolean}[] = [
-  {id: 'maximum', values: {timelock: 7n * DAY, sendDailyAllowance: 1_000n, marketTradeDailyLossAllowance: 1_000n}},
+  // Both allowances at 0: nothing goes to a new address and nothing trades at market — money leaves
+  // only to a saved recipient, and trades go as limit orders. Needs a vault that accepts 0 (1.0.5+).
+  {id: 'maximum', values: {timelock: 7n * DAY, sendDailyAllowance: 0n, marketTradeDailyLossAllowance: 0n}},
   {
     id: 'balanced',
     values: {timelock: 3n * DAY, sendDailyAllowance: 5_000n, marketTradeDailyLossAllowance: 5_000n},
@@ -34,14 +36,16 @@ export const RISK_FIELDS: RiskField[] = ['timelock', 'sendDailyAllowance', 'mark
 const STANDARD = SAFETY_LEVELS.find((l) => l.id === 'standard')!.values;
 
 /**
- * The numbers in force, from a risk read. A v1.0.0+ vault never holds a 0 — it reads an unset number
- * as its default — so a 0 here is a vault not activated yet, shown as the Standard it will start on.
+ * The numbers in force, from a risk read. A vault reads an unset number as its default, so a read
+ * that did not land is a vault not activated yet, shown as the Standard it will start on. An
+ * allowance of 0 that was read is real: the owner turned regular sends or market trading off.
  */
-export function valuesInForce(r: RiskValues): RiskValues {
+export function valuesInForce(r: RiskValues & {read: boolean}): RiskValues {
+  if (!r.read) return {...STANDARD};
   return {
     timelock: r.timelock || STANDARD.timelock,
-    sendDailyAllowance: r.sendDailyAllowance || STANDARD.sendDailyAllowance,
-    marketTradeDailyLossAllowance: r.marketTradeDailyLossAllowance || STANDARD.marketTradeDailyLossAllowance,
+    sendDailyAllowance: r.sendDailyAllowance,
+    marketTradeDailyLossAllowance: r.marketTradeDailyLossAllowance,
   };
 }
 

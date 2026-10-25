@@ -27,6 +27,7 @@ export type SettingsIconName =
   | 'perTx'
   | 'settings'
   | 'allowlist'
+  | 'whitelist'
   | 'follow'
   | 'terms'
   | 'privacy';
@@ -63,17 +64,22 @@ const TINT: Record<SettingsIconName, string> = {
   perTx: '#5856D6',
   settings: '#8E8E93',
   allowlist: '#30B0C7',
+  whitelist: '#34C759',
   follow: '#0E85FF',
   terms: '#8E8E93',
   privacy: '#5856D6',
 };
 
-export function SettingsIcon({name, size = 29}: {name: SettingsIconName; size?: number}) {
+/** `round` draws it in a circle rather than the rounded square of a Settings row (the header's lock). */
+export function SettingsIcon({name, size = 29, round = false}: {name: SettingsIconName; size?: number; round?: boolean}) {
   const c = {stroke: '#fff', strokeWidth: 2, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const};
-  const g = size * 0.62;
+  // In a circle the glyph gets a little more room, and a padlock is lifted: its body is the heavy
+  // part and sits in the lower half, so geometrically centred it reads as low in a round badge.
+  const g = size * (round ? 0.56 : 0.62);
+  const lift = round && (name === 'lock' || name === 'lockTemp' || name === 'lockOpen') ? 1.5 : 0;
   return (
-    <View style={[styles.box, {width: size, height: size, borderRadius: size * 0.24, backgroundColor: TINT[name]}]}>
-      <Svg width={g} height={g} viewBox="0 0 24 24">
+    <View style={[styles.box, {width: size, height: size, borderRadius: round ? size / 2 : size * 0.24, backgroundColor: TINT[name]}]}>
+      <Svg width={g} height={g} viewBox={`0 ${lift} 24 24`}>
         {name === 'language' ? (
           <>
             <Circle cx={12} cy={12} r={9} {...c} />
@@ -136,6 +142,13 @@ export function SettingsIcon({name, size = 29}: {name: SettingsIconName; size?: 
         ) : name === 'lockForever' ? (
           // lucide Infinity: no lock at all, because there is no key that opens it — forever.
           <Path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 0 0 0-8c-2 0-4 1.33-6 4Z" {...c} />
+        ) : name === 'whitelist' ? (
+          // lucide BookUser: the address book.
+          <>
+            <Path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20" {...c} />
+            <Circle cx={12} cy={8} r={2} {...c} />
+            <Path d="M15 13a3 3 0 1 0-6 0" {...c} />
+          </>
         ) : name === 'ownership' ? (
           // lucide ArrowRightLeft: one owner out, another in.
           <Path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4" {...c} />

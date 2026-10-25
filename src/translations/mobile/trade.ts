@@ -4,6 +4,9 @@ import type {MobileTable} from './index';
 // cancel alerts). Everything else on the screen reuses the web "vault.*" keys.
 export const trade: MobileTable = {
   en: {
+    market_off_title: 'Market trading is off',
+    market_off: 'Market trade slippage in 24 hours is $0, so the vault refuses every market trade. Limit orders still work. To trade at market again, raise it; raising waits out the timelock.',
+    market_off_line: 'Market trading is off: market trade slippage in 24 hours is $0. Use a limit order.',
     search_assets: 'Search assets',
     asset_details: 'Asset details',
     contract: 'Contract',
@@ -82,6 +85,9 @@ export const trade: MobileTable = {
     cannot_cancel: 'Cannot cancel',
   },
   zh: {
+    market_off_title: '市价交易已关闭',
+    market_off: '24 小时内市价交易滑点为 $0，金库会拒绝所有市价交易。限价单仍可使用。如需再次进行市价交易，请调高该值；调高需等待时间锁。',
+    market_off_line: '市价交易已关闭：24 小时内市价交易滑点为 $0。请使用限价单。',
     search_assets: '搜索资产',
     asset_details: '资产详情',
     contract: '合约',
@@ -159,6 +165,9 @@ export const trade: MobileTable = {
     cannot_cancel: '无法撤销',
   },
   'zh-TW': {
+    market_off_title: '市價交易已關閉',
+    market_off: '24 小時內市價交易滑價為 $0，金庫會拒絕所有市價交易。限價單仍可使用。如需再次進行市價交易，請調高該值；調高需等待時間鎖。',
+    market_off_line: '市價交易已關閉：24 小時內市價交易滑價為 $0。請使用限價單。',
     search_assets: '搜尋資產',
     asset_details: '資產詳情',
     contract: '合約',
@@ -236,6 +245,9 @@ export const trade: MobileTable = {
     cannot_cancel: '無法撤銷',
   },
   ja: {
+    market_off_title: '成行取引はオフです',
+    market_off: '24時間の成行取引スリッページが $0 のため、Vault はすべての成行取引を拒否します。指値注文は引き続き使えます。再び成行で取引するには引き上げてください。引き上げはタイムロック後に反映されます。',
+    market_off_line: '成行取引はオフです（24時間の成行取引スリッページが $0）。指値注文を使ってください。',
     search_assets: '銘柄を検索',
     asset_details: '資産の詳細',
     contract: 'コントラクト',
@@ -313,6 +325,9 @@ export const trade: MobileTable = {
     cannot_cancel: 'キャンセルできません',
   },
   ko: {
+    market_off_title: '시장가 거래가 꺼져 있습니다',
+    market_off: '24시간 시장가 거래 슬리피지가 $0이므로 볼트가 모든 시장가 거래를 거부합니다. 지정가 주문은 계속 사용할 수 있습니다. 다시 시장가로 거래하려면 값을 높이세요. 높이면 타임락 후 적용됩니다.',
+    market_off_line: '시장가 거래가 꺼져 있습니다(24시간 시장가 거래 슬리피지 $0). 지정가 주문을 사용하세요.',
     search_assets: '자산 검색',
     asset_details: '자산 상세',
     contract: '컨트랙트',
@@ -390,6 +405,9 @@ export const trade: MobileTable = {
     cannot_cancel: '취소할 수 없음',
   },
   fr: {
+    market_off_title: 'Les trades au marché sont désactivés',
+    market_off: 'Le slippage des trades au marché sur 24 h est de 0 $, le coffre refuse donc tout trade au marché. Les ordres à cours limité fonctionnent toujours. Pour trader de nouveau au marché, relevez-le ; le relever attend le délai de sécurité.',
+    market_off_line: 'Trades au marché désactivés : le slippage des trades au marché sur 24 h est de 0 $. Utilisez un ordre à cours limité.',
     search_assets: 'Rechercher un actif',
     asset_details: 'Détails de l’actif',
     contract: 'Contrat',
@@ -467,6 +485,9 @@ export const trade: MobileTable = {
     cannot_cancel: 'Annulation impossible',
   },
   es: {
+    market_off_title: 'Las operaciones de mercado están desactivadas',
+    market_off: 'El deslizamiento de operaciones de mercado en 24 horas es 0 $, así que la bóveda rechaza toda operación de mercado. Las órdenes límite siguen funcionando. Para volver a operar a mercado, súbelo; subirlo espera el bloqueo temporal.',
+    market_off_line: 'Operaciones de mercado desactivadas: el deslizamiento de operaciones de mercado en 24 horas es 0 $. Usa una orden límite.',
     search_assets: 'Buscar activos',
     asset_details: 'Detalles del activo',
     contract: 'Contrato',
@@ -544,6 +565,9 @@ export const trade: MobileTable = {
     cannot_cancel: 'No se puede cancelar',
   },
   de: {
+    market_off_title: 'Markthandel ist ausgeschaltet',
+    market_off: 'Die Markthandel-Slippage in 24 Stunden ist 0 $, daher lehnt der Tresor jeden Markt-Trade ab. Limit-Orders funktionieren weiterhin. Um wieder zum Marktpreis zu handeln, erhöhe sie; das Erhöhen wartet die Zeitsperre ab.',
+    market_off_line: 'Markthandel ist aus: die Markthandel-Slippage in 24 Stunden ist 0 $. Nutze eine Limit-Order.',
     search_assets: 'Werte suchen',
     asset_details: 'Asset-Details',
     contract: 'Contract',
@@ -621,6 +645,9 @@ export const trade: MobileTable = {
     cannot_cancel: 'Stornieren nicht möglich',
   },
   'pt-BR': {
+    market_off_title: 'Negociação a mercado desativada',
+    market_off: 'O slippage de trades a mercado em 24 horas é $0, então o cofre recusa toda negociação a mercado. Ordens limitadas continuam funcionando. Para negociar a mercado de novo, aumente-o; aumentar aguarda o timelock.',
+    market_off_line: 'Negociação a mercado desativada: o slippage de trades a mercado em 24 horas é $0. Use uma ordem limitada.',
     search_assets: 'Buscar ativos',
     asset_details: 'Detalhes do ativo',
     contract: 'Contrato',
@@ -698,6 +725,9 @@ export const trade: MobileTable = {
     cannot_cancel: 'Não é possível cancelar',
   },
   hi: {
+    market_off_title: 'मार्केट ट्रेडिंग बंद है',
+    market_off: '24 घंटे में मार्केट ट्रेड स्लिपेज $0 है, इसलिए वॉल्ट हर मार्केट ट्रेड को अस्वीकार करता है। लिमिट ऑर्डर अब भी काम करते हैं। फिर से मार्केट पर ट्रेड करने के लिए इसे बढ़ाएँ; बढ़ाने पर टाइमलॉक पूरा होने तक प्रतीक्षा करनी होगी।',
+    market_off_line: 'मार्केट ट्रेडिंग बंद है: 24 घंटे में मार्केट ट्रेड स्लिपेज $0 है। लिमिट ऑर्डर का उपयोग करें।',
     search_assets: 'एसेट खोजें',
     asset_details: 'एसेट विवरण',
     contract: 'कॉन्ट्रैक्ट',
@@ -775,6 +805,9 @@ export const trade: MobileTable = {
     cannot_cancel: 'रद्द नहीं कर सकते',
   },
   tr: {
+    market_off_title: 'Piyasa işlemleri kapalı',
+    market_off: '24 saatte piyasa işlemi kayması $0, bu yüzden kasa tüm piyasa işlemlerini reddeder. Limit emirler çalışmaya devam eder. Yeniden piyasadan işlem yapmak için değeri yükseltin; yükseltme zaman kilidini bekler.',
+    market_off_line: 'Piyasa işlemleri kapalı: 24 saatte piyasa işlemi kayması $0. Limit emir kullanın.',
     search_assets: 'Varlık ara',
     asset_details: 'Varlık detayları',
     contract: 'Sözleşme',
@@ -852,6 +885,9 @@ export const trade: MobileTable = {
     cannot_cancel: 'İptal edilemiyor',
   },
   ru: {
+    market_off_title: 'Рыночная торговля отключена',
+    market_off: 'Проскальзывание рыночных сделок за 24 часа равно $0, поэтому хранилище отклоняет все рыночные сделки. Лимитные ордера по-прежнему работают. Чтобы снова торговать по рынку, увеличьте значение; увеличение вступит в силу после таймлока.',
+    market_off_line: 'Рыночная торговля отключена: проскальзывание рыночных сделок за 24 часа — $0. Используйте лимитный ордер.',
     search_assets: 'Поиск активов',
     asset_details: 'Детали актива',
     contract: 'Контракт',
@@ -929,6 +965,9 @@ export const trade: MobileTable = {
     cannot_cancel: 'Нельзя отменить',
   },
   id: {
+    market_off_title: 'Perdagangan pasar dimatikan',
+    market_off: 'Slippage trade pasar dalam 24 jam adalah $0, jadi vault menolak semua perdagangan pasar. Order limit tetap berfungsi. Untuk berdagang di pasar lagi, naikkan nilainya; menaikkan menunggu timelock.',
+    market_off_line: 'Perdagangan pasar dimatikan: slippage trade pasar dalam 24 jam adalah $0. Gunakan order limit.',
     search_assets: 'Cari aset',
     asset_details: 'Detail aset',
     contract: 'Kontrak',
@@ -1006,6 +1045,9 @@ export const trade: MobileTable = {
     cannot_cancel: 'Tidak bisa dibatalkan',
   },
   vi: {
+    market_off_title: 'Giao dịch thị trường đang tắt',
+    market_off: 'Trượt giá giao dịch thị trường trong 24 giờ là $0, nên vault từ chối mọi giao dịch thị trường. Lệnh giới hạn vẫn hoạt động. Để giao dịch thị trường lại, hãy nâng giá trị này; việc nâng phải chờ hết timelock.',
+    market_off_line: 'Giao dịch thị trường đang tắt: trượt giá giao dịch thị trường trong 24 giờ là $0. Hãy dùng lệnh giới hạn.',
     search_assets: 'Tìm tài sản',
     asset_details: 'Chi tiết tài sản',
     contract: 'Hợp đồng',
@@ -1083,6 +1125,9 @@ export const trade: MobileTable = {
     cannot_cancel: 'Không thể hủy',
   },
   th: {
+    market_off_title: 'ปิดการซื้อขายแบบตลาดอยู่',
+    market_off: 'สลิปเพจการเทรดตลาดใน 24 ชั่วโมงคือ $0 ห้องนิรภัยจึงปฏิเสธการซื้อขายแบบตลาดทั้งหมด คำสั่งแบบลิมิตยังใช้ได้ หากต้องการซื้อขายแบบตลาดอีกครั้ง ให้เพิ่มค่านี้ การเพิ่มต้องรอไทม์ล็อก',
+    market_off_line: 'ปิดการซื้อขายแบบตลาดอยู่: สลิปเพจการเทรดตลาดใน 24 ชั่วโมงคือ $0 ใช้คำสั่งแบบลิมิตแทน',
     search_assets: 'ค้นหาสินทรัพย์',
     asset_details: 'รายละเอียดสินทรัพย์',
     contract: 'สัญญา',

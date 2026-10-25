@@ -14,6 +14,8 @@ type State = {
   balances: VaultBalances | null;
   loading: boolean;
   error: string | null;
+  /** The balances on hand were read against the catalog as it stands now, not a smaller one. */
+  current: boolean;
   refresh: () => void;
 };
 
@@ -35,7 +37,8 @@ type State = {
  *    the app had no part in and cannot be told about.
  */
 
-type Entry = {balances: VaultBalances | null; loading: boolean; error: string | null; at: number};
+/** `version`: the catalog version the balances on hand were read against (-1 before any read). */
+type Entry = {balances: VaultBalances | null; loading: boolean; error: string | null; at: number; version: number};
 
 const useStore = create<{byKey: Record<string, Entry>}>(() => ({byKey: {}}));
 const inflight = new Map<string, Promise<void>>();
@@ -57,7 +60,7 @@ const keyFor = (network: Network, vault: Address) => `${network}:${vault.toLower
  */
 const STALE_MS = 15_000;
 
-const EMPTY: Entry = {balances: null, loading: false, error: null, at: 0};
+const EMPTY: Entry = {balances: null, loading: false, error: null, at: 0, version: -1};
 
 const patch = (key: string, next: Partial<Entry>) =>
   useStore.setState((s) => ({byKey: {...s.byKey, [key]: {...(s.byKey[key] ?? EMPTY), ...next}}}));
@@ -82,7 +85,7 @@ function load(network: Network, vault: Address): Promise<void> {
   const current = () => lastSeq.get(key) === seq;
   const task = readVaultBalances(vault, network)
     .then((b) => {
-      if (current()) patch(key, {balances: b, error: null});
+      if (current()) patch(key, {balances: b, error: null, version});
     })
     .catch((e) => {
       if (current()) patch(key, {error: String((e as Error)?.message ?? e)});
@@ -161,6 +164,7 @@ export function useVaultBalances(network: Network): State {
     // screen waiting on a wallet that is still deriving its owner spins for ever.
     loading: !!vault && !!entry?.loading,
     error: entry?.error ?? null,
+    current: !!entry && entry.version === catalogVersion,
     refresh,
   };
 }

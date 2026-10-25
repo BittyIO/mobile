@@ -9,7 +9,7 @@ import {PendingRow} from '@/components/PendingRow';
 import {Button} from '@/components/Button';
 import {useVaultWrite} from '@/components/useVaultWrite';
 import {useWallet} from '@/wallet/store';
-import {pendingTitle, pendingValue} from '@/screens/PendingChangesScreen';
+import {pendingTitle, pendingValue, useEntryLabel} from '@/screens/PendingChangesScreen';
 import {useT} from '@/i18n';
 import {useStyles, type Colors} from '@/theme';
 
@@ -45,6 +45,7 @@ export function VaultLockActionScreen() {
   const {action} = useRoute<RouteProp<RootStackParamList, 'VaultLockAction'>>().params;
   const owner = useWallet((s) => s.address);
   const {vault, network, busy, ready, run, sheet} = useVaultWrite(() => nav.goBack());
+  const nameOf = useEntryLabel(network);
 
   const [pending, setPending] = useState<PendingChange[] | null>(null);
   const [timelock, setTimelock] = useState(0);
@@ -112,7 +113,7 @@ export function VaultLockActionScreen() {
                 at={Number(p.at)}
                 now={now}
                 timelock={timelock}
-                title={pendingTitle(p, t)}
+                title={pendingTitle(p, t, nameOf)}
                 value={pendingValue(p, t)}
                 last={i === pending.length - 1}
               />

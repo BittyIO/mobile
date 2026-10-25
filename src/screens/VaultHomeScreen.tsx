@@ -19,13 +19,13 @@ import {useReorder} from '@/components/useReorder';
 import {useVaultPositions} from '@/vault/useVaultPositions';
 import {useFlows} from '@/vault/useFlows';
 import {earnedRaw} from '@/vault/flows';
-import {usePrices} from '@/vault/usePrices';
+import {usePriceFeed} from '@/vault/usePrices';
 import {useMarketStats, type MarketStat, type MarketStatMap} from '@/vault/useMarketStats';
 
 import {usdValue, fmtUsd} from '@/core/prices';
 import {fmtNum, displaySymbol} from '@/core/format';
 
-import {useAssetCatalog} from '@/core/asset-catalog';
+import {useAssetCatalog, useCatalogSettled} from '@/core/asset-catalog';
 import {assetCategory, type AssetCategory} from '@/core/assets';
 import {isAssetsList, useFavorites, useWatchLists, watchListLabel, watchListNumber} from '@/core/favorites-store';
 import {getFlag, setFlag, HIDE_BALANCES} from '@/core/prefs';
@@ -103,6 +103,9 @@ const fmt = fmtNum;
  * of dots says nothing about either.
  */
 const MASK_TOTAL = '••••••';
+
+/** The longest the Overview waits for every source before showing what it has. */
+const READY_TIMEOUT_MS = 12_000;
 
 type Row = {
   symbol: string;
@@ -387,7 +390,37 @@ export function VaultHomeScreen() {
   // catalog — every Ondo stock on mainnet — is no longer left without a price.
   const catalogSymbols = useMemo(() => catalog.map((a) => a.symbol), [catalog]);
   const [priceNonce, setPriceNonce] = useState(0);
-  const prices = usePrices(network, priceNonce, catalogSymbols);
+  const {prices, loaded: pricesLoaded} = usePriceFeed(network, priceNonce, catalogSymbols);
+  const catalogSettled = useCatalogSettled(network);
+  /**
+   * Every figure the total is made of has arrived: the live catalog (which decides which tokens are
+   * read), the balances read against it, the Earn positions, and prices for all of it.
+   *
+   * Each loads on its own, and the total used to be drawn from whatever had landed — a bundled-list
+   * balance first, then the catalog's extra tokens, then the positions — so it climbed two or three
+   * times on every launch. Until all four are in, the total and the Assets list show a spinner.
+   *
+   * Latched per vault: once a vault's total has been shown, a later refresh (a pull, a confirmed
+   * transaction, coming back to the tab) updates it in place rather than blanking it again. A
+   * source that never answers releases the latch after {READY_TIMEOUT_MS}, so a slow request costs
+   * a few seconds of spinner, never an empty screen.
+   */
+  const readyKey = bal.vault ? `${network}:${bal.vault.toLowerCase()}` : '';
+  const settledNow =
+    !!bal.vault &&
+    catalogSettled &&
+    ((bal.current && !!bal.balances) || !!bal.error) &&
+    pos.loaded &&
+    pricesLoaded;
+  const [readyFor, setReadyFor] = useState<Set<string>>(() => new Set());
+  const ready = readyFor.has(readyKey);
+  React.useEffect(() => {
+    if (!readyKey || ready) return;
+    const latch = () => setReadyFor((s) => (s.has(readyKey) ? s : new Set(s).add(readyKey)));
+    if (settledNow) return latch();
+    const timer = setTimeout(latch, READY_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [readyKey, ready, settledNow]);
   /**
    * Day change and market cap, for the watch lists.
    *
@@ -754,7 +787,16 @@ export function VaultHomeScreen() {
           </Pressable>
         </View>
         <View style={styles.totalRow}>
-          <Text style={styles.totalValue}>{hidden ? MASK_TOTAL : totalUsd != null ? fmtUsd(totalUsd) : '—'}</Text>
+          {hidden ? (
+            <Text style={styles.totalValue}>{MASK_TOTAL}</Text>
+          ) : !ready ? (
+            // The figure's own line height, so the card does not jump when it lands.
+            <View style={styles.totalLoading}>
+              <ActivityIndicator color={c.subtext} />
+            </View>
+          ) : (
+            <Text style={styles.totalValue}>{totalUsd != null ? fmtUsd(totalUsd) : '—'}</Text>
+          )}
           {/* Holdings distribution, right after the figure it breaks down. Disabled while balances
               are hidden: the sheet would show the very values the eye toggle is masking. */}
           <Pressable
@@ -885,7 +927,9 @@ export function VaultHomeScreen() {
                   }}>
                   <AssetList
                     rows={rowsForList(l.id)}
-                    loading={bal.loading && !bal.balances}
+                    // Holdings wait with the total, so the rows never show the half-read sum either.
+                    // A watch list shows market data, not balances, and does not.
+                    loading={isAssetsList(l.id) ? !ready && !bal.error : bal.loading && !bal.balances}
                     error={bal.error}
                     hidden={hidden}
                     markets={!isAssetsList(l.id)}
@@ -936,6 +980,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   totalHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
   totalLabel: {color: c.subtext, fontSize: 13, fontWeight: '600'},
   totalValue: {color: c.text, fontSize: 34, fontWeight: '800'},
+  totalLoading: {height: 41, justifyContent: 'center'},
   actions: {flexDirection: 'row', justifyContent: 'space-around', marginTop: 16, paddingTop: 18, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border},
   action: {alignItems: 'center', gap: 8},
   actionCircle: {width: 54, height: 54, borderRadius: 27, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center'},
@@ -1005,6 +1050,6 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   chev: {color: c.subtext, fontSize: 18, width: 16, textAlign: 'right'},
   // The card's padding frames the list: the last row (or its open details) adds no bottom padding,
   // so the space below the last asset equals the space above the header.
-  depositBtn: {backgroundColor: c.accent, borderRadius: 10, paddingVertical: 10, alignItems: 'center', marginTop: 2},
+  depositBtn: {backgroundColor: c.accent, borderRadius: 999, paddingVertical: 10, alignItems: 'center', marginTop: 2},
   depositText: {color: c.onAccent, fontSize: 14, fontWeight: '700'},
 });

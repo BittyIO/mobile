@@ -4,7 +4,7 @@ import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import {useDiscardGuard} from '@/components/DiscardGuard';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
-import {getLockLevel, getRiskConfig, updateRiskSettings, type LockLevel, type RiskConfig, type RiskField} from '@/vault/risk';
+import {getLockLevel, getRiskConfig, updateRiskSettings, useAllowsZeroAllowance, ZERO_ALLOWANCE_SINCE, type LockLevel, type RiskConfig, type RiskField} from '@/vault/risk';
 import {useRiskDraft} from '@/core/risk-draft';
 import {useVaultWrite} from '@/components/useVaultWrite';
 import {Button} from '@/components/Button';
@@ -52,6 +52,12 @@ export function RiskSettingsScreen() {
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
   const vault = useActiveVaultAddress(network);
+  // High sets both allowances to 0, which a vault before 1.0.5 refuses: there it is not offered.
+  const zeroOk = useAllowsZeroAllowance(vault, network);
+  const needsZero = (id: SafetyLevelOrCustom) => {
+    const v = SAFETY_LEVELS.find((l) => l.id === id)?.values;
+    return !!v && (v.sendDailyAllowance === 0n || v.marketTradeDailyLossAllowance === 0n);
+  };
   const [risk, setRisk] = useState<RiskConfig | null>(null);
   const [lockLevel, setLockLevel] = useState<LockLevel | null>(null);
   const [customOpen, setCustomOpen] = useState(false);
@@ -144,7 +150,7 @@ export function RiskSettingsScreen() {
     setCustomOpen(false);
   };
   const pick = (id: SafetyLevel) => {
-    if (locked || !inForce) return;
+    if (locked || !inForce || (needsZero(id) && !zeroOk)) return;
     // Already this level's numbers — the one in force, with Custom opened over it and nothing
     // edited. There is nothing to put in the draft, but the choice still has to move back from
     // Custom; returning early here is what left Custom stuck on.
@@ -161,17 +167,19 @@ export function RiskSettingsScreen() {
   const levelRow = (id: SafetyLevelOrCustom, onPress: () => void, last: boolean) => {
     const color = safetyColor(id, c);
     const on = level === id;
+    const unavailable = needsZero(id) && !zeroOk;
     return (
       <Pressable
         key={id}
         onPress={onPress}
-        disabled={locked || !inForce}
+        disabled={locked || !inForce || unavailable}
         style={({pressed}) => [styles.levelRow, !last && styles.divider, pressed && styles.pressed]}
         accessibilityRole="radio"
         accessibilityState={{selected: on, disabled: locked}}>
         <View style={[styles.dot, {backgroundColor: color}]} />
-        <Text style={[styles.levelTitle, locked && styles.dim]}>{t(SAFETY_TITLE[id])}</Text>
+        <Text style={[styles.levelTitle, (locked || unavailable) && styles.dim]}>{t(SAFETY_TITLE[id])}</Text>
         <View style={styles.flex} />
+        {unavailable && !on ? <Text style={styles.needs}>{t('mobile.vault.safety_needs_version', {version: ZERO_ALLOWANCE_SINCE})}</Text> : null}
         {on ? <Text style={[styles.check, {color}]}>✓</Text> : null}
       </Pressable>
     );
@@ -193,13 +201,15 @@ export function RiskSettingsScreen() {
         contentInsetAdjustmentBehavior="automatic"
         style={styles.container}
         contentContainerStyle={styles.body}>
-        {/* First the choice; the three numbers below follow it, and editing one makes it Custom. */}
-        <SettingsGroup label={t('mobile.vault.safety_level')} footer={locked ? t('mobile.vault.safety_locked') : waitingNote}>
+        {/* First the choice; the three numbers below follow it, and editing one makes it Custom.
+            No headings over the two cards: the page is titled Security level, and the rows say
+            what they are. */}
+        <SettingsGroup footer={locked ? t('mobile.vault.safety_locked') : waitingNote}>
           {SAFETY_LEVELS.map((l) => levelRow(l.id, () => pick(l.id), false))}
           {levelRow('custom', () => !locked && setCustomOpen(true), true)}
         </SettingsGroup>
 
-        <SettingsGroup label={t('mobile.vault.safety_parameters')} footer={preview}>
+        <SettingsGroup footer={preview}>
           {RISK_FIELDS.map((f, i) => (
             <SettingsRow
               key={f}
@@ -233,6 +243,7 @@ const makeStyles = (c: Colors) =>
     dot: {width: 10, height: 10, borderRadius: 5},
     levelTitle: {color: c.text, fontSize: 16, fontWeight: '600'},
     dim: {color: c.subtext},
+    needs: {color: c.subtext, fontSize: 12},
     flex: {flex: 1},
     check: {fontSize: 17, fontWeight: '700'},
     note: {color: c.subtext, fontSize: 13, lineHeight: 18, paddingHorizontal: 4},

@@ -193,6 +193,22 @@ export function useAssetCatalog(network: Network): Asset[] {
 }
 
 /**
+ * Whether this network's catalog request has answered, rows or not. Before it has, the token list
+ * is the bundled one, and anything read against it can still grow.
+ */
+export function useCatalogSettled(network: Network): boolean {
+  const [settled, setSettled] = useState<Network | null>(() => (cache.has(network) ? network : null));
+  useEffect(() => {
+    let live = true;
+    fetchCatalog(network).finally(() => live && setSettled(network));
+    return () => {
+      live = false;
+    };
+  }, [network]);
+  return settled === network;
+}
+
+/**
  * Every contract address the app knows to be a token on this network.
  *
  * The catalog's own rows plus the receipt tokens positions are held in — aTokens, sUSDS, stETH —

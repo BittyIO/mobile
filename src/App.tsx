@@ -8,6 +8,7 @@ import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {useWallet} from '@/wallet/store';
 import {TabIcon, type TabName} from '@/components/TabIcon';
 import {NetworkSwitcher} from '@/components/NetworkSwitcher';
+import {LockBadge} from '@/components/LockBadge';
 import {useGuardProtocols} from '@/core/guard-catalog';
 import {useNetwork} from '@/core/network-store';
 import {RISK_TITLE} from '@/components/riskFormat';
@@ -35,6 +36,9 @@ export type RootStackParamList = {
   Payments: undefined;
   SelectRecipient: undefined;
   NewRecipient: undefined;
+  /** Security › Whitelisted addresses: the address book, to add to and remove from. */
+  VaultWhitelist: undefined;
+  VaultWhitelistAdd: undefined;
   /** The asset directory as a watch list editor: no prices, a star on every row. */
   Watchlist: undefined;
   /** One Earn position in full: its rate over time, what Auto-Yield does, and both actions. */
@@ -205,7 +209,14 @@ function MainTabs() {
          * corner is usually empty.
          */
         headerTitleAlign: 'center',
-        headerTitle: ({children}) => <Text style={styles.headerTitle}>{children}</Text>,
+        // The vault's lock, while it has one, right after the tab's title: on every tab, tapped
+        // through to Lock status.
+        headerTitle: ({children}) => (
+          <View style={styles.headerTitleRow}>
+            <Text style={styles.headerTitle}>{children}</Text>
+            <LockBadge />
+          </View>
+        ),
         /**
          * The chain in the right-hand corner, where it started.
          *
@@ -248,7 +259,15 @@ function MainTabs() {
           below — `title` does that — so only the header differs. */}
       <Tab.Screen
         name="Overview"
-        options={{title: t('mobile.app.overview'), headerTitle: () => <Text style={styles.headerTitle}>{t('mobile.app.name')}</Text>}}
+        options={{
+          title: t('mobile.app.overview'),
+          headerTitle: () => (
+            <View style={styles.headerTitleRow}>
+              <Text style={styles.headerTitle}>{t('mobile.app.name')}</Text>
+              <LockBadge />
+            </View>
+          ),
+        }}
         component={VaultHomeScreen}
       />
       <Tab.Screen name="Earn" options={{title: t('mobile.app.earn')}} getComponent={() => require('@/screens/EarnScreen').EarnScreen} />
@@ -343,6 +362,16 @@ function Root() {
           name="NewRecipient"
           getComponent={() => require('@/screens/NewRecipientScreen').NewRecipientScreen}
           options={{title: t('mobile.payments.new_recipient')}}
+        />
+        <Stack.Screen
+          name="VaultWhitelist"
+          getComponent={() => require('@/screens/SelectRecipientScreen').WhitelistScreen}
+          options={{title: t('mobile.settings.whitelisted_addresses')}}
+        />
+        <Stack.Screen
+          name="VaultWhitelistAdd"
+          getComponent={() => require('@/screens/NewRecipientScreen').AddWhitelistedScreen}
+          options={{title: t('mobile.settings.add_whitelisted')}}
         />
         <Stack.Screen
           name="Watchlist"
@@ -473,7 +502,7 @@ function Root() {
           getComponent={() => require('@/screens/RiskValueScreen').RiskValueScreen}
           options={({route}) => ({title: t(RISK_TITLE[route.params.field])})}
         />
-        <Stack.Screen name="VaultList" getComponent={() => require('@/screens/VaultListScreen').VaultListScreen} options={{title: t('mobile.vaults.title')}} />
+        <Stack.Screen name="VaultList" getComponent={() => require('@/screens/VaultListScreen').VaultListScreen} options={{title: t('mobile.settings.choose_vault')}} />
         <Stack.Screen name="VaultLock" getComponent={() => require('@/screens/VaultLockScreen').VaultLockScreen} options={{title: t('mobile.vault.vault_lock')}} />
         <Stack.Screen
           name="VaultLockAction"
@@ -507,4 +536,5 @@ const makeStyles = (colors: Colors) =>
   StyleSheet.create({
     splash: {flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center'},
     headerTitle: {color: colors.text, fontSize: 17, fontWeight: '700'},
+    headerTitleRow: {flexDirection: 'row', alignItems: 'center', gap: 6},
   });

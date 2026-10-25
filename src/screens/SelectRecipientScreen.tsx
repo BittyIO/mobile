@@ -1,6 +1,6 @@
 import React, {useCallback, useEffect, useLayoutEffect, useMemo, useState} from 'react';
 import Svg, {Path} from 'react-native-svg';
-import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {Address} from 'viem';
@@ -17,6 +17,7 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import {showToast} from '@/components/Toast';
 import {ProgressRing, leftUnit, waitDone} from '@/components/ProgressRing';
 import {useVaultWrite} from '@/components/useVaultWrite';
+import {usePending} from '@/vault/pending';
 import {useRecipientNames, recipientName} from '@/core/recipient-names';
 import {useRecipientPick} from '@/core/recipient-pick';
 import {useColors, useStyles, type Colors} from '@/theme';
@@ -32,7 +33,15 @@ import {vaultAddressOf} from '@/core/active-vault';
  * have to be delivered by `navigate`, which is as willing to push a second Send page as it is to
  * return to the first; `goBack` can only unwind, which is the behaviour this page wants.
  */
-export function SelectRecipientScreen() {
+/**
+ * Security › Whitelisted addresses: the same book, to manage rather than to pay from. A tap does not
+ * choose (long press still copies), your own vaults are not listed, and + adds to the book.
+ */
+export function WhitelistScreen() {
+  return <SelectRecipientScreen manage />;
+}
+
+export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
   const {t} = useT();
   const c = useColors();
   const styles = useStyles(makeStyles);
@@ -59,6 +68,12 @@ export function SelectRecipientScreen() {
    */
   const [loading, setLoading] = useState(true);
   const [reload, setReload] = useState(0);
+  // Read again whenever a relayed write lands: an add or a removal is only in the book once mined,
+  // and the write's own callback fires when the relayer accepted it, before that.
+  const settled = usePending((s) => s.txs.filter((x) => x.status !== 'pending').length);
+  useEffect(() => {
+    if (settled > 0) setReload((n) => n + 1);
+  }, [settled]);
   const [risk, setRisk] = useState<RiskConfig | null>(null);
   useEffect(() => {
     if (vault) getRiskConfig(vault, network).then(setRisk);
@@ -114,19 +129,30 @@ export function SelectRecipientScreen() {
   const setName = useRecipientNames((st) => st.setName);
 
   /**
-   * Renaming an entry, in place: the pencil after its name turns the name into a field, and it is
-   * saved on return or when the field loses focus — as a vault is renamed in the vault picker.
-   * The name is this device's (see core/recipient-names), so this is a local edit with no prompt
-   * and no fee; clearing it falls back to the entry's place in the book.
+   * Renaming an entry: the pencil after its name opens a dialog with the name in a field and the
+   * address under the title, so the row never turns into a form. The name is this device's (see
+   * core/recipient-names), a local edit with no signature and no fee; saving it empty falls back to
+   * the entry's place in the book.
    */
-  const [editing, setEditing] = useState<string | null>(null);
-  const [draft, setDraft] = useState('');
-  const commitName = () => {
-    if (editing) setName(network, editing, draft);
-    setEditing(null);
-  };
+  const rename = (address: string, current: string | undefined) =>
+    Alert.prompt(
+      t('mobile.payments.edit_name'),
+      address,
+      [
+        {text: t('common.cancel'), style: 'cancel'},
+        {text: t('vault.save'), onPress: (v?: string) => setName(network, address, v ?? '')},
+      ],
+      'plain-text',
+      current ?? '',
+    );
 
   const pick = (address: string, label?: string) => {
+    // Send to new in 24 hours at $0: the vault pays only a whitelisted address whose wait is over.
+    // Choosing any other would only fail at the payment, so say why here instead of choosing it.
+    if (risk?.read && risk.sendDailyAllowance === 0n && !whitelisted(address)) {
+      Alert.alert(t('mobile.payments.cant_pay_title'), t('mobile.payments.cant_pay_sends_off'));
+      return;
+    }
     setPicked({address: address as Address, label, addToBook: false});
     nav.goBack();
   };
@@ -148,72 +174,49 @@ export function SelectRecipientScreen() {
   const entryRow = (b: WhitelistedRecipient, i: number, list: WhitelistedRecipient[]) => {
     const named = recipientName(names, network, b.recipientAddress);
     const removeAt = b.status === WHITELIST_STATUS.removalQueued ? b.removeAt : undefined;
-    const onDate = (at: number) => t('mobile.vault.on_date', {date: new Date(at * 1000).toLocaleDateString()});
-    const note = removeAt
-      ? t('mobile.payments.removal_pending', {when: onDate(removeAt)})
-      : b.status === WHITELIST_STATUS.voided
-          ? t('mobile.payments.voided_by_lock')
-          : null;
-    const isEditing = editing?.toLowerCase() === b.recipientAddress.toLowerCase();
+    const waitUntil = removeAt ?? (b.status === WHITELIST_STATUS.pending ? b.effectiveAt : undefined);
+    const note = b.status === WHITELIST_STATUS.voided ? t('mobile.payments.voided_by_lock') : null;
     return (
       <Pressable
         key={b.id}
-        style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === list.length - 1 && styles.rowLast, pressed && !isEditing && styles.pressed]}
-        // While the name is being edited the row is a form, not a choice: a tap must not pay it.
-        disabled={isEditing}
+        style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === list.length - 1 && styles.rowLast, pressed && styles.pressed]}
+        // Managing the book, a tap chooses nothing.
+        disabled={manage}
         onPress={() => pick(b.recipientAddress, named)}
         onLongPress={() => copy(b.recipientAddress)}>
         {/* Every entry under a name: the one saved on this device, or its place in the
             book where none was given. The full address below, since that is what gets paid. */}
         <View style={styles.entryCol}>
           <View style={styles.nameLine}>
-            {isEditing ? (
-              <TextInput
-                style={[styles.entryName, styles.nameInput]}
-                value={draft}
-                onChangeText={setDraft}
-                onBlur={commitName}
-                onSubmitEditing={commitName}
-                placeholder={t('mobile.payments.recipient_n', {n: b.id})}
-                placeholderTextColor={c.subtext}
-                autoCapitalize="words"
-                returnKeyType="done"
-                autoFocus
-                maxLength={32}
-              />
-            ) : (
+            <Text style={[styles.entryName, !named && styles.entryNameOff]} numberOfLines={1}>
+              {named ?? t('mobile.payments.recipient_n', {n: b.id})}
+            </Text>
+            {/* Its own target, like the ✕: a tap on the row chooses the recipient. */}
+            <Pressable
+              hitSlop={10}
+              onPress={() => rename(b.recipientAddress, named)}
+              accessibilityRole="button"
+              accessibilityLabel={t('vault.edit')}
+              style={({pressed}) => pressed && styles.pressed}>
+              <Svg width={14} height={14} viewBox="0 0 24 24">
+                <Path
+                  d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"
+                  stroke={c.subtext}
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              </Svg>
+            </Pressable>
+            {/* Still waiting out the timelock, to be added or to be removed: how far it has run,
+                and in one phrase what happens when. */}
+            {waitUntil ? (
               <>
-                <Text style={[styles.entryName, !named && styles.entryNameOff]} numberOfLines={1}>
-                  {named ?? t('mobile.payments.recipient_n', {n: b.id})}
+                <ProgressRing size={16} done={waitDone(waitUntil, now, Number(risk?.timelock ?? 0))} left={waitUntil - now} />
+                <Text style={styles.left}>
+                  {t(removeAt ? 'mobile.payments.removed_in' : 'mobile.payments.added_in', {time: leftUnit(waitUntil - now, t).join(' ')})}
                 </Text>
-                {/* Its own target, like the ✕: a tap on the row chooses the recipient. */}
-                <Pressable
-                  hitSlop={10}
-                  onPress={() => {
-                    setDraft(named ?? '');
-                    setEditing(b.recipientAddress);
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('vault.edit')}
-                  style={({pressed}) => pressed && styles.pressed}>
-                  <Svg width={14} height={14} viewBox="0 0 24 24">
-                    <Path
-                      d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"
-                      stroke={c.subtext}
-                      strokeWidth={2}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      fill="none"
-                    />
-                  </Svg>
-                </Pressable>
-              </>
-            )}
-            {/* Still waiting out the timelock: how far it has run, and what is left. */}
-            {b.status === WHITELIST_STATUS.pending && b.effectiveAt ? (
-              <>
-                <ProgressRing size={16} done={waitDone(b.effectiveAt, now, Number(risk?.timelock ?? 0))} left={b.effectiveAt - now} />
-                <Text style={styles.left}>{leftUnit(b.effectiveAt - now, t).join(' ')}</Text>
               </>
             ) : null}
           </View>
@@ -254,7 +257,7 @@ export function SelectRecipientScreen() {
     nav.setOptions({
       headerRight: () => (
         <Pressable
-          onPress={() => nav.navigate('NewRecipient')}
+          onPress={() => nav.navigate(manage ? 'VaultWhitelistAdd' : 'NewRecipient')}
           hitSlop={10}
           style={styles.headerBtn}
           accessibilityRole="button"
@@ -265,7 +268,7 @@ export function SelectRecipientScreen() {
         </Pressable>
       ),
     });
-  }, [nav, t, c, styles]);
+  }, [nav, t, c, styles, manage]);
 
   return (
     <ScrollView
@@ -277,9 +280,11 @@ export function SelectRecipientScreen() {
       contentContainerStyle={styles.body}>
       {/* The whitelist first, and always — even with nothing in it: paying somewhere this vault
           already pays is the common case, and an empty list still says the vault HAS one. */}
-      <Text style={styles.section}>
-        {t('mobile.payments.whitelisted_book')} · {t('mobile.payments.max_send_none')}
-      </Text>
+      {/* Each group's title on the left and what a payment to it may be on the right. */}
+      <View style={styles.sectionRow}>
+        <Text style={styles.sectionTitle}>{t('mobile.payments.whitelisted_book')}</Text>
+        <Text style={styles.sectionLimit}>{t('mobile.payments.max_send_none')}</Text>
+      </View>
       <View style={styles.card}>
         {loading ? (
           <View style={[styles.row, styles.rowFirst, styles.rowLast, styles.centered]}>
@@ -298,21 +303,29 @@ export function SelectRecipientScreen() {
           send allowance, which the title says. */}
       {waiting.length > 0 ? (
         <>
-          <Text style={styles.section}>
-            {t('mobile.payments.pending_whitelisted')}
-            {allowance ? ` · ${allowance}` : ''}
-          </Text>
-          <View style={styles.card}>{waiting.map((b, i) => entryRow(b, i, waiting))}</View>
+          <View style={styles.sectionRow}>
+            <Text style={styles.sectionTitle}>{t('mobile.payments.pending_whitelisted')}</Text>
+            {allowance ? <Text style={styles.sectionLimit}>{allowance}</Text> : null}
+          </View>
+          {/* One card each: every one is a change to who can be paid without limit, and set apart
+              it cannot be skimmed past as one more line of a list. */}
+          <View style={styles.cards}>
+            {waiting.map((b) => (
+              <View key={b.id} style={styles.card}>
+                {entryRow(b, 0, [b])}
+              </View>
+            ))}
+          </View>
         </>
       ) : null}
 
-      {mine.length > 0 ? (
+      {!manage && mine.length > 0 ? (
         <>
           {/* Your own vaults are paid like anyone else: no limit once whitelisted, else the allowance. */}
-          <Text style={styles.section}>
-            {t('mobile.payments.my_vaults')}
-            {allowance ? ` · ${allowance}` : ''}
-          </Text>
+          <View style={styles.sectionRow}>
+            <Text style={styles.sectionTitle}>{t('mobile.payments.my_vaults')}</Text>
+            {allowance ? <Text style={styles.sectionLimit}>{allowance}</Text> : null}
+          </View>
           <View style={styles.card}>
             {mine.map((v, i) => (
               <Pressable
@@ -343,8 +356,11 @@ const makeStyles = (c: Colors) =>
   StyleSheet.create({
     flex: {flex: 1, backgroundColor: c.bg},
     body: {flexGrow: 1, padding: 16, paddingBottom: 32},
-    section: {color: c.subtext, fontSize: 13, fontWeight: '600', paddingHorizontal: 4, paddingTop: 18, paddingBottom: 8},
+    sectionRow: {flexDirection: 'row', alignItems: 'baseline', gap: 12, paddingHorizontal: 4, paddingTop: 18, paddingBottom: 8},
+    sectionTitle: {color: c.subtext, fontSize: 13, fontWeight: '600', flexShrink: 1},
+    sectionLimit: {marginLeft: 'auto', color: c.subtext, fontSize: 13, fontWeight: '600', textAlign: 'right'},
     card: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 16},
+    cards: {gap: 10},
     // The same row metrics the asset picker uses, so a list is a list.
     row: {
       flexDirection: 'row',
@@ -363,8 +379,6 @@ const makeStyles = (c: Colors) =>
     entryName: {color: c.text, fontSize: 16, fontWeight: '600', flexShrink: 1},
     left: {color: c.subtext, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums']},
     entryNameOff: {color: c.subtext},
-    // The field sits where the name was, at the name's size, so editing does not move the row.
-    nameInput: {flex: 1, padding: 0, margin: 0},
     // Sized to the bar's 44, as the Pending page's lock: the native bar anchors a custom view by its bottom.
     headerBtn: {width: 44, height: 44, paddingBottom: 9, alignItems: 'center', justifyContent: 'center'},
     addrMuted: {color: c.subtext, fontSize: 13, fontVariant: ['tabular-nums']},

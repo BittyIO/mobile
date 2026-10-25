@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import type {RouteProp} from '@react-navigation/native';
 import {useNavigation, useRoute} from '@react-navigation/native';
@@ -13,7 +13,10 @@ import {useNetwork} from '@/core/network-store';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {balanceOfSymbol} from '@/vault/read';
 import {depositFromSources, depositToProtocol, withdrawFromProtocol} from '@/vault/actions';
-import {parseUnits} from 'viem';
+import {parseUnits, type Address} from 'viem';
+import {VAULT_DEFI_ABI} from '@/core/abi';
+import {encodeVaultCalls, type VaultCall} from '@/vault/relay';
+import {estimateRelayGas, relayGasFor} from '@/vault/fee-quote';
 import {Sheet} from '@/components/Sheet';
 import {FundRow} from '@/components/FundRow';
 import {useVaultPositions} from '@/vault/useVaultPositions';
@@ -253,6 +256,46 @@ export function EarnActionScreen() {
     return order.flatMap((k, i) => (k !== 'free' && takes[i] > 0n ? [{protocol: k as `0x${string}`, raw: takes[i]}] : []));
   };
 
+  /**
+   * The gas the fee line under Confirm is priced from: this exact call simulated, so a first deposit
+   * that also clones the adapter shows what it will cost, not what a repeat deposit costs. Until the
+   * simulation lands (and where it cannot run) the deposit/withdraw model stands in.
+   */
+  const plan = (() => {
+    try {
+      return multi && Number(amount) > 0 ? planWithdrawals() : [];
+    } catch {
+      return [];
+    }
+  })();
+  const planKey = plan.map((w) => `${w.protocol}:${w.raw}`).join(',');
+  const modelGas = relayGasFor({supply: isDeposit ? 1 : 0, withdraw: plan.length + (isDeposit ? 0 : 1)});
+  const [feeGas, setFeeGas] = useState<bigint>(modelGas);
+  useEffect(() => {
+    setFeeGas(modelGas);
+    const vault = activeVaultAddress(network);
+    if (!vault || !owner || !protocol || !targetAsset || !(Number(amount) > 0)) return;
+    let raw: bigint;
+    try {
+      raw = parseUnits(amount, targetDecimals);
+    } catch {
+      return;
+    }
+    const calls: VaultCall[] = [
+      ...plan.map((w) => ({abi: VAULT_DEFI_ABI, functionName: 'withdraw', args: [w.protocol, targetAsset, w.raw]})),
+      {abi: VAULT_DEFI_ABI, functionName: isDeposit ? 'deposit' : 'withdraw', args: [protocol, targetAsset, raw]},
+    ];
+    let live = true;
+    const id = setTimeout(() => {
+      estimateRelayGas(network, owner as Address, vault, encodeVaultCalls(calls), modelGas).then((g) => live && setFeeGas(g));
+    }, 400);
+    return () => {
+      live = false;
+      clearTimeout(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [network, owner, protocol, targetAsset, targetDecimals, amount, planKey, isDeposit]);
+
   const onSubmit = async () => {
     if (!unlocked || !owner || !protocol || !targetAsset || !feeCoin) return;
     setStatus('busy');
@@ -413,7 +456,7 @@ export function EarnActionScreen() {
         {/* Directly under the field, the way the order sheet puts its confirm under the amount.
             Pinned to the bottom it floated a long way from the thing it confirms, and in a short
             sheet it collided with it. */}
-        <ConfirmButton onPress={onSubmit} disabled={!canSubmit} style={styles.submit} />
+        <ConfirmButton onPress={onSubmit} disabled={!canSubmit} gas={feeGas} style={styles.submit} />
       </ScrollView>
       {/* Inside the form sheet, like the order form's own pickers: presented from outside it, a
           sheet opens behind the one being looked at. */}

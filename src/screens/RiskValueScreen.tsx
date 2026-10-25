@@ -2,9 +2,9 @@ import React, {useCallback, useState} from 'react';
 import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {useFocusEffect, useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '@/App';
-import {getRiskConfig, getLockLevel, RISK_BOUNDS, type RiskConfig, type LockLevel} from '@/vault/risk';
+import {getRiskConfig, getLockLevel, RISK_BOUNDS, useAllowsZeroAllowance, type RiskConfig, type LockLevel} from '@/vault/risk';
 import {OptionRow, SettingsGroup} from '@/components/SettingsRow';
-import {fmtRiskValue, fmtPending, riskHintKey} from '@/components/riskFormat';
+import {fmtRiskValue, fmtPending, riskHintKey, riskZeroHintKey} from '@/components/riskFormat';
 import {useRiskDraft} from '@/core/risk-draft';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
@@ -16,8 +16,9 @@ const HOUR = 3600n;
 const DAY = 86400n;
 
 /**
- * The answers worth offering. Anything else is one Custom entry away. The vault refuses 0 and
- * anything outside {RISK_BOUNDS}, so it is offered only what it accepts.
+ * The answers worth offering. Anything else is one Custom entry away. The vault refuses anything
+ * outside {RISK_BOUNDS}, so it is offered only what it accepts — and an allowance of 0, which turns
+ * regular sends or market trading off, only on a vault release that accepts it.
  */
 const PRESETS = {
   timelock: [DAY, 2n * DAY, 7n * DAY, 14n * DAY, 30n * DAY],
@@ -62,8 +63,10 @@ export function RiskValueScreen() {
   const inForce = risk ? risk[field] : null;
   // What the page is set to: the unsaved pick where there is one, otherwise the value in force.
   const current = drafted ?? inForce;
-  const presets: readonly bigint[] = PRESETS[field];
-  const bounds = RISK_BOUNDS[field];
+  const zeroOk = useAllowsZeroAllowance(vault, network) && field !== 'timelock';
+  const presets: readonly bigint[] = zeroOk ? [0n, ...PRESETS[field]] : PRESETS[field];
+  const bounds = {min: zeroOk ? 0n : RISK_BOUNDS[field].min, max: RISK_BOUNDS[field].max};
+  const zeroHint = zeroOk ? riskZeroHintKey(field) : null;
   const isCustom = current != null && !presets.includes(current);
   // A lock freezes these too, so nothing can be picked rather than signed and refused on chain.
   const locked = lockLevel === 1 || lockLevel === 2;
@@ -113,6 +116,8 @@ export function RiskValueScreen() {
           <OptionRow
             key={String(v)}
             title={fmt(v)}
+            // What off means, on the row that turns it off.
+            sub={v === 0n && zeroHint ? t(zeroHint) : undefined}
             checked={!customOpen && current === v}
             disabled={!canPick}
             onPress={() => {
@@ -167,7 +172,7 @@ const makeStyles = (c: Colors) =>
     saveBtn: {
       height: 40,
       paddingHorizontal: 16,
-      borderRadius: 10,
+      borderRadius: 20,
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: 1,

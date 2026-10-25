@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {Keyboard, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View} from 'react-native';
+import {Alert, Keyboard, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {Address} from 'viem';
@@ -14,6 +14,9 @@ import {useRecipientNames} from '@/core/recipient-names';
 import {useRecipientPick} from '@/core/recipient-pick';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
+import {useVaultWrite} from '@/components/useVaultWrite';
+import {addWhitelisted, fetchWhitelist, type WhitelistedRecipient} from '@/vault/payments';
+import {WHITELIST_STATUS} from '@/core/abi';
 
 /**
  * Select recipient › New recipient — an address to type, a name for it on this device, and whether
@@ -23,7 +26,15 @@ import {useT} from '@/i18n';
  * Confirming hands the address back through {useRecipientPick} and unwinds past the picker straight
  * to the Send card, which is where the choice is used.
  */
-export function NewRecipientScreen() {
+/**
+ * Security › Whitelisted addresses › + — the same form, without the payment: the address always goes
+ * into the book, through the Face-ID and fee confirm, and the page closes once it is submitted.
+ */
+export function AddWhitelistedScreen() {
+  return <NewRecipientScreen manage />;
+}
+
+export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
   const {t} = useT();
   const c = useColors();
   const styles = useStyles(makeStyles);
@@ -43,6 +54,13 @@ export function NewRecipientScreen() {
   useEffect(() => {
     if (vault) getRiskConfig(vault, network).then(setRisk);
   }, [vault, network]);
+  // With sends to new addresses off, a typed address can be paid only if it is already in the book
+  // and past its wait — so the book is read to tell.
+  const sendsOff = !manage && !!risk?.read && risk.sendDailyAllowance === 0n;
+  const [book, setBook] = useState<WhitelistedRecipient[]>([]);
+  useEffect(() => {
+    if (sendsOff && vault) fetchWhitelist(vault, network).then(setBook).catch(() => setBook([]));
+  }, [sendsOff, vault, network]);
 
   const valid = isPayableAddress(draft, network);
   const isToken = isTokenAddress(draft, network);
@@ -52,12 +70,29 @@ export function NewRecipientScreen() {
       ? t('mobile.payments.max_send_daily', {value: fmtAllowance(risk.sendDailyAllowance, t)})
       : '…';
 
+  const write = useVaultWrite(() => nav.goBack());
   const confirm = () => {
     const given = nameDraft.trim();
     if (given) setName(network, draft, given);
+    if (manage) {
+      write.run('add', `${t('vault.add')} · ${t('vault.address_book')}`, (base) =>
+        addWhitelisted({...base, recipient: draft as Address}),
+      );
+      return;
+    }
+    const payable = book.some(
+      (b) =>
+        b.recipientAddress.toLowerCase() === draft.toLowerCase() &&
+        (b.status === undefined || b.status === WHITELIST_STATUS.payable || b.status === WHITELIST_STATUS.removalQueued),
+    );
+    if (sendsOff && !payable) {
+      Alert.alert(t('mobile.payments.cant_pay_title'), t('mobile.payments.cant_pay_sends_off'));
+      return;
+    }
     setPicked({address: draft as Address, label: given || undefined, addToBook});
     nav.pop(2);
   };
+  const canConfirm = valid && (!manage || write.ready);
 
   return (
     <ScrollView
@@ -93,14 +128,19 @@ export function NewRecipientScreen() {
         {isToken ? <Text style={styles.warn}>{t('mobile.payments.token_address_warning')}</Text> : null}
 
         <View style={[styles.card, styles.gap]}>
-          <View style={[styles.row, styles.divider]}>
-            <Text style={styles.rowLabel}>{t('mobile.payments.add_to_whitelist')}</Text>
-            <Switch value={addToBook} onValueChange={setAddToBook} style={styles.switch} />
-          </View>
-          <View style={[styles.row, addToBook && styles.divider]}>
-            <Text style={styles.rowLabel}>{t('mobile.payments.max_send')}</Text>
-            <Text style={styles.rowValue}>{max}</Text>
-          </View>
+          {/* Managing the book there is no payment: no switch, and no cap to show. */}
+          {manage ? null : (
+            <>
+              <View style={[styles.row, styles.divider]}>
+                <Text style={styles.rowLabel}>{t('mobile.payments.add_to_whitelist')}</Text>
+                <Switch value={addToBook} onValueChange={setAddToBook} style={styles.switch} />
+              </View>
+              <View style={[styles.row, addToBook && styles.divider]}>
+                <Text style={styles.rowLabel}>{t('mobile.payments.max_send')}</Text>
+                <Text style={styles.rowValue}>{max}</Text>
+              </View>
+            </>
+          )}
           {/* A new whitelist entry waits out the timelock before it can be paid. */}
           {addToBook ? (
             <View style={styles.row}>
@@ -111,12 +151,13 @@ export function NewRecipientScreen() {
         </View>
 
         <Pressable
-          style={({pressed}) => [styles.use, !valid && styles.useOff, pressed && styles.pressed]}
-          disabled={!valid}
+          style={({pressed}) => [styles.use, !canConfirm && styles.useOff, pressed && styles.pressed]}
+          disabled={!canConfirm}
           onPress={confirm}>
-          <Text style={[styles.useText, !valid && styles.useTextOff]}>{t('vault.confirm')}</Text>
+          <Text style={[styles.useText, !canConfirm && styles.useTextOff]}>{t('vault.confirm')}</Text>
         </Pressable>
       </Pressable>
+      {write.sheet}
     </ScrollView>
   );
 }
@@ -138,7 +179,7 @@ const makeStyles = (c: Colors) =>
     rowValue: {color: c.subtext, fontSize: 14, fontVariant: ['tabular-nums']},
     // A switch fills its box exactly, where a chevron's glyph sits inside; this lines them up.
     switch: {marginRight: 10},
-    use: {height: 48, borderRadius: 14, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', marginTop: 24},
+    use: {height: 52, borderRadius: 26, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', marginTop: 24},
     useOff: {backgroundColor: c.neutralSoft},
     useText: {color: '#fff', fontSize: 15, fontWeight: '700'},
     useTextOff: {color: c.subtext},
