@@ -30,7 +30,6 @@ export function Sheet({
   children,
   height,
   done,
-  noSwipe = false,
 }: {
   visible: boolean;
   title: string;
@@ -46,12 +45,6 @@ export function Sheet({
    * pick one thing and close, or that carry their own confirm button, keep the ✕.
    */
   done?: boolean;
-  /**
-   * No swipe-down to close. For a sheet that is one long read (the Terms): the swipe takes the
-   * vertical drags its scroll view needs, so the text could not be scrolled. The ✕ and the
-   * backdrop still close it.
-   */
-  noSwipe?: boolean;
 }) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
@@ -126,7 +119,7 @@ export function Sheet({
       <Animated.View style={[StyleSheet.absoluteFill, styles.shade, backdropStyle]} />
       <Pressable style={styles.backdrop} onPress={requestClose}>
         <Animated.View style={{marginBottom: lift}}>
-          <Animated.View style={[{height: sheetHeight}, sheetStyle]} {...(noSwipe ? {} : panHandlers)}>
+          <Animated.View style={[{height: sheetHeight}, sheetStyle]} {...panHandlers}>
             <Pressable style={styles.sheet} onPress={() => {}}>
               <View style={styles.head}>
                 <Text style={styles.title}>{title}</Text>
