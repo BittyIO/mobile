@@ -892,7 +892,7 @@ export function VaultHomeScreen() {
             return (
               <Pressable
                 key={l.id}
-                hitSlop={8}
+                style={styles.tabHit}
                 accessibilityRole="button"
                 onLayout={(e) => {
                   const {x, width} = e.nativeEvent.layout;
@@ -919,7 +919,7 @@ export function VaultHomeScreen() {
               has the name as a field at the top and the assets underneath, which is where both
               questions actually get answered. */}
           <Pressable
-            hitSlop={8}
+            style={styles.tabHit}
             accessibilityRole="button"
             accessibilityLabel={t('mobile.home.new_list')}
             onPress={() => {
@@ -1045,7 +1045,9 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   // Inset to the cards' own content, not to the page: "Watch list" and "hide 0" line up with
   // "Total value" and the eye in the hero card above, which is the row this one echoes. At 4 they
   // hung off both edges, further out than anything they sit over.
-  listHead: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: -6},
+  // The tabs carry their own touch padding (tabHit), so the row is pulled back by the same amount
+  // on every side: it sits where it did, and each name is a finger-sized target.
+  listHead: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10, marginTop: -12, marginBottom: -18},
   // The total value and the distribution pie icon beside it, on one line in the hero card.
   totalRow: {flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 2},
   distBtn: {flexShrink: 0},
@@ -1064,7 +1066,14 @@ const makeStyles = (c: Colors) => StyleSheet.create({
    * padding inside is just so the ＋ is not flush to the edge it scrolls past.
    */
   tabScroll: {flexGrow: 0, flexShrink: 1, marginRight: 18},
-  tabRow: {flexDirection: 'row', alignItems: 'center', gap: 16, paddingRight: 4},
+  tabRow: {flexDirection: 'row', alignItems: 'center', gap: 0, paddingRight: 4},
+  /**
+   * A list name's touch area. hitSlop cannot do this: the names sit in a horizontal scroller only
+   * as tall as the text, and a touch outside the scroller never reaches them. So the padding is real
+   * — 12 above and below, 10 each side (20 between names, where `gap` gave 16) — and listHead
+   * takes it back with negative margins.
+   */
+  tabHit: {paddingVertical: 12, paddingHorizontal: 10},
   // The row's own grey, like the list names and "hide 0" beside it. In accent it was the loudest
   // thing on a line of labels, and the one thing on it nobody needs to find in a hurry.
   listAdd: {color: c.subtext, fontSize: 15, fontWeight: '600'},
