@@ -23,14 +23,43 @@ import {ACTIVATION_GAS, activationFeeUnits, relayFeeUnits} from '@/core/activati
 import {ETH_USD_FEED} from './fee-quote';
 import {fetchPrices} from '@/core/prices';
 import {sendFromOwner} from './direct';
+import {translate} from '@/i18n';
+import {useLanguage} from '@/core/language-store';
 
 
 /** Is the vault deployed (activated)? A counterfactual vault has no code until activation. */
 export async function isActivated(vault: Address, network: Network): Promise<boolean> {
+  const key = `${network}:${vault.toLowerCase()}`;
+  // Deployed is for good: once seen, never asked again.
+  if (deployed.has(key)) return true;
   const client = publicClientFor(network);
-  const code = await client.getBytecode({address: vault}).catch(() => undefined);
-  return !!code && code !== '0x';
+  /**
+   * A read that FAILS is not an empty address.
+   *
+   * It used to be: `getBytecode(...).catch(() => undefined)` turned a timed-out or rate-limited RPC
+   * into "no code", and every write on a long-active vault then set off to ACTIVATE it — which
+   * failed, and told the user to fund a vault that had been running for weeks ("your vault needs to
+   * be activated first; the network fee is paid from…"), with nothing ever reaching the relayer.
+   * So a failed read is retried, and if the chain still cannot be reached the write stops and says
+   * that instead.
+   */
+  let lastErr: unknown;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const code = await client.getBytecode({address: vault});
+      const live = !!code && code !== '0x';
+      if (live) deployed.add(key);
+      return live;
+    } catch (e) {
+      lastErr = e;
+      await new Promise((r) => setTimeout(r, 600 * (i + 1)));
+    }
+  }
+  throw new Error(
+    `${translate(useLanguage.getState().language, 'mobile.actions.network_unreachable')}\n\n${String((lastErr as Error)?.message ?? lastErr).slice(0, 120)}`,
+  );
 }
+const deployed = new Set<string>();
 
 const GUARD_CONFIG_ABI = parseAbi(['function getAddress(bytes32 key) view returns (address)']);
 const VAULT_VERSION_ABI = parseAbi(['function vaultVersion() view returns (uint256)']);
