@@ -307,7 +307,15 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
             <Text style={styles.sectionTitle}>{t('mobile.payments.pending_whitelisted')}</Text>
             {allowance ? <Text style={styles.sectionLimit}>{allowance}</Text> : null}
           </View>
-          <View style={styles.card}>{waiting.map((b, i) => entryRow(b, i, waiting))}</View>
+          {/* One card each: every one is a change to who can be paid without limit, and set apart
+              it cannot be skimmed past as one more line of a list. */}
+          <View style={styles.cards}>
+            {waiting.map((b) => (
+              <View key={b.id} style={styles.card}>
+                {entryRow(b, 0, [b])}
+              </View>
+            ))}
+          </View>
         </>
       ) : null}
 
@@ -352,6 +360,7 @@ const makeStyles = (c: Colors) =>
     sectionTitle: {color: c.subtext, fontSize: 13, fontWeight: '600', flexShrink: 1},
     sectionLimit: {marginLeft: 'auto', color: c.subtext, fontSize: 13, fontWeight: '600', textAlign: 'right'},
     card: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 16},
+    cards: {gap: 10},
     // The same row metrics the asset picker uses, so a list is a list.
     row: {
       flexDirection: 'row',
