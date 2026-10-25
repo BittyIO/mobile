@@ -84,8 +84,16 @@ export function VaultListScreen() {
   const [owner, setOwner] = useState<string | null>(() => (active ? ownerOf(active) : null));
   const current = owners.find((o) => o.key === owner) ?? owners[0];
   const [ownerOpen, setOwnerOpen] = useState(false);
-  const ownerLabel = (o: (typeof owners)[number]) =>
-    o.safe ? t('mobile.vaults.tag_safe') : t('mobile.vaults.owner_n', {n: o.keyIndex + 1});
+  const label = (n: number) => t('mobile.app.vault_n', {n});
+  /**
+   * An owner is named after the vault it was made for — "Owner of Savings" — since that is the name
+   * the user gave: a key's own vault (the one the factory derives from it), a Safe's vault. A key
+   * with no vault of its own here (it only signs for a Safe, or only received one) keeps its number.
+   */
+  const ownerLabel = (o: (typeof owners)[number]) => {
+    const own = vaults.find((v) => (o.safe ? v.safe?.toLowerCase() === o.key : !v.safe && !v.vault && v.index === o.keyIndex));
+    return own ? t('mobile.vaults.owner_of', {name: vaultLabel(own, label)}) : t('mobile.vaults.owner_n', {n: o.keyIndex + 1});
+  };
   const {notYours} = useVaultDirectory(network, vaults, refresh);
   const mine = vaults.filter((v) => current && ownerOf(v) === current.key);
 
@@ -123,7 +131,6 @@ export function VaultListScreen() {
   const stable = useAssetCatalog(network).find((a) => a.kind === 'stable')?.address;
   const {ask, sheet} = useConfirmAction();
 
-  const label = (n: number) => t('mobile.app.vault_n', {n});
   /**
    * Renaming a vault: the pencil opens the system text dialog — the name in a field, the vault's
    * address under the title, Cancel and Save — as an address-book entry is renamed. The name is

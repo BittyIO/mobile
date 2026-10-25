@@ -3,6 +3,7 @@ import type {MobileTable} from './index';
 // Settings › Vaults: the vault list, the vaults found for this device's keys, and removing one.
 export const vaults: MobileTable = {
   en: {
+    owner_of: 'Owner of {{name}}',
     owner: 'Owner',
     owner_n: 'Owner {{n}}',
     choose_owner: 'Choose owner',
@@ -22,6 +23,7 @@ export const vaults: MobileTable = {
     remove: 'Remove',
   },
   zh: {
+    owner_of: '{{name}} 的所有者',
     owner: '所有者',
     owner_n: '所有者 {{n}}',
     choose_owner: '选择所有者',
@@ -41,6 +43,7 @@ export const vaults: MobileTable = {
     remove: '移除',
   },
   'zh-TW': {
+    owner_of: '{{name}} 的擁有者',
     owner: '擁有者',
     owner_n: '擁有者 {{n}}',
     choose_owner: '選擇擁有者',
@@ -60,6 +63,7 @@ export const vaults: MobileTable = {
     remove: '移除',
   },
   ja: {
+    owner_of: '{{name}} のオーナー',
     owner: 'オーナー',
     owner_n: 'オーナー {{n}}',
     choose_owner: 'オーナーを選択',
@@ -79,6 +83,7 @@ export const vaults: MobileTable = {
     remove: '削除',
   },
   ko: {
+    owner_of: '{{name}}의 소유자',
     owner: '소유자',
     owner_n: '소유자 {{n}}',
     choose_owner: '소유자 선택',
@@ -98,6 +103,7 @@ export const vaults: MobileTable = {
     remove: '제거',
   },
   fr: {
+    owner_of: 'Propriétaire de {{name}}',
     owner: 'Propriétaire',
     owner_n: 'Propriétaire {{n}}',
     choose_owner: 'Choisir le propriétaire',
@@ -117,6 +123,7 @@ export const vaults: MobileTable = {
     remove: 'Retirer',
   },
   es: {
+    owner_of: 'Propietario de {{name}}',
     owner: 'Propietario',
     owner_n: 'Propietario {{n}}',
     choose_owner: 'Elegir propietario',
@@ -136,6 +143,7 @@ export const vaults: MobileTable = {
     remove: 'Quitar',
   },
   de: {
+    owner_of: 'Eigentümer von {{name}}',
     owner: 'Eigentümer',
     owner_n: 'Eigentümer {{n}}',
     choose_owner: 'Eigentümer wählen',
@@ -155,6 +163,7 @@ export const vaults: MobileTable = {
     remove: 'Entfernen',
   },
   'pt-BR': {
+    owner_of: 'Proprietário de {{name}}',
     owner: 'Proprietário',
     owner_n: 'Proprietário {{n}}',
     choose_owner: 'Escolher proprietário',
@@ -174,6 +183,7 @@ export const vaults: MobileTable = {
     remove: 'Remover',
   },
   hi: {
+    owner_of: '{{name}} का मालिक',
     owner: 'मालिक',
     owner_n: 'मालिक {{n}}',
     choose_owner: 'मालिक चुनें',
@@ -193,6 +203,7 @@ export const vaults: MobileTable = {
     remove: 'हटाएँ',
   },
   tr: {
+    owner_of: '{{name}} sahibi',
     owner: 'Sahip',
     owner_n: 'Sahip {{n}}',
     choose_owner: 'Sahip seç',
@@ -212,6 +223,7 @@ export const vaults: MobileTable = {
     remove: 'Kaldır',
   },
   ru: {
+    owner_of: 'Владелец {{name}}',
     owner: 'Владелец',
     owner_n: 'Владелец {{n}}',
     choose_owner: 'Выберите владельца',
@@ -231,6 +243,7 @@ export const vaults: MobileTable = {
     remove: 'Убрать',
   },
   id: {
+    owner_of: 'Pemilik {{name}}',
     owner: 'Pemilik',
     owner_n: 'Pemilik {{n}}',
     choose_owner: 'Pilih pemilik',
@@ -250,6 +263,7 @@ export const vaults: MobileTable = {
     remove: 'Hapus',
   },
   vi: {
+    owner_of: 'Chủ sở hữu {{name}}',
     owner: 'Chủ sở hữu',
     owner_n: 'Chủ sở hữu {{n}}',
     choose_owner: 'Chọn chủ sở hữu',
@@ -269,6 +283,7 @@ export const vaults: MobileTable = {
     remove: 'Gỡ',
   },
   th: {
+    owner_of: 'เจ้าของ {{name}}',
     owner: 'เจ้าของ',
     owner_n: 'เจ้าของ {{n}}',
     choose_owner: 'เลือกเจ้าของ',
