@@ -25,7 +25,8 @@ import {
   type VaultVersionsCatalog,
 } from '@/vault/versions';
 import {useT} from '@/i18n';
-import {useStyles, type Colors} from '@/theme';
+import {useColors, useStyles, type Colors} from '@/theme';
+import Svg, {Circle, Path, Rect} from 'react-native-svg';
 import {displaySymbol} from '@/core/format';
 
 /**
@@ -60,6 +61,7 @@ const serviceRank = (c: ProtocolCategory) => {
 
 export function ManageScreen() {
   const {t, company} = useT();
+  const c = useColors();
   const styles = useStyles(makeStyles);
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const {params} = useRoute<RouteProp<RootStackParamList, 'VaultAssets'>>();
@@ -308,7 +310,10 @@ export function ManageScreen() {
             key={key}
             style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === 1 && styles.rowLast, pressed && styles.pressed]}
             onPress={() => nav.push('VaultAssets', {section: key})}>
-            <Text style={styles.rowTitle}>{label}</Text>
+            <View style={styles.titleWithIcon}>
+              <ListIcon name={key} color={c.subtext} />
+              <Text style={styles.rowTitle}>{label}</Text>
+            </View>
             <View style={styles.countRow}>
               <Text style={styles.count}>{count}</Text>
               <Text style={styles.chev}>›</Text>
@@ -319,6 +324,28 @@ export function ManageScreen() {
 
       {sheet}
     </ScrollView>
+  );
+}
+
+/** The web's marks for the two lists: coins for assets, building blocks for protocols. */
+function ListIcon({name, color}: {name: 'assets' | 'services'; color: string}) {
+  const st = {stroke: color, strokeWidth: 2, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const};
+  return (
+    <Svg width={20} height={20} viewBox="0 0 24 24">
+      {name === 'assets' ? (
+        <>
+          <Circle cx={8} cy={8} r={6} {...st} />
+          <Path d="M18.09 10.37A6 6 0 1 1 10.34 18" {...st} />
+          <Path d="M7 6h1v4" {...st} />
+          <Path d="m16.71 13.88.7.71-2.82 2.82" {...st} />
+        </>
+      ) : (
+        <>
+          <Rect x={14} y={3} width={7} height={7} rx={1} {...st} />
+          <Path d="M10 21V8a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H3" {...st} />
+        </>
+      )}
+    </Svg>
   );
 }
 
@@ -358,6 +385,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   pressed: {opacity: 0.6},
   // The summary rows' right-hand end: how many are in the list, then the way in.
   countRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
+  titleWithIcon: {flexDirection: 'row', alignItems: 'center', gap: 10},
   count: {color: c.subtext, fontSize: 15, fontVariant: ['tabular-nums']},
   chev: {color: c.subtext, fontSize: 20, marginTop: -2},
   rowText: {flex: 1, gap: 2},
