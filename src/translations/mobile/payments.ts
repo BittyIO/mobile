@@ -3,6 +3,7 @@ import type {MobileTable} from './index';
 // Payments tab (Send / Scheduled / Address Book), plus first-run onboarding and the lock screen.
 export const payments: MobileTable = {
   en: {
+    tab_added: 'Added',
     tab_pending: 'Pending',
     tab_cancelled: 'Cancelled',
     none_here: 'Nothing here',
@@ -76,6 +77,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Unlock',
   },
   zh: {
+    tab_added: '已添加',
     tab_pending: '待生效',
     tab_cancelled: '已作废',
     none_here: '暂无',
@@ -149,6 +151,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: '解锁',
   },
   'zh-TW': {
+    tab_added: '已新增',
     tab_pending: '待生效',
     tab_cancelled: '已作廢',
     none_here: '暫無',
@@ -222,6 +225,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: '解鎖',
   },
   ja: {
+    tab_added: '追加済み',
     tab_pending: '保留中',
     tab_cancelled: 'キャンセル済み',
     none_here: 'ありません',
@@ -280,6 +284,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'ロック解除',
   },
   ko: {
+    tab_added: '추가됨',
     tab_pending: '대기 중',
     tab_cancelled: '취소됨',
     none_here: '없음',
@@ -338,6 +343,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: '잠금 해제',
   },
   fr: {
+    tab_added: 'Ajoutées',
     tab_pending: 'En attente',
     tab_cancelled: 'Annulées',
     none_here: 'Rien ici',
@@ -396,6 +402,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Déverrouiller',
   },
   es: {
+    tab_added: 'Añadidas',
     tab_pending: 'Pendientes',
     tab_cancelled: 'Canceladas',
     none_here: 'Nada aquí',
@@ -454,6 +461,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Desbloquear',
   },
   de: {
+    tab_added: 'Hinzugefügt',
     tab_pending: 'Ausstehend',
     tab_cancelled: 'Storniert',
     none_here: 'Nichts hier',
@@ -512,6 +520,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Entsperren',
   },
   'pt-BR': {
+    tab_added: 'Adicionadas',
     tab_pending: 'Pendentes',
     tab_cancelled: 'Canceladas',
     none_here: 'Nada aqui',
@@ -570,6 +579,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Desbloquear',
   },
   hi: {
+    tab_added: 'जोड़े गए',
     tab_pending: 'लंबित',
     tab_cancelled: 'रद्द',
     none_here: 'कुछ नहीं',
@@ -628,6 +638,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'अनलॉक करें',
   },
   tr: {
+    tab_added: 'Eklenenler',
     tab_pending: 'Bekleyen',
     tab_cancelled: 'İptal edilen',
     none_here: 'Burada bir şey yok',
@@ -686,6 +697,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Kilidi aç',
   },
   ru: {
+    tab_added: 'Добавленные',
     tab_pending: 'Ожидают',
     tab_cancelled: 'Отменённые',
     none_here: 'Пусто',
@@ -744,6 +756,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Разблокировать',
   },
   id: {
+    tab_added: 'Ditambahkan',
     tab_pending: 'Tertunda',
     tab_cancelled: 'Dibatalkan',
     none_here: 'Tidak ada',
@@ -802,6 +815,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Buka kunci',
   },
   vi: {
+    tab_added: 'Đã thêm',
     tab_pending: 'Đang chờ',
     tab_cancelled: 'Đã hủy',
     none_here: 'Không có gì',
@@ -860,6 +874,7 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Mở khóa',
   },
   th: {
+    tab_added: 'เพิ่มแล้ว',
     tab_pending: 'รอดำเนินการ',
     tab_cancelled: 'ยกเลิกแล้ว',
     none_here: 'ไม่มีรายการ',

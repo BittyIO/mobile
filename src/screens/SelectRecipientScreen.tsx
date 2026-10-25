@@ -301,7 +301,7 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
    */
   if (manage) {
     const tabs = [
-      {label: t('mobile.payments.whitelisted_book'), rows: live, limit: t('mobile.payments.max_send_none'), empty: t('mobile.payments.book_empty_title')},
+      {label: t('mobile.payments.tab_added'), rows: live, limit: t('mobile.payments.max_send_none'), empty: t('mobile.payments.book_empty_title')},
       {label: t('mobile.payments.tab_pending'), rows: book.filter((b) => b.status === WHITELIST_STATUS.pending), limit: allowance, empty: t('mobile.payments.none_here')},
       {label: t('mobile.payments.tab_cancelled'), rows: book.filter((b) => b.status === WHITELIST_STATUS.voided), limit: null, empty: t('mobile.payments.none_here')},
     ];
@@ -417,7 +417,7 @@ const makeStyles = (c: Colors) =>
     sectionLimit: {marginLeft: 'auto', color: c.subtext, fontSize: 13, fontWeight: '600', textAlign: 'right'},
     card: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 16},
     // The managing page: the category row under the header, then a page per category.
-    tabRow: {flexDirection: 'row', alignItems: 'center', gap: 20, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4},
+    tabRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 24, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4},
     tabText: {color: c.subtext, fontSize: 15, fontWeight: '600'},
     tabTextOn: {color: c.text},
     page: {padding: 16, paddingTop: 12, paddingBottom: 32},
