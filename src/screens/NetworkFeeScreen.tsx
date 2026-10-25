@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {Alert, Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import Svg, {Path} from 'react-native-svg';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -10,6 +10,7 @@ import {OwnerWalletCard} from '@/components/FeePayer';
 import {useNetwork} from '@/core/network-store';
 import {useActiveFeePayer} from '@/vault/useFeePayer';
 import {setFeePayer, type FeePayer} from '@/core/fee-payer-store';
+import {ownerEthBalance} from '@/vault/direct';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 
@@ -31,7 +32,27 @@ export function NetworkFeeScreen() {
   const c = useColors();
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const network = useNetwork((s) => s.network);
-  const {payer, canChoose, vault} = useActiveFeePayer(network);
+  const {payer, canChoose, vault, owner} = useActiveFeePayer(network);
+
+  /**
+   * Choosing a way to pay. The owner wallet with no ETH in it cannot pay a single fee, so choosing
+   * it then asks first: every write would stop at "not enough ETH" until the wallet is funded. A
+   * balance that cannot be read does not stand in the way.
+   */
+  const choose = async (p: FeePayer) => {
+    if (!vault || payer === p) return;
+    if (p === 'owner' && owner) {
+      const eth = await ownerEthBalance(network, owner).catch(() => null);
+      if (eth === 0n) {
+        Alert.alert(t('mobile.fees.owner_empty_title'), t('mobile.fees.owner_empty_body'), [
+          {text: t('common.cancel'), style: 'cancel'},
+          {text: t('mobile.fees.owner_empty_confirm'), onPress: () => setFeePayer(network, vault, 'owner')},
+        ]);
+        return;
+      }
+    }
+    setFeePayer(network, vault, p);
+  };
   // The page holds still while a fee coin is being dragged, as the Overview does for its lists.
   const [dragging, setDragging] = useState(false);
 
@@ -73,7 +94,7 @@ export function NetworkFeeScreen() {
         // No pressed dimming: the check moving is the feedback, and dimming the title read as it
         // being highlighted.
         style={styles.wayPick}
-        onPress={() => vault && setFeePayer(network, vault, p)}
+        onPress={() => void choose(p)}
         accessibilityRole="radio"
         accessibilityState={{checked: payer === p}}>
         <View style={styles.titleLine}>
