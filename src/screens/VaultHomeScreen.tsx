@@ -20,6 +20,8 @@ import {useVaultPositions} from '@/vault/useVaultPositions';
 import {useFlows} from '@/vault/useFlows';
 import {earnedRaw} from '@/vault/flows';
 import {usePriceFeed} from '@/vault/usePrices';
+import {getLidoUnstake, NO_UNSTAKE, type LidoUnstake} from '@/vault/lido';
+import {adapterByName} from '@/core/protocols';
 import {useMarketStats, type MarketStat, type MarketStatMap} from '@/vault/useMarketStats';
 
 import {usdValue, fmtUsd} from '@/core/prices';
@@ -115,7 +117,7 @@ type Row = {
   yielding: number;
   lending: number;
   /** Each position behind the totals, with what it has earned, for the expanded row. */
-  legs: {protocol: string; kind: 'staked' | 'supplied'; amount: number; earned: number}[];
+  legs: {protocol: string; kind: 'staked' | 'supplied' | 'unstaking'; amount: number; earned: number}[];
   earned: number;
   total: number;
   usd: number | null;
@@ -294,7 +296,7 @@ function AssetRow({
           {row.legs.map((leg, i) => (
             <Leg
               key={`${leg.protocol}-${leg.kind}-${i}`}
-              label={t(leg.kind === 'staked' ? 'vault.yielding' : 'vault.lending')}
+              label={t(leg.kind === 'staked' ? 'vault.yielding' : leg.kind === 'unstaking' ? 'vault.unstaking' : 'vault.lending')}
               amount={leg.amount}
               earned={leg.earned}
               symbol={row.symbol}
@@ -393,6 +395,28 @@ export function VaultHomeScreen() {
   const {prices, loaded: pricesLoaded} = usePriceFeed(network, priceNonce, catalogSymbols);
   const catalogSettled = useCatalogSettled(network);
   /**
+   * ETH withdrawn from Lido and still in its queue (or finalized and not yet claimed).
+   *
+   * It is in neither the vault's balance nor the server's positions — Lido holds it until the claim
+   * — so without this read a withdrawal made the total drop by the whole amount for days, then jump
+   * back on the claim. Read from the chain, as the web does, and counted into WETH, which is what
+   * the claim pays back. `unstakeFor` says which vault the figure is for, so a switch waits again.
+   */
+  const lidoAdapter = adapterByName(network, 'Lido');
+  const [unstake, setUnstake] = useState<{key: string; v: LidoUnstake} | null>(null);
+  React.useEffect(() => {
+    const key = bal.vault ? `${network}:${bal.vault.toLowerCase()}` : '';
+    if (!bal.vault) return;
+    if (!lidoAdapter) return setUnstake({key, v: NO_UNSTAKE});
+    let live = true;
+    getLidoUnstake(bal.vault, lidoAdapter, network)
+      .then((v) => live && setUnstake({key, v}))
+      .catch(() => live && setUnstake((u) => (u?.key === key ? u : {key, v: NO_UNSTAKE})));
+    return () => {
+      live = false;
+    };
+  }, [bal.vault, network, lidoAdapter, pos.positions, priceNonce]);
+  /**
    * Every figure the total is made of has arrived: the live catalog (which decides which tokens are
    * read), the balances read against it, the Earn positions, and prices for all of it.
    *
@@ -411,6 +435,7 @@ export function VaultHomeScreen() {
     catalogSettled &&
     ((bal.current && !!bal.balances) || !!bal.error) &&
     pos.loaded &&
+    unstake?.key === readyKey &&
     pricesLoaded;
   const [readyFor, setReadyFor] = useState<Set<string>>(() => new Set());
   const ready = readyFor.has(readyKey);
@@ -429,6 +454,7 @@ export function VaultHomeScreen() {
    * One answer covers all of them, and it refreshes on the same pull the prices do.
    */
   const marketStats = useMarketStats(network, catalogSymbols, priceNonce);
+  const unstakeKey = bal.vault ? `${network}:${bal.vault.toLowerCase()}` : '';
   const rows = useMemo<Row[]>(() => {
     // Stablecoins lead the list, then the rest in catalog order.
     const assets = [...catalog].sort((x, y) => Number(y.kind === 'stable') - Number(x.kind === 'stable'));
@@ -451,7 +477,7 @@ export function VaultHomeScreen() {
         : 0;
       const legs = pos.positions
         .filter((p) => p.symbol === a.symbol && Number(p.formatted) > 0)
-        .map((p) => {
+        .map((p): Row['legs'][number] => {
           const raw = flows.flows ? earnedRaw(p, flows.flows) : null;
           return {
             protocol: p.protocolName,
@@ -462,10 +488,16 @@ export function VaultHomeScreen() {
         })
         // Yielding above lending, always, rather than whatever order the positions arrived in.
         .sort((x, y) => Number(x.kind === 'supplied') - Number(y.kind === 'supplied'));
-      const total = free + yielding + lending;
+      // Lido's queue pays back in WETH: count it there, as a leg of its own.
+      const queued =
+        a.symbol === 'WETH' && unstake && unstake.key === unstakeKey
+          ? Number(formatUnits(unstake.v.unstaking + unstake.v.claimable, 18))
+          : 0;
+      if (queued > 0) legs.push({protocol: 'Lido', kind: 'unstaking', amount: queued, earned: 0});
+      const total = free + yielding + lending + queued;
       return {legs, symbol: a.symbol, icon: a.icon, address: a.address, free, yielding, lending, earned, total, usd: usdValue(total, a.symbol, prices), price: usdValue(1, a.symbol, prices), stable: a.kind === 'stable', category: assetCategory(a.category)};
     });
-  }, [catalog, bal.balances, pos.positions, flows.flows, network, prices]);
+  }, [catalog, bal.balances, pos.positions, flows.flows, network, prices, unstake, unstakeKey]);
 
   /**
    * Tapping an asset's name opens Trade on a pair for it.
