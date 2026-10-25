@@ -3,6 +3,9 @@ import type {MobileTable} from './index';
 // Overview tab, Receive dialog, History, and the Earn action form.
 export const home: MobileTable = {
   en: {
+    backup_first_title: 'Back up your recovery phrase first',
+    backup_first_body: 'Write down your 12 words and confirm three of them. Until then the vault address stays hidden, so no money can arrive in a vault you could not recover.',
+    backup_now: 'Back up now',
     watch_list: 'Watch list',
     watch_list_n: 'Watch list #{{n}}',
     all_assets: 'Assets',
@@ -34,6 +37,9 @@ export const home: MobileTable = {
     your_vault_on: 'Your vault address on {{network}}',
   },
   zh: {
+    backup_first_title: '请先备份助记词',
+    backup_first_body: '写下你的 12 个单词并确认其中三个。在此之前金库地址将保持隐藏，以免资金转入一个你无法恢复的金库。',
+    backup_now: '立即备份',
     watch_list: '自选',
     watch_list_n: '自选 #{{n}}',
     all_assets: '资产',
@@ -65,6 +71,9 @@ export const home: MobileTable = {
     your_vault_on: '你在 {{network}} 上的金库地址',
   },
   'zh-TW': {
+    backup_first_title: '請先備份助記詞',
+    backup_first_body: '寫下你的 12 個單字並確認其中三個。在此之前金庫地址會保持隱藏，以免資金轉入一個你無法恢復的金庫。',
+    backup_now: '立即備份',
     watch_list: '自選',
     watch_list_n: '自選 #{{n}}',
     all_assets: '資產',
@@ -96,6 +105,9 @@ export const home: MobileTable = {
     your_vault_on: '你在 {{network}} 上的金庫地址',
   },
   ja: {
+    backup_first_title: 'まずリカバリーフレーズをバックアップ',
+    backup_first_body: '12 個の単語を書き留め、そのうち 3 つを確認してください。それまでは金庫のアドレスを表示しません。復元できない金庫に資金が入らないようにするためです。',
+    backup_now: '今すぐバックアップ',
     watch_list: 'ウォッチリスト',
     watch_list_n: 'ウォッチリスト #{{n}}',
     all_assets: '資産',
@@ -127,6 +139,9 @@ export const home: MobileTable = {
     your_vault_on: '{{network}} 上のあなたのボールトアドレス',
   },
   ko: {
+    backup_first_title: '먼저 복구 문구를 백업하세요',
+    backup_first_body: '12개 단어를 적고 그중 세 개를 확인하세요. 그 전까지는 금고 주소를 숨겨, 복구할 수 없는 금고로 돈이 들어오지 않게 합니다.',
+    backup_now: '지금 백업',
     watch_list: '관심 목록',
     watch_list_n: '관심 목록 #{{n}}',
     all_assets: '자산',
@@ -158,6 +173,9 @@ export const home: MobileTable = {
     your_vault_on: '{{network}}의 내 볼트 주소',
   },
   fr: {
+    backup_first_title: 'Sauvegardez d’abord votre phrase de récupération',
+    backup_first_body: 'Notez vos 12 mots et confirmez-en trois. D’ici là, l’adresse du coffre reste masquée, pour qu’aucun fonds n’arrive dans un coffre que vous ne pourriez pas récupérer.',
+    backup_now: 'Sauvegarder maintenant',
     watch_list: 'Liste de suivi',
     watch_list_n: 'Liste de suivi #{{n}}',
     all_assets: 'Actifs',
@@ -189,6 +207,9 @@ export const home: MobileTable = {
     your_vault_on: 'L’adresse de votre coffre sur {{network}}',
   },
   es: {
+    backup_first_title: 'Primero respalda tu frase de recuperación',
+    backup_first_body: 'Anota tus 12 palabras y confirma tres. Hasta entonces la dirección de la bóveda queda oculta, para que no llegue dinero a una bóveda que no podrías recuperar.',
+    backup_now: 'Respaldar ahora',
     watch_list: 'Lista de seguimiento',
     watch_list_n: 'Lista de seguimiento #{{n}}',
     all_assets: 'Activos',
@@ -220,6 +241,9 @@ export const home: MobileTable = {
     your_vault_on: 'La dirección de tu bóveda en {{network}}',
   },
   de: {
+    backup_first_title: 'Sichere zuerst deine Wiederherstellungsphrase',
+    backup_first_body: 'Schreibe deine 12 Wörter auf und bestätige drei davon. Bis dahin bleibt die Tresoradresse verborgen, damit kein Geld in einen Tresor gelangt, den du nicht wiederherstellen könntest.',
+    backup_now: 'Jetzt sichern',
     watch_list: 'Beobachtungsliste',
     watch_list_n: 'Beobachtungsliste #{{n}}',
     all_assets: 'Assets',
@@ -251,6 +275,9 @@ export const home: MobileTable = {
     your_vault_on: 'Die Adresse deines Tresors auf {{network}}',
   },
   'pt-BR': {
+    backup_first_title: 'Primeiro faça backup da sua frase de recuperação',
+    backup_first_body: 'Anote suas 12 palavras e confirme três delas. Até lá o endereço do cofre fica oculto, para que nenhum dinheiro chegue a um cofre que você não conseguiria recuperar.',
+    backup_now: 'Fazer backup agora',
     watch_list: 'Lista de acompanhamento',
     watch_list_n: 'Lista de acompanhamento #{{n}}',
     all_assets: 'Ativos',
@@ -282,6 +309,9 @@ export const home: MobileTable = {
     your_vault_on: 'O endereço do seu cofre na {{network}}',
   },
   hi: {
+    backup_first_title: 'पहले अपने रिकवरी फ़्रेज़ का बैकअप लें',
+    backup_first_body: 'अपने 12 शब्द लिखें और उनमें से तीन की पुष्टि करें। तब तक वॉल्ट का पता छिपा रहेगा, ताकि ऐसे वॉल्ट में पैसा न आए जिसे आप रिकवर न कर सकें।',
+    backup_now: 'अभी बैकअप लें',
     watch_list: 'वॉचलिस्ट',
     watch_list_n: 'वॉचलिस्ट #{{n}}',
     all_assets: 'एसेट',
@@ -313,6 +343,9 @@ export const home: MobileTable = {
     your_vault_on: '{{network}} पर आपके वॉल्ट का पता',
   },
   tr: {
+    backup_first_title: 'Önce kurtarma ifadenizi yedekleyin',
+    backup_first_body: '12 kelimenizi yazın ve üçünü doğrulayın. O zamana kadar kasa adresi gizli kalır; böylece kurtaramayacağınız bir kasaya para gelmez.',
+    backup_now: 'Şimdi yedekle',
     watch_list: 'İzleme listesi',
     watch_list_n: 'İzleme listesi #{{n}}',
     all_assets: 'Varlıklar',
@@ -344,6 +377,9 @@ export const home: MobileTable = {
     your_vault_on: '{{network}} üzerindeki kasa adresiniz',
   },
   ru: {
+    backup_first_title: 'Сначала сохраните фразу восстановления',
+    backup_first_body: 'Запишите 12 слов и подтвердите три из них. До этого адрес хранилища скрыт, чтобы деньги не пришли в хранилище, которое вы не сможете восстановить.',
+    backup_now: 'Сохранить сейчас',
     watch_list: 'Список наблюдения',
     watch_list_n: 'Список наблюдения #{{n}}',
     all_assets: 'Активы',
@@ -375,6 +411,9 @@ export const home: MobileTable = {
     your_vault_on: 'Адрес вашего хранилища в сети {{network}}',
   },
   id: {
+    backup_first_title: 'Cadangkan frasa pemulihan Anda dulu',
+    backup_first_body: 'Tulis 12 kata Anda dan konfirmasi tiga di antaranya. Sampai saat itu alamat vault disembunyikan, agar tidak ada dana masuk ke vault yang tidak bisa Anda pulihkan.',
+    backup_now: 'Cadangkan sekarang',
     watch_list: 'Daftar pantauan',
     watch_list_n: 'Daftar pantauan #{{n}}',
     all_assets: 'Aset',
@@ -406,6 +445,9 @@ export const home: MobileTable = {
     your_vault_on: 'Alamat brankas Anda di {{network}}',
   },
   vi: {
+    backup_first_title: 'Hãy sao lưu cụm từ khôi phục trước',
+    backup_first_body: 'Ghi lại 12 từ và xác nhận ba từ trong số đó. Trước khi xong, địa chỉ két sẽ được ẩn để không có tiền nào chuyển vào một két bạn không thể khôi phục.',
+    backup_now: 'Sao lưu ngay',
     watch_list: 'Danh sách theo dõi',
     watch_list_n: 'Danh sách theo dõi #{{n}}',
     all_assets: 'Tài sản',
@@ -437,6 +479,9 @@ export const home: MobileTable = {
     your_vault_on: 'Địa chỉ kho của bạn trên {{network}}',
   },
   th: {
+    backup_first_title: 'สำรองวลีกู้คืนก่อน',
+    backup_first_body: 'จดคำทั้ง 12 คำและยืนยันสามคำ ก่อนหน้านั้นที่อยู่ห้องนิรภัยจะถูกซ่อนไว้ เพื่อไม่ให้มีเงินเข้าห้องนิรภัยที่คุณกู้คืนไม่ได้',
+    backup_now: 'สำรองตอนนี้',
     watch_list: 'รายการติดตาม',
     watch_list_n: 'รายการติดตาม #{{n}}',
     all_assets: 'สินทรัพย์',
