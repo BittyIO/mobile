@@ -287,11 +287,11 @@ function AssetRow({
         onLongPress={onHold}
         onAmountPress={splittable ? () => setOpen((o) => !o) : undefined}
       />
-      {open ? (
-        <View style={styles.legs}>
-          {/* Balance first: it is the part that can be spent without unwinding anything. Which
-              protocol holds the rest is a detail for the Earn tab; here the question is only how
-              much of the total is free and how much is working. */}
+      {/* Where the total sits — free balance, then each position — in a sheet rather than opened
+          under the row: the list keeps its shape, and the breakdown has room for its own lines. */}
+      <Sheet visible={open} title={displaySymbol(row.symbol)} onClose={() => setOpen(false)}>
+        <View style={styles.legsSheet}>
+          {/* Balance first: it is the part that can be spent without unwinding anything. */}
           <Leg label={t('vault.balance')} amount={row.free} symbol={row.symbol} hidden={hidden} />
           {row.legs.map((leg, i) => (
             <Leg
@@ -304,7 +304,7 @@ function AssetRow({
             />
           ))}
         </View>
-      ) : null}
+      </Sheet>
     </>
   );
 }
@@ -328,14 +328,14 @@ function Leg({label, amount, earned = 0, symbol, hidden}: {label: string; amount
           <>{MASK} </>
         ) : earned > 0 ? (
           <>
-            <Amount v={fmt(amount - earned)} size={13} weight="600" />{' '}
+            <Amount v={fmt(amount - earned)} size={15} weight="600" />{' '}
             <Text style={styles.legEarned}>
-              + <Amount v={fmt(earned)} size={12} color={c.success} weight="600" />
+              + <Amount v={fmt(earned)} size={14} color={c.success} weight="600" />
             </Text>{' '}
           </>
         ) : (
           <>
-            <Amount v={fmt(amount)} size={13} weight="600" />{' '}
+            <Amount v={fmt(amount)} size={15} weight="600" />{' '}
           </>
         )}
         {displaySymbol(symbol)}
@@ -1080,11 +1080,11 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   listCard: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 4},
   list: {gap: 0},
   // Indented to the asset NAME, not its icon: a 28pt icon and the cell's 10pt gap above it.
-  legs: {paddingLeft: 38, paddingBottom: 12, gap: 8},
+  legsSheet: {gap: 14, paddingTop: 12},
   legRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
-  legLabel: {flex: 1, color: c.subtext, fontSize: 13},
-  legAmt: {color: c.text, fontSize: 13, fontVariant: ['tabular-nums']},
-  legEarned: {color: c.success, fontSize: 12},
+  legLabel: {flex: 1, color: c.subtext, fontSize: 15},
+  legAmt: {color: c.text, fontSize: 15, fontVariant: ['tabular-nums']},
+  legEarned: {color: c.success, fontSize: 14},
   // Sized to the icon and the name, never to the cell: the gap to its right is the row's.
   badge: {width: 28, height: 28, borderRadius: 14, backgroundColor: c.bg, alignItems: 'center', justifyContent: 'center'},
   badgeText: {color: c.subtext, fontSize: 10, fontWeight: '700'},
