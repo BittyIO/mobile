@@ -142,15 +142,6 @@ export function QuantumSafeScreen() {
 
   const owner = status?.owner ?? null;
   const used = !!owner && (status?.used || !!usedHere[owner.toLowerCase()]);
-  const path = owner ? (keys[owner.toLowerCase()] ?? null) : null;
-  // Which key: the account's own, the nth one-time key, or — not one of this phone's — its address.
-  const keyName = !owner
-    ? undefined
-    : path
-      ? t('mobile.quantum.key_n', {n: path.k + 1})
-      : owner.toLowerCase() === me?.toLowerCase()
-        ? t('mobile.quantum.key_original')
-        : shortAddress(owner);
   const ours = isOwnKey(owner, me);
   const pending = status?.pending ?? null;
   const freshPending = !!pending && !!keys[pending.address.toLowerCase()];
@@ -190,9 +181,8 @@ export function QuantumSafeScreen() {
           <SettingsGroup footer={t(`mobile.quantum.state_${state}`)}>
             <SettingsRow
               icon="recovery"
-              title={t('mobile.quantum.signing_key')}
-              sub={owner ? shortAddress(owner) : undefined}
-              value={keyName}
+              title={t('mobile.quantum.owner_address')}
+              value={owner ? shortAddress(owner) : undefined}
               chevron={false}
               last={!pending}
             />
