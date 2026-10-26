@@ -164,6 +164,8 @@ export function PendingChangesScreen() {
       style={styles.container}
       contentContainerStyle={styles.body}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} tintColor={c.text} colors={[c.accent]} />}>
+      {/* Why these wait: the timelock, said without the word. */}
+      <Text style={styles.intro}>{t('mobile.vault.timelock_intro')}</Text>
       {items === null ? (
         <ActivityIndicator />
       ) : items.length === 0 ? (
@@ -234,6 +236,7 @@ const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: {flex: 1, backgroundColor: c.bg},
     body: {flexGrow: 1, padding: 16, gap: 24},
+    intro: {color: c.subtext, fontSize: 14, lineHeight: 20},
     empty: {color: c.subtext, fontSize: 15, textAlign: 'center', marginTop: 24},
     // Sized to the bar's 44 like the trade menu's: the native bar anchors a custom view by its bottom.
     notMe: {minHeight: 52, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16},
