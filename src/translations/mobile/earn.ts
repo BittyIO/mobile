@@ -4,6 +4,9 @@ import type {MobileTable} from './index';
 // range pills come from the web keys).
 export const earn: MobileTable = {
   en: {
+    stop_auto_yield: 'Turn off Auto-Yield',
+    stop_auto_supply: 'Turn off Auto-Supply',
+    stop_auto_why: 'Otherwise the withdrawn {{symbol}} is put straight back in automatically.',
     detail_position: 'In position',
     detail_earned: 'Earned',
     auto_yield_what: 'Auto-Yield routes idle {{symbol}} into this protocol as it arrives, so a deposit starts earning without a second step. You can withdraw at any time.',
@@ -16,6 +19,9 @@ export const earn: MobileTable = {
     no_lend_markets: 'No lending markets on this network.',
   },
   zh: {
+    stop_auto_yield: '关闭自动收益',
+    stop_auto_supply: '关闭自动供应',
+    stop_auto_why: '否则取出的 {{symbol}} 会被自动重新存入。',
     detail_position: '持仓中',
     detail_earned: '已赚取',
     auto_yield_what: '自动收益会在闲置 {{symbol}} 到账时自动转入该协议，存入后无需第二步即可开始赚取收益。你可以随时取出。',
@@ -28,6 +34,9 @@ export const earn: MobileTable = {
     no_lend_markets: '此网络上没有借贷市场。',
   },
   'zh-TW': {
+    stop_auto_yield: '關閉自動收益',
+    stop_auto_supply: '關閉自動供應',
+    stop_auto_why: '否則取出的 {{symbol}} 會被自動重新存入。',
     detail_position: '持倉中',
     detail_earned: '已賺取',
     auto_yield_what: '自動收益會在閒置 {{symbol}} 到帳時自動轉入該協議，存入後無需第二步即可開始賺取收益。你可以隨時取出。',
@@ -40,6 +49,9 @@ export const earn: MobileTable = {
     no_lend_markets: '此網路上沒有借貸市場。',
   },
   ja: {
+    stop_auto_yield: '自動利回りをオフにする',
+    stop_auto_supply: '自動供給をオフにする',
+    stop_auto_why: 'オフにしないと、引き出した {{symbol}} が自動で再び預け入れられます。',
     detail_position: '保有中',
     detail_earned: '獲得額',
     auto_yield_what: '自動運用は、未使用の {{symbol}} が届くたびにこのプロトコルへ回すため、入金後すぐに利回りが付きます。いつでも出金できます。',
@@ -52,6 +64,9 @@ export const earn: MobileTable = {
     no_lend_markets: 'このネットワークには貸付市場がありません。',
   },
   ko: {
+    stop_auto_yield: '자동 수익 끄기',
+    stop_auto_supply: '자동 공급 끄기',
+    stop_auto_why: '끄지 않으면 인출한 {{symbol}}이(가) 자동으로 다시 예치됩니다.',
     detail_position: '보유 중',
     detail_earned: '수익',
     auto_yield_what: '자동 수익은 유휴 {{symbol}}가 들어올 때마다 이 프로토콜로 보내므로 예치 후 바로 수익이 쌓입니다. 언제든 출금할 수 있습니다.',
@@ -64,6 +79,9 @@ export const earn: MobileTable = {
     no_lend_markets: '이 네트워크에는 대출 시장이 없습니다.',
   },
   fr: {
+    stop_auto_yield: 'Désactiver l’Auto-Yield',
+    stop_auto_supply: 'Désactiver l’Auto-Supply',
+    stop_auto_why: 'Sinon, les {{symbol}} retirés sont automatiquement redéposés.',
     detail_position: 'En position',
     detail_earned: 'Gagné',
     auto_yield_what: 'L’Auto-Rendement dirige l’{{symbol}} inactif vers ce protocole dès son arrivée : un dépôt commence à rapporter sans seconde étape. Vous pouvez retirer à tout moment.',
@@ -76,6 +94,9 @@ export const earn: MobileTable = {
     no_lend_markets: 'Aucun marché de prêt sur ce réseau.',
   },
   es: {
+    stop_auto_yield: 'Desactivar Auto-Yield',
+    stop_auto_supply: 'Desactivar Auto-Supply',
+    stop_auto_why: 'Si no, los {{symbol}} retirados se vuelven a depositar automáticamente.',
     detail_position: 'En posición',
     detail_earned: 'Ganado',
     auto_yield_what: 'El Auto-Rendimiento envía el {{symbol}} inactivo a este protocolo en cuanto llega, así un depósito empieza a rendir sin un segundo paso. Puedes retirar cuando quieras.',
@@ -88,6 +109,9 @@ export const earn: MobileTable = {
     no_lend_markets: 'No hay mercados de préstamo en esta red.',
   },
   de: {
+    stop_auto_yield: 'Auto-Yield ausschalten',
+    stop_auto_supply: 'Auto-Supply ausschalten',
+    stop_auto_why: 'Sonst werden die abgehobenen {{symbol}} automatisch wieder eingezahlt.',
     detail_position: 'In Position',
     detail_earned: 'Verdient',
     auto_yield_what: 'Auto-Rendite leitet ungenutztes {{symbol}} beim Eingang in dieses Protokoll, sodass eine Einzahlung ohne zweiten Schritt zu verzinsen beginnt. Sie können jederzeit abheben.',
@@ -100,6 +124,9 @@ export const earn: MobileTable = {
     no_lend_markets: 'Keine Kreditmärkte in diesem Netzwerk.',
   },
   'pt-BR': {
+    stop_auto_yield: 'Desativar Auto-Yield',
+    stop_auto_supply: 'Desativar Auto-Supply',
+    stop_auto_why: 'Caso contrário, os {{symbol}} sacados são depositados de novo automaticamente.',
     detail_position: 'Em posição',
     detail_earned: 'Rendido',
     auto_yield_what: 'O Auto-Rendimento encaminha o {{symbol}} ocioso para este protocolo assim que ele chega, então um depósito começa a render sem um segundo passo. Você pode sacar quando quiser.',
@@ -112,6 +139,9 @@ export const earn: MobileTable = {
     no_lend_markets: 'Nenhum mercado de empréstimo nesta rede.',
   },
   hi: {
+    stop_auto_yield: 'Auto-Yield बंद करें',
+    stop_auto_supply: 'Auto-Supply बंद करें',
+    stop_auto_why: 'वरना निकाले गए {{symbol}} अपने-आप फिर से जमा हो जाएंगे।',
     detail_position: 'पोजीशन में',
     detail_earned: 'अर्जित',
     auto_yield_what: 'ऑटो-यील्ड निष्क्रिय {{symbol}} को आते ही इस प्रोटोकॉल में भेज देता है, जिससे जमा राशि बिना दूसरे कदम के कमाने लगती है। आप कभी भी निकाल सकते हैं।',
@@ -124,6 +154,9 @@ export const earn: MobileTable = {
     no_lend_markets: 'इस नेटवर्क पर कोई लेंडिंग मार्केट नहीं।',
   },
   tr: {
+    stop_auto_yield: 'Auto-Yield’i kapat',
+    stop_auto_supply: 'Auto-Supply’ı kapat',
+    stop_auto_why: 'Aksi halde çekilen {{symbol}} otomatik olarak yeniden yatırılır.',
     detail_position: 'Pozisyonda',
     detail_earned: 'Kazanılan',
     auto_yield_what: 'Otomatik Getiri, boşta duran {{symbol}} geldikçe bu protokole yönlendirir; böylece yatırdığınız tutar ikinci bir adıma gerek kalmadan kazanmaya başlar. İstediğiniz zaman çekebilirsiniz.',
@@ -136,6 +169,9 @@ export const earn: MobileTable = {
     no_lend_markets: 'Bu ağda kredi piyasası yok.',
   },
   ru: {
+    stop_auto_yield: 'Выключить Auto-Yield',
+    stop_auto_supply: 'Выключить Auto-Supply',
+    stop_auto_why: 'Иначе выведенные {{symbol}} будут автоматически внесены обратно.',
     detail_position: 'В позиции',
     detail_earned: 'Заработано',
     auto_yield_what: 'Автодоход направляет свободный {{symbol}} в этот протокол сразу по поступлении, поэтому внесённые средства начинают приносить доход без второго шага. Вывести можно в любой момент.',
@@ -148,6 +184,9 @@ export const earn: MobileTable = {
     no_lend_markets: 'В этой сети нет рынков кредитования.',
   },
   id: {
+    stop_auto_yield: 'Matikan Auto-Yield',
+    stop_auto_supply: 'Matikan Auto-Supply',
+    stop_auto_why: 'Jika tidak, {{symbol}} yang ditarik akan otomatis disetor kembali.',
     detail_position: 'Dalam posisi',
     detail_earned: 'Diperoleh',
     auto_yield_what: 'Imbal Hasil Otomatis mengarahkan {{symbol}} yang menganggur ke protokol ini begitu tiba, jadi setoran langsung menghasilkan tanpa langkah kedua. Anda bisa menarik kapan saja.',
@@ -160,6 +199,9 @@ export const earn: MobileTable = {
     no_lend_markets: 'Tidak ada pasar pinjaman di jaringan ini.',
   },
   vi: {
+    stop_auto_yield: 'Tắt Auto-Yield',
+    stop_auto_supply: 'Tắt Auto-Supply',
+    stop_auto_why: 'Nếu không, {{symbol}} đã rút sẽ tự động được gửi lại.',
     detail_position: 'Đang nắm giữ',
     detail_earned: 'Đã sinh lời',
     auto_yield_what: 'Tự động sinh lời chuyển {{symbol}} nhàn rỗi vào giao thức này ngay khi đến, nên khoản nạp bắt đầu sinh lời mà không cần bước thứ hai. Bạn có thể rút bất cứ lúc nào.',
@@ -172,6 +214,9 @@ export const earn: MobileTable = {
     no_lend_markets: 'Không có thị trường cho vay trên mạng này.',
   },
   th: {
+    stop_auto_yield: 'ปิด Auto-Yield',
+    stop_auto_supply: 'ปิด Auto-Supply',
+    stop_auto_why: 'มิฉะนั้น {{symbol}} ที่ถอนจะถูกฝากกลับเข้าไปโดยอัตโนมัติ',
     detail_position: 'ในสถานะ',
     detail_earned: 'ได้รับแล้ว',
     auto_yield_what: 'ผลตอบแทนอัตโนมัติจะส่ง {{symbol}} ที่ว่างอยู่เข้าโปรโตคอลนี้ทันทีที่มาถึง เงินฝากจึงเริ่มสร้างผลตอบแทนโดยไม่ต้องทำขั้นที่สอง คุณถอนได้ทุกเมื่อ',

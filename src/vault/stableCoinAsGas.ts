@@ -10,6 +10,7 @@ import {VAULT_STABLE_COIN_AS_GAS_ABI} from '@/core/abi';
 import {bornVault, WETH_GAS_VERSION} from './activate';
 import {relayVaultWrite} from './relay';
 import {parseUnits, zeroAddress, type Address, type Hex} from 'viem';
+import {knownAssets} from '@/core/assets';
 import type {Asset} from '@/core/assets';
 import {balanceOfSymbol, type VaultBalances} from './read';
 import {feeCoinOrder, gasReserveSize} from '@/core/prefs';
@@ -315,4 +316,20 @@ export function useSyncFeeReserve(
       body,
     }).catch(() => reported.delete(key)); // best-effort; retried on the next render that resolves it
   }, [network, vault, waiting, body]);
+}
+
+/**
+ * Which coin a spend should have the relayer BILL, given where the fee float sits.
+ *
+ * The float ({resolveFeeReserve}) is held back only in its own coin, so a spend of ANOTHER coin may
+ * use all of that one. The relayer, though, is hinted the owner's first fee coin, checks its balance
+ * before the call and charges after — so spending the hinted coin down passes the check and fails
+ * the charge (`fee-leg-failed`). When the float is in another coin than the one being spent, that is
+ * the coin to bill, pinned (see {relayVaultWrite}'s `pinFee`). Null when the hint can stand.
+ */
+export function feeCoinForSpend(network: string, floatCoin: string | null, spendSymbol: string | undefined): Address | null {
+  const coin = floatCoin?.toUpperCase();
+  if (!coin || spendSymbol === undefined || coin === spendSymbol.toUpperCase()) return null;
+  const sym = coin === FEE_WETH ? 'WETH' : coin;
+  return (knownAssets(network as Network).find((a) => a.symbol.toUpperCase() === sym)?.address as Address | undefined) ?? null;
 }

@@ -7,6 +7,8 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import Svg, {Circle, Line, Path} from 'react-native-svg';
 import type {RootStackParamList} from '@/App';
 import {MarketRow} from '@/components/MarketRow';
+import {ProtocolIcon} from '@/components/ProtocolIcon';
+import {TokenIcon} from '@/components/TokenIcon';
 import {HoldingRow, MASK} from '@/components/HoldingRow';
 import {Amount} from '@/components/Amount';
 import {ReceiveDialog} from '@/components/ReceiveDialog';
@@ -20,6 +22,8 @@ import {useVaultPositions} from '@/vault/useVaultPositions';
 import {useFlows} from '@/vault/useFlows';
 import {earnedRaw} from '@/vault/flows';
 import {usePriceFeed} from '@/vault/usePrices';
+import {getLidoUnstake, NO_UNSTAKE, type LidoUnstake} from '@/vault/lido';
+import {adapterByName, protocolDisplayName} from '@/core/protocols';
 import {useMarketStats, type MarketStat, type MarketStatMap} from '@/vault/useMarketStats';
 
 import {usdValue, fmtUsd} from '@/core/prices';
@@ -28,7 +32,7 @@ import {fmtNum, displaySymbol} from '@/core/format';
 import {useAssetCatalog, useCatalogSettled} from '@/core/asset-catalog';
 import {assetCategory, type AssetCategory} from '@/core/assets';
 import {isAssetsList, useFavorites, useWatchLists, watchListLabel, watchListNumber} from '@/core/favorites-store';
-import {getFlag, setFlag, HIDE_BALANCES} from '@/core/prefs';
+import {getFlag, setFlag, getPref, setPref, HIDE_BALANCES} from '@/core/prefs';
 import {useWatchDraft} from '@/core/watch-draft';
 import {balanceOfSymbol} from '@/vault/read';
 import {getPendingChanges} from '@/vault/risk';
@@ -115,7 +119,7 @@ type Row = {
   yielding: number;
   lending: number;
   /** Each position behind the totals, with what it has earned, for the expanded row. */
-  legs: {protocol: string; kind: 'staked' | 'supplied'; amount: number; earned: number}[];
+  legs: {protocol: string; kind: 'staked' | 'supplied' | 'unstaking'; amount: number; earned: number}[];
   earned: number;
   total: number;
   usd: number | null;
@@ -285,16 +289,36 @@ function AssetRow({
         onLongPress={onHold}
         onAmountPress={splittable ? () => setOpen((o) => !o) : undefined}
       />
-      {open ? (
-        <View style={styles.legs}>
-          {/* Balance first: it is the part that can be spent without unwinding anything. Which
-              protocol holds the rest is a detail for the Earn tab; here the question is only how
-              much of the total is free and how much is working. */}
-          <Leg label={t('vault.balance')} amount={row.free} symbol={row.symbol} hidden={hidden} />
+      {/* Where the total sits — free balance, then each position — in a sheet rather than opened
+          under the row: the list keeps its shape, and the breakdown has room for its own lines. */}
+      {/* Amounts only: the value is on the row already. The total sits where the ✕ would — the
+          sheet is read and dismissed by the backdrop or a swipe, so it needs no close control. */}
+      <Sheet
+        visible={open}
+        title={displaySymbol(row.symbol)}
+        onClose={() => setOpen(false)}
+        height={150 + (row.legs.length + 1) * 52}
+        right={
+          <Text style={styles.legHeadAmt}>
+            {hidden ? MASK : <Amount v={fmt(row.total)} size={17} weight="700" />} {displaySymbol(row.symbol)}
+          </Text>
+        }>
+        <View style={styles.legsSheet}>
+          {/* Balance first: it is the part that can be spent without unwinding anything. Each
+              position after it under its protocol's mark, so where the money sits is seen. */}
+          <Leg
+            label={t('vault.balance')}
+            icon={<TokenIcon symbol={row.symbol} uri={row.icon} size={28} />}
+            amount={row.free}
+            symbol={row.symbol}
+            hidden={hidden}
+          />
           {row.legs.map((leg, i) => (
             <Leg
               key={`${leg.protocol}-${leg.kind}-${i}`}
-              label={t(leg.kind === 'staked' ? 'vault.yielding' : 'vault.lending')}
+              icon={<ProtocolIcon name={leg.protocol} size={28} />}
+              sub={protocolDisplayName(leg.protocol)}
+              label={t(leg.kind === 'staked' ? 'vault.yielding' : leg.kind === 'unstaking' ? 'vault.unstaking' : 'vault.lending')}
               amount={leg.amount}
               earned={leg.earned}
               symbol={row.symbol}
@@ -302,7 +326,7 @@ function AssetRow({
             />
           ))}
         </View>
-      ) : null}
+      </Sheet>
     </>
   );
 }
@@ -313,27 +337,52 @@ function AssetRow({
  * A position splits into what was put in and what it has made, the same way the row's total does
  * above it, so the green figure answers "which of these is actually earning, and how much".
  */
-function Leg({label, amount, earned = 0, symbol, hidden}: {label: string; amount: number; earned?: number; symbol: string; hidden: boolean}) {
+function Leg({
+  label,
+  sub,
+  icon,
+  amount,
+  earned = 0,
+  symbol,
+  hidden,
+}: {
+  label: string;
+  /** The protocol holding this part, under the label. */
+  sub?: string;
+  icon: React.ReactNode;
+  amount: number;
+  earned?: number;
+  symbol: string;
+  hidden: boolean;
+}) {
   const styles = useStyles(makeStyles);
   const c = useColors();
   return (
     <View style={styles.legRow}>
-      <Text style={styles.legLabel} numberOfLines={1}>
-        {label}
-      </Text>
+      {icon}
+      <View style={styles.legText}>
+        <Text style={styles.legLabel} numberOfLines={1}>
+          {label}
+        </Text>
+        {sub ? (
+          <Text style={styles.legSub} numberOfLines={1}>
+            {sub}
+          </Text>
+        ) : null}
+      </View>
       <Text style={styles.legAmt}>
         {hidden ? (
           <>{MASK} </>
         ) : earned > 0 ? (
           <>
-            <Amount v={fmt(amount - earned)} size={13} weight="600" />{' '}
+            <Amount v={fmt(amount - earned)} size={15} weight="600" />{' '}
             <Text style={styles.legEarned}>
-              + <Amount v={fmt(earned)} size={12} color={c.success} weight="600" />
+              + <Amount v={fmt(earned)} size={14} color={c.success} weight="600" />
             </Text>{' '}
           </>
         ) : (
           <>
-            <Amount v={fmt(amount)} size={13} weight="600" />{' '}
+            <Amount v={fmt(amount)} size={15} weight="600" />{' '}
           </>
         )}
         {displaySymbol(symbol)}
@@ -393,6 +442,28 @@ export function VaultHomeScreen() {
   const {prices, loaded: pricesLoaded} = usePriceFeed(network, priceNonce, catalogSymbols);
   const catalogSettled = useCatalogSettled(network);
   /**
+   * ETH withdrawn from Lido and still in its queue (or finalized and not yet claimed).
+   *
+   * It is in neither the vault's balance nor the server's positions — Lido holds it until the claim
+   * — so without this read a withdrawal made the total drop by the whole amount for days, then jump
+   * back on the claim. Read from the chain, as the web does, and counted into WETH, which is what
+   * the claim pays back. `unstakeFor` says which vault the figure is for, so a switch waits again.
+   */
+  const lidoAdapter = adapterByName(network, 'Lido');
+  const [unstake, setUnstake] = useState<{key: string; v: LidoUnstake} | null>(null);
+  React.useEffect(() => {
+    const key = bal.vault ? `${network}:${bal.vault.toLowerCase()}` : '';
+    if (!bal.vault) return;
+    if (!lidoAdapter) return setUnstake({key, v: NO_UNSTAKE});
+    let live = true;
+    getLidoUnstake(bal.vault, lidoAdapter, network)
+      .then((v) => live && setUnstake({key, v}))
+      .catch(() => live && setUnstake((u) => (u?.key === key ? u : {key, v: NO_UNSTAKE})));
+    return () => {
+      live = false;
+    };
+  }, [bal.vault, network, lidoAdapter, pos.positions, priceNonce]);
+  /**
    * Every figure the total is made of has arrived: the live catalog (which decides which tokens are
    * read), the balances read against it, the Earn positions, and prices for all of it.
    *
@@ -411,6 +482,7 @@ export function VaultHomeScreen() {
     catalogSettled &&
     ((bal.current && !!bal.balances) || !!bal.error) &&
     pos.loaded &&
+    unstake?.key === readyKey &&
     pricesLoaded;
   const [readyFor, setReadyFor] = useState<Set<string>>(() => new Set());
   const ready = readyFor.has(readyKey);
@@ -429,7 +501,8 @@ export function VaultHomeScreen() {
    * One answer covers all of them, and it refreshes on the same pull the prices do.
    */
   const marketStats = useMarketStats(network, catalogSymbols, priceNonce);
-  const rows = useMemo<Row[]>(() => {
+  const unstakeKey = bal.vault ? `${network}:${bal.vault.toLowerCase()}` : '';
+  const rowsLive = useMemo<Row[]>(() => {
     // Stablecoins lead the list, then the rest in catalog order.
     const assets = [...catalog].sort((x, y) => Number(y.kind === 'stable') - Number(x.kind === 'stable'));
     return assets.map((a) => {
@@ -451,7 +524,7 @@ export function VaultHomeScreen() {
         : 0;
       const legs = pos.positions
         .filter((p) => p.symbol === a.symbol && Number(p.formatted) > 0)
-        .map((p) => {
+        .map((p): Row['legs'][number] => {
           const raw = flows.flows ? earnedRaw(p, flows.flows) : null;
           return {
             protocol: p.protocolName,
@@ -462,10 +535,45 @@ export function VaultHomeScreen() {
         })
         // Yielding above lending, always, rather than whatever order the positions arrived in.
         .sort((x, y) => Number(x.kind === 'supplied') - Number(y.kind === 'supplied'));
-      const total = free + yielding + lending;
+      // Lido's queue pays back in WETH: count it there, as a leg of its own.
+      const queued =
+        a.symbol === 'WETH' && unstake && unstake.key === unstakeKey
+          ? Number(formatUnits(unstake.v.unstaking + unstake.v.claimable, 18))
+          : 0;
+      if (queued > 0) legs.push({protocol: 'Lido', kind: 'unstaking', amount: queued, earned: 0});
+      const total = free + yielding + lending + queued;
       return {legs, symbol: a.symbol, icon: a.icon, address: a.address, free, yielding, lending, earned, total, usd: usdValue(total, a.symbol, prices), price: usdValue(1, a.symbol, prices), stable: a.kind === 'stable', category: assetCategory(a.category)};
     });
-  }, [catalog, bal.balances, pos.positions, flows.flows, network, prices]);
+  }, [catalog, bal.balances, pos.positions, flows.flows, network, prices, unstake, unstakeKey]);
+
+  /**
+   * The last complete Overview of this vault, shown at once while the fresh one loads.
+   *
+   * Waiting for every source (see `ready`) keeps the total from climbing, but on a cold launch that
+   * is several seconds of spinner for numbers that have usually barely moved. So each complete set
+   * of rows is kept on the phone, and the next launch opens on it; the live rows replace it in one
+   * step once all of them are in. Never shown for a vault it was not saved for.
+   */
+  const snapKey = readyKey ? `overview.snapshot.${readyKey}` : '';
+  const snapshot = useMemo<Row[] | null>(() => {
+    if (!snapKey) return null;
+    try {
+      const raw = getPref(snapKey);
+      return raw ? (JSON.parse(raw) as Row[]) : null;
+    } catch {
+      return null;
+    }
+  }, [snapKey]);
+  React.useEffect(() => {
+    if (!ready || !snapKey) return;
+    try {
+      setPref(snapKey, JSON.stringify(rowsLive));
+    } catch {
+      // Storage unavailable: the next launch simply waits, as it did before.
+    }
+  }, [ready, snapKey, rowsLive]);
+  const showingSnapshot = !ready && !!snapshot;
+  const rows = ready || !snapshot ? rowsLive : snapshot;
 
   /**
    * Tapping an asset's name opens Trade on a pair for it.
@@ -789,7 +897,7 @@ export function VaultHomeScreen() {
         <View style={styles.totalRow}>
           {hidden ? (
             <Text style={styles.totalValue}>{MASK_TOTAL}</Text>
-          ) : !ready ? (
+          ) : !ready && !showingSnapshot ? (
             // The figure's own line height, so the card does not jump when it lands.
             <View style={styles.totalLoading}>
               <ActivityIndicator color={c.subtext} />
@@ -860,7 +968,7 @@ export function VaultHomeScreen() {
             return (
               <Pressable
                 key={l.id}
-                hitSlop={8}
+                style={styles.tabHit}
                 accessibilityRole="button"
                 onLayout={(e) => {
                   const {x, width} = e.nativeEvent.layout;
@@ -887,7 +995,7 @@ export function VaultHomeScreen() {
               has the name as a field at the top and the assets underneath, which is where both
               questions actually get answered. */}
           <Pressable
-            hitSlop={8}
+            style={styles.tabHit}
             accessibilityRole="button"
             accessibilityLabel={t('mobile.home.new_list')}
             onPress={() => {
@@ -929,7 +1037,7 @@ export function VaultHomeScreen() {
                     rows={rowsForList(l.id)}
                     // Holdings wait with the total, so the rows never show the half-read sum either.
                     // A watch list shows market data, not balances, and does not.
-                    loading={isAssetsList(l.id) ? !ready && !bal.error : bal.loading && !bal.balances}
+                    loading={isAssetsList(l.id) ? !ready && !showingSnapshot && !bal.error : bal.loading && !bal.balances}
                     error={bal.error}
                     hidden={hidden}
                     markets={!isAssetsList(l.id)}
@@ -1013,7 +1121,9 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   // Inset to the cards' own content, not to the page: "Watch list" and "hide 0" line up with
   // "Total value" and the eye in the hero card above, which is the row this one echoes. At 4 they
   // hung off both edges, further out than anything they sit over.
-  listHead: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: -6},
+  // The tabs carry their own touch padding (tabHit), so the row is pulled back by the same amount
+  // on every side: it sits where it did, and each name is a finger-sized target.
+  listHead: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10, marginTop: -12, marginBottom: -18},
   // The total value and the distribution pie icon beside it, on one line in the hero card.
   totalRow: {flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 2},
   distBtn: {flexShrink: 0},
@@ -1032,18 +1142,28 @@ const makeStyles = (c: Colors) => StyleSheet.create({
    * padding inside is just so the ＋ is not flush to the edge it scrolls past.
    */
   tabScroll: {flexGrow: 0, flexShrink: 1, marginRight: 18},
-  tabRow: {flexDirection: 'row', alignItems: 'center', gap: 16, paddingRight: 4},
+  tabRow: {flexDirection: 'row', alignItems: 'center', gap: 0, paddingRight: 4},
+  /**
+   * A list name's touch area. hitSlop cannot do this: the names sit in a horizontal scroller only
+   * as tall as the text, and a touch outside the scroller never reaches them. So the padding is real
+   * — 12 above and below, 10 each side (20 between names, where `gap` gave 16) — and listHead
+   * takes it back with negative margins.
+   */
+  tabHit: {paddingVertical: 12, paddingHorizontal: 10},
   // The row's own grey, like the list names and "hide 0" beside it. In accent it was the loudest
   // thing on a line of labels, and the one thing on it nobody needs to find in a hurry.
   listAdd: {color: c.subtext, fontSize: 15, fontWeight: '600'},
   listCard: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 4},
   list: {gap: 0},
   // Indented to the asset NAME, not its icon: a 28pt icon and the cell's 10pt gap above it.
-  legs: {paddingLeft: 38, paddingBottom: 12, gap: 8},
-  legRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
-  legLabel: {flex: 1, color: c.subtext, fontSize: 13},
-  legAmt: {color: c.text, fontSize: 13, fontVariant: ['tabular-nums']},
-  legEarned: {color: c.success, fontSize: 12},
+  legsSheet: {gap: 16, paddingTop: 12},
+  legHeadAmt: {color: c.text, fontSize: 17, fontWeight: '700'},
+  legText: {flex: 1, gap: 2, minWidth: 0},
+  legSub: {color: c.subtext, fontSize: 12},
+  legRow: {flexDirection: 'row', alignItems: 'center', gap: 12},
+  legLabel: {color: c.text, fontSize: 15, fontWeight: '600'},
+  legAmt: {color: c.text, fontSize: 15, fontVariant: ['tabular-nums']},
+  legEarned: {color: c.success, fontSize: 14},
   // Sized to the icon and the name, never to the cell: the gap to its right is the row's.
   badge: {width: 28, height: 28, borderRadius: 14, backgroundColor: c.bg, alignItems: 'center', justifyContent: 'center'},
   badgeText: {color: c.subtext, fontSize: 10, fontWeight: '700'},

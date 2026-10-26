@@ -3,7 +3,7 @@ import {Alert, Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Button} from '@/components/Button';
 import {useWallet} from '@/wallet/store';
-import {markPhraseVerified} from '@/wallet/phrase-backup';
+import {backupChoices, markPhraseVerified} from '@/wallet/phrase-backup';
 import {generateNewMnemonic} from '@/wallet/keyring';
 import {useRevealGuard} from '@/core/device-security';
 import {PhraseInput} from '@/components/PhraseInput';
@@ -57,7 +57,11 @@ export function OnboardingScreen() {
   const phrase = importWords.slice(0, importCount).join(' ');
 
   const words = useMemo(() => (mnemonic ? mnemonic.split(' ') : []), [mnemonic]);
-  const wordChoices = useMemo(() => shuffled(Array.from(new Set(words))), [words]);
+  // Three choices per position — the word and two others from the phrase. See {backupChoices}.
+  const wordChoices = useMemo(
+    () => Object.fromEntries(challengePositions.map((p) => [p, backupChoices(words, p)])) as Record<number, string[]>,
+    [words, challengePositions],
+  );
 
   // Hide phrase-derived content while the screen is recorded; warn (can't prevent) on a screenshot.
   const reveal = useRevealGuard();
@@ -226,7 +230,7 @@ export function OnboardingScreen() {
                       {answers[position] ? ` · ${answers[position]}` : ''}
                     </Text>
                     <View style={styles.choices}>
-                      {wordChoices.map((word) => {
+                      {(wordChoices[position] ?? []).map((word) => {
                         const selected = answers[position] === word;
                         return (
                           <Pressable

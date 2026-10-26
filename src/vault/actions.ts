@@ -17,6 +17,8 @@ type Base = {
   amount: string; // human units, e.g. "100.5"
   decimals: number;
   stableCoin: Address;
+  /** Bill exactly `stableCoin`: see {relayVaultWrite}. */
+  pinFee?: boolean;
 };
 
 /** Stake/supply `amount` of `asset` into `protocol` (Sky, Aave, Lido). */
@@ -29,6 +31,7 @@ export async function depositToProtocol(o: Base): Promise<Hex> {
     functionName: 'deposit',
     args: [o.protocol, o.asset, parseUnits(o.amount, o.decimals)],
     stableCoin: o.stableCoin,
+    pinFee: o.pinFee,
   });
   return hash;
 }
@@ -43,6 +46,7 @@ export async function withdrawFromProtocol(o: Base): Promise<Hex> {
     functionName: 'withdraw',
     args: [o.protocol, o.asset, parseUnits(o.amount, o.decimals)],
     stableCoin: o.stableCoin,
+    pinFee: o.pinFee,
   });
   return hash;
 }
@@ -63,6 +67,8 @@ export async function depositFromSources(o: {
   raw: bigint;
   withdrawals: {protocol: Address; raw: bigint}[];
   stableCoin: Address;
+  /** Bill exactly `stableCoin`: see {relayVaultWrite}. */
+  pinFee?: boolean;
 }): Promise<Hex> {
   const {hash} = await relayVaultMulticall({
     account: o.account,
@@ -73,6 +79,7 @@ export async function depositFromSources(o: {
       {abi: VAULT_DEFI_ABI, functionName: 'deposit', args: [o.protocol, o.asset, o.raw]},
     ],
     stableCoin: o.stableCoin,
+    pinFee: o.pinFee,
   });
   return hash;
 }

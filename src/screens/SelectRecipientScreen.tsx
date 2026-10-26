@@ -1,4 +1,5 @@
-import React, {useCallback, useEffect, useLayoutEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
+import {useHeaderHeight} from '@react-navigation/elements';
 import Svg, {Path} from 'react-native-svg';
 import {ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
@@ -229,7 +230,7 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
         </View>
         {busy === `rm-${b.id}` ? (
           <ActivityIndicator color={c.subtext} />
-        ) : removeAt ? null : (
+        ) : removeAt || b.status === WHITELIST_STATUS.voided ? null : (
           <Pressable
             hitSlop={10}
             disabled={!ready}
@@ -252,6 +253,29 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
   const allowance = risk ? t('mobile.payments.max_send_daily', {value: fmtAllowance(risk.sendDailyAllowance, t)}) : null;
   const whitelisted = (a: string) => live.some((b) => b.recipientAddress.toLowerCase() === a.toLowerCase());
 
+  /** One card of book entries, or its loading / empty state. */
+  const group = (rows: WhitelistedRecipient[], empty: string) => (
+    <View style={styles.card}>
+      {loading ? (
+        <View style={[styles.row, styles.rowFirst, styles.rowLast, styles.centered]}>
+          <ActivityIndicator color={c.accent} />
+        </View>
+      ) : rows.length === 0 ? (
+        <View style={[styles.row, styles.rowFirst, styles.rowLast]}>
+          <Text style={styles.emptyText}>{empty}</Text>
+        </View>
+      ) : (
+        rows.map((b, i) => entryRow(b, i, rows))
+      )}
+    </View>
+  );
+
+  // The managing page's three categories, swiped between like the Overview's lists.
+  const headerHeight = useHeaderHeight();
+  const [tab, setTab] = useState(0);
+  const [pageW, setPageW] = useState(0);
+  const pagerRef = useRef<ScrollView>(null);
+
   // New recipient in the header: always in reach, however long the book grows.
   useLayoutEffect(() => {
     nav.setOptions({
@@ -270,6 +294,58 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
     });
   }, [nav, t, c, styles, manage]);
 
+  /**
+   * Security › Whitelisted addresses: three categories, a page each, swiped between or picked from
+   * the row above — Whitelisted (payable, removals in flight included), Pending (still waiting out
+   * the timelock), Cancelled (voided by a lock, never payable; nothing to remove, so no ✕).
+   */
+  if (manage) {
+    const tabs = [
+      {label: t('mobile.payments.tab_added'), rows: live, limit: t('mobile.payments.max_send_none'), empty: t('mobile.payments.book_empty_title')},
+      {label: t('mobile.payments.tab_pending'), rows: book.filter((b) => b.status === WHITELIST_STATUS.pending), limit: allowance, empty: t('mobile.payments.none_here')},
+      {label: t('mobile.payments.tab_cancelled'), rows: book.filter((b) => b.status === WHITELIST_STATUS.voided), limit: null, empty: t('mobile.payments.none_here')},
+    ];
+    const goTo = (i: number) => {
+      setTab(i);
+      pagerRef.current?.scrollTo({x: i * pageW, animated: true});
+    };
+    return (
+      <View style={[styles.flex, {paddingTop: headerHeight}]}>
+        <View style={styles.tabRow}>
+          {tabs.map((x, i) => (
+            <Pressable key={x.label} hitSlop={8} onPress={() => goTo(i)} accessibilityRole="tab" accessibilityState={{selected: tab === i}}>
+              <Text style={[styles.tabText, tab === i && styles.tabTextOn]}>{x.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <ScrollView
+          ref={pagerRef}
+          horizontal
+          pagingEnabled
+          bounces={false}
+          showsHorizontalScrollIndicator={false}
+          style={styles.flex}
+          onLayout={(e) => setPageW(e.nativeEvent.layout.width)}
+          onMomentumScrollEnd={(e) => pageW > 0 && setTab(Math.round(e.nativeEvent.contentOffset.x / pageW))}>
+          {tabs.map((x) => (
+            <ScrollView
+              key={x.label}
+              style={{width: pageW}}
+              showsVerticalScrollIndicator={false}
+              alwaysBounceVertical
+              contentContainerStyle={styles.page}>
+              {group(x.rows, x.empty)}
+              {/* What a payment to these addresses may be, as the card's footnote. Cancelled ones
+                  cannot be paid at all, so that page has none. */}
+              {x.limit ? <Text style={styles.pageFoot}>{x.limit}</Text> : null}
+            </ScrollView>
+          ))}
+        </ScrollView>
+        {sheet}
+      </View>
+    );
+  }
+
   return (
     <ScrollView
       style={styles.flex}
@@ -285,19 +361,7 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
         <Text style={styles.sectionTitle}>{t('mobile.payments.whitelisted_book')}</Text>
         <Text style={styles.sectionLimit}>{t('mobile.payments.max_send_none')}</Text>
       </View>
-      <View style={styles.card}>
-        {loading ? (
-          <View style={[styles.row, styles.rowFirst, styles.rowLast, styles.centered]}>
-            <ActivityIndicator color={c.accent} />
-          </View>
-        ) : live.length === 0 ? (
-          <View style={[styles.row, styles.rowFirst, styles.rowLast]}>
-            <Text style={styles.emptyText}>{t('mobile.payments.book_empty_title')}</Text>
-          </View>
-        ) : (
-          live.map((b, i) => entryRow(b, i, live))
-        )}
-      </View>
+      {group(live, t('mobile.payments.book_empty_title'))}
 
       {/* Not payable as whitelisted yet: until then, a send to one of these is held to the daily
           send allowance, which the title says. */}
@@ -307,15 +371,7 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
             <Text style={styles.sectionTitle}>{t('mobile.payments.pending_whitelisted')}</Text>
             {allowance ? <Text style={styles.sectionLimit}>{allowance}</Text> : null}
           </View>
-          {/* One card each: every one is a change to who can be paid without limit, and set apart
-              it cannot be skimmed past as one more line of a list. */}
-          <View style={styles.cards}>
-            {waiting.map((b) => (
-              <View key={b.id} style={styles.card}>
-                {entryRow(b, 0, [b])}
-              </View>
-            ))}
-          </View>
+          <View style={styles.card}>{waiting.map((b, i) => entryRow(b, i, waiting))}</View>
         </>
       ) : null}
 
@@ -360,7 +416,12 @@ const makeStyles = (c: Colors) =>
     sectionTitle: {color: c.subtext, fontSize: 13, fontWeight: '600', flexShrink: 1},
     sectionLimit: {marginLeft: 'auto', color: c.subtext, fontSize: 13, fontWeight: '600', textAlign: 'right'},
     card: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 16},
-    cards: {gap: 10},
+    // The managing page: the category row under the header, then a page per category.
+    tabRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 24, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4},
+    tabText: {color: c.subtext, fontSize: 15, fontWeight: '600'},
+    tabTextOn: {color: c.text},
+    page: {padding: 16, paddingTop: 12, paddingBottom: 32},
+    pageFoot: {color: c.subtext, fontSize: 12, lineHeight: 17, paddingHorizontal: 16, marginTop: 6},
     // The same row metrics the asset picker uses, so a list is a list.
     row: {
       flexDirection: 'row',

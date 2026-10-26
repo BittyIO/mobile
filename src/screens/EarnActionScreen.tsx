@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View} from 'react-native';
 import type {RouteProp} from '@react-navigation/native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import {ConfirmButton} from '@/components/Button';
@@ -14,8 +14,8 @@ import {useVaultBalances} from '@/vault/useVaultBalances';
 import {balanceOfSymbol} from '@/vault/read';
 import {depositFromSources, depositToProtocol, withdrawFromProtocol} from '@/vault/actions';
 import {parseUnits, type Address} from 'viem';
-import {VAULT_DEFI_ABI} from '@/core/abi';
-import {encodeVaultCalls, type VaultCall} from '@/vault/relay';
+import {VAULT_AUTOYIELD_ABI, VAULT_DEFI_ABI} from '@/core/abi';
+import {encodeVaultCalls, relayVaultMulticall, type VaultCall} from '@/vault/relay';
 import {estimateRelayGas, relayGasFor} from '@/vault/fee-quote';
 import {Sheet} from '@/components/Sheet';
 import {FundRow} from '@/components/FundRow';
@@ -24,8 +24,9 @@ import {useVaultPositions} from '@/vault/useVaultPositions';
 import Svg, {Path} from 'react-native-svg';
 import {TokenIcon} from '@/components/TokenIcon';
 import {PickerSheet, type PickerItem} from '@/components/AssetPicker';
-import {adapterByName} from '@/core/protocols';
-import {FEE_WETH, resolveFeeReserve, reserveHeld, useWethFeeCoin} from '@/vault/stableCoinAsGas';
+import {adapterByName, protocolMeta} from '@/core/protocols';
+import {recordFlow} from '@/vault/flows';
+import {FEE_WETH, feeCoinForSpend, resolveFeeReserve, reserveHeld, useWethFeeCoin} from '@/vault/stableCoinAsGas';
 import type {RootStackParamList} from '@/App';
 import {FormSheet, FORM_SHEET_BODY} from '@/components/FormSheet';
 import {AvailableLine} from '@/components/AvailableLine';
@@ -72,6 +73,18 @@ export function EarnActionScreen() {
   const [picker, setPicker] = useState(false);
   const [status, setStatus] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
   const [err, setErr] = useState<string | null>(null);
+  /**
+   * Withdrawing from a position Auto-Yield (or Auto-Supply) feeds: the keeper would sweep what comes
+   * out straight back in, so the form offers to turn the route off in the SAME transaction — on by
+   * default, as the web's dialog has it. Left on, the withdraw is a temporary one.
+   */
+  const offerStopAuto = !isDeposit && !!params.autoOn;
+  const [stopAuto, setStopAuto] = useState(true);
+  const stopAutoCall = (asset: Address): VaultCall => ({
+    abi: VAULT_AUTOYIELD_ABI,
+    functionName: 'setAutoYielding',
+    args: [{asset, protocol: '0x0000000000000000000000000000000000000000'}],
+  });
 
   const selected = stablecoins.find((s) => s.symbol === coin) ?? stablecoins[0];
   const protocol = specific
@@ -282,6 +295,7 @@ export function EarnActionScreen() {
       return;
     }
     const calls: VaultCall[] = [
+      ...(offerStopAuto && stopAuto ? [stopAutoCall(targetAsset as Address)] : []),
       ...plan.map((w) => ({abi: VAULT_DEFI_ABI, functionName: 'withdraw', args: [w.protocol, targetAsset, w.raw]})),
       {abi: VAULT_DEFI_ABI, functionName: isDeposit ? 'deposit' : 'withdraw', args: [protocol, targetAsset, raw]},
     ];
@@ -294,7 +308,7 @@ export function EarnActionScreen() {
       clearTimeout(id);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [network, owner, protocol, targetAsset, targetDecimals, amount, planKey, isDeposit]);
+  }, [network, owner, protocol, targetAsset, targetDecimals, amount, planKey, isDeposit, stopAuto]);
 
   const onSubmit = async () => {
     if (!unlocked || !owner || !protocol || !targetAsset || !feeCoin) return;
@@ -318,10 +332,21 @@ export function EarnActionScreen() {
     try {
       const acct = await getSigner();
       // Formatted, not the raw field: see the Trade screen's `payLeg`.
-      tx = showTx(`${title} · ${fmtShort(Number(amount))} ${displaySymbol(targetSymbol)}`, network);
+      // "Deposit 100 USDC": what moved and how much, not the form's own title.
+      tx = showTx(
+        t(isDeposit ? 'mobile.actions.deposit_amount' : 'mobile.actions.withdraw_amount', {
+          amount: `${fmtShort(Number(amount))} ${displaySymbol(targetSymbol)}`,
+        }),
+        network,
+      );
       nav.goBack();
       const vault = activeVaultAddress(network)!;
       const withdrawals = multi ? planWithdrawals() : [];
+      // A deposit spends its coin; bill the one the fee float sits in if that is another — see
+      // {feeCoinForSpend}. A withdrawal brings its coin back, so the usual hint stands.
+      const pinned = isDeposit ? feeCoinForSpend(network, reserve.coin, targetSymbol) : null;
+      const billCoin = pinned ?? feeCoin;
+      const pinFee = !!pinned;
       const h = withdrawals.length
         ? await depositFromSources({
             account: acct,
@@ -331,9 +356,24 @@ export function EarnActionScreen() {
             asset: targetAsset,
             raw: parseUnits(amount, targetDecimals),
             withdrawals,
-            stableCoin: feeCoin,
+            stableCoin: billCoin,
+            pinFee,
           })
-        : await (isDeposit ? depositToProtocol : withdrawFromProtocol)({
+        : offerStopAuto && stopAuto
+          ? (
+              await relayVaultMulticall({
+                account: acct,
+                vault,
+                network,
+                calls: [
+                  stopAutoCall(targetAsset as Address),
+                  {abi: VAULT_DEFI_ABI, functionName: 'withdraw', args: [protocol, targetAsset, parseUnits(amount, targetDecimals)]},
+                ],
+                stableCoin: billCoin,
+                pinFee,
+              })
+            ).hash
+          : await (isDeposit ? depositToProtocol : withdrawFromProtocol)({
         account: acct,
         vault,
         network,
@@ -341,9 +381,30 @@ export function EarnActionScreen() {
         asset: targetAsset,
         amount,
         decimals: targetDecimals,
-        stableCoin: feeCoin,
+        stableCoin: billCoin,
+        pinFee,
       });
       tx.success(h);
+      /**
+       * Ledger every move this transaction made, so "earned" has a principal to measure against:
+       * the vault emits no deposit or withdraw events, so the stake / supply ledgers are written by
+       * the client that sent it and by nothing else. The old Earn row did this; it was lost when
+       * deposit and withdraw moved into this form, and every position funded from the app since has
+       * shown no earned at all. Best-effort and idempotent per (tx, direction, asset).
+       */
+      const kindOf = (p: string) => (protocolMeta(network, p).category === 'lending' ? 'supply' : 'stake');
+      for (const w of withdrawals)
+        void recordFlow({vault, network, protocol: w.protocol, asset: targetAsset, kind: kindOf(w.protocol), direction: 'out', amount: w.raw, txHash: h});
+      void recordFlow({
+        vault,
+        network,
+        protocol,
+        asset: targetAsset,
+        kind: kindOf(protocol),
+        direction: isDeposit ? 'in' : 'out',
+        amount: parseUnits(amount, targetDecimals),
+        txHash: h,
+      });
       setStatus('done');
     } catch (e) {
       const msg = String((e as Error)?.message ?? e);
@@ -451,6 +512,16 @@ export function EarnActionScreen() {
           disabled={!hasMax}
         />
 
+        {offerStopAuto ? (
+          <View style={styles.stopAuto}>
+            <View style={styles.stopAutoRow}>
+              <Text style={styles.stopAutoLabel}>{t(params.lend ? 'mobile.earn.stop_auto_supply' : 'mobile.earn.stop_auto_yield')}</Text>
+              <Switch value={stopAuto} onValueChange={setStopAuto} />
+            </View>
+            <Text style={styles.stopAutoWhy}>{t('mobile.earn.stop_auto_why', {symbol: displaySymbol(targetSymbol)})}</Text>
+          </View>
+        ) : null}
+
         {status === 'error' && err ? <Text style={styles.err}>{err}</Text> : null}
 
         {/* Directly under the field, the way the order sheet puts its confirm under the amount.
@@ -512,6 +583,10 @@ export function EarnActionScreen() {
 }
 
 const makeStyles = (c: Colors) => StyleSheet.create({
+    stopAuto: {gap: 6, marginTop: 4},
+    stopAutoRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12},
+    stopAutoLabel: {color: c.text, fontSize: 15, fontWeight: '600', flex: 1},
+    stopAutoWhy: {color: c.subtext, fontSize: 12, lineHeight: 17},
   submit: {marginTop: 6},
   // The order sheet's row, verbatim: label left, figure right, controls after it. See {payField}.
   field: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: c.input, borderRadius: 12, paddingHorizontal: 14, height: 52},

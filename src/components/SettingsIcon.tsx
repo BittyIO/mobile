@@ -30,7 +30,8 @@ export type SettingsIconName =
   | 'whitelist'
   | 'follow'
   | 'terms'
-  | 'privacy';
+  | 'privacy'
+  | 'quantum';
 
 // iOS Settings row icons: a white glyph on a small rounded square, one tint per row. Glyphs follow
 // the lucide set the web uses (Globe, Coins, Wrench, Shield, Key, Lock, Zap, Users, Fuel, CalendarClock, Receipt), drawn on a
@@ -68,6 +69,7 @@ const TINT: Record<SettingsIconName, string> = {
   follow: '#0E85FF',
   terms: '#8E8E93',
   privacy: '#5856D6',
+  quantum: '#32ADE6',
 };
 
 /** `round` draws it in a circle rather than the rounded square of a Settings row (the header's lock). */
@@ -109,9 +111,10 @@ export function SettingsIcon({name, size = 29, round = false}: {name: SettingsIc
             <Path d="M18.1 8.5a6 6 0 1 1-8.6 8.6M7 6h1v4M16.7 13.1l.7.7-2.8 2.8" {...c} />
           </>
         ) : name === 'protocols' ? (
+          // Building blocks (lucide Blocks), the web's mark for the protocol list.
           <>
-            <Path d="M12 3l9 4.5-9 4.5-9-4.5z" {...c} />
-            <Path d="M3 12l9 4.5 9-4.5M3 16.5L12 21l9-4.5" {...c} />
+            <Rect x={14} y={3} width={7} height={7} rx={1} {...c} />
+            <Path d="M10 21V8a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H3" {...c} />
           </>
         ) : name === 'services' ? (
           <Path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z" {...c} />
@@ -185,6 +188,13 @@ export function SettingsIcon({name, size = 29, round = false}: {name: SettingsIc
             {/* A page with ruled lines. */}
             <Path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" {...c} />
             <Path d="M14 3v5h5M9 13h6M9 17h4" {...c} />
+          </>
+        ) : name === 'quantum' ? (
+          <>
+            {/* lucide Atom: quantum-safe keys. */}
+            <Circle cx={12} cy={12} r={1} {...c} />
+            <Path d="M20.2 20.2c2-2 0-7.4-4.5-11.9S5.8 1.8 3.8 3.8s0 7.4 4.5 11.9 9.9 6.5 11.9 4.5z" {...c} />
+            <Path d="M15.7 15.7c4.5-4.5 6.5-9.9 4.5-11.9s-7.4 0-11.9 4.5-6.5 9.9-4.5 11.9 7.4 0 11.9-4.5z" {...c} />
           </>
         ) : name === 'privacy' ? (
           <>

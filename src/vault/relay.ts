@@ -10,10 +10,11 @@
  * proceed and the user is told why.
  */
 import {Alert} from 'react-native';
-import {encodeFunctionData, type Abi, type Address, type Hex, type PublicClient} from 'viem';
+import {decodeFunctionData, encodeFunctionData, type Abi, type Address, type Hex, type PublicClient} from 'viem';
 import type {Signer} from '@/wallet/signer';
 import {apiUrl, CHAIN_ID, publicClientFor, type Network} from '@/core/chain';
-import {FORWARDER_ABI, FORWARD_REQUEST_TYPES, VAULT_FWD_ABI, VAULT_MULTICALL_ABI} from '@/core/abi';
+import {FORWARDER_ABI, FORWARD_REQUEST_TYPES, VAULT_FWD_ABI, VAULT_MULTICALL_ABI, VAULT_OWNERSHIP_ABI, VAULT_RISK_ABI} from '@/core/abi';
+import {rotationOn} from '@/wallet/rotation-store';
 import {isActivated, activateVault, activateVaultDirect} from './activate';
 import {OwnerGasShort, ownerEthBalance, sendFromOwner} from './direct';
 import {feePayerFor, type FeePayer} from '@/core/fee-payer-store';
@@ -139,6 +140,10 @@ type EncodedWrite = {
   stableCoin: Address;
   /** Who pays the network fee for THIS write, over the vault's setting: a fallback the user accepted. */
   payer?: FeePayer;
+  /** Bill `stableCoin` as given, not the owner's first fee coin: see {relayVaultWrite}'s `pinFee`. */
+  pinFee?: boolean;
+  /** Do not hand the vault to a fresh key with this write: see {relayVaultWrite}'s `noRotate`. */
+  noRotate?: boolean;
 };
 
 /**
@@ -165,16 +170,62 @@ function offerOtherPayer(title: string, message: string, accept: string): Promis
 }
 
 /**
- * One vault write, paid the way the vault is set to pay — or, if that way cannot, the other way,
- * when the user says so. See core/fee-payer-store.
+ * Writes to one vault from one key, one at a time.
+ *
+ * The forwarder takes a single nonce sequence per (signer, vault) and a request is signed for the
+ * nonce it read — so two operations started together (a deposit while a trade is still mining) both
+ * signed the SAME nonce, and only one of them could ever land; the other failed at the relayer or on
+ * chain. The owner-paid path has the same problem with the owner's own account nonce.
+ *
+ * So a write waits for the one before it to be MINED before it reads a nonce and signs. The caller
+ * still gets its hash as soon as its own write is submitted; it is the next write that waits. A
+ * receipt that never comes frees the queue after {SETTLE_TIMEOUT_MS}, so one stuck transaction
+ * cannot block the vault for good.
  */
+const writeQueue = new Map<string, Promise<void>>();
+const SETTLE_TIMEOUT_MS = 120_000;
+
 async function relayEncoded(opts: EncodedWrite): Promise<RelayResult> {
+  const key = `${opts.network}:${opts.account.address.toLowerCase()}:${opts.vault.toLowerCase()}`;
+  const before = writeQueue.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const done = new Promise<void>((r) => (release = r));
+  const turn = before.then(() => done);
+  writeQueue.set(key, turn);
+  void turn.then(() => {
+    if (writeQueue.get(key) === turn) writeQueue.delete(key);
+  });
+  await before;
+  try {
+    const res = await relayEncodedNow(opts);
+    publicClientFor(opts.network)
+      .waitForTransactionReceipt({hash: res.hash, timeout: SETTLE_TIMEOUT_MS})
+      .catch(() => {})
+      .finally(release);
+    return res;
+  } catch (e) {
+    release();
+    throw e;
+  }
+}
+
+/**
+ * One vault write, paid the way the vault is set to pay — or, if that way cannot, the other way,
+ * when the user says so. See core/fee-payer-store. Called through {relayEncoded}'s queue.
+ */
+async function relayEncodedNow(given: EncodedWrite): Promise<RelayResult> {
   const t = (key: string) => translate(useLanguage.getState().language, key);
-  const {account, network, vault} = opts;
+  const {account, network, vault} = given;
   // Every vault write passes here, so this is where a vault on a release newer than this build is
   // stopped — before a signature is asked for.
   await assertCanWrite(vault, network);
-  const payer = opts.payer ?? (ownerCanPay(account) ? feePayerFor(network, vault) : 'vault');
+  const opts = await withHandover(given);
+  /**
+   * On quantum-safe keys the vault always pays. The key that signs is a one-time key with no ETH
+   * of its own, and ETH sent to it would be left behind at an address the vault has moved on from.
+   */
+  const rotating = rotationOn(network, vault);
+  const payer = opts.payer ?? (ownerCanPay(account) && !rotating ? feePayerFor(network, vault) : 'vault');
   const asked = opts.payer !== undefined;
 
   if (payer === 'owner') {
@@ -182,7 +233,7 @@ async function relayEncoded(opts: EncodedWrite): Promise<RelayResult> {
       return await viaOwner(opts);
     } catch (e) {
       if (!asked && e instanceof OwnerGasShort && (await offerOtherPayer(t('mobile.fees.fallback_vault_title'), e.message, t('mobile.fees.fallback_vault_button')))) {
-        return relayEncoded({...opts, payer: 'vault'});
+        return relayEncodedNow({...opts, payer: 'vault'});
       }
       throw e;
     }
@@ -192,15 +243,53 @@ async function relayEncoded(opts: EncodedWrite): Promise<RelayResult> {
   } catch (e) {
     if (
       !asked &&
+      !rotating &&
       e instanceof VaultFeeRefused &&
       ownerCanPay(account) &&
       (await ownerEthBalance(network, account.address).catch(() => BigInt(0))) > BigInt(0) &&
       (await offerOtherPayer(t('mobile.fees.fallback_owner_title'), e.message, t('mobile.fees.fallback_owner_button')))
     ) {
-      return relayEncoded({...opts, payer: 'owner'});
+      return relayEncodedNow({...opts, payer: 'owner'});
     }
     throw e;
   }
+}
+
+/**
+ * The write with the vault's handover to a fresh key appended, when the signer planned one (see
+ * wallet/rotation): one transaction, so the key that signs it is no longer the one the vault is
+ * waiting on by the time anyone can read its signature.
+ *
+ * A write that is already a multicall gets the handover as its last call; any other becomes a
+ * multicall of the two. Tried on the chain first, and left off when the pair would revert where the
+ * write alone would not — the operation is what the user asked for, and the handover can ride on
+ * the next one. When the write fails on its own as well, it goes as it is, so its own error is the
+ * one the user sees.
+ */
+async function withHandover(opts: EncodedWrite): Promise<EncodedWrite> {
+  const to = !opts.noRotate && opts.account.rotation && 'to' in opts.account.rotation ? opts.account.rotation.to : undefined;
+  if (!to) return opts;
+  const client = publicClientFor(opts.network);
+  // Asked again here, after the write queue: a write started alongside this one may have queued a
+  // handover since the signer looked, and queueing a second would start the wait over.
+  const waiting = await client
+    .readContract({address: opts.vault, abi: VAULT_RISK_ABI, functionName: 'pendingChanges'})
+    .then((p) => p.newOwnerReadyAt > 0n)
+    .catch(() => false);
+  if (waiting) return {...opts, noRotate: true};
+  const handover = encodeCall({abi: VAULT_OWNERSHIP_ABI, functionName: 'transferOwnership', args: [to]});
+  let calls: readonly Hex[] = [opts.data];
+  try {
+    const d = decodeFunctionData({abi: VAULT_MULTICALL_ABI, data: opts.data});
+    if (d.functionName === 'multicall') calls = d.args[0];
+  } catch {
+    // Not a multicall: the write is one call.
+  }
+  const data = encodeCall({abi: VAULT_MULTICALL_ABI, functionName: 'multicall', args: [[...calls, handover]]});
+  const ok = await client
+    .estimateGas({account: opts.account.address, to: opts.vault, data})
+    .then(() => true, () => false);
+  return ok ? {...opts, data, noRotate: true} : {...opts, noRotate: true};
 }
 
 /**
@@ -287,6 +376,7 @@ async function viaRelayer(opts: EncodedWrite): Promise<RelayResult> {
     network,
     request: {from: account.address, to: vault, value: '0', gas: innerGas.toString(), deadline, data: opts.data, signature},
     stableCoin: opts.stableCoin,
+    pinFee: opts.pinFee,
   });
 }
 
@@ -299,13 +389,14 @@ export async function submitForwardRequest(o: {
   network: Network;
   request: {from: Address; to: Address; value: string; gas: string; deadline: number; data: Hex; signature: Hex};
   stableCoin: Address;
+  pinFee?: boolean;
 }): Promise<RelayResult> {
   const res = await fetch(apiUrl('/api/ethereum/vaults/relay', o.network), {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
       request: o.request,
-      stableCoinAddress: feeHint(o.network, o.request.to, o.stableCoin),
+      stableCoinAddress: o.pinFee ? o.stableCoin : feeHint(o.network, o.request.to, o.stableCoin),
     }),
   });
 
@@ -389,6 +480,23 @@ export async function relayVaultWrite(opts: {
   args?: readonly unknown[];
   /** The stable coin the relayer should charge its fee in (a hint — it will try others if needed). */
   stableCoin: Address;
+  /**
+   * Send `stableCoin` as the hint even when the owner's fee-coin order puts another coin first.
+   *
+   * For a write that SPENDS the owner's first coin: the relayer checks the hinted coin's balance
+   * before the call and charges it after, so hinting the coin the call is about to spend down passes
+   * the check and fails the charge (`fee-leg-failed`). A caller that has worked out which coin will
+   * still be there afterwards — the one it held the fee float back in — pins that one.
+   */
+  pinFee?: boolean;
+  /**
+   * Keep the vault with the key that signs this write, on quantum-safe keys.
+   *
+   * For the setup in front of a limit or recurring order: the order is signed next by the same key,
+   * and the vault checks that signature against its owner whenever the order fills, so handing the
+   * vault on here would stop the order filling once the timelock ran.
+   */
+  noRotate?: boolean;
 }): Promise<RelayResult> {
   const data = encodeCall({abi: opts.abi, functionName: opts.functionName, args: opts.args});
   return relayEncoded({
@@ -398,6 +506,8 @@ export async function relayVaultWrite(opts: {
     data,
     activationCalls: [data],
     stableCoin: opts.stableCoin,
+    pinFee: opts.pinFee,
+    noRotate: opts.noRotate,
   });
 }
 
@@ -412,6 +522,10 @@ export async function relayVaultMulticall(opts: {
   network: Network;
   calls: VaultCall[];
   stableCoin: Address;
+  /** See {relayVaultWrite}. */
+  pinFee?: boolean;
+  /** See {relayVaultWrite}. */
+  noRotate?: boolean;
 }): Promise<RelayResult> {
   const datas = opts.calls.map(encodeCall);
   const data = encodeCall({abi: VAULT_MULTICALL_ABI, functionName: 'multicall', args: [datas]});
@@ -422,5 +536,7 @@ export async function relayVaultMulticall(opts: {
     data,
     activationCalls: datas,
     stableCoin: opts.stableCoin,
+    pinFee: opts.pinFee,
+    noRotate: opts.noRotate,
   });
 }

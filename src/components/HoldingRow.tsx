@@ -2,7 +2,7 @@ import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {Amount} from '@/components/Amount';
 import {TokenIcon} from '@/components/TokenIcon';
-import {displaySymbol, fmtNum} from '@/core/format';
+import {displaySymbol, fmtHolding, fmtShort} from '@/core/format';
 import {fmtUsd} from '@/core/prices';
 import {fmtChange} from '@/vault/useMarketStats';
 import {useColors, useStyles, type Colors} from '@/theme';
@@ -97,11 +97,11 @@ export function HoldingRow({
               MASK
             ) : earned > 0 ? (
               <>
-                <Amount v={fmtNum(total - earned)} size={15} weight="600" />{' '}
-                <Text style={styles.amtEarned}>+ <Amount v={fmtNum(earned)} size={13} color={c.success} weight="600" /></Text>
+                <Amount v={fmtHolding(total - earned)} size={15} weight="600" />{' '}
+                <Text style={styles.amtEarned}>+ <Amount v={fmtShort(earned)} size={13} color={c.success} weight="600" /></Text>
               </>
             ) : (
-              <Amount v={fmtNum(total)} size={15} weight="600" />
+              <Amount v={fmtHolding(total)} size={15} weight="600" />
             )}
           </Text>
           {hidden ? <Text style={styles.sub}>{MASK}</Text> : usd != null ? <Text style={styles.sub}>{fmtUsd(usd)}</Text> : null}

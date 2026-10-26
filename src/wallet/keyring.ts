@@ -8,8 +8,18 @@
  * (iOS deletes the Keychain item with the app). No server ever sees it.
  */
 import * as Keychain from 'react-native-keychain';
-import {generateMnemonic, mnemonicToAccount, english, type HDAccount} from 'viem/accounts';
-import {validateMnemonic} from '@scure/bip39';
+import {toHex} from 'viem';
+import {
+  generateMnemonic,
+  hdKeyToAccount,
+  mnemonicToAccount,
+  privateKeyToAccount,
+  english,
+  HDKey,
+  type HDAccount,
+  type PrivateKeyAccount,
+} from 'viem/accounts';
+import {mnemonicToSeedSync, validateMnemonic} from '@scure/bip39';
 import {wordlist} from '@scure/bip39/wordlists/english';
 import {translate} from '@/i18n';
 import {useLanguage} from '@/core/language-store';
@@ -67,8 +77,35 @@ async function readSecret(prompt: string): Promise<string | null> {
  * Index 0 is the wallet that has always existed and keeps the default path.
  */
 export async function unlock(index = 0): Promise<HDAccount | null> {
+  const root = await unlockRoot();
+  return root ? accountAt(root, index) : null;
+}
+
+/**
+ * The phrase's root key, behind the same Face ID prompt as {unlock}: for a caller that needs more
+ * than one key of it at once — the vault's owner key and the fresh key it is handed to next (see
+ * ./rotation). Held only for the operation in hand, like the account {unlock} returns.
+ */
+export async function unlockRoot(): Promise<HDKey | null> {
   const m = await readSecret(translate(useLanguage.getState().language, 'mobile.app.unlock_prompt'));
-  return m ? mnemonicToAccount(m, {accountIndex: index}) : null;
+  return m ? HDKey.fromMasterSeed(mnemonicToSeedSync(m)) : null;
+}
+
+/** The owner key at BIP-44 account `index` (m/44'/60'/index'/0/0) — what {unlock} returns. */
+export const accountAt = (root: HDKey, index: number): HDAccount => hdKeyToAccount(root, {accountIndex: index});
+
+/**
+ * One-time key `k` of account `index`: m/44'/60'/index'/1/k.
+ *
+ * The CHANGE branch (1), which Ethereum wallets do not use — MetaMask and the like count accounts
+ * on m/44'/60'/0'/0/n — so importing this phrase somewhere else does not hand out these keys as
+ * that wallet's "Account 2". Still the same phrase, so the phrase restores every one of them.
+ */
+export function oneTimeKeys(root: HDKey, index: number): (k: number) => PrivateKeyAccount {
+  // The branch is derived once: a scan for the vault's owner walks dozens of keys, and deriving each
+  // from the root repeats the four hardened steps above it every time.
+  const branch = root.derive(`m/44'/60'/${index}'/1`);
+  return (k) => privateKeyToAccount(toHex(branch.deriveChild(k).privateKey!));
 }
 
 /**

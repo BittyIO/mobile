@@ -6,6 +6,7 @@ import type {Network} from '@/core/chain';
 import type {Address} from 'viem';
 import {API_VERSION} from '@/core/vault-contracts';
 import {registerServedProtocols} from '@/core/protocols';
+import {getPref, setPref} from '@/core/prefs';
 
 /**
  * The asset catalog now lives in the DB and is served by the web app's /api/ethereum/assets. Mobile
@@ -54,6 +55,30 @@ const inflight = new Map<string, Promise<Asset[] | null>>();
  */
 let version = 0;
 const listeners = new Set<() => void>();
+/**
+ * The last catalog each network served, kept on the phone and loaded before anything asks.
+ *
+ * On a cold launch the catalog request takes a second, and everything waited on it twice: the
+ * balances were read against the bundled list, read AGAIN once the catalog grew, and priced again for
+ * the longer list — three round trips in a row before the Overview could show a total. With the last
+ * answer loaded at start-up the first read is already against the full list; the request still goes
+ * out, and only a catalog that actually CHANGED since bumps the version and triggers a re-read.
+ */
+const STORE_KEY = (network: string) => `catalog.${network}`;
+for (const network of ['mainnet', 'base', 'sepolia', 'robinhood', 'arbitrum'] as Network[]) {
+  try {
+    const raw = getPref(STORE_KEY(network));
+    if (!raw) continue;
+    const saved = JSON.parse(raw) as {assets?: Asset[]; protocols?: {address: string; category: string; name?: string}[]};
+    if (!saved.assets?.length) continue;
+    cache.set(network, saved.assets);
+    registerCatalogAssets(network, saved.assets);
+    if (saved.protocols) registerServedProtocols(network, saved.protocols);
+  } catch {
+    // A stored catalog that cannot be read is no catalog: the request below fills it in.
+  }
+}
+
 const subscribe = (fn: () => void) => {
   listeners.add(fn);
   return () => {
@@ -137,6 +162,11 @@ async function loadCatalog(network: Network): Promise<Asset[] | null> {
     if (list.length === 0) return null;
     const before = cache.get(network);
     cache.set(network, list);
+    try {
+      setPref(STORE_KEY(network), JSON.stringify({assets: list, protocols: j.protocols}));
+    } catch {
+      // Storage full or unavailable: the in-memory cache still serves this run.
+    }
     // So `assetMeta`/`isKnownAsset` can name a token this build does not bundle. See {knownAssets}.
     registerCatalogAssets(network, list);
     if (

@@ -39,6 +39,18 @@ export function fmtShort(n: number): string {
 }
 
 /**
+ * A holding on a list row: two decimals from 1 up, as {fmtNum}; below 1, at most four — 0.0365,
+ * not 0.0365366 — so a column of balances reads like the total above it. The exact figure is a tap
+ * away (the breakdown sheet). Still the subscript form for dust, so 0.00001 is never shown as 0.
+ */
+export function fmtHolding(n: number): string {
+  if (!Number.isFinite(n) || n === 0) return '0';
+  const abs = Math.abs(n);
+  if (abs >= 1 || Number(abs.toPrecision(3)) < 0.0001) return fmtNum(n);
+  return (Math.trunc(n * 1e4) / 1e4).toLocaleString(undefined, {maximumFractionDigits: 4});
+}
+
+/**
  * The amount in FULL, with nothing dropped off the end.
  *
  * {@link fmtNum} truncates at two decimals above 1, which is right for a balance being read and

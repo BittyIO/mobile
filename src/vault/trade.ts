@@ -192,6 +192,8 @@ type SellOpts = {
   sellAmount: string; // human units of sellToken
   slippageBps: number; // e.g. 100 = 1%
   stableCoin: Address;
+  /** Bill exactly `stableCoin`: see {relayVaultWrite}. */
+  pinFee?: boolean;
 };
 
 /**
@@ -232,8 +234,8 @@ export async function marketSell(o: SellOpts): Promise<{hash: Hex; quote: Quote}
   // the swap in ONE multicall (one signature, mined atomically) so the swap sees them registered.
   const setup = await buildSetupCalls({network: o.network, vault: o.vault, adapter: amm, tokens: [o.sellToken, o.buyToken]});
   const {hash} = setup.length
-    ? await relayVaultMulticall({account: o.account, vault: o.vault, network: o.network, calls: [...setup, swapCall], stableCoin: o.stableCoin})
-    : await relayVaultWrite({account: o.account, vault: o.vault, network: o.network, ...swapCall, stableCoin: o.stableCoin});
+    ? await relayVaultMulticall({account: o.account, vault: o.vault, network: o.network, calls: [...setup, swapCall], stableCoin: o.stableCoin, pinFee: o.pinFee})
+    : await relayVaultWrite({account: o.account, vault: o.vault, network: o.network, ...swapCall, stableCoin: o.stableCoin, pinFee: o.pinFee});
 
   return {
     hash,

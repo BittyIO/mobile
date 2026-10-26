@@ -4,6 +4,9 @@ import type {MobileTable} from './index';
 // as the action taken ("Cancel limit orders"), the way the button that caused it reads.
 export const actions: MobileTable = {
   en: {
+    network_unreachable: 'Couldn\'t reach the network to check the vault, so nothing was sent. Try again in a moment.',
+    deposit_amount: 'Deposit {{amount}}',
+    withdraw_amount: 'Withdraw {{amount}}',
     fee_coin_on: '{{token}}: network fee on',
     fee_coin_off: '{{token}}: network fee off',
     fee_coins: 'Network fee tokens: {{tokens}}',
@@ -70,6 +73,9 @@ export const actions: MobileTable = {
     network_fee: 'Network fee: {{amount}}',
   },
   zh: {
+    network_unreachable: '无法连接网络来检查金库，因此未发送任何交易。请稍后重试。',
+    deposit_amount: '存入 {{amount}}',
+    withdraw_amount: '取出 {{amount}}',
     fee_coin_on: '{{token}}：开启网络手续费',
     fee_coin_off: '{{token}}：关闭网络手续费',
     fee_coins: '网络手续费代币：{{tokens}}',
@@ -136,6 +142,9 @@ export const actions: MobileTable = {
     network_fee: '网络费：{{amount}}',
   },
   'zh-TW': {
+    network_unreachable: '無法連線網路來檢查金庫，因此未送出任何交易。請稍後再試。',
+    deposit_amount: '存入 {{amount}}',
+    withdraw_amount: '取出 {{amount}}',
     fee_coin_on: '{{token}}：開啟網路手續費',
     fee_coin_off: '{{token}}：關閉網路手續費',
     fee_coins: '網路手續費代幣：{{tokens}}',
@@ -161,7 +170,7 @@ export const actions: MobileTable = {
     relay_no_liquid: '金庫中沒有穩定幣可支付網路手續費。請先從理財或借貸部位取出一些。',
     relay_budget: '金庫的每日網路手續費額度已用完，將在首次扣費後 24 小時重置。',
     relay_stable_coin_as_gas_off: '該金庫已關閉代付。請在「網路手續費」頁面重新啟用一種手續費代幣。',
-    relay_refused: '金庫拒絕了本次操作，因此未送出任何交易。請檢查資產是否在允許清單中，以及交易是否被暫停。',
+    relay_refused: '金庫拒絕了本次操作，因此未送出任何交易。請檢查資產是否在白名單中，以及交易是否被暫停。',
     relay_failed: '代付服務拒絕了本次操作（{{reason}}），因此未送出任何交易。',
     app_update_required: '此金庫執行的是 {{version}} 版本，需要較新的應用程式版本。請從 App Store 更新 Bitty Vault 後再試一次。未傳送任何交易。',
     withdraw_from: '從 {{name}} 取出',
@@ -202,6 +211,9 @@ export const actions: MobileTable = {
     network_fee: '網路費：{{amount}}',
   },
   ja: {
+    network_unreachable: 'ネットワークに接続できず金庫を確認できなかったため、何も送信されていません。しばらくしてから再試行してください。',
+    deposit_amount: '{{amount}} を入金',
+    withdraw_amount: '{{amount}} を引き出し',
     fee_coin_on: '{{token}}：ネットワーク手数料をオン',
     fee_coin_off: '{{token}}：ネットワーク手数料をオフ',
     fee_coins: 'ネットワーク手数料トークン：{{tokens}}',
@@ -268,6 +280,9 @@ export const actions: MobileTable = {
     network_fee: 'ネットワーク手数料：{{amount}}',
   },
   ko: {
+    network_unreachable: '네트워크에 연결해 금고를 확인하지 못해 아무것도 전송되지 않았습니다. 잠시 후 다시 시도하세요.',
+    deposit_amount: '{{amount}} 예치',
+    withdraw_amount: '{{amount}} 인출',
     fee_coin_on: '{{token}}: 네트워크 수수료 켜기',
     fee_coin_off: '{{token}}: 네트워크 수수료 끄기',
     fee_coins: '네트워크 수수료 토큰: {{tokens}}',
@@ -334,6 +349,9 @@ export const actions: MobileTable = {
     network_fee: '네트워크 수수료: {{amount}}',
   },
   fr: {
+    network_unreachable: 'Impossible de joindre le réseau pour vérifier le coffre : rien n\'a été envoyé. Réessayez dans un instant.',
+    deposit_amount: 'Dépôt de {{amount}}',
+    withdraw_amount: 'Retrait de {{amount}}',
     fee_coin_on: '{{token}} : frais de réseau activés',
     fee_coin_off: '{{token}} : frais de réseau désactivés',
     fee_coins: 'Jetons de frais de réseau : {{tokens}}',
@@ -400,6 +418,9 @@ export const actions: MobileTable = {
     network_fee: 'Frais de réseau : {{amount}}',
   },
   es: {
+    network_unreachable: 'No se pudo conectar con la red para comprobar la bóveda, así que no se envió nada. Inténtalo de nuevo en un momento.',
+    deposit_amount: 'Depositar {{amount}}',
+    withdraw_amount: 'Retirar {{amount}}',
     fee_coin_on: '{{token}}: comisión de red activada',
     fee_coin_off: '{{token}}: comisión de red desactivada',
     fee_coins: 'Tokens de comisión de red: {{tokens}}',
@@ -466,6 +487,9 @@ export const actions: MobileTable = {
     network_fee: 'Comisión de red: {{amount}}',
   },
   de: {
+    network_unreachable: 'Das Netzwerk war nicht erreichbar, um den Tresor zu prüfen, daher wurde nichts gesendet. Versuche es gleich noch einmal.',
+    deposit_amount: '{{amount}} einzahlen',
+    withdraw_amount: '{{amount}} abheben',
     fee_coin_on: '{{token}}: Netzwerkgebühr an',
     fee_coin_off: '{{token}}: Netzwerkgebühr aus',
     fee_coins: 'Token für Netzwerkgebühren: {{tokens}}',
@@ -532,6 +556,9 @@ export const actions: MobileTable = {
     network_fee: 'Netzwerkgebühr: {{amount}}',
   },
   'pt-BR': {
+    network_unreachable: 'Não foi possível acessar a rede para verificar o cofre, então nada foi enviado. Tente novamente em instantes.',
+    deposit_amount: 'Depositar {{amount}}',
+    withdraw_amount: 'Sacar {{amount}}',
     fee_coin_on: '{{token}}: taxa de rede ativada',
     fee_coin_off: '{{token}}: taxa de rede desativada',
     fee_coins: 'Tokens de taxa de rede: {{tokens}}',
@@ -598,6 +625,9 @@ export const actions: MobileTable = {
     network_fee: 'Taxa de rede: {{amount}}',
   },
   hi: {
+    network_unreachable: 'वॉल्ट जाँचने के लिए नेटवर्क से कनेक्ट नहीं हो सका, इसलिए कुछ भी नहीं भेजा गया। थोड़ी देर में फिर कोशिश करें।',
+    deposit_amount: '{{amount}} जमा करें',
+    withdraw_amount: '{{amount}} निकालें',
     fee_coin_on: '{{token}}: नेटवर्क शुल्क चालू',
     fee_coin_off: '{{token}}: नेटवर्क शुल्क बंद',
     fee_coins: 'नेटवर्क शुल्क टोकन: {{tokens}}',
@@ -664,6 +694,9 @@ export const actions: MobileTable = {
     network_fee: 'नेटवर्क शुल्क: {{amount}}',
   },
   tr: {
+    network_unreachable: 'Kasayı kontrol etmek için ağa ulaşılamadı, bu yüzden hiçbir şey gönderilmedi. Birazdan tekrar deneyin.',
+    deposit_amount: '{{amount}} yatır',
+    withdraw_amount: '{{amount}} çek',
     fee_coin_on: '{{token}}: ağ ücreti açık',
     fee_coin_off: '{{token}}: ağ ücreti kapalı',
     fee_coins: 'Ağ ücreti tokenleri: {{tokens}}',
@@ -730,6 +763,9 @@ export const actions: MobileTable = {
     network_fee: 'Ağ ücreti: {{amount}}',
   },
   ru: {
+    network_unreachable: 'Не удалось подключиться к сети для проверки хранилища, поэтому ничего не отправлено. Повторите попытку чуть позже.',
+    deposit_amount: 'Внести {{amount}}',
+    withdraw_amount: 'Вывести {{amount}}',
     fee_coin_on: '{{token}}: сетевая комиссия включена',
     fee_coin_off: '{{token}}: сетевая комиссия выключена',
     fee_coins: 'Токены сетевой комиссии: {{tokens}}',
@@ -796,6 +832,9 @@ export const actions: MobileTable = {
     network_fee: 'Сетевая комиссия: {{amount}}',
   },
   id: {
+    network_unreachable: 'Tidak dapat menjangkau jaringan untuk memeriksa vault, jadi tidak ada yang dikirim. Coba lagi sebentar lagi.',
+    deposit_amount: 'Setor {{amount}}',
+    withdraw_amount: 'Tarik {{amount}}',
     fee_coin_on: '{{token}}: biaya jaringan aktif',
     fee_coin_off: '{{token}}: biaya jaringan nonaktif',
     fee_coins: 'Token biaya jaringan: {{tokens}}',
@@ -862,6 +901,9 @@ export const actions: MobileTable = {
     network_fee: 'Biaya jaringan: {{amount}}',
   },
   vi: {
+    network_unreachable: 'Không kết nối được mạng để kiểm tra két, nên chưa có gì được gửi. Hãy thử lại sau giây lát.',
+    deposit_amount: 'Nạp {{amount}}',
+    withdraw_amount: 'Rút {{amount}}',
     fee_coin_on: '{{token}}: bật phí mạng',
     fee_coin_off: '{{token}}: tắt phí mạng',
     fee_coins: 'Token trả phí mạng: {{tokens}}',
@@ -928,6 +970,9 @@ export const actions: MobileTable = {
     network_fee: 'Phí mạng: {{amount}}',
   },
   th: {
+    network_unreachable: 'ไม่สามารถเชื่อมต่อเครือข่ายเพื่อตรวจสอบห้องนิรภัยได้ จึงยังไม่มีการส่งใดๆ โปรดลองอีกครั้งในอีกสักครู่',
+    deposit_amount: 'ฝาก {{amount}}',
+    withdraw_amount: 'ถอน {{amount}}',
     fee_coin_on: '{{token}}: เปิดค่าธรรมเนียมเครือข่าย',
     fee_coin_off: '{{token}}: ปิดค่าธรรมเนียมเครือข่าย',
     fee_coins: 'โทเค็นค่าธรรมเนียมเครือข่าย: {{tokens}}',

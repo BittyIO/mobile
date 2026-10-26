@@ -26,6 +26,7 @@ import {
 } from '@/vault/versions';
 import {useT} from '@/i18n';
 import {useStyles, type Colors} from '@/theme';
+import {SettingsIcon} from '@/components/SettingsIcon';
 import {displaySymbol} from '@/core/format';
 
 /**
@@ -236,7 +237,6 @@ export function ManageScreen() {
         {section === 'services' && versions.upgrades.length > 0 && (
           // One row per adapter clone behind its lineage's newest build; none when all are current.
           <View style={styles.section}>
-            <Text style={styles.header}>{t('vault.upgrade_action')}</Text>
             <View style={styles.group}>
               {versions.upgrades.map((r, i) => (
                 <Pressable
@@ -262,7 +262,6 @@ export function ManageScreen() {
           assetList
         ) : (
           <View style={styles.section}>
-            <Text style={styles.header}>{t('mobile.vault.current_protocols')}</Text>
             {serviceList}
           </View>
         )}
@@ -276,7 +275,8 @@ export function ManageScreen() {
       <View style={styles.section}>
       <View style={styles.group}>
         <View style={[styles.row, styles.rowFirst, styles.rowLast]}>
-          <View style={styles.rowText}>
+          <View style={[styles.rowText, styles.titleWithIcon]}>
+            <SettingsIcon name="allowlist" />
             <Text style={styles.rowTitle}>{t('mobile.vault.bitty_allowlist')}</Text>
           </View>
           <PendingSwitch
@@ -308,7 +308,10 @@ export function ManageScreen() {
             key={key}
             style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === 1 && styles.rowLast, pressed && styles.pressed]}
             onPress={() => nav.push('VaultAssets', {section: key})}>
-            <Text style={styles.rowTitle}>{label}</Text>
+            <View style={styles.titleWithIcon}>
+              <SettingsIcon name={key === 'assets' ? 'assets' : 'protocols'} />
+              <Text style={styles.rowTitle}>{label}</Text>
+            </View>
             <View style={styles.countRow}>
               <Text style={styles.count}>{count}</Text>
               <Text style={styles.chev}>›</Text>
@@ -358,6 +361,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   pressed: {opacity: 0.6},
   // The summary rows' right-hand end: how many are in the list, then the way in.
   countRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
+  titleWithIcon: {flexDirection: 'row', alignItems: 'center', gap: 12},
   count: {color: c.subtext, fontSize: 15, fontVariant: ['tabular-nums']},
   chev: {color: c.subtext, fontSize: 20, marginTop: -2},
   rowText: {flex: 1, gap: 2},
