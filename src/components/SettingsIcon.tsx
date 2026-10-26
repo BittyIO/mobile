@@ -31,7 +31,8 @@ export type SettingsIconName =
   | 'follow'
   | 'terms'
   | 'privacy'
-  | 'quantum';
+  | 'quantum'
+  | 'wallet';
 
 // iOS Settings row icons: a white glyph on a small rounded square, one tint per row. Glyphs follow
 // the lucide set the web uses (Globe, Coins, Wrench, Shield, Key, Lock, Zap, Users, Fuel, CalendarClock, Receipt), drawn on a
@@ -70,6 +71,8 @@ const TINT: Record<SettingsIconName, string> = {
   terms: '#8E8E93',
   privacy: '#5856D6',
   quantum: '#32ADE6',
+  // The owner's own wallet paying the fee, beside the Bitty logo of the vault paying it.
+  wallet: '#FF9500',
 };
 
 /** `round` draws it in a circle rather than the rounded square of a Settings row (the header's lock). */
@@ -188,6 +191,13 @@ export function SettingsIcon({name, size = 29, round = false}: {name: SettingsIc
             {/* A page with ruled lines. */}
             <Path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" {...c} />
             <Path d="M14 3v5h5M9 13h6M9 17h4" {...c} />
+          </>
+        ) : name === 'wallet' ? (
+          <>
+            {/* A wallet: its body, the flap over it, and the clasp. */}
+            <Rect x={3} y={7} width={18} height={13} rx={2.5} {...c} />
+            <Path d="M17 7V5.5a1.5 1.5 0 0 0-1.9-1.45L6 6.5" {...c} />
+            <Path d="M21 11h-4a2 2 0 0 0 0 4h4" {...c} />
           </>
         ) : name === 'quantum' ? (
           <>

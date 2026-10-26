@@ -1,17 +1,17 @@
 import React, {useState} from 'react';
 import {Alert, Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
-import Svg, {Path} from 'react-native-svg';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
 import {makeSettingsStyles} from '@/components/SettingsRow';
+import {SettingsIcon} from '@/components/SettingsIcon';
 import {VaultFeeSettings} from '@/components/VaultFeeSettings';
 import {OwnerWalletCard} from '@/components/FeePayer';
 import {useNetwork} from '@/core/network-store';
 import {useActiveFeePayer} from '@/vault/useFeePayer';
 import {setFeePayer, type FeePayer} from '@/core/fee-payer-store';
 import {ownerEthBalance} from '@/vault/direct';
-import {useColors, useStyles, type Colors} from '@/theme';
+import {useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 
 /**
@@ -29,7 +29,6 @@ import {useT} from '@/i18n';
 export function NetworkFeeScreen() {
   const {t} = useT();
   const styles = useStyles(makeStyles);
-  const c = useColors();
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const network = useNetwork((s) => s.network);
   const {payer, canChoose, vault, owner} = useActiveFeePayer(network);
@@ -70,22 +69,14 @@ export function NetworkFeeScreen() {
    * page is for, so it gets nearly all of the row; a tap anywhere but the end must not navigate.
    */
   /**
-   * Each way's mark, as the web draws them: the Bitty logo for the vault, a wallet for the owner's
-   * own address.
+   * Each way's mark: the Bitty logo for the vault, and for the owner's own address a wallet on a
+   * tinted square of the same size and corners, so the two read as a pair.
    */
   const payerIcon = (p: FeePayer) =>
     p === 'vault' ? (
       <Image source={require('@/assets/logo.png')} style={styles.payerLogo} />
     ) : (
-      <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-        <Path
-          d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"
-          stroke={c.subtext}
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </Svg>
+      <SettingsIcon name="wallet" size={20} />
     );
 
   const way = (p: FeePayer, title: string, route: 'NetworkFeeVault' | 'NetworkFeeOwner', last?: boolean) => (
