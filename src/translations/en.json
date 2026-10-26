@@ -1421,7 +1421,30 @@
     "add_asset": "Add asset",
     "rename_list": "Rename list",
     "change_24h": "24h",
-    "tx_not_included": "Never included — nothing happened"
+    "tx_not_included": "Never included — nothing happened",
+    "gate": {
+      "locked_temp": "Paused while the vault is temporarily locked. Unlock it in Vault status to continue.",
+      "locked_forever": "Not available: this vault is locked forever.",
+      "not_locked": "The vault isn't locked.",
+      "stablecoin_buy_only": "While the vault is locked, orders can only buy stablecoins.",
+      "send_allowance_off": "Sending to new addresses is turned off in Risk settings.",
+      "market_trade_off": "Market trading is turned off in Risk settings.",
+      "owner_only": "Only the vault owner can do this.",
+      "no_permission": "Your asset manager permissions don't include this.",
+      "err_vault_locked": "This vault is locked, so this action isn't available.",
+      "err_payment_not_stable": "Only stablecoins can be sent to a new address. Add it to your whitelist to send other assets.",
+      "err_send_limit": "This is more than your daily send allowance has left.",
+      "err_market_loss": "This trade would go over today's market-trade loss allowance.",
+      "err_market_price": "The price moved too far from the market price, so the trade didn't go through. Try again.",
+      "err_deprecated": "This protocol is being retired, so it no longer takes new deposits or orders. You can still withdraw.",
+      "err_not_newer": "Already on this version or a newer one.",
+      "err_unauthorized": "This wallet isn't allowed to do this on this vault.",
+      "err_not_registered": "This asset or protocol isn't supported.",
+      "err_recipient_waiting": "This recipient can't receive funds yet. It becomes payable when its waiting period ends.",
+      "err_no_escape": "Choose a whitelisted recipient that can already receive funds.",
+      "err_gas_budget": "Today's network fee budget is used up.",
+      "err_price_unavailable": "A price feed isn't available right now. Try again shortly."
+    }
   },
   "matrica": {
     "title": "Matrica verify ownership",

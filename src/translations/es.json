@@ -1445,7 +1445,30 @@
     "add_asset": "Añadir activo",
     "rename_list": "Renombrar lista",
     "change_24h": "24 h",
-    "tx_not_included": "Nunca se incluyó: no pasó nada"
+    "tx_not_included": "Nunca se incluyó: no pasó nada",
+    "gate": {
+      "locked_temp": "En pausa mientras la bóveda está bloqueada temporalmente. Desbloquéala en Estado de la bóveda para continuar.",
+      "locked_forever": "No disponible: esta bóveda está bloqueada para siempre.",
+      "not_locked": "La bóveda no está bloqueada.",
+      "stablecoin_buy_only": "Mientras la bóveda está bloqueada, las órdenes solo pueden comprar stablecoins.",
+      "send_allowance_off": "El envío a direcciones nuevas está desactivado en la configuración de riesgo.",
+      "market_trade_off": "El trading a mercado está desactivado en la configuración de riesgo.",
+      "owner_only": "Solo el propietario de la bóveda puede hacer esto.",
+      "no_permission": "Tus permisos de administrador de activos no incluyen esta acción.",
+      "err_vault_locked": "Esta bóveda está bloqueada, así que esta acción no está disponible.",
+      "err_payment_not_stable": "Solo se pueden enviar stablecoins a una dirección nueva. Añádela a tu lista blanca para enviar otros activos.",
+      "err_send_limit": "Esto supera lo que queda de tu límite de envío diario.",
+      "err_market_loss": "Esta operación superaría el límite de pérdida diaria del trading a mercado.",
+      "err_market_price": "El precio se alejó demasiado del precio de mercado y la operación no se realizó. Inténtalo de nuevo.",
+      "err_deprecated": "Este protocolo se está retirando y ya no acepta nuevos depósitos ni órdenes. Aún puedes retirar.",
+      "err_not_newer": "Ya está en esta versión o en una más reciente.",
+      "err_unauthorized": "Esta billetera no tiene permiso para hacer esto en esta bóveda.",
+      "err_not_registered": "Este activo o protocolo no es compatible.",
+      "err_recipient_waiting": "Este destinatario aún no puede recibir fondos. Podrá cuando termine su periodo de espera.",
+      "err_no_escape": "Elige un destinatario de la lista blanca que ya pueda recibir fondos.",
+      "err_gas_budget": "Se agotó el presupuesto de comisiones de red de hoy.",
+      "err_price_unavailable": "Un feed de precios no está disponible ahora. Inténtalo de nuevo en breve."
+    }
   },
   "matrica": {
     "title": "Verificar propiedad Matrica",

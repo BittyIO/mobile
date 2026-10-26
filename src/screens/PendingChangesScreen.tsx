@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {PendingRow} from '@/components/PendingRow';
+import {QuantumInfoButton, QuantumKeys} from '@/components/QuantumHandover';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
@@ -39,8 +40,8 @@ export function pendingTitle(p: PendingChange, t: T, nameOf?: (address: string) 
     case 'maxFeePerOp':
       return t('mobile.vault.pending_max_fee');
     case 'newOwner':
-      // One of this phrase's one-time keys: the vault moving to a fresh key, not to someone else.
-      return t(keyPathOf(p.address) ? 'mobile.quantum.pending_fresh_key' : 'mobile.vault.pending_new_owner');
+      // One of this phrase's one-time keys: quantum-safe keys handing the vault on, not someone else.
+      return t(keyPathOf(p.address) ? 'mobile.quantum.pending_title' : 'mobile.vault.pending_new_owner');
     case 'newAssetManager':
       return t('mobile.vault.pending_new_asset_manager');
     case 'whitelistAdd':
@@ -50,6 +51,17 @@ export function pendingTitle(p: PendingChange, t: T, nameOf?: (address: string) 
       return name ? t('mobile.vault.pending_named', {title, name}) : title;
     }
   }
+}
+
+/**
+ * The extra a pending item's row draws, where its title and value cannot say what it is: today only
+ * a handover to one of this phrase's one-time keys, which the user did not ask for in so many words
+ * — quantum-safe keys queued it with their last operation. The row shows the two keys and what is
+ * public about each, with an ⓘ for why (see components/QuantumHandover).
+ */
+export function pendingExtras(p: PendingChange): {titleRight?: React.ReactNode; detail?: React.ReactNode} {
+  if (p.kind !== 'newOwner' || !keyPathOf(p.address)) return {};
+  return {titleRight: <QuantumInfoButton />, detail: <QuantumKeys to={p.address} />};
 }
 
 /** The name an address-book entry goes by on this device, as the book shows it. */
@@ -187,6 +199,7 @@ export function PendingChangesScreen() {
                     timelock={timelock}
                     title={pendingTitle(p, t, nameOf)}
                     value={pendingValue(p, t)}
+                    {...pendingExtras(p)}
                     // A new asset manager's permissions are a list, so they open in a sheet rather than crowd the row.
                     onPress={p.kind === 'newAssetManager' ? () => setPermsOf(p.perms) : undefined}
                     onCancel={cancel ?? undefined}

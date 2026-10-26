@@ -1445,7 +1445,30 @@
     "add_asset": "Ajouter un actif",
     "rename_list": "Renommer la liste",
     "change_24h": "24 h",
-    "tx_not_included": "Jamais incluse — rien ne s’est passé"
+    "tx_not_included": "Jamais incluse — rien ne s’est passé",
+    "gate": {
+      "locked_temp": "En pause tant que le coffre est verrouillé temporairement. Déverrouillez-le dans État du coffre pour continuer.",
+      "locked_forever": "Indisponible : ce coffre est verrouillé pour toujours.",
+      "not_locked": "Le coffre n'est pas verrouillé.",
+      "stablecoin_buy_only": "Tant que le coffre est verrouillé, les ordres ne peuvent acheter que des stablecoins.",
+      "send_allowance_off": "L'envoi vers de nouvelles adresses est désactivé dans les paramètres de risque.",
+      "market_trade_off": "Le trading au marché est désactivé dans les paramètres de risque.",
+      "owner_only": "Seul le propriétaire du coffre peut faire cela.",
+      "no_permission": "Vos autorisations de gestionnaire d'actifs n'incluent pas cette action.",
+      "err_vault_locked": "Ce coffre est verrouillé, cette action n'est donc pas disponible.",
+      "err_payment_not_stable": "Seuls des stablecoins peuvent être envoyés à une nouvelle adresse. Ajoutez-la à votre liste blanche pour envoyer d'autres actifs.",
+      "err_send_limit": "Cela dépasse ce qu'il reste de votre plafond d'envoi quotidien.",
+      "err_market_loss": "Cette transaction dépasserait la limite de perte quotidienne du trading au marché.",
+      "err_market_price": "Le prix s'est trop éloigné du prix du marché, la transaction n'a pas abouti. Réessayez.",
+      "err_deprecated": "Ce protocole est en cours de retrait et n'accepte plus de nouveaux dépôts ni ordres. Vous pouvez toujours retirer.",
+      "err_not_newer": "Déjà sur cette version ou une plus récente.",
+      "err_unauthorized": "Ce portefeuille n'est pas autorisé à faire cela sur ce coffre.",
+      "err_not_registered": "Cet actif ou ce protocole n'est pas pris en charge.",
+      "err_recipient_waiting": "Ce destinataire ne peut pas encore recevoir de fonds. Il le pourra à la fin de sa période d'attente.",
+      "err_no_escape": "Choisissez un destinataire de la liste blanche qui peut déjà recevoir des fonds.",
+      "err_gas_budget": "Le budget de frais réseau du jour est épuisé.",
+      "err_price_unavailable": "Un flux de prix est indisponible pour le moment. Réessayez dans un instant."
+    }
   },
   "matrica": {
     "title": "Vérification de propriété Matrica",

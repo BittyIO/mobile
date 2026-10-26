@@ -1445,7 +1445,30 @@
     "add_asset": "添加资产",
     "rename_list": "重命名列表",
     "change_24h": "24小时",
-    "tx_not_included": "未被打包 — 没有任何变化"
+    "tx_not_included": "未被打包 — 没有任何变化",
+    "gate": {
+      "locked_temp": "金库已临时锁定，此操作已暂停。请在金库状态中解锁后继续。",
+      "locked_forever": "不可用：此金库已永久锁定。",
+      "not_locked": "金库未锁定。",
+      "stablecoin_buy_only": "金库锁定期间，订单只能买入稳定币。",
+      "send_allowance_off": "向新地址转账已在风险设置中关闭。",
+      "market_trade_off": "市价交易已在风险设置中关闭。",
+      "owner_only": "只有金库所有者可以执行此操作。",
+      "no_permission": "你的资产管理员权限不包含此操作。",
+      "err_vault_locked": "此金库已锁定，无法执行此操作。",
+      "err_payment_not_stable": "只能向新地址发送稳定币。将其加入地址簿后可发送其他资产。",
+      "err_send_limit": "超出了你今日剩余的转账额度。",
+      "err_market_loss": "此交易将超过今日的市价交易亏损额度。",
+      "err_market_price": "价格偏离市场价过多，交易未成交。请重试。",
+      "err_deprecated": "此协议即将停用，不再接受新的存入或订单。你仍可取出。",
+      "err_not_newer": "已是此版本或更新版本。",
+      "err_unauthorized": "此钱包无权在该金库执行此操作。",
+      "err_not_registered": "不支持此资产或协议。",
+      "err_recipient_waiting": "该收款人暂时无法收款，等待期结束后即可收款。",
+      "err_no_escape": "请选择一个已可收款的地址簿收款人。",
+      "err_gas_budget": "今日的网络费用预算已用完。",
+      "err_price_unavailable": "价格数据暂时不可用，请稍后重试。"
+    }
   },
   "matrica": {
     "title": "Matrica 所有权验证",

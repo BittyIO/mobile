@@ -10,6 +10,7 @@ import {getLockLevel, getPendingChanges, getRiskConfig} from '@/vault/risk';
 import {cancelOwnershipTransfer, transferOwnership} from '@/vault/ownership';
 import {Button} from '@/components/Button';
 import {PendingRow} from '@/components/PendingRow';
+import {QuantumInfoButton, QuantumKeys} from '@/components/QuantumHandover';
 import {SettingsGroup, SettingsRow} from '@/components/SettingsRow';
 import {useVaultWrite} from '@/components/useVaultWrite';
 import {useWallet} from '@/wallet/store';
@@ -113,8 +114,10 @@ export function TransferOwnershipScreen() {
               at={pending.at}
               now={now}
               timelock={Number(timelock ?? 0)}
-              title={t(keyPathOf(pending.address) ? 'mobile.quantum.pending_fresh_key' : 'mobile.vault.pending_new_owner')}
+              title={t(keyPathOf(pending.address) ? 'mobile.quantum.pending_title' : 'mobile.vault.pending_new_owner')}
               value={pending.address}
+              titleRight={keyPathOf(pending.address) ? <QuantumInfoButton /> : undefined}
+              detail={keyPathOf(pending.address) ? <QuantumKeys to={pending.address} /> : undefined}
               onCancel={cancel}
               cancelling={busy === 'cancel'}
               cancelDisabled={!ready}

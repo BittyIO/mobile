@@ -20,6 +20,8 @@ export function PendingRow({
   timelock,
   title,
   value,
+  titleRight,
+  detail,
   onPress,
   onCancel,
   cancelling,
@@ -31,6 +33,10 @@ export function PendingRow({
   timelock: number;
   title: string;
   value: string;
+  /** Beside the title: an ⓘ for a change that needs explaining. */
+  titleRight?: React.ReactNode;
+  /** Drawn in place of `value`, for a change one line cannot show (a quantum-safe key change). */
+  detail?: React.ReactNode;
   onPress?: () => void;
   onCancel?: () => void;
   cancelling?: boolean;
@@ -43,8 +49,11 @@ export function PendingRow({
     <Pressable style={[styles.item, !last && styles.divider]} onPress={onPress} disabled={!onPress}>
       <ProgressRing done={waitDone(at, now, timelock)} left={at - now} />
       <View style={styles.itemText}>
-        <Text style={styles.title} numberOfLines={1}>{title}</Text>
-        <Text style={styles.value}>{value}</Text>
+        <View style={styles.titleLine}>
+          <Text style={styles.title} numberOfLines={1}>{title}</Text>
+          {titleRight}
+        </View>
+        {detail ?? <Text style={styles.value}>{value}</Text>}
       </View>
       {onCancel ? (
         <Pressable
@@ -65,6 +74,7 @@ const makeStyles = (c: Colors) =>
     itemText: {flex: 1, gap: 3},
     title: {color: c.text, fontSize: 15, fontWeight: '600', flexShrink: 1},
     value: {color: c.subtext, fontSize: 13},
+    titleLine: {flexDirection: 'row', alignItems: 'center', gap: 6},
     cancel: {paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: c.neutralSoft, minWidth: 64, alignItems: 'center'},
     cancelText: {color: c.danger, fontSize: 13, fontWeight: '700'},
     pressed: {opacity: 0.6},

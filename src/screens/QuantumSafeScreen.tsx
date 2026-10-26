@@ -11,6 +11,7 @@ import {vaultOwnerOf} from '@/vault/owned-vaults';
 import {handOverToFreshKey} from '@/vault/ownership';
 import {Button} from '@/components/Button';
 import {PendingRow} from '@/components/PendingRow';
+import {QuantumInfoButton, QuantumKeys} from '@/components/QuantumHandover';
 import {SettingsGroup, SettingsRow} from '@/components/SettingsRow';
 import {fmtRiskValue} from '@/components/riskFormat';
 import {useVaultWrite} from '@/components/useVaultWrite';
@@ -191,8 +192,10 @@ export function QuantumSafeScreen() {
                 at={pending.at}
                 now={now}
                 timelock={Number(status.timelock ?? 0)}
-                title={t(freshPending ? 'mobile.quantum.pending_fresh_key' : 'mobile.vault.pending_new_owner')}
+                title={t(freshPending ? 'mobile.quantum.pending_title' : 'mobile.vault.pending_new_owner')}
                 value={pending.address}
+                titleRight={freshPending ? <QuantumInfoButton /> : undefined}
+                detail={freshPending ? <QuantumKeys to={pending.address} /> : undefined}
                 last
               />
             ) : null}
