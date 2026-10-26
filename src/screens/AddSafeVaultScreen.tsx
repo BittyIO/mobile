@@ -1,7 +1,8 @@
 import React, {useState} from 'react';
-import {ActivityIndicator, Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {StackActions, useNavigation} from '@react-navigation/native';
-import Svg, {Path, Rect} from 'react-native-svg';
+import Clipboard from '@react-native-clipboard/clipboard';
+import Svg, {Circle, Path, Rect} from 'react-native-svg';
 import {getAddress, isAddress, type Address} from 'viem';
 import {useNetwork} from '@/core/network-store';
 import {useVaults} from '@/core/vault-store';
@@ -12,17 +13,34 @@ import * as keyring from '@/wallet/keyring';
 import {useWallet} from '@/wallet/store';
 import {Button} from '@/components/Button';
 import {QrScanner} from '@/components/QrScanner';
-import {SettingsGroup, makeSettingsStyles} from '@/components/SettingsRow';
+import {SettingsIcon} from '@/components/SettingsIcon';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 
-/** The camera mark on the address field's scan button (lucide ScanLine). */
-function ScanIcon({color}: {color: string}) {
+/** An address shortened to its first and last six: 0x111111…000000. */
+const shortAddr = (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}`;
+
+/** Line-drawn marks used on this page: scan (lucide ScanLine), the footnote's lock, and an alert. */
+function Glyph({name, color, size = 20}: {name: 'scan' | 'lock' | 'alert'; color: string; size?: number}) {
   const st = {stroke: color, strokeWidth: 2, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const};
   return (
-    <Svg width={22} height={22} viewBox="0 0 24 24">
-      <Path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" {...st} />
-      <Rect x={7} y={7} width={10} height={10} rx={1} {...st} />
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      {name === 'scan' ? (
+        <>
+          <Path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" {...st} />
+          <Path d="M7 12h10" {...st} />
+        </>
+      ) : name === 'lock' ? (
+        <>
+          <Rect x={4} y={11} width={16} height={10} rx={2} {...st} />
+          <Path d="M8 11V7a4 4 0 0 1 8 0v4" {...st} />
+        </>
+      ) : (
+        <>
+          <Circle cx={12} cy={12} r={10} {...st} />
+          <Path d="M12 8v4M12 16h.01" {...st} />
+        </>
+      )}
     </Svg>
   );
 }
@@ -32,7 +50,7 @@ function ScanIcon({color}: {color: string}) {
  *
  * A Safe vault is signed for by one of the Safe's owners, and that owner is a key the user already
  * has somewhere else — a hardware wallet, MetaMask, a script — not one of this phrase's. So the page
- * asks for two things, in order:
+ * is two steps, each a card with its number, ticked once it is done:
  *
  * 1. The owner's private key, imported onto this phone (or one imported before). It is kept in the
  *    Keychain behind Face ID like the phrase, never sent anywhere, and not restored by the phrase.
@@ -62,6 +80,8 @@ export function AddSafeVaultScreen() {
   const [error, setError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  const addressOk = isAddress(draft.trim());
 
   const onImport = async () => {
     setKeyError(null);
@@ -110,6 +130,7 @@ export function AddSafeVaultScreen() {
     const raw = draft.trim();
     if (!key) return;
     if (!isAddress(raw)) return setError(t('mobile.safe.invalid_address'));
+    Keyboard.dismiss();
     setBusy(true);
     try {
       const found = await resolve(getAddress(raw));
@@ -126,6 +147,143 @@ export function AddSafeVaultScreen() {
     }
   };
 
+  const paste = async (into: (v: string) => void) => into((await Clipboard.getString()).trim());
+
+  /** One step's card: its number (a tick once done), its title, what it asks for, and a footnote. */
+  const step = (n: number, title: string, done: boolean, off: boolean, body: React.ReactNode, note?: React.ReactNode) => (
+    <View style={[styles.card, off && styles.cardOff]}>
+      <View style={styles.stepHead}>
+        <View style={[styles.badge, done ? styles.badgeDone : off ? styles.badgeOff : null]}>
+          <Text style={[styles.badgeText, off && !done && styles.badgeTextOff]}>{done ? '✓' : n}</Text>
+        </View>
+        <Text style={styles.stepTitle}>{title}</Text>
+      </View>
+      {body}
+      {note}
+    </View>
+  );
+
+  const keyBody =
+    keys.length > 0 && !importing ? (
+      <View style={styles.options}>
+        {keys.map((a) => {
+          const on = key === a;
+          return (
+            <Pressable
+              key={a}
+              style={({pressed}) => [styles.option, on && styles.optionOn, pressed && styles.pressed]}
+              onPress={() => {
+                setKey(a);
+                setError(null);
+              }}
+              accessibilityRole="radio"
+              accessibilityState={{checked: on}}>
+              <SettingsIcon name="wallet" size={32} />
+              <View style={styles.optionText}>
+                <Text style={styles.optionTitle}>{t('mobile.safe.imported_key')}</Text>
+                <Text style={styles.mono}>{shortAddr(a)}</Text>
+              </View>
+              <View style={[styles.radio, on && styles.radioOn]}>{on ? <View style={styles.radioDot} /> : null}</View>
+            </Pressable>
+          );
+        })}
+        <Pressable style={({pressed}) => [styles.textBtn, pressed && styles.pressed]} onPress={() => setImporting(true)} hitSlop={6}>
+          <Text style={styles.link}>{`＋ ${t(keys.length ? 'mobile.safe.import_another' : 'mobile.safe.import_key')}`}</Text>
+        </Pressable>
+      </View>
+    ) : (
+      <View style={styles.gap10}>
+        <View style={[styles.inputWrap, !!keyError && styles.inputWrapError]}>
+          <TextInput
+            style={styles.input}
+            value={keyDraft}
+            onChangeText={(v) => {
+              setKeyDraft(v);
+              setKeyError(null);
+            }}
+            placeholder={t('mobile.safe.private_key_placeholder')}
+            placeholderTextColor={c.subtext}
+            autoCapitalize="none"
+            autoCorrect={false}
+            spellCheck={false}
+            secureTextEntry
+            textContentType="none"
+            autoComplete="off"
+            onSubmitEditing={onImport}
+          />
+          {!keyDraft ? (
+            <Pressable style={({pressed}) => [styles.pill, pressed && styles.pressed]} onPress={() => paste(setKeyDraft)} hitSlop={6}>
+              <Text style={styles.pillText}>{t('mobile.safe.paste')}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+        {keyError ? <Text style={styles.fieldError}>{keyError}</Text> : null}
+        <View style={styles.actions}>
+          {keys.length > 0 ? (
+            <Pressable
+              style={({pressed}) => [styles.textBtn, pressed && styles.pressed]}
+              onPress={() => {
+                setImporting(false);
+                setKeyDraft('');
+                setKeyError(null);
+              }}
+              hitSlop={6}>
+              <Text style={styles.cancel}>{t('common.cancel')}</Text>
+            </Pressable>
+          ) : null}
+          <Pressable
+            style={({pressed}) => [styles.smallBtn, !keyDraft.trim() && styles.smallBtnOff, pressed && styles.pressed]}
+            onPress={onImport}
+            disabled={!keyDraft.trim()}>
+            <Text style={styles.smallBtnText}>{t('mobile.safe.import')}</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+
+  const vaultBody = (
+    <View style={[styles.inputWrap, !!error && styles.inputWrapError]}>
+      <TextInput
+        style={[styles.input, styles.inputMono]}
+        value={draft}
+        onChangeText={(v) => {
+          setDraft(v);
+          setError(null);
+        }}
+        placeholder={t('mobile.safe.vault_address')}
+        placeholderTextColor={c.subtext}
+        autoCapitalize="none"
+        autoCorrect={false}
+        spellCheck={false}
+        editable={!!key}
+      />
+      {!draft && key ? (
+        <Pressable style={({pressed}) => [styles.pill, pressed && styles.pressed]} onPress={() => paste(setDraft)} hitSlop={6}>
+          <Text style={styles.pillText}>{t('mobile.safe.paste')}</Text>
+        </Pressable>
+      ) : null}
+      <Pressable
+        style={({pressed}) => [styles.scanBtn, pressed && styles.pressed]}
+        onPress={() => {
+          Keyboard.dismiss();
+          setScanning(true);
+        }}
+        disabled={!key}
+        hitSlop={6}
+        accessibilityRole="button"
+        accessibilityLabel={t('mobile.scan.scan')}>
+        <Glyph name="scan" color={c.accent} />
+      </Pressable>
+    </View>
+  );
+
+  const note = (text: string) => (
+    <View style={styles.note}>
+      <Glyph name="lock" color={c.subtext} size={14} />
+      <Text style={styles.noteText}>{text}</Text>
+    </View>
+  );
+
   return (
     <ScrollView
       showsVerticalScrollIndicator={false}
@@ -134,94 +292,34 @@ export function AddSafeVaultScreen() {
       contentInsetAdjustmentBehavior="automatic"
       style={styles.container}
       contentContainerStyle={styles.body}>
-      <Text style={styles.intro}>{t('mobile.safe.add_safe_page_intro')}</Text>
+      <View style={styles.hero}>
+        <SettingsIcon name="vault" size={64} />
+        <Text style={styles.heroSub}>{t('mobile.safe.add_safe_footer')}</Text>
+      </View>
 
-      {/* 1. The owner's key. */}
-      <SettingsGroup label={t('mobile.safe.step_key')} footer={t('mobile.safe.step_key_footer')}>
-        {keys.map((a) => (
-          <Pressable
-            key={a}
-            style={({pressed}) => [styles.row, styles.rowDivider, pressed && styles.pressed]}
-            onPress={() => {
-              setKey(a);
-              setError(null);
-            }}
-            accessibilityRole="radio"
-            accessibilityState={{checked: key === a}}>
-            <View style={styles.rowText}>
-              <Text style={styles.rowTitle}>{t('mobile.safe.imported_key')}</Text>
-              <Text style={styles.addr} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-                {a}
-              </Text>
-            </View>
-            <Text style={[styles.check, key !== a && styles.checkHidden]}>✓</Text>
-          </Pressable>
-        ))}
-        {importing ? (
-          <View style={styles.form}>
-            <TextInput
-              style={styles.field}
-              value={keyDraft}
-              onChangeText={(v) => {
-                setKeyDraft(v);
-                setKeyError(null);
-              }}
-              placeholder={t('mobile.safe.private_key_placeholder')}
-              placeholderTextColor={c.subtext}
-              autoCapitalize="none"
-              autoCorrect={false}
-              spellCheck={false}
-              secureTextEntry
-              textContentType="none"
-              autoComplete="off"
-              importantForAutofill="no"
-            />
-            {keyError ? <Text style={styles.error}>{keyError}</Text> : null}
-            <Pressable onPress={onImport} disabled={!keyDraft.trim()} hitSlop={6}>
-              <Text style={[styles.link, !keyDraft.trim() && styles.linkOff]}>{t('mobile.safe.import')}</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <Pressable style={({pressed}) => [styles.row, pressed && styles.pressed]} onPress={() => setImporting(true)}>
-            <Text style={styles.link}>{`＋ ${t('mobile.safe.import_key')}`}</Text>
-          </Pressable>
-        )}
-      </SettingsGroup>
+      {step(1, t('mobile.safe.step_key'), !!key && !importing, false, keyBody, note(t('mobile.safe.step_key_footer')))}
+      {step(
+        2,
+        t('mobile.safe.step_vault'),
+        false,
+        !key || importing,
+        vaultBody,
+        <Text style={styles.hint}>{t('mobile.safe.step_vault_footer')}</Text>,
+      )}
 
-      {/* 2. Which vault: typed, pasted or scanned. */}
-      <SettingsGroup label={t('mobile.safe.step_vault')} footer={t('mobile.safe.step_vault_footer')}>
-        <View style={styles.fieldRow}>
-          <TextInput
-            style={[styles.field, styles.fieldGrow]}
-            value={draft}
-            onChangeText={(v) => {
-              setDraft(v);
-              setError(null);
-            }}
-            placeholder={t('mobile.safe.vault_address')}
-            placeholderTextColor={c.subtext}
-            autoCapitalize="none"
-            autoCorrect={false}
-            spellCheck={false}
-          />
-          <Pressable
-            style={({pressed}) => [styles.scanBtn, pressed && styles.pressed]}
-            onPress={() => {
-              Keyboard.dismiss();
-              setScanning(true);
-            }}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={t('mobile.scan.scan')}>
-            <ScanIcon color={c.accent} />
-          </Pressable>
+      {error ? (
+        <View style={styles.banner}>
+          <Glyph name="alert" color={c.danger} size={18} />
+          <Text style={styles.bannerText}>{error}</Text>
         </View>
-      </SettingsGroup>
+      ) : null}
 
-      {error ? <Text style={[styles.error, styles.errorOut]}>{error}</Text> : null}
-      {!key ? <Text style={styles.need}>{t('mobile.safe.need_key')}</Text> : null}
-      <Button title={busy ? t('mobile.safe.checking') : t('mobile.safe.add_button')} onPress={onAdd} disabled={!key || !draft.trim() || busy} />
-      {busy ? <ActivityIndicator color={c.subtext} /> : null}
+      <Button
+        title={busy ? t('mobile.safe.checking') : t('mobile.safe.add_button')}
+        onPress={onAdd}
+        loading={busy}
+        disabled={!key || importing || !addressOk || busy}
+      />
 
       <QrScanner
         visible={scanning}
@@ -238,21 +336,48 @@ export function AddSafeVaultScreen() {
 
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
-    ...makeSettingsStyles(c),
     container: {flex: 1, backgroundColor: c.bg},
-    body: {padding: 16, gap: 20, paddingBottom: 40},
-    intro: {color: c.subtext, fontSize: 14, lineHeight: 20, paddingHorizontal: 4},
-    addr: {color: c.subtext, fontSize: 13, fontFamily: 'Menlo', lineHeight: 18},
-    pressed: {opacity: 0.6},
-    checkHidden: {opacity: 0},
+    body: {padding: 16, gap: 16, paddingBottom: 40},
+    hero: {alignItems: 'center', gap: 14, paddingTop: 8, paddingBottom: 4, paddingHorizontal: 20},
+    heroSub: {color: c.subtext, fontSize: 14, lineHeight: 20, textAlign: 'center'},
+    card: {backgroundColor: c.card, borderRadius: 20, padding: 16, gap: 14},
+    cardOff: {opacity: 0.5},
+    stepHead: {flexDirection: 'row', alignItems: 'center', gap: 10},
+    badge: {width: 26, height: 26, borderRadius: 13, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center'},
+    badgeDone: {backgroundColor: c.success},
+    badgeOff: {backgroundColor: c.neutralSoft},
+    badgeText: {color: c.onAccent, fontSize: 14, fontWeight: '700'},
+    badgeTextOff: {color: c.subtext},
+    stepTitle: {color: c.text, fontSize: 17, fontWeight: '600'},
+    options: {gap: 10},
+    option: {flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 14, backgroundColor: c.input, borderWidth: 1.5, borderColor: 'transparent'},
+    optionOn: {borderColor: c.accent, backgroundColor: c.accentSoft},
+    optionText: {flex: 1, gap: 2},
+    optionTitle: {color: c.text, fontSize: 15, fontWeight: '600'},
+    mono: {color: c.subtext, fontSize: 13, fontFamily: 'Menlo'},
+    radio: {width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: c.border, alignItems: 'center', justifyContent: 'center'},
+    radioOn: {borderColor: c.accent},
+    radioDot: {width: 10, height: 10, borderRadius: 5, backgroundColor: c.accent},
+    gap10: {gap: 10},
+    inputWrap: {flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.input, borderRadius: 14, paddingLeft: 14, paddingRight: 6, minHeight: 52, borderWidth: 1.5, borderColor: 'transparent'},
+    inputWrapError: {borderColor: c.danger},
+    input: {flex: 1, color: c.text, fontSize: 15, paddingVertical: 14},
+    inputMono: {fontFamily: 'Menlo', fontSize: 13},
+    pill: {paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: c.accentSoft},
+    pillText: {color: c.accent, fontSize: 13, fontWeight: '600'},
+    scanBtn: {width: 40, height: 40, borderRadius: 10, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center'},
+    fieldError: {color: c.danger, fontSize: 13, lineHeight: 18, paddingHorizontal: 4},
+    actions: {flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 16},
+    smallBtn: {paddingHorizontal: 20, paddingVertical: 10, borderRadius: 999, backgroundColor: c.accent},
+    smallBtnOff: {opacity: 0.4},
+    smallBtnText: {color: c.onAccent, fontSize: 15, fontWeight: '600'},
+    textBtn: {paddingVertical: 4},
     link: {color: c.accent, fontSize: 15, fontWeight: '600'},
-    linkOff: {opacity: 0.4},
-    form: {gap: 12, padding: 16},
-    fieldRow: {flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16},
-    fieldGrow: {flex: 1},
-    field: {color: c.text, fontSize: 13, fontFamily: 'Menlo', backgroundColor: c.input, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11},
-    scanBtn: {width: 42, height: 42, borderRadius: 10, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center'},
-    error: {color: c.danger, fontSize: 13, lineHeight: 18},
-    errorOut: {paddingHorizontal: 4},
-    need: {color: c.subtext, fontSize: 13, lineHeight: 18, paddingHorizontal: 4},
+    cancel: {color: c.subtext, fontSize: 15, fontWeight: '600'},
+    note: {flexDirection: 'row', alignItems: 'flex-start', gap: 8},
+    noteText: {flex: 1, color: c.subtext, fontSize: 12, lineHeight: 17},
+    hint: {color: c.subtext, fontSize: 12, lineHeight: 17},
+    banner: {flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 14, borderRadius: 14, backgroundColor: c.dangerSoft},
+    bannerText: {flex: 1, color: c.danger, fontSize: 14, lineHeight: 20},
+    pressed: {opacity: 0.6},
   });
