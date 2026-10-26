@@ -8,7 +8,8 @@
  * (iOS deletes the Keychain item with the app). No server ever sees it.
  */
 import * as Keychain from 'react-native-keychain';
-import {toHex} from 'viem';
+import {MMKV} from 'react-native-mmkv';
+import {getAddress, toHex, type Address} from 'viem';
 import {
   generateMnemonic,
   hdKeyToAccount,
@@ -125,7 +126,61 @@ export async function revealMnemonic(): Promise<string | null> {
   return readSecret('Reveal your recovery phrase');
 }
 
-/** Permanently remove the wallet from this device. */
+/**
+ * Private keys imported on their own, outside the phrase — today, the key of a Safe's co-owner, so
+ * this phone can sign as one of the Safe's owners (see vault/safe). Each sits in its own Keychain
+ * item behind the same Face ID gate as the phrase; only the addresses, which are public, are listed
+ * in MMKV. The phrase does not restore them: they are the user's to back up.
+ */
+const imported = new MMKV({id: 'bitty.imported-keys'});
+const IMPORTED = 'addresses';
+const importedService = (address: string) => `io.bitty.vault.key.${address.toLowerCase()}`;
+
+/** The addresses of the keys imported on this phone, in the order they were imported. */
+export function importedKeys(): Address[] {
+  try {
+    return (JSON.parse(imported.getString(IMPORTED) ?? '[]') as string[]).map((a) => getAddress(a));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The 32-byte private key in `raw`, with or without its 0x, or null when it is not one. A recovery
+ * phrase pasted here by mistake is not a key, and is not accepted.
+ */
+export function parsePrivateKey(raw: string): `0x${string}` | null {
+  const hex = raw.trim().replace(/^0x/i, '');
+  if (!/^[0-9a-fA-F]{64}$/.test(hex)) return null;
+  try {
+    privateKeyToAccount(`0x${hex}`);
+    return `0x${hex.toLowerCase()}`;
+  } catch {
+    return null;
+  }
+}
+
+/** Keep `key` on this phone behind Face ID and return its address. Importing one already here is a no-op. */
+export async function importPrivateKey(key: `0x${string}`): Promise<Address> {
+  const {address} = privateKeyToAccount(key);
+  await Keychain.setGenericPassword(address, key, {...SECURE, service: importedService(address)});
+  const list = importedKeys();
+  if (!list.some((a) => a.toLowerCase() === address.toLowerCase())) imported.set(IMPORTED, JSON.stringify([...list, address]));
+  return address;
+}
+
+/** The imported key at `address`, behind Face ID. Null if cancelled, or if it is not on this phone. */
+export async function unlockImported(address: Address): Promise<PrivateKeyAccount | null> {
+  const creds = await Keychain.getGenericPassword({
+    service: importedService(address),
+    authenticationPrompt: {title: translate(useLanguage.getState().language, 'mobile.app.unlock_prompt')},
+  }).catch(() => false as const);
+  return creds ? privateKeyToAccount(creds.password as `0x${string}`) : null;
+}
+
+/** Permanently remove the wallet from this device, with every key imported into it. */
 export async function wipe(): Promise<void> {
   await Keychain.resetGenericPassword({service: SERVICE});
+  await Promise.all(importedKeys().map((a) => Keychain.resetGenericPassword({service: importedService(a)}).catch(() => false)));
+  imported.delete(IMPORTED);
 }

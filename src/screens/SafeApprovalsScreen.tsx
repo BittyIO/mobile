@@ -12,7 +12,7 @@ import {assetMeta} from '@/core/assets';
 import {displaySymbol, fmtNum, shortAddress} from '@/core/format';
 import {cosign, fetchSafe, listSafeMessages, type SafeInfo, type SafeMessageStatus} from '@/vault/safe';
 import {finishSafeMessage} from '@/vault/safe-finish';
-import * as keyring from '@/wallet/keyring';
+import {safeDeviceKey} from '@/wallet/store';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 
@@ -164,7 +164,7 @@ export function SafeApprovalsScreen() {
     setBusy(s.messageHash);
     const tx = showTx(`${t('mobile.safe.signing')}: ${title(s)}`, network, {broadcast: false});
     try {
-      const device = await keyring.unlock(ref.signerIndex ?? 0);
+      const device = await safeDeviceKey(ref);
       if (!device) throw new Error('Unlock cancelled');
       await cosign({network, device, status: s});
       tx.success();

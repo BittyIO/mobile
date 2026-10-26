@@ -8,11 +8,12 @@
  */
 import {create} from 'zustand';
 import {MMKV} from 'react-native-mmkv';
+import type {LocalAccount} from 'viem';
 import type {HDAccount} from 'viem/accounts';
 import type {Signer} from './signer';
 import * as keyring from './keyring';
 import {learnKeys, vaultSigner} from './rotation';
-import {keyIndexOf, useVaults} from '@/core/vault-store';
+import {keyIndexOf, useVaults, type VaultRef} from '@/core/vault-store';
 import {activeVaultAddress} from '@/core/active-vault';
 import {useNetwork} from '@/core/network-store';
 import {fetchSafe, safeSigner} from '@/vault/safe';
@@ -98,6 +99,15 @@ const active = () => {
   return v ? keyIndexOf(v) : useVaults.getState().activeIndex;
 };
 
+/**
+ * This phone's key among a Safe vault's owners, behind Face ID: the key imported for it, or the
+ * phrase's account at its `signerIndex`. Null if cancelled.
+ */
+export async function safeDeviceKey(v: VaultRef): Promise<LocalAccount | null> {
+  if (v.imported && v.signer) return keyring.unlockImported(v.signer);
+  return keyring.unlock(v.signerIndex ?? 0);
+}
+
 export const useWallet = create<WalletState>((set) => ({
   status: 'unknown',
   lockedBy: 'launch',
@@ -135,18 +145,20 @@ export const useWallet = create<WalletState>((set) => ({
   },
 
   signer: async () => {
-    // The ACTIVE index, not index 0: a write must be signed by the owner of the vault on screen.
-    const root = await keyring.unlockRoot();
-    if (!root) throw new Error('Unlock cancelled');
-    const account = keyring.accountAt(root, active());
-    const safe = activeVault()?.safe;
+    const ref = activeVault();
+    const safe = ref?.safe;
     const network = useNetwork.getState().network;
     if (!safe) {
+      // The ACTIVE index, not index 0: a write must be signed by the owner of the vault on screen.
+      const root = await keyring.unlockRoot();
+      if (!root) throw new Error('Unlock cancelled');
       // Whichever of this account's keys owns the vault now: on quantum-safe keys, that is the
       // one-time key it was last handed, not the account's own (see ./rotation).
       const vault = activeVaultAddress(network);
-      return vault ? vaultSigner({root, index: active(), network, vault}) : account;
+      return vault ? vaultSigner({root, index: active(), network, vault}) : keyring.accountAt(root, active());
     }
+    const account = await safeDeviceKey(ref);
+    if (!account) throw new Error('Unlock cancelled');
     // A Safe vault signs as the Safe. Its owners and threshold are read now, for this operation:
     // they can change on chain at any time, and a key that has been removed must not sign.
     const info = await fetchSafe(network, safe);

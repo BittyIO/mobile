@@ -13,8 +13,7 @@
  * enough (see ./safe-finish). The API keeps the payload itself, so any owner can finish it from any
  * device; nothing about a pending request is kept on this phone.
  */
-import {hashTypedData, type Address, type Hex, type TypedDataDefinition} from 'viem';
-import type {HDAccount} from 'viem/accounts';
+import {hashTypedData, type Address, type Hex, type LocalAccount, type TypedDataDefinition} from 'viem';
 import type {Signer} from '@/wallet/signer';
 import {apiUrl, CHAIN_ID, type Network} from '@/core/chain';
 import {translate} from '@/i18n';
@@ -114,7 +113,7 @@ export function definitionOf(status: SafeMessageStatus): TypedDataDefinition {
 /**
  * Add this device's signature to a pending message. The API checks it recovers to a current owner.
  */
-export async function cosign(o: {network: Network; device: HDAccount; status: SafeMessageStatus}): Promise<SafeMessageStatus> {
+export async function cosign(o: {network: Network; device: LocalAccount; status: SafeMessageStatus}): Promise<SafeMessageStatus> {
   // Signed over what the payload hashes to HERE, not over the hash the server reports: a co-owner
   // signs what they were shown, and a server that lied about the payload gets a useless signature.
   const inner = hashTypedData(definitionOf(o.status));
@@ -150,14 +149,14 @@ export class SafeSignaturePending extends Error {
  * once. Above one it is filed with the API; if co-owners have already brought it to the threshold
  * the combined signature comes back, otherwise {@link SafeSignaturePending} is thrown.
  */
-export function safeSigner(o: {device: HDAccount; safe: Address; network: Network; threshold: number}): Signer {
+export function safeSigner(o: {device: LocalAccount; safe: Address; network: Network; threshold: number}): Signer {
   const multi = o.threshold > 1;
   return {
     address: o.safe,
     isContract: true,
     approvalWindowSeconds: multi ? SAFE_APPROVAL_WINDOW_SECONDS : undefined,
     async signTypedData(td) {
-          const signature = await o.device.signTypedData(safeMessageFor(o.network, o.safe, hashTypedData(td)));
+      const signature = await o.device.signTypedData(safeMessageFor(o.network, o.safe, hashTypedData(td)));
       if (!multi) return signature;
       const {status} = await api<{status: SafeMessageStatus}>(o.network, 'POST', `/api/ethereum/safe/${o.safe}/messages`, {
         typedData: typedDataJson(td),
