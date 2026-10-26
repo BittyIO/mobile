@@ -42,6 +42,7 @@ import {FINISHED_WINDOWS, finishedSince, setSlippageBps, slippageBps, useFinishe
 import {relayGasFor} from '@/vault/fee-quote';
 import {intentPrepCalls, needsRelayerApproval} from '@/vault/limit';
 import {Sheet} from '@/components/Sheet';
+import {Explain} from '@/components/Explain';
 import {FormSheet} from '@/components/FormSheet';
 import {AvailableLine} from '@/components/AvailableLine';
 import {OrderRow, OrderDetailLines, fmtPrice, type OrderPart, type OrderValue} from '@/components/OrderRow';
@@ -2580,6 +2581,11 @@ export function TradeScreen() {
               // fractions, and the keyboard has to leave something to read.
               height={Math.round(screenHeight * 0.8)}>
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                {/* What paying from a position does, above the rows that offer it. */}
+                <View style={styles.fundInfo}>
+                  <Text style={styles.fundInfoText}>{t('mobile.explain.funding_from_positions.title')}</Text>
+                  <Explain id="funding_from_positions" size={15} />
+                </View>
                 {mode === 'Market' ? (
                   <>
                 {/* Labelled exactly as the limit sheet labels the same three things, so the two
@@ -3448,6 +3454,9 @@ export function TradeScreen() {
                   <Text style={[styles.segText, mode === m.key && styles.segTextOn]}>{m.label}</Text>
                 </Pressable>
               ))}
+              <View style={styles.segInfo}>
+                <Explain id="order_types" size={16} />
+              </View>
               {/* Pushed to the right edge of the same line, exactly as the Earn card's header
                   carries its protocol: the mark alone, tapped to name itself. */}
               {venues.length > 0 ? (
@@ -3521,12 +3530,15 @@ export function TradeScreen() {
                  Min received on the right — net of BOTH the slippage tolerance and the 0.2% Bitty
                  fee, so it agrees with the fee line below. */
               <View style={[styles.quoteBox, styles.quoteLine]}>
-                <Pressable onPress={() => setPicker('slippage')} hitSlop={6}>
-                  <Text style={styles.quoteLabel}>
-                    {t('mobile.trade.max_slippage')}{' '}
-                    <Text style={[styles.quoteValue, styles.quoteLink]}>{slippage / 100}%</Text>
-                  </Text>
-                </Pressable>
+                <View style={styles.inlineInfo}>
+                  <Pressable onPress={() => setPicker('slippage')} hitSlop={6}>
+                    <Text style={styles.quoteLabel}>
+                      {t('mobile.trade.max_slippage')}{' '}
+                      <Text style={[styles.quoteValue, styles.quoteLink]}>{slippage / 100}%</Text>
+                    </Text>
+                  </Pressable>
+                  <Explain id="slippage" size={14} />
+                </View>
                 {mktQuote ? (
                   <Text style={styles.quoteLabel}>
                     {t('mobile.trade.min_received')}{' '}
@@ -3678,6 +3690,11 @@ export function TradeScreen() {
 }
 
 const makeStyles = (c: Colors) => StyleSheet.create({
+  // The ⓘ for order types, right after the last mode label.
+  segInfo: {justifyContent: 'center', paddingHorizontal: 6},
+  inlineInfo: {flexDirection: 'row', alignItems: 'center', gap: 6},
+  fundInfo: {flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 4, paddingBottom: 10},
+  fundInfoText: {color: c.subtext, fontSize: 13, fontWeight: '600'},
   container: {flex: 1, backgroundColor: c.bg},
   // paddingBottom is set inline from the tab bar's height; see the ScrollView.
   body: {flexGrow: 1, padding: 16, gap: 14},
