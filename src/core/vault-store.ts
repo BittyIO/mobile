@@ -42,6 +42,12 @@ export type VaultRef = {
   /** That key's address, cached like `owner` so the approvals screen can tell what it signed. */
   signer?: `0x${string}`;
   /**
+   * For a Safe vault signed for by a key imported on its own (see wallet/keyring `importPrivateKey`)
+   * rather than one of the phrase's: true, and `signer` is that key's address. `signerIndex` is
+   * then not set.
+   */
+  imported?: boolean;
+  /**
    * Set for a vault this device's key RECEIVED by an ownership transfer: the vault's own address.
    *
    * Every other vault sits at the address the factory derives from its owner, so it is computed
@@ -49,7 +55,10 @@ export type VaultRef = {
    * on the one chain the transfer happened on. Its key is `signerIndex` (and `owner`/`signer`).
    */
   vault?: `0x${string}`;
-  /** The chain a received vault is on. It does not exist at that address anywhere else. */
+  /**
+   * The chain a received vault is on. It does not exist at that address anywhere else. Also set,
+   * with `vault`, for a Safe vault that was transferred to its Safe rather than created by it.
+   */
   network?: string;
 };
 
@@ -76,10 +85,12 @@ type State = {
   /** Append the next index. The caller supplies the owner it just derived. */
   add: (owner: `0x${string}`) => number;
   /**
-   * Append a vault owned by `safe`, signed for by this device's key at `signerIndex`. Its index is
-   * a fresh id, like any other vault's. Adding a Safe that is already here selects that one instead.
+   * Append a vault owned by `safe`, signed for by this device's key: the phrase's at `signer.index`,
+   * or an imported one (no index). Its index is a fresh id, like any other vault's. `at` is the
+   * vault's address and chain when it is not the one the factory derives from the Safe. Adding a
+   * Safe that is already here updates and selects that one instead.
    */
-  addSafe: (safe: `0x${string}`, signerIndex: number, signer: `0x${string}`) => number;
+  addSafe: (safe: `0x${string}`, signer: {index?: number; address: `0x${string}`}, at?: {vault: `0x${string}`; network: string}) => number;
   /**
    * Append a vault this device's key at `signerIndex` owns by transfer, at `vault` on `network`.
    * Adding one already listed only refreshes its key. Returns its index; does not select it.
@@ -119,12 +130,16 @@ export const useVaults = create<State>((set, get) => ({
     return next;
   },
 
-  addSafe: (safe, signerIndex, signer) => {
+  addSafe: (safe, signer, at) => {
     const existing = get().vaults.find((v) => v.safe?.toLowerCase() === safe.toLowerCase());
     const index = existing?.index ?? Math.max(...get().vaults.map((v) => v.index)) + 1;
+    const key: Partial<VaultRef> =
+      signer.index === undefined
+        ? {signer: signer.address, imported: true, signerIndex: undefined}
+        : {signer: signer.address, signerIndex: signer.index, imported: undefined};
     const vaults = existing
-      ? get().vaults.map((v) => (v.index === index ? {...v, signerIndex, signer} : v))
-      : [...get().vaults, {index, name: '', owner: safe, safe, signerIndex, signer}];
+      ? get().vaults.map((v) => (v.index === index ? {...v, ...key, ...at} : v))
+      : [...get().vaults, {index, name: '', owner: safe, safe, ...key, ...at}];
     store.set(KEY, JSON.stringify(vaults));
     store.set(ACTIVE, index);
     set({vaults, activeIndex: index});

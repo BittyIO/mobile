@@ -58,6 +58,8 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Bitty uses the camera to scan address QR codes.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Unlock your Bitty Vault and approve each signature with Face ID.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

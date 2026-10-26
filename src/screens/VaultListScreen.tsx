@@ -1,8 +1,10 @@
 import React, {useEffect, useLayoutEffect, useMemo, useState} from 'react';
-import {ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View} from 'react-native';
+import {ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import type {RootStackParamList} from '@/App';
 import Svg, {Path} from 'react-native-svg';
-import {getAddress, isAddress, type Address} from 'viem';
+import type {Address} from 'viem';
 import {useVaults, vaultLabel, type VaultRef} from '@/core/vault-store';
 import {vaultAddressOf} from '@/core/active-vault';
 import {ownerVaultAddress} from '@/vault/read';
@@ -10,7 +12,6 @@ import {useNetwork} from '@/core/network-store';
 import type {Network} from '@/core/chain';
 import {useWallet} from '@/wallet/store';
 import * as keyring from '@/wallet/keyring';
-import {fetchSafe, SafeApiError} from '@/vault/safe';
 import {deviceKeys, fetchOwnedVaults, useVaultDirectory, type FoundVault} from '@/vault/owned-vaults';
 import {acceptOwnership} from '@/vault/ownership';
 import {relayGasFor} from '@/vault/fee-quote';
@@ -24,9 +25,6 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import {SettingsGroup, makeSettingsStyles} from '@/components/SettingsRow';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
-
-/** How many of the phrase's accounts are searched for an owner of a Safe being added. */
-const SAFE_KEY_SCAN = 10;
 
 /**
  * Settings › Vaults: every vault on this phone, and the ones its keys own that are not on it yet.
@@ -47,47 +45,27 @@ const SAFE_KEY_SCAN = 10;
  */
 const SHOW_OWNERS = 'vaults.showOwners';
 const SHOW_TRANSFERRED = 'vaults.showTransferred';
+const SHOW_SAFE = 'vaults.showSafe';
 
 /**
- * The Vaults page's header-right: a ⋯ like the Trade screen's, holding how the list is shown. Owner
- * addresses are a detail most people never need, so the list is one plain list of vaults until
- * "Show owners" is turned on here; then it is grouped under each owner's address. Remembered on this
- * phone. Module scope so the header's right side keeps one element type across renders.
+ * The Vaults page's header-right: a ⋯ like the Trade screen's, opening how the list is shown (see
+ * the sheet in {VaultListScreen}). Owner addresses are a detail most people never need, so the list
+ * is one plain list of vaults until "Show owners" is turned on; Safe vaults, and adding one, show
+ * only with "Show Safe multi-sig vaults". Remembered on this phone. Module scope so the header's
+ * right side keeps one element type across renders.
+ *
+ * Only the button is in the header. The sheet and its switches live in the screen: a header item is
+ * re-rendered by the native header when its options change, and a switch inside it read its new
+ * value a render late, so each one took two taps to turn.
  */
-function VaultsMenu({
-  showOwners,
-  onShowOwners,
-  showTransferred,
-  onShowTransferred,
-}: {
-  showOwners: boolean;
-  onShowOwners: (on: boolean) => void;
-  showTransferred: boolean;
-  onShowTransferred: (on: boolean) => void;
-}) {
+function VaultsMenuButton({onPress}: {onPress: () => void}) {
   const {t} = useT();
   const c = useColors();
   const styles = useStyles(makeStyles);
-  const [open, setOpen] = useState(false);
   return (
-    <>
-      <Pressable onPress={() => setOpen(true)} style={styles.moreBtn} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('mobile.trade.more')}>
-        <MoreIcon color={c.text} />
-      </Pressable>
-      <Sheet visible={open} title={t('mobile.settings.choose_vault')} onClose={() => setOpen(false)}>
-        <View style={styles.menuCard}>
-          <View style={[styles.menuRow, styles.rowDivider]}>
-            <Text style={styles.menuLabel}>{t('mobile.vaults.show_owners')}</Text>
-            <Switch value={showOwners} onValueChange={onShowOwners} />
-          </View>
-          {/* Vaults given away stay on the phone's list; they are shown only when asked for. */}
-          <View style={styles.menuRow}>
-            <Text style={styles.menuLabel}>{t('mobile.vaults.show_transferred')}</Text>
-            <Switch value={showTransferred} onValueChange={onShowTransferred} />
-          </View>
-        </View>
-      </Sheet>
-    </>
+    <Pressable onPress={onPress} style={styles.moreBtn} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('mobile.trade.more')}>
+      <MoreIcon color={c.text} />
+    </Pressable>
   );
 }
 
@@ -95,7 +73,7 @@ export function VaultListScreen() {
   const {t} = useT();
   const c = useColors();
   const styles = useStyles(makeStyles);
-  const nav = useNavigation();
+  const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const network = useNetwork((s) => s.network);
   const setNetwork = useNetwork((s) => s.setNetwork);
   const vaults = useVaults((s) => s.vaults);
@@ -116,14 +94,20 @@ export function VaultListScreen() {
     setShowTransferred(on);
     setPref(SHOW_TRANSFERRED, on ? '1' : '0');
   };
+  // Safe vaults, and adding one: hidden unless asked for (the ⋯ menu). Until it has been set, on for
+  // a phone that already lists a Safe vault, so none it has goes missing.
+  const [showSafe, setShowSafe] = useState(() => {
+    const p = getPref(SHOW_SAFE);
+    return p == null ? vaults.some((v) => v.safe) : p === '1';
+  });
+  const toggleSafe = (on: boolean) => {
+    setShowSafe(on);
+    setPref(SHOW_SAFE, on ? '1' : '0');
+  };
+  const [menuOpen, setMenuOpen] = useState(false);
   useLayoutEffect(() => {
-    nav.setOptions({
-      headerRight: () => (
-        <VaultsMenu showOwners={showOwners} onShowOwners={toggleOwners} showTransferred={showTransferred} onShowTransferred={toggleTransferred} />
-      ),
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nav, showOwners, showTransferred]);
+    nav.setOptions({headerRight: () => <VaultsMenuButton onPress={() => setMenuOpen(true)} />});
+  }, [nav]);
   const [pulled, setPulled] = useState(false);
 
   /**
@@ -143,12 +127,12 @@ export function VaultListScreen() {
     for (const v of vaults)
       if (!v.safe && !v.vault && !v.owner) keys.push({key: `index:${v.index}`, address: null, keyIndex: v.index, safe: false});
     const safes = vaults
-      .filter((v) => v.safe)
+      .filter((v) => v.safe && showSafe)
       .map((v) => ({key: v.safe!.toLowerCase(), address: v.safe!, keyIndex: v.signerIndex ?? 0, safe: true}));
     return [...keys, ...safes.filter((s) => !keys.some((k) => k.key === s.key))].sort((a, b) =>
       a.safe === b.safe ? a.keyIndex - b.keyIndex : a.safe ? 1 : -1,
     );
-  }, [vaults]);
+  }, [vaults, showSafe]);
   const label = (n: number) => t('mobile.app.vault_n', {n});
   const {notYours, transferredTo} = useVaultDirectory(network, vaults, refresh);
 
@@ -211,9 +195,6 @@ export function VaultListScreen() {
     showToast('success', t('common.copied'), address, 1500);
   };
   const [busy, setBusy] = useState(false);
-  const [safeOpen, setSafeOpen] = useState(false);
-  const [safeDraft, setSafeDraft] = useState('');
-  const [safeError, setSafeError] = useState<string | null>(null);
   const stable = useAssetCatalog(network).find((a) => a.kind === 'stable')?.address;
   const {ask, sheet} = useConfirmAction();
 
@@ -291,37 +272,6 @@ export function VaultListScreen() {
     const index = useVaults.getState().addReceived(f.vault, network, f.key.index, f.key.address);
     selectVault(index);
     nav.goBack();
-  };
-
-  /**
-   * Add a vault owned by the Safe in the field, read on THIS chain (a Safe is deployed per chain).
-   * The key that signs for it is whichever of this phone's accounts is one of its owners; with
-   * none, the user is told which address to add to the Safe.
-   */
-  const onAddSafe = async () => {
-    setSafeError(null);
-    const raw = safeDraft.trim();
-    if (!isAddress(raw)) return setSafeError(t('mobile.safe.invalid_address'));
-    const safe = getAddress(raw);
-    setBusy(true);
-    try {
-      let info;
-      try {
-        info = await fetchSafe(network, safe);
-      } catch (e) {
-        return setSafeError(e instanceof SafeApiError && e.reason === 'safe-not-found' ? t('mobile.safe.not_found') : String((e as Error)?.message ?? e));
-      }
-      if (!info.supported) return setSafeError(t('mobile.safe.unsupported', {problems: info.problems.join(', ')}));
-      const addrs = await keyring.addressesUpTo(Math.max(SAFE_KEY_SCAN, ...vaults.map((v) => v.index + 1)));
-      if (!addrs) return;
-      const owners = new Set(info.owners.map((o) => o.toLowerCase()));
-      const signerIndex = addrs.findIndex((a) => owners.has(a.toLowerCase()));
-      if (signerIndex < 0) return setSafeError(t('mobile.safe.no_owner_key', {address: addrs[0]}));
-      selectVault(useVaults.getState().addSafe(safe, signerIndex, addrs[signerIndex]));
-      nav.goBack();
-    } finally {
-      setBusy(false);
-    }
   };
 
   const row = (v: VaultRef, i: number, count: number) => {
@@ -472,36 +422,38 @@ export function VaultListScreen() {
       )}
 
       <SettingsGroup>
-        <Pressable style={[styles.row, styles.rowDivider]} onPress={onAdd} disabled={busy}>
+        <Pressable style={styles.row} onPress={onAdd} disabled={busy}>
           <Text style={styles.link}>{`＋ ${t('mobile.settings.add_vault')}`}</Text>
-          {busy && !safeOpen ? <ActivityIndicator color={c.subtext} /> : null}
+          {busy ? <ActivityIndicator color={c.subtext} /> : null}
         </Pressable>
-        <Pressable style={styles.row} onPress={() => setSafeOpen((o) => !o)} disabled={busy}>
-          <Text style={styles.link}>{`＋ ${t('mobile.safe.add_safe_vault')}`}</Text>
-        </Pressable>
-        {safeOpen ? (
-          <View style={styles.form}>
-            <Text style={styles.intro}>{t('mobile.safe.add_safe_intro')}</Text>
-            <TextInput
-              style={styles.field}
-              value={safeDraft}
-              onChangeText={(v) => {
-                setSafeDraft(v);
-                setSafeError(null);
-              }}
-              placeholder={t('mobile.safe.safe_address')}
-              placeholderTextColor={c.subtext}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoFocus
-            />
-            {safeError ? <Text style={styles.error}>{safeError}</Text> : null}
-            <Pressable onPress={onAddSafe} disabled={busy}>
-              <Text style={styles.link}>{busy ? t('mobile.safe.checking') : t('mobile.safe.add')}</Text>
-            </Pressable>
-          </View>
-        ) : null}
       </SettingsGroup>
+      {/* Its own group and its own page: a Safe vault is signed for by a key imported for it, which
+          is a different thing to set up from the phrase's next vault. */}
+      {showSafe ? (
+        <SettingsGroup footer={t('mobile.safe.add_safe_footer')}>
+          <Pressable style={styles.row} onPress={() => nav.navigate('AddSafeVault')} disabled={busy}>
+            <Text style={styles.link}>{`＋ ${t('mobile.safe.add_safe_vault')}`}</Text>
+            <Text style={styles.chev}>›</Text>
+          </Pressable>
+        </SettingsGroup>
+      ) : null}
+      <Sheet visible={menuOpen} title={t('mobile.settings.choose_vault')} onClose={() => setMenuOpen(false)}>
+        <View style={styles.menuCard}>
+          <View style={[styles.menuRow, styles.rowDivider]}>
+            <Text style={styles.menuLabel}>{t('mobile.vaults.show_owners')}</Text>
+            <Switch value={showOwners} onValueChange={toggleOwners} />
+          </View>
+          {/* Vaults given away stay on the phone's list; they are shown only when asked for. */}
+          <View style={[styles.menuRow, styles.rowDivider]}>
+            <Text style={styles.menuLabel}>{t('mobile.vaults.show_transferred')}</Text>
+            <Switch value={showTransferred} onValueChange={toggleTransferred} />
+          </View>
+          <View style={styles.menuRow}>
+            <Text style={styles.menuLabel}>{t('mobile.vaults.show_safe')}</Text>
+            <Switch value={showSafe} onValueChange={toggleSafe} />
+          </View>
+        </View>
+      </Sheet>
       {sheet}
     </ScrollView>
   );
@@ -535,8 +487,4 @@ const makeStyles = (c: Colors) =>
     pressed: {opacity: 0.6},
     checkHidden: {opacity: 0},
     link: {color: c.accent, fontSize: 15, fontWeight: '600'},
-    form: {gap: 12, paddingHorizontal: 16, paddingBottom: 16},
-    intro: {color: c.subtext, fontSize: 13, lineHeight: 18},
-    field: {color: c.text, fontSize: 13, fontFamily: 'Menlo', borderWidth: StyleSheet.hairlineWidth, borderColor: c.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10},
-    error: {color: c.danger, fontSize: 13, lineHeight: 18},
   });
