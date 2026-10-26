@@ -107,6 +107,29 @@
     "withdraw_from_earn": "Esnek Getiri'den çek",
     "withdraw_from_flexible_lend": "Esnek Kredi'den çek",
     "yielding": "Getiri sağlıyor",
-    "you_pay": "Öde"
+    "you_pay": "Öde",
+    "gate": {
+      "locked_temp": "Kasa geçici olarak kilitli olduğu için duraklatıldı. Devam etmek için Kasa durumundan kilidi açın.",
+      "locked_forever": "Kullanılamaz: bu kasa kalıcı olarak kilitli.",
+      "not_locked": "Kasa kilitli değil.",
+      "stablecoin_buy_only": "Kasa kilitliyken emirler yalnızca stablecoin alabilir.",
+      "send_allowance_off": "Yeni adreslere gönderim Risk ayarlarında kapalı.",
+      "market_trade_off": "Piyasa işlemleri Risk ayarlarında kapalı.",
+      "owner_only": "Bunu yalnızca kasa sahibi yapabilir.",
+      "no_permission": "Varlık yöneticisi izinleriniz bunu kapsamıyor.",
+      "err_vault_locked": "Bu kasa kilitli, bu yüzden bu işlem kullanılamıyor.",
+      "err_payment_not_stable": "Yeni bir adrese yalnızca stablecoin gönderilebilir. Başka varlıklar göndermek için adresi beyaz listenize ekleyin.",
+      "err_send_limit": "Bu, günlük gönderim limitinizden kalan tutarı aşıyor.",
+      "err_market_loss": "Bu işlem bugünkü piyasa işlemi kayıp limitini aşar.",
+      "err_market_price": "Fiyat piyasa fiyatından çok uzaklaştı, işlem gerçekleşmedi. Tekrar deneyin.",
+      "err_deprecated": "Bu protokol kullanımdan kaldırılıyor ve yeni yatırma veya emir kabul etmiyor. Çekim yapmaya devam edebilirsiniz.",
+      "err_not_newer": "Zaten bu veya daha yeni bir sürümde.",
+      "err_unauthorized": "Bu cüzdanın bu kasada bunu yapma izni yok.",
+      "err_not_registered": "Bu varlık veya protokol desteklenmiyor.",
+      "err_recipient_waiting": "Bu alıcı henüz fon alamaz. Bekleme süresi bitince alabilecek.",
+      "err_no_escape": "Halihazırda fon alabilen bir beyaz liste alıcısı seçin.",
+      "err_gas_budget": "Bugünkü ağ ücreti bütçesi tükendi.",
+      "err_price_unavailable": "Şu anda bir fiyat beslemesi kullanılamıyor. Birazdan tekrar deneyin."
+    }
   }
 }

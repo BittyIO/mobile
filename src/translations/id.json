@@ -107,6 +107,29 @@
     "withdraw_from_earn": "Tarik dari Imbal Hasil Fleksibel",
     "withdraw_from_flexible_lend": "Tarik dari Pinjaman Fleksibel",
     "yielding": "Menghasilkan",
-    "you_pay": "Bayar"
+    "you_pay": "Bayar",
+    "gate": {
+      "locked_temp": "Dijeda selama vault dikunci sementara. Buka kuncinya di Status vault untuk melanjutkan.",
+      "locked_forever": "Tidak tersedia: vault ini dikunci selamanya.",
+      "not_locked": "Vault tidak terkunci.",
+      "stablecoin_buy_only": "Selama vault terkunci, order hanya bisa membeli stablecoin.",
+      "send_allowance_off": "Pengiriman ke alamat baru dimatikan di Pengaturan risiko.",
+      "market_trade_off": "Perdagangan pasar dimatikan di Pengaturan risiko.",
+      "owner_only": "Hanya pemilik vault yang bisa melakukan ini.",
+      "no_permission": "Izin pengelola aset Anda tidak mencakup tindakan ini.",
+      "err_vault_locked": "Vault ini terkunci, jadi tindakan ini tidak tersedia.",
+      "err_payment_not_stable": "Hanya stablecoin yang bisa dikirim ke alamat baru. Tambahkan ke daftar putih Anda untuk mengirim aset lain.",
+      "err_send_limit": "Ini melebihi sisa batas pengiriman harian Anda.",
+      "err_market_loss": "Perdagangan ini akan melampaui batas kerugian harian perdagangan pasar.",
+      "err_market_price": "Harga bergerak terlalu jauh dari harga pasar, jadi perdagangan tidak terjadi. Coba lagi.",
+      "err_deprecated": "Protokol ini sedang dihentikan dan tidak lagi menerima setoran atau order baru. Anda masih bisa menarik.",
+      "err_not_newer": "Sudah di versi ini atau yang lebih baru.",
+      "err_unauthorized": "Dompet ini tidak diizinkan melakukan ini di vault ini.",
+      "err_not_registered": "Aset atau protokol ini tidak didukung.",
+      "err_recipient_waiting": "Penerima ini belum bisa menerima dana. Bisa setelah masa tunggunya berakhir.",
+      "err_no_escape": "Pilih penerima daftar putih yang sudah bisa menerima dana.",
+      "err_gas_budget": "Anggaran biaya jaringan hari ini sudah habis.",
+      "err_price_unavailable": "Feed harga sedang tidak tersedia. Coba lagi sebentar lagi."
+    }
   }
 }

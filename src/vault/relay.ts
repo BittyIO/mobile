@@ -24,6 +24,8 @@ import {translate} from '@/i18n';
 import {useLanguage} from '@/core/language-store';
 import {SafeSignaturePending} from './safe';
 import {assertCanWrite, nameRevert} from './vault-abi';
+import {assertVaultAccepts} from './presend';
+import {REVERT_REASON} from './capabilities';
 
 /** One vault call, unencoded — used to compose a multicall. */
 export type VaultCall = {abi: Abi; functionName: string; args?: readonly unknown[]};
@@ -219,6 +221,8 @@ async function relayEncodedNow(given: EncodedWrite): Promise<RelayResult> {
   // Every vault write passes here, so this is where a vault on a release newer than this build is
   // stopped — before a signature is asked for.
   await assertCanWrite(vault, network);
+  // A lock made since the screen last looked: say so before anything is signed or paid for.
+  await assertVaultAccepts(vault, network, given.activationCalls);
   const opts = await withHandover(given);
   /**
    * On quantum-safe keys the vault always pays. The key that signs is a one-time key with no ETH
@@ -442,9 +446,13 @@ function relayError(json: {reason?: string; error?: string; code?: string} | nul
       return withCode(t('mobile.actions.relay_budget'), json.reason, json.code);
     case 'stable-coin-as-gas-off':
       return withCode(t('mobile.actions.relay_stable_coin_as_gas_off'), json.reason, json.code);
-    case 'simulation-failed':
+    case 'simulation-failed': {
       // The call itself reverts, so retrying it unchanged cannot work. Nothing was signed or sent.
+      // When it is the vault refusing, say what it objected to, in the words the screens use.
+      const name = json.code ? nameRevert(json.code) : undefined;
+      if (name && REVERT_REASON[name]) return `${t(`vault.gate.${REVERT_REASON[name]}`)}\n\n${name}`;
       return withCode(t('mobile.actions.relay_refused'), json.reason, json.code);
+    }
     default:
       return json?.reason
         ? t('mobile.actions.relay_failed', {reason: json.reason})

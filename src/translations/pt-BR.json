@@ -107,6 +107,29 @@
     "withdraw_from_earn": "Sacar do Rendimento Flexível",
     "withdraw_from_flexible_lend": "Sacar do Empréstimo Flexível",
     "yielding": "Rendendo",
-    "you_pay": "Pagar"
+    "you_pay": "Pagar",
+    "gate": {
+      "locked_temp": "Pausado enquanto o cofre está bloqueado temporariamente. Desbloqueie em Status do cofre para continuar.",
+      "locked_forever": "Indisponível: este cofre está bloqueado para sempre.",
+      "not_locked": "O cofre não está bloqueado.",
+      "stablecoin_buy_only": "Enquanto o cofre está bloqueado, as ordens só podem comprar stablecoins.",
+      "send_allowance_off": "O envio para novos endereços está desativado nas configurações de risco.",
+      "market_trade_off": "A negociação a mercado está desativada nas configurações de risco.",
+      "owner_only": "Apenas o dono do cofre pode fazer isso.",
+      "no_permission": "Suas permissões de gestor de ativos não incluem esta ação.",
+      "err_vault_locked": "Este cofre está bloqueado, então esta ação não está disponível.",
+      "err_payment_not_stable": "Apenas stablecoins podem ser enviadas para um novo endereço. Adicione-o à sua lista de permissões para enviar outros ativos.",
+      "err_send_limit": "Isso excede o que resta do seu limite diário de envio.",
+      "err_market_loss": "Esta negociação ultrapassaria o limite diário de perda da negociação a mercado.",
+      "err_market_price": "O preço se afastou demais do preço de mercado e a negociação não foi concluída. Tente novamente.",
+      "err_deprecated": "Este protocolo está sendo descontinuado e não aceita novos depósitos nem ordens. Você ainda pode sacar.",
+      "err_not_newer": "Já está nesta versão ou em uma mais recente.",
+      "err_unauthorized": "Esta carteira não tem permissão para fazer isso neste cofre.",
+      "err_not_registered": "Este ativo ou protocolo não é suportado.",
+      "err_recipient_waiting": "Este destinatário ainda não pode receber fundos. Poderá quando o período de espera terminar.",
+      "err_no_escape": "Escolha um destinatário da lista de permissões que já possa receber fundos.",
+      "err_gas_budget": "O orçamento de taxas de rede de hoje acabou.",
+      "err_price_unavailable": "Um feed de preços está indisponível no momento. Tente novamente em instantes."
+    }
   }
 }

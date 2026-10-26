@@ -1445,7 +1445,30 @@
     "add_asset": "新增資產",
     "rename_list": "重新命名清單",
     "change_24h": "24小時",
-    "tx_not_included": "未被打包 — 沒有任何變化"
+    "tx_not_included": "未被打包 — 沒有任何變化",
+    "gate": {
+      "locked_temp": "金庫已臨時鎖定，此操作已暫停。請在金庫狀態中解鎖後繼續。",
+      "locked_forever": "無法使用：此金庫已永久鎖定。",
+      "not_locked": "金庫未鎖定。",
+      "stablecoin_buy_only": "金庫鎖定期間，訂單只能買入穩定幣。",
+      "send_allowance_off": "向新地址轉帳已在風險設定中關閉。",
+      "market_trade_off": "市價交易已在風險設定中關閉。",
+      "owner_only": "只有金庫擁有者可以執行此操作。",
+      "no_permission": "你的資產管理員權限不包含此操作。",
+      "err_vault_locked": "此金庫已鎖定，無法執行此操作。",
+      "err_payment_not_stable": "只能向新地址傳送穩定幣。將其加入地址簿後可傳送其他資產。",
+      "err_send_limit": "超出了你今日剩餘的轉帳額度。",
+      "err_market_loss": "此交易將超過今日的市價交易虧損額度。",
+      "err_market_price": "價格偏離市場價過多，交易未成交。請重試。",
+      "err_deprecated": "此協議即將停用，不再接受新的存入或訂單。你仍可取出。",
+      "err_not_newer": "已是此版本或更新版本。",
+      "err_unauthorized": "此錢包無權在該金庫執行此操作。",
+      "err_not_registered": "不支援此資產或協議。",
+      "err_recipient_waiting": "該收款人暫時無法收款，等待期結束後即可收款。",
+      "err_no_escape": "請選擇一個已可收款的地址簿收款人。",
+      "err_gas_budget": "今日的網路費用預算已用完。",
+      "err_price_unavailable": "價格資料暫時無法取得，請稍後重試。"
+    }
   },
   "matrica": {
     "title": "Matrica 驗證所有權",

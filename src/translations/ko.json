@@ -1445,7 +1445,30 @@
     "add_asset": "자산 추가",
     "rename_list": "목록 이름 변경",
     "change_24h": "24시간",
-    "tx_not_included": "블록에 포함되지 않음 — 아무 일도 없었습니다"
+    "tx_not_included": "블록에 포함되지 않음 — 아무 일도 없었습니다",
+    "gate": {
+      "locked_temp": "금고가 임시로 잠겨 있어 일시 중지되었습니다. 금고 상태에서 잠금을 해제하면 계속할 수 있습니다.",
+      "locked_forever": "사용할 수 없음: 이 금고는 영구적으로 잠겼습니다.",
+      "not_locked": "금고가 잠겨 있지 않습니다.",
+      "stablecoin_buy_only": "금고가 잠겨 있는 동안에는 스테이블코인을 사는 주문만 할 수 있습니다.",
+      "send_allowance_off": "새 주소로 보내기가 위험 설정에서 꺼져 있습니다.",
+      "market_trade_off": "시장가 거래가 위험 설정에서 꺼져 있습니다.",
+      "owner_only": "금고 소유자만 할 수 있습니다.",
+      "no_permission": "자산 관리자 권한에 이 작업이 포함되어 있지 않습니다.",
+      "err_vault_locked": "이 금고는 잠겨 있어 이 작업을 할 수 없습니다.",
+      "err_payment_not_stable": "새 주소에는 스테이블코인만 보낼 수 있습니다. 다른 자산을 보내려면 화이트리스트에 추가하세요.",
+      "err_send_limit": "일일 보내기 한도의 남은 금액을 초과합니다.",
+      "err_market_loss": "이 거래는 오늘의 시장가 거래 손실 한도를 초과합니다.",
+      "err_market_price": "가격이 시장가에서 너무 많이 벗어나 거래가 체결되지 않았습니다. 다시 시도하세요.",
+      "err_deprecated": "이 프로토콜은 종료 예정이라 새 예치나 주문을 받지 않습니다. 출금은 계속 가능합니다.",
+      "err_not_newer": "이미 이 버전 이상입니다.",
+      "err_unauthorized": "이 지갑은 이 금고에서 이 작업을 할 권한이 없습니다.",
+      "err_not_registered": "지원되지 않는 자산 또는 프로토콜입니다.",
+      "err_recipient_waiting": "이 수신자는 아직 받을 수 없습니다. 대기 기간이 끝나면 받을 수 있습니다.",
+      "err_no_escape": "이미 받을 수 있는 화이트리스트 수신자를 선택하세요.",
+      "err_gas_budget": "오늘의 네트워크 수수료 예산을 모두 사용했습니다.",
+      "err_price_unavailable": "지금은 가격 피드를 사용할 수 없습니다. 잠시 후 다시 시도하세요."
+    }
   },
   "matrica": {
     "title": "Matrica 소유권 확인",

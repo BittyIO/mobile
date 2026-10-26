@@ -101,6 +101,10 @@ export const EXPLORER_TX: Record<Network, string> = {
   arbitrum: 'https://arbiscan.io/tx/',
 };
 
+/** An address's page on the network's block explorer. Every explorer above keeps them at /address/. */
+export const explorerAddressUrl = (network: Network, address: string): string =>
+  EXPLORER_TX[network].replace(/\/tx\/$/, '/address/') + address;
+
 // The existing Next.js API (data feeds: transfers, stake/supply flows, sync, …). The mobile app is a
 // CLIENT of the same backend — routes stay on the server and are called over HTTP.
 export const API_BASE = 'https://bitty.io';

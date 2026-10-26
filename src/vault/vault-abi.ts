@@ -1,4 +1,4 @@
-import {keccak256, parseAbi, toBytes, type Abi, type Address} from 'viem';
+import {decodeFunctionData, keccak256, parseAbi, toBytes, type Abi, type Address, type Hex} from 'viem';
 import {MMKV} from 'react-native-mmkv';
 import {apiFetch, apiUrl, publicClientFor, type Network} from '@/core/chain';
 import {GUARD_IMPL_ABI, IMPLEMENTATION_VAULT} from '@/core/abi';
@@ -148,6 +148,18 @@ function knownAbis(): Abi[] {
 }
 
 /** A revert that came back as a bare selector ("0x1234abcd"), named from the known ABIs if it can be. */
+/** The vault function `data` calls, by any vault ABI this device has; null when none decodes it. */
+export function vaultFunctionName(data: Hex): string | null {
+  for (const abi of knownAbis()) {
+    try {
+      return decodeFunctionData({abi, data}).functionName;
+    } catch {
+      // Not in this release's ABI; try the next.
+    }
+  }
+  return null;
+}
+
 export function nameRevert(code: string): string {
   if (!/^0x[0-9a-fA-F]{8}$/.test(code)) return code;
   for (const abi of knownAbis()) {
