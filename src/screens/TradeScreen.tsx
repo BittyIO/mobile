@@ -87,7 +87,7 @@ import {useAssetCatalog} from '@/core/asset-catalog';
 import {useAssetPick} from '@/core/asset-pick';
 import {activeVaultAddress, useActiveVaultAddress} from '@/core/active-vault';
 import {useAllowancesOff} from '@/vault/risk';
-import {GateHint, LockNotice} from '@/components/LockNotice';
+import {GateHint} from '@/components/LockNotice';
 import {capability} from '@/vault/capabilities';
 import {gateReasonKey, useVaultGate} from '@/vault/gate';
 
@@ -1624,6 +1624,8 @@ export function TradeScreen() {
   const orderBuys = shownSide === 'buy' ? base : quoteAsset;
   const intentGate = capability('placeIntentOrder', vaultGate, {buysStablecoin: orderBuys ? orderBuys.kind === 'stable' : undefined});
   const lockedOrder = intentGate.allowed && (vaultGate.lockLevel === 1 || vaultGate.lockLevel === 2);
+  // The lock refuses this order: a market one, or one that does not buy a stablecoin.
+  const orderLocked = mode === 'Market' ? marketLocked : !intentGate.allowed;
 
   // The same checks onSubmit makes, so the button is disabled rather than erroring on tap.
   const canConfirm =
@@ -3475,7 +3477,6 @@ export function TradeScreen() {
         closable={!busy}
         overlay={orderOverlay}>
         <View style={styles.sheetBody}>
-            <LockNotice blocked={mode === 'Market' ? marketLocked : !intentGate.allowed} beforeNavigate={() => setSheetSide(null)} />
 
             {/* Order type as plain labels from the left, like the Overview's asset categories, rather
                 than a segmented control stretched across the sheet. */}
@@ -3498,11 +3499,10 @@ export function TradeScreen() {
                 </View>
               ) : null}
             </View>
-            {mode === 'Market' && marketOff ? (
+            {/* Off by the owner's $0 allowance. A lock says so on the confirm button instead. */}
+            {mode === 'Market' && marketOff && !marketLocked ? (
               <Pressable onPress={explainMarketOff} hitSlop={6}>
-                <Text style={styles.marketOff}>
-                  {marketLocked ? t(gateReasonKey(marketGate)!) : t('mobile.trade.market_off_line')}
-                </Text>
+                <Text style={styles.marketOff}>{t('mobile.trade.market_off_line')}</Text>
               </Pressable>
             ) : null}
 
@@ -3652,8 +3652,10 @@ export function TradeScreen() {
               gas={feeGas}
               fee={feeApplies}
               free={feeFree}
+              locked={orderLocked}
+              beforeNavigate={() => setSheetSide(null)}
             />
-            {mode !== 'Market' ? <GateHint gate={intentGate} /> : null}
+            {mode !== 'Market' && !orderLocked ? <GateHint gate={intentGate} /> : null}
             {mode !== 'Market' && lockedOrder ? (
               <Text style={styles.marketOff}>{t('mobile.vault.lock_order_no_cancel')}</Text>
             ) : null}

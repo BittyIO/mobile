@@ -19,7 +19,7 @@ import {Button} from '@/components/Button';
 import {useVaultWrite} from '@/components/useVaultWrite';
 import {useT} from '@/i18n';
 import {useStyles, type Colors} from '@/theme';
-import {GateHint, LockNotice} from '@/components/LockNotice';
+import {GateHint, useVaultLocked} from '@/components/LockNotice';
 import {useCapability} from '@/vault/gate';
 
 type Field = 'maxFeePerOp' | 'dailyLimit';
@@ -85,6 +85,7 @@ export function NetworkFeeLimitsScreen() {
   const dirty = FIELDS.some((f) => draft[f] !== undefined && draft[f] !== current(f));
   // A lock freezes the fee limits as it does every other setting (vault/gate).
   const gasGate = useCapability('setTokenAsGas');
+  const vaultLocked = useVaultLocked();
   const locked = !cfg || preActivation || busy !== null || !gasGate.allowed;
 
   // Leaving with changes unsaved asks first, by the back button or the swipe — before the page goes.
@@ -133,10 +134,9 @@ export function NetworkFeeLimitsScreen() {
   return (
     <View style={styles.fill}>
       <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
-        <LockNotice blocked={!gasGate.allowed} />
         <View style={styles.group}>{FIELDS.map((f, i) => row(f, i === FIELDS.length - 1))}</View>
-        <Button title={t('vault.save')} onPress={save} loading={busy === 'save'} disabled={!dirty || !ready || locked} />
-        <GateHint gate={gasGate} />
+        <Button title={t('vault.save')} onPress={save} loading={busy === 'save'} disabled={!dirty || !ready || locked} locked={!gasGate.allowed} />
+        {vaultLocked ? null : <GateHint gate={gasGate} />}
         <PickerSheet
           visible={picking !== null}
           title={picking ? t(TITLE[picking]) : ''}

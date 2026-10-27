@@ -58,6 +58,47 @@ export function LockNotice({
   );
 }
 
+/**
+ * An operation's confirm button while the lock refuses that operation: greyed, the lock's own icon
+ * and name where the action was, and under it why. Nothing to tap but Lock status — the label says
+ * what holds the vault, so the way to undo it is one tap away.
+ *
+ * The notice at the top of the page said the same thing a screen away from the control it was
+ * about; here it is the control. Screens draw this in place of their button (see {Button}'s and
+ * {ConfirmButton}'s `locked`), so a locked confirm reads as locked rather than as merely grey.
+ */
+export function LockedButton({style, beforeNavigate}: {style?: StyleProp<ViewStyle>; beforeNavigate?: () => void}) {
+  const {t} = useT();
+  const styles = useStyles(makeStyles);
+  const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const {lockLevel} = useVaultGate();
+  const level = lockLevel === 2 ? 2 : 1;
+  const tint = level === 2 ? FOREVER : TEMP;
+  return (
+    <View style={[styles.lockedWrap, style]}>
+      <Pressable
+        onPress={() => {
+          beforeNavigate?.();
+          nav.navigate('VaultLock');
+        }}
+        accessibilityRole="button"
+        accessibilityState={{disabled: true}}
+        accessibilityLabel={`${t(LOCK_TITLE[level])}. ${t('mobile.vault.lock_notice_op')}`}
+        style={({pressed}) => [styles.locked, {borderColor: tint, opacity: pressed ? 0.7 : 1}]}>
+        <SettingsIcon name={LOCK_ICON[level]} size={20} round />
+        <Text style={[styles.lockedLabel, {color: tint}]}>{t(LOCK_TITLE[level])}</Text>
+      </Pressable>
+      <Text style={styles.hint}>{t('mobile.vault.lock_notice_op')}</Text>
+    </View>
+  );
+}
+
+/** Whether the vault is locked right now — what decides that a refused operation shows {LockedButton}. */
+export function useVaultLocked(): boolean {
+  const {lockLevel} = useVaultGate();
+  return lockLevel === 1 || lockLevel === 2;
+}
+
 /** The reason a control is disabled, under it. Nothing while it is allowed. */
 export function GateHint({gate, style}: {gate: Gate; style?: StyleProp<ViewStyle>}) {
   const {t} = useT();
@@ -86,4 +127,18 @@ const makeStyles = (c: Colors) =>
     title: {fontSize: 15, fontWeight: '600'},
     text: {color: c.subtext, fontSize: 13, lineHeight: 18},
     hint: {color: c.subtext, fontSize: 12, lineHeight: 17, textAlign: 'center'},
+    lockedWrap: {gap: 8},
+    // The confirm pill's shape, in the card colour with the lock's outline: plainly not the action.
+    locked: {
+      height: 52,
+      borderRadius: 26,
+      borderWidth: 1,
+      backgroundColor: c.card,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingHorizontal: 20,
+    },
+    lockedLabel: {fontSize: 17, fontWeight: '600'},
   });

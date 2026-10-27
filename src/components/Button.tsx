@@ -12,6 +12,7 @@ import {useColors, useStyles, type Colors} from '@/theme';
 import {FaceIdIcon} from '@/components/FaceIdIcon';
 import {NetworkFee} from '@/components/NetworkFee';
 import {useT} from '@/i18n';
+import {LockedButton, useVaultLocked} from '@/components/LockNotice';
 
 type Props = {
   title: string;
@@ -21,6 +22,8 @@ type Props = {
   variant?: 'primary' | 'secondary' | 'danger';
   loading?: boolean;
   disabled?: boolean;
+  /** The lock refuses this operation: drawn as {LockedButton} while the vault is locked. */
+  locked?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -31,10 +34,13 @@ export function Button({
   variant = 'primary',
   loading,
   disabled,
+  locked,
   style,
 }: Props) {
   const styles = useStyles(makeStyles);
   const c = useColors();
+  const vaultLocked = useVaultLocked();
+  if (locked && vaultLocked) return <LockedButton style={style} />;
   const bg =
     variant === 'primary'
       ? c.accent
@@ -82,10 +88,16 @@ export function ConfirmButton({
   gas,
   fee = true,
   free,
+  locked,
+  beforeNavigate,
 }: {
   onPress: () => void;
   loading?: boolean;
   disabled?: boolean;
+  /** The lock refuses this operation: drawn as {LockedButton}, with no fee line, while locked. */
+  locked?: boolean;
+  /** For a button inside a sheet: close it before the locked state opens Lock status. */
+  beforeNavigate?: () => void;
   color?: string;
   style?: StyleProp<ViewStyle>;
   /** Gas this particular operation is expected to burn; defaults to a typical relayed write. */
@@ -98,6 +110,8 @@ export function ConfirmButton({
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
+  const vaultLocked = useVaultLocked();
+  if (locked && vaultLocked) return <LockedButton style={style} beforeNavigate={beforeNavigate} />;
   const isDisabled = disabled || loading;
   const button = (
     <Pressable

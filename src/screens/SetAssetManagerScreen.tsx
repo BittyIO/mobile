@@ -9,7 +9,7 @@ import {Button} from '@/components/Button';
 import {useVaultWrite} from '@/components/useVaultWrite';
 import {EXPIRIES, PERM_ROWS, isSet} from '@/components/useAssetManagerRow';
 import {useT} from '@/i18n';
-import {GateHint, LockNotice} from '@/components/LockNotice';
+import {GateHint, useVaultLocked} from '@/components/LockNotice';
 import {useCapability} from '@/vault/gate';
 import {useColors, useStyles, type Colors} from '@/theme';
 
@@ -56,6 +56,7 @@ export function SetAssetManagerScreen() {
   const daysOk = Number.isInteger(grantDays) && grantDays >= 1 && grantDays <= 365;
   // A lock freezes the appointment like every other setting (vault/gate).
   const managerGate = useCapability('setAssetManager');
+  const vaultLocked = useVaultLocked();
   const canSet = managerGate.allowed && ready && isPayableAddress(addr, network) && daysOk && perms !== 0;
 
   const set = () => {
@@ -79,7 +80,6 @@ export function SetAssetManagerScreen() {
       contentContainerStyle={styles.body}>
       {/* A tap anywhere that is not a control puts the keyboard away. */}
       <Pressable accessible={false} onPress={Keyboard.dismiss} style={styles.section}>
-        <LockNotice blocked={!managerGate.allowed} />
         {/* Who, and for how long, in one group: the address row, then the expiry row. */}
         <View style={styles.group}>
           <TextInput
@@ -138,8 +138,8 @@ export function SetAssetManagerScreen() {
         </View>
         <Text style={styles.fine}>{t('mobile.vault.permissions_hint')}</Text>
 
-        <Button title={t('vault.set')} onPress={set} loading={busy === 'set'} disabled={!canSet} style={styles.setBtn} />
-        <GateHint gate={managerGate} />
+        <Button title={t('vault.set')} onPress={set} loading={busy === 'set'} disabled={!canSet} style={styles.setBtn} locked={!managerGate.allowed} />
+        {vaultLocked ? null : <GateHint gate={managerGate} />}
       </Pressable>
       {sheet}
     </ScrollView>
