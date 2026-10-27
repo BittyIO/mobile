@@ -35,7 +35,7 @@ import {displaySymbol, fmtNum, fmtShort, floor6, round6} from '@/core/format';
 import {useT} from '@/i18n';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {activeVaultAddress} from '@/core/active-vault';
-import {GateHint} from '@/components/LockNotice';
+import {GateHint, LockNotice} from '@/components/LockNotice';
 import {useCapability} from '@/vault/gate';
 
 /**
@@ -434,6 +434,8 @@ export function EarnActionScreen() {
         contentContainerStyle={FORM_SHEET_BODY}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag">
+        {/* A lock refuses a deposit; a withdrawal still goes through, so it says nothing there. */}
+        <LockNotice blocked={isDeposit && !depositGate.allowed} />
         {/* What can be moved, above the field that moves it — the same line the order sheet now
             carries. On a deposit it is the vault's balance; on a withdrawal it is what the position
             holds, which the route hands over. */}

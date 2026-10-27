@@ -133,7 +133,7 @@ export function NetworkFeeLimitsScreen() {
   return (
     <View style={styles.fill}>
       <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
-        <LockNotice />
+        <LockNotice blocked={!gasGate.allowed} />
         <View style={styles.group}>{FIELDS.map((f, i) => row(f, i === FIELDS.length - 1))}</View>
         <Button title={t('vault.save')} onPress={save} loading={busy === 'save'} disabled={!dirty || !ready || locked} />
         <GateHint gate={gasGate} />

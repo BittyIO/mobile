@@ -23,8 +23,7 @@ import {
  *
  * One store for every screen, keyed by network and vault, so the Trade, Earn and Send screens read
  * the same answer. Read when a screen using it comes into focus, when the app comes back, and when
- * a relayed write settles (a lock made on this device is one) — the rhythm of the header's
- * LockBadge.
+ * a relayed write settles (a lock made on this device is one).
  *
  * The app always acts as the vault's owner, so the role is fixed: an asset manager uses web.
  */

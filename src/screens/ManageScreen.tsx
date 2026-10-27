@@ -27,7 +27,6 @@ import {
 import {useT} from '@/i18n';
 import {useStyles, type Colors} from '@/theme';
 import {SettingsIcon} from '@/components/SettingsIcon';
-import {LockNotice} from '@/components/LockNotice';
 import {useCapability} from '@/vault/gate';
 import {displaySymbol} from '@/core/format';
 
@@ -276,7 +275,6 @@ export function ManageScreen() {
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
-      <LockNotice />
       <View style={styles.section}>
       <View style={styles.group}>
         <View style={[styles.row, styles.rowFirst, styles.rowLast]}>

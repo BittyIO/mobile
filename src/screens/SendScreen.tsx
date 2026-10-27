@@ -457,7 +457,7 @@ export function SendScreen() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* The scroll view is the whole page, so a drag anywhere scrolls; the button holds the bottom. */}
       <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.scroll} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-        <LockNotice />
+        <LockNotice blocked={lockedSends && bookBlocked} />
         {/* Grouped like Settings: who, then what, then a way to add more. */}
         <SettingsGroup>
             {/* Chosen, not typed. The common case on this screen is paying somewhere the vault

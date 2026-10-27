@@ -84,7 +84,7 @@ export function AssetManagerScreen() {
       style={styles.container}
       contentContainerStyle={styles.body}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} tintColor={c.text} colors={[c.accent]} />}>
-      <LockNotice />
+      <LockNotice blocked={!managerGate.allowed} />
       <SettingsGroup label={t('vault.current')}>
         <SettingsRow
           icon="delegation"

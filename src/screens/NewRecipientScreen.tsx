@@ -114,7 +114,7 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled">
       <Pressable accessible={false} onPress={Keyboard.dismiss} style={styles.dismiss}>
-        <LockNotice style={styles.notice} />
+        <LockNotice blocked={manage ? !addGate.allowed : lockedSends} style={styles.notice} />
         {/* Two full-width fields in one group, as Settings rows: the address, then the name. */}
         <View style={styles.fields}>
           <TextInput

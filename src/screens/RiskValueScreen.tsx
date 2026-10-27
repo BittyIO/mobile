@@ -4,6 +4,7 @@ import {useFocusEffect, useNavigation, useRoute, type RouteProp} from '@react-na
 import type {RootStackParamList} from '@/App';
 import {getRiskConfig, RISK_BOUNDS, useAllowsZeroAllowance, type RiskConfig} from '@/vault/risk';
 import {useCapability} from '@/vault/gate';
+import {LockNotice} from '@/components/LockNotice';
 import {OptionRow, SettingsGroup} from '@/components/SettingsRow';
 import {fmtRiskValue, fmtPending, riskHintKey, riskZeroHintKey} from '@/components/riskFormat';
 import {useRiskDraft} from '@/core/risk-draft';
@@ -104,6 +105,7 @@ export function RiskValueScreen() {
       contentInsetAdjustmentBehavior="automatic"
       style={styles.container}
       contentContainerStyle={styles.body}>
+      <LockNotice blocked={locked} />
       <SettingsGroup
         footer={[
           fmtPending(field, risk, t),

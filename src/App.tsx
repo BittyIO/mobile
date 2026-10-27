@@ -8,7 +8,6 @@ import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {useWallet} from '@/wallet/store';
 import {TabIcon, type TabName} from '@/components/TabIcon';
 import {NetworkSwitcher} from '@/components/NetworkSwitcher';
-import {LockBadge} from '@/components/LockBadge';
 import {useGuardProtocols} from '@/core/guard-catalog';
 import {useNetwork} from '@/core/network-store';
 import {RISK_TITLE} from '@/components/riskFormat';
@@ -215,13 +214,8 @@ function MainTabs() {
          * corner is usually empty.
          */
         headerTitleAlign: 'center',
-        // The vault's lock, while it has one, right after the tab's title: on every tab, tapped
-        // through to Lock status.
         headerTitle: ({children}) => (
-          <View style={styles.headerTitleRow}>
-            <Text style={styles.headerTitle}>{children}</Text>
-            <LockBadge />
-          </View>
+          <Text style={styles.headerTitle}>{children}</Text>
         ),
         /**
          * The chain in the right-hand corner, where it started.
@@ -268,10 +262,7 @@ function MainTabs() {
         options={{
           title: t('mobile.app.overview'),
           headerTitle: () => (
-            <View style={styles.headerTitleRow}>
-              <Text style={styles.headerTitle}>{t('mobile.app.name')}</Text>
-              <LockBadge />
-            </View>
+            <Text style={styles.headerTitle}>{t('mobile.app.name')}</Text>
           ),
         }}
         component={VaultHomeScreen}
@@ -544,5 +535,4 @@ const makeStyles = (colors: Colors) =>
   StyleSheet.create({
     splash: {flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center'},
     headerTitle: {color: colors.text, fontSize: 17, fontWeight: '700'},
-    headerTitleRow: {flexDirection: 'row', alignItems: 'center', gap: 6},
   });

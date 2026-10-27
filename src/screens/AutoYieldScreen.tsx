@@ -106,7 +106,7 @@ export function AutoYieldScreen() {
   const sweepGate = useCapability('autoYield');
   return (
     <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
-      <LockNotice />
+      <LockNotice blocked={!routeGate.allowed} />
       <Text style={styles.hint}>{t('mobile.vault.auto_yield_hint')}</Text>
       <GateHint gate={routeGate} />
 

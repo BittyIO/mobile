@@ -31,7 +31,7 @@ import {displaySymbol, fmtNum} from '@/core/format';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 import {useAssetCatalog} from '@/core/asset-catalog';
-import {GateHint, LockNotice} from '@/components/LockNotice';
+import {GateHint} from '@/components/LockNotice';
 import {useCapability} from '@/vault/gate';
 
 /**
@@ -262,7 +262,6 @@ export function EarnDetailScreen() {
           colors={[c.accent]}
         />
       }>
-      <LockNotice />
       {/* Who and what, with the rate it pays. */}
       <View style={styles.head}>
         <TokenIcon symbol={symbol} size={40} />

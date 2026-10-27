@@ -21,7 +21,6 @@ import {PickerSheet} from '@/components/AssetPicker';
 import {useT} from '@/i18n';
 
 import {openLink} from '@/core/open-link';
-import {LockNotice} from '@/components/LockNotice';
 
 /**
  * Sun, moon, phone — one per appearance option, so the sheet is readable at a glance instead of
@@ -112,7 +111,6 @@ export function SettingsScreen() {
       contentOffset={{x: 0, y: -headerHeight}}
       scrollIndicatorInsets={{top: headerHeight}}
       automaticallyAdjustContentInsets={false}>
-      <LockNotice />
       <View style={styles.group}>
         {/* First, because which vault you are looking at decides what every row below means. It
             lived in the header for a while, where it was permanently on screen for a control

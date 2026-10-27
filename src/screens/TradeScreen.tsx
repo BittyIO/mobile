@@ -3475,7 +3475,7 @@ export function TradeScreen() {
         closable={!busy}
         overlay={orderOverlay}>
         <View style={styles.sheetBody}>
-            <LockNotice beforeNavigate={() => setSheetSide(null)} />
+            <LockNotice blocked={mode === 'Market' ? marketLocked : !intentGate.allowed} beforeNavigate={() => setSheetSide(null)} />
 
             {/* Order type as plain labels from the left, like the Overview's asset categories, rather
                 than a segmented control stretched across the sheet. */}

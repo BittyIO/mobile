@@ -79,7 +79,7 @@ export function SetAssetManagerScreen() {
       contentContainerStyle={styles.body}>
       {/* A tap anywhere that is not a control puts the keyboard away. */}
       <Pressable accessible={false} onPress={Keyboard.dismiss} style={styles.section}>
-        <LockNotice />
+        <LockNotice blocked={!managerGate.allowed} />
         {/* Who, and for how long, in one group: the address row, then the expiry row. */}
         <View style={styles.group}>
           <TextInput
