@@ -27,6 +27,8 @@ import {
 import {useT} from '@/i18n';
 import {useStyles, type Colors} from '@/theme';
 import {SettingsIcon} from '@/components/SettingsIcon';
+import {LockNotice} from '@/components/LockNotice';
+import {useCapability} from '@/vault/gate';
 import {displaySymbol} from '@/core/format';
 
 /**
@@ -71,6 +73,8 @@ export function ManageScreen() {
   const stable = assets.find((a) => a.kind === 'stable');
   const vault = useActiveVaultAddress(network);
   const versions = useAdapterVersions();
+  // A lock freezes the allow lists, and adapter upgrades with them (vault/gate).
+  const listGate = useCapability('updateAllowList');
 
   // The services come from the server version catalog (the single source shared with the web), not
   // from a bundled adapter table. One adapter per name (canonical address), in service order.
@@ -187,7 +191,7 @@ export function ManageScreen() {
           <PendingSwitch
             value={bitty || assetSet.has(a.address.toLowerCase())}
             pending={busy === `a-${a.address}`}
-            disabled={busy !== null || bitty}
+            disabled={busy !== null || bitty || !listGate.allowed}
             onValueChange={(v) =>
               run(`a-${a.address}`, t(v ? 'mobile.actions.asset_added' : 'mobile.actions.asset_removed', {name: displaySymbol(a.symbol)}), (acct) =>
                 updateAsset({account: acct, vault: vault!, network, asset: a.address, add: v, stableCoin: stable!.address}),
@@ -218,7 +222,7 @@ export function ManageScreen() {
           <PendingSwitch
             value={bitty || protoSet.has(p.address.toLowerCase())}
             pending={busy === `p-${p.address}`}
-            disabled={busy !== null || bitty}
+            disabled={busy !== null || bitty || !listGate.allowed}
             onValueChange={(v) =>
               run(`p-${p.address}`, t(v ? 'mobile.actions.enable_service' : 'mobile.actions.disable_service', {name: p.name}), (acct) =>
                 updateProtocol({account: acct, vault: vault!, network, protocol: p.address, add: v, stableCoin: stable!.address}),
@@ -272,6 +276,7 @@ export function ManageScreen() {
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
+      <LockNotice />
       <View style={styles.section}>
       <View style={styles.group}>
         <View style={[styles.row, styles.rowFirst, styles.rowLast]}>
@@ -282,7 +287,8 @@ export function ManageScreen() {
           <PendingSwitch
               value={!restricted}
               pending={busy === 'allowlist'}
-              disabled={busy !== null}
+              // Locked, the vault may still go back to Bitty's list, never narrow to its own.
+              disabled={busy !== null || (!restricted && !listGate.allowed)}
               onValueChange={(v) =>
                 run('allowlist', t('mobile.vault.bitty_allowlist'), (acct) =>
                   setAllowlistEnabled({account: acct, vault: vault!, network, enabled: !v, stableCoin: stable!.address}),

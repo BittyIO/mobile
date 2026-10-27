@@ -16,7 +16,7 @@ import {apiUrl, CHAIN_ID, publicClientFor, type Network} from '@/core/chain';
 import {FORWARDER_ABI, FORWARD_REQUEST_TYPES, VAULT_FWD_ABI, VAULT_MULTICALL_ABI, VAULT_OWNERSHIP_ABI, VAULT_RISK_ABI} from '@/core/abi';
 import {rotationOn} from '@/wallet/rotation-store';
 import {isActivated, activateVault, activateVaultDirect} from './activate';
-import {OwnerGasShort, ownerEthBalance, sendFromOwner} from './direct';
+import {formatEth, OwnerGasShort, ownerEthBalance, sendFromOwner} from './direct';
 import {feePayerFor, type FeePayer} from '@/core/fee-payer-store';
 import {feeCoinOrder} from '@/core/prefs';
 import {knownAssets} from '@/core/assets';
@@ -222,8 +222,9 @@ async function relayEncodedNow(given: EncodedWrite): Promise<RelayResult> {
   // stopped — before a signature is asked for.
   await assertCanWrite(vault, network);
   // A lock made since the screen last looked: say so before anything is signed or paid for.
-  await assertVaultAccepts(vault, network, given.activationCalls);
+  const lockLevel = await assertVaultAccepts(vault, network, given.activationCalls);
   const opts = await withHandover(given);
+  if (lockLevel === 2 && ownerCanPay(account)) return viaOwnerLockedForever(opts);
   /**
    * On quantum-safe keys the vault always pays. The key that signs is a one-time key with no ETH
    * of its own, and ETH sent to it would be left behind at an address the vault has moved on from.
@@ -256,6 +257,27 @@ async function relayEncodedNow(given: EncodedWrite): Promise<RelayResult> {
       return relayEncodedNow({...opts, payer: 'owner'});
     }
     throw e;
+  }
+}
+
+/**
+ * A vault locked forever refuses to pay the relayer (payRelayerFee), so every write from then on is
+ * paid from the owner key's own ETH — whatever the fee setting says, and on quantum-safe keys too:
+ * the lock refuses the handover to a fresh key as well, so the key that signs now stays the owner
+ * and ETH sent to it is not left behind. Asking which way to pay would offer a way that cannot work,
+ * so the one that can is taken, and a key with too little ETH is told exactly where to send it.
+ */
+async function viaOwnerLockedForever(opts: EncodedWrite): Promise<RelayResult> {
+  try {
+    return await viaOwner(opts);
+  } catch (e) {
+    if (!(e instanceof OwnerGasShort)) throw e;
+    throw new Error(
+      translate(useLanguage.getState().language, 'mobile.vault.forever_owner_pays', {
+        need: formatEth(e.need),
+        owner: e.owner,
+      }),
+    );
   }
 }
 

@@ -24,6 +24,8 @@ import {useRecipientPick} from '@/core/recipient-pick';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 import {vaultAddressOf} from '@/core/active-vault';
+import {LockNotice} from '@/components/LockNotice';
+import {useCapability} from '@/vault/gate';
 
 /**
  * Who to pay, as its own page, in two groups: the whitelisted address book, each entry under its
@@ -52,6 +54,11 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
   const vault = useActiveVaultAddress(network);
   const vaults = useVaults((s) => s.vaults);
   const activeIndex = useVaults((s) => s.activeIndex);
+  // A locked vault pays only book entries already payable, and adds or removes none.
+  const sendGate = useCapability('send');
+  const addGate = useCapability('addWhitelistedRecipient');
+  const removeGate = useCapability('removeWhitelistedRecipient');
+  const lockedSends = !sendGate.allowed && sendGate.reason !== 'send_allowance_off';
 
   /**
    * The book as the vault reports it, each entry with its status. An entry whose removal is queued
@@ -177,12 +184,14 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
     const removeAt = b.status === WHITELIST_STATUS.removalQueued ? b.removeAt : undefined;
     const waitUntil = removeAt ?? (b.status === WHITELIST_STATUS.pending ? b.effectiveAt : undefined);
     const note = b.status === WHITELIST_STATUS.voided ? t('mobile.payments.voided_by_lock') : null;
+    // Locked, an entry that cannot be paid yet cannot be paid at all: offering it only leads to a refusal.
+    const unpayable = lockedSends && (b.status === WHITELIST_STATUS.pending || b.status === WHITELIST_STATUS.voided);
     return (
       <Pressable
         key={b.id}
-        style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === list.length - 1 && styles.rowLast, pressed && styles.pressed]}
+        style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === list.length - 1 && styles.rowLast, (pressed || unpayable) && styles.pressed]}
         // Managing the book, a tap chooses nothing.
-        disabled={manage}
+        disabled={manage || unpayable}
         onPress={() => pick(b.recipientAddress, named)}
         onLongPress={() => copy(b.recipientAddress)}>
         {/* Every entry under a name: the one saved on this device, or its place in the
@@ -233,11 +242,11 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
         ) : removeAt || b.status === WHITELIST_STATUS.voided ? null : (
           <Pressable
             hitSlop={10}
-            disabled={!ready}
+            disabled={!ready || !removeGate.allowed}
             onPress={() => removeEntry(b)}
             accessibilityRole="button"
             accessibilityLabel={t('vault.remove')}
-            style={({pressed}) => [styles.remove, (pressed || !ready) && styles.pressed]}>
+            style={({pressed}) => [styles.remove, (pressed || !ready || !removeGate.allowed) && styles.pressed]}>
             <Text style={styles.removeText}>✕</Text>
           </Pressable>
         )}
@@ -277,13 +286,16 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
   const pagerRef = useRef<ScrollView>(null);
 
   // New recipient in the header: always in reach, however long the book grows.
+  const newOff = !addGate.allowed && (manage || !sendGate.allowed);
   useLayoutEffect(() => {
     nav.setOptions({
       headerRight: () => (
         <Pressable
           onPress={() => nav.navigate(manage ? 'VaultWhitelistAdd' : 'NewRecipient')}
+          // A new address can be paid or saved; locked, the vault does neither.
+          disabled={newOff}
           hitSlop={10}
-          style={styles.headerBtn}
+          style={[styles.headerBtn, newOff && styles.pressed]}
           accessibilityRole="button"
           accessibilityLabel={t('mobile.payments.new_recipient')}>
           <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
@@ -292,7 +304,7 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
         </Pressable>
       ),
     });
-  }, [nav, t, c, styles, manage]);
+  }, [nav, t, c, styles, manage, newOff]);
 
   /**
    * Security › Whitelisted addresses: three categories, a page each, swiped between or picked from
@@ -311,6 +323,7 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
     };
     return (
       <View style={[styles.flex, {paddingTop: headerHeight}]}>
+        <LockNotice style={styles.manageNotice} />
         <View style={styles.tabRow}>
           {tabs.map((x, i) => (
             <Pressable key={x.label} hitSlop={8} onPress={() => goTo(i)} accessibilityRole="tab" accessibilityState={{selected: tab === i}}>
@@ -354,6 +367,7 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
       // A PUSHED screen: the header inset is the system's to apply, so this and nothing else.
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={styles.body}>
+      <LockNotice />
       {/* The whitelist first, and always — even with nothing in it: paying somewhere this vault
           already pays is the common case, and an empty list still says the vault HAS one. */}
       {/* Each group's title on the left and what a payment to it may be on the right. */}
@@ -383,10 +397,13 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
             {allowance ? <Text style={styles.sectionLimit}>{allowance}</Text> : null}
           </View>
           <View style={styles.card}>
-            {mine.map((v, i) => (
+            {mine.map((v, i) => {
+              const unpayable = lockedSends && !whitelisted(v.address);
+              return (
               <Pressable
                 key={v.index}
-                style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === mine.length - 1 && styles.rowLast, pressed && styles.pressed]}
+                style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === mine.length - 1 && styles.rowLast, (pressed || unpayable) && styles.pressed]}
+                disabled={unpayable}
                 onPress={() => pick(v.address, v.name)}
                 onLongPress={() => copy(v.address)}>
                 <View style={styles.entryCol}>
@@ -396,10 +413,13 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
                     <Text style={styles.sub}>
                       {t('mobile.payments.whitelisted_book')} · {t('mobile.payments.max_send_none')}
                     </Text>
+                  ) : unpayable ? (
+                    <Text style={styles.sub}>{t('mobile.vault.lock_send_book_only')}</Text>
                   ) : null}
                 </View>
               </Pressable>
-            ))}
+              );
+            })}
           </View>
         </>
       ) : null}
@@ -447,6 +467,7 @@ const makeStyles = (c: Colors) =>
     subWarn: {color: c.danger},
     emptyText: {color: c.subtext, fontSize: 15},
     centered: {justifyContent: 'center'},
+    manageNotice: {marginHorizontal: 16, marginBottom: 8},
     remove: {width: 28, height: 28, borderRadius: 14, backgroundColor: c.neutralSoft, alignItems: 'center', justifyContent: 'center'},
     removeText: {color: c.subtext, fontSize: 13, fontWeight: '700'},
   });

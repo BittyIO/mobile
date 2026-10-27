@@ -17,6 +17,8 @@ import {useT} from '@/i18n';
 import {useVaultWrite} from '@/components/useVaultWrite';
 import {addWhitelisted, fetchWhitelist, type WhitelistedRecipient} from '@/vault/payments';
 import {WHITELIST_STATUS} from '@/core/abi';
+import {GateHint, LockNotice} from '@/components/LockNotice';
+import {useCapability} from '@/vault/gate';
 
 /**
  * Select recipient › New recipient — an address to type, a name for it on this device, and whether
@@ -57,10 +59,15 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
   // With sends to new addresses off, a typed address can be paid only if it is already in the book
   // and past its wait — so the book is read to tell.
   const sendsOff = !manage && !!risk?.read && risk.sendDailyAllowance === 0n;
+  // Locked, the same holds — the vault pays only the book — and nothing can be added to it.
+  const sendGate = useCapability('send');
+  const addGate = useCapability('addWhitelistedRecipient');
+  const lockedSends = !manage && !sendGate.allowed && sendGate.reason !== 'send_allowance_off';
+  const bookOnly = sendsOff || lockedSends;
   const [book, setBook] = useState<WhitelistedRecipient[]>([]);
   useEffect(() => {
-    if (sendsOff && vault) fetchWhitelist(vault, network).then(setBook).catch(() => setBook([]));
-  }, [sendsOff, vault, network]);
+    if (bookOnly && vault) fetchWhitelist(vault, network).then(setBook).catch(() => setBook([]));
+  }, [bookOnly, vault, network]);
 
   const valid = isPayableAddress(draft, network);
   const isToken = isTokenAddress(draft, network);
@@ -85,14 +92,17 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
         b.recipientAddress.toLowerCase() === draft.toLowerCase() &&
         (b.status === undefined || b.status === WHITELIST_STATUS.payable || b.status === WHITELIST_STATUS.removalQueued),
     );
-    if (sendsOff && !payable) {
-      Alert.alert(t('mobile.payments.cant_pay_title'), t('mobile.payments.cant_pay_sends_off'));
+    if (bookOnly && !payable) {
+      Alert.alert(
+        t('mobile.payments.cant_pay_title'),
+        t(lockedSends ? 'mobile.vault.lock_send_book_only' : 'mobile.payments.cant_pay_sends_off'),
+      );
       return;
     }
-    setPicked({address: draft as Address, label: given || undefined, addToBook});
+    setPicked({address: draft as Address, label: given || undefined, addToBook: addToBook && addGate.allowed});
     nav.pop(2);
   };
-  const canConfirm = valid && (!manage || write.ready);
+  const canConfirm = valid && (!manage || (write.ready && addGate.allowed));
 
   return (
     <ScrollView
@@ -104,6 +114,7 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled">
       <Pressable accessible={false} onPress={Keyboard.dismiss} style={styles.dismiss}>
+        <LockNotice style={styles.notice} />
         {/* Two full-width fields in one group, as Settings rows: the address, then the name. */}
         <View style={styles.fields}>
           <TextInput
@@ -133,7 +144,12 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
             <>
               <View style={[styles.row, styles.divider]}>
                 <Text style={styles.rowLabel}>{t('mobile.payments.add_to_whitelist')}</Text>
-                <Switch value={addToBook} onValueChange={setAddToBook} style={styles.switch} />
+                <Switch
+                  value={addToBook && addGate.allowed}
+                  disabled={!addGate.allowed}
+                  onValueChange={setAddToBook}
+                  style={styles.switch}
+                />
               </View>
               <View style={[styles.row, addToBook && styles.divider]}>
                 <Text style={styles.rowLabel}>{t('mobile.payments.max_send')}</Text>
@@ -156,6 +172,7 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
           onPress={confirm}>
           <Text style={[styles.useText, !canConfirm && styles.useTextOff]}>{t('vault.confirm')}</Text>
         </Pressable>
+        {manage ? <GateHint gate={addGate} style={styles.gap} /> : null}
       </Pressable>
       {write.sheet}
     </ScrollView>
@@ -169,6 +186,7 @@ const makeStyles = (c: Colors) =>
     dismiss: {flex: 1},
     card: {backgroundColor: c.card, borderRadius: 20, paddingHorizontal: 16},
     gap: {marginTop: 24},
+    notice: {marginBottom: 16},
     fields: {backgroundColor: c.card, borderRadius: 20, overflow: 'hidden'},
     input: {width: '100%', minHeight: 52, color: c.text, paddingHorizontal: 16, paddingVertical: 14, fontSize: 15},
     inputErr: {color: c.danger},

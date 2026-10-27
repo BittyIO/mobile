@@ -34,6 +34,8 @@ import {quoteRelayFeeUsd, relayGasFor} from '@/vault/fee-quote';
 import {FEE_WETH, feeCoinForSpend, reserveHeld, resolveFeeReserve, useWethFeeCoin} from '@/vault/stableCoinAsGas';
 
 import {useAssetCatalog} from '@/core/asset-catalog';
+import {LockNotice} from '@/components/LockNotice';
+import {useCapability} from '@/vault/gate';
 
 /**
  * Where a line's tokens come from: the vault's free balance, its Sky position, its Aave supply, or
@@ -132,6 +134,10 @@ export function SendScreen() {
   const vault = useActiveVaultAddress(network);
   // A daily send allowance of $0 turns plain sends off: the vault then pays only a saved recipient.
   const sendsOff = useAllowancesOff(vault, network).sends;
+  // A locked vault pays only the address book, as an allowance of $0 does: the same route, a
+  // different reason. Refused for any other cause (send_allowance_off) it is `sendsOff` above.
+  const sendGate = useCapability('send');
+  const lockedSends = !sendGate.allowed && sendGate.reason !== 'send_allowance_off';
 
   const bal = useVaultBalances(network);
   const weth = useWethFeeCoin(network, vault);
@@ -384,7 +390,7 @@ export function SendScreen() {
       )
     : undefined;
   // With plain sends off, every funded card goes as a whitelisted payment.
-  const viaBook = bookOnly.length > 0 || (sendsOff && recipient.lines.some((l) => Number(l.amount) > 0));
+  const viaBook = bookOnly.length > 0 || ((sendsOff || lockedSends) && recipient.lines.some((l) => Number(l.amount) > 0));
   const bookBlocked = viaBook && !!recipient.to && !entry;
   const canSubmit = unlocked && !!stable && status !== 'busy' && rows.length > 0 && !anyOver && !bookBlocked;
 
@@ -451,6 +457,7 @@ export function SendScreen() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* The scroll view is the whole page, so a drag anywhere scrolls; the button holds the bottom. */}
       <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.scroll} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+        <LockNotice />
         {/* Grouped like Settings: who, then what, then a way to add more. */}
         <SettingsGroup>
             {/* Chosen, not typed. The common case on this screen is paying somewhere the vault
@@ -550,7 +557,9 @@ export function SendScreen() {
               </Pressable>
             </SettingsGroup>
 
-        {sendsOff ? (
+        {lockedSends ? (
+          <Text style={bookBlocked ? styles.err : styles.hint}>{t('mobile.vault.lock_send_book_only')}</Text>
+        ) : sendsOff ? (
           <Text style={bookBlocked ? styles.err : styles.hint}>{t('mobile.payments.sends_off')}</Text>
         ) : bookOnly.length > 0 ? (
           <Text style={bookBlocked ? styles.err : styles.hint}>

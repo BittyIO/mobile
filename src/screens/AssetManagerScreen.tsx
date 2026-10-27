@@ -12,6 +12,8 @@ import {PendingRow} from '@/components/PendingRow';
 import {useVaultWrite} from '@/components/useVaultWrite';
 import {PERM_ROWS, fmtExpiry, isSet} from '@/components/useAssetManagerRow';
 import {useT} from '@/i18n';
+import {GateHint, LockNotice} from '@/components/LockNotice';
+import {useCapability} from '@/vault/gate';
 import {useColors, useStyles, type Colors} from '@/theme';
 
 /**
@@ -57,6 +59,8 @@ export function AssetManagerScreen() {
   }, []);
 
   const hasManager = !!am && isSet(am.manager);
+  // Locked, the appointment is frozen: the manager in force stays until its grant runs out.
+  const managerGate = useCapability('setAssetManager');
   const hasPending = !!am && isSet(am.pendingManager);
   const pendingAt = hasPending ? Number(am!.pendingAt) : 0;
 
@@ -80,19 +84,22 @@ export function AssetManagerScreen() {
       style={styles.container}
       contentContainerStyle={styles.body}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} tintColor={c.text} colors={[c.accent]} />}>
+      <LockNotice />
       <SettingsGroup label={t('vault.current')}>
         <SettingsRow
           icon="delegation"
           title={t('mobile.vault.manager_address')}
           value={am ? (hasManager ? shortAddress(am.manager) : t('vault.none')) : undefined}
           // With a manager in force, a tap asks which: change them or revoke them. With none, set one.
-          onPress={() => (hasManager ? setActionSheet(true) : nav.navigate('VaultSetAssetManager'))}
+          onPress={managerGate.allowed ? () => (hasManager ? setActionSheet(true) : nav.navigate('VaultSetAssetManager')) : undefined}
+          chevron={managerGate.allowed}
           last={!hasManager}
         />
         {hasManager ? (
           <SettingsRow icon="timelock" title={t('vault.expires')} value={fmtExpiry(am!.expiresAt, t)} chevron={false} last />
         ) : null}
       </SettingsGroup>
+      <GateHint gate={managerGate} />
 
       {hasPending ? (
         <SettingsGroup label={t('mobile.vault.pending_changes')}>
@@ -105,7 +112,7 @@ export function AssetManagerScreen() {
             onPress={() => setPermSheet(true)}
             onCancel={cancelPending}
             cancelling={busy === 'cancel'}
-            cancelDisabled={!ready || busy !== null}
+            cancelDisabled={!ready || busy !== null || !managerGate.allowed}
             last
           />
         </SettingsGroup>
