@@ -103,7 +103,8 @@ export function RiskSettingsScreen() {
   const sub = (f: RiskField) =>
     changes[f] !== undefined && risk ? t('mobile.vault.unsaved_from', {value: fmt(f, risk[f])}) : fmtPending(f, risk, t);
 
-  const saveButton = <Button title={t('vault.save')} onPress={save} loading={busy === 'save'} disabled={!dirty || !ready} />;
+  const riskGate = useCapability('updateRisk');
+  const saveButton = <Button title={t('vault.save')} onPress={save} loading={busy === 'save'} disabled={!dirty || !ready} locked={!riskGate.allowed} />;
 
   const inForce = risk ? valuesInForce(risk) : null;
   const picked: RiskValues | null = inForce

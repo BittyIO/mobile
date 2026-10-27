@@ -24,7 +24,7 @@ import {useRecipientPick} from '@/core/recipient-pick';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 import {vaultAddressOf} from '@/core/active-vault';
-import {LockNotice} from '@/components/LockNotice';
+import {LockIcon, LockNotice, useLockLevel} from '@/components/LockNotice';
 import {useCapability} from '@/vault/gate';
 
 /**
@@ -58,6 +58,7 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
   const sendGate = useCapability('send');
   const addGate = useCapability('addWhitelistedRecipient');
   const removeGate = useCapability('removeWhitelistedRecipient');
+  const lockLevel = useLockLevel();
   const lockedSends = !sendGate.allowed && sendGate.reason !== 'send_allowance_off';
 
   /**
@@ -239,7 +240,9 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
         </View>
         {busy === `rm-${b.id}` ? (
           <ActivityIndicator color={c.subtext} />
-        ) : removeAt || b.status === WHITELIST_STATUS.voided ? null : (
+        ) : removeAt || b.status === WHITELIST_STATUS.voided ? null : lockLevel && !removeGate.allowed ? (
+          <LockIcon level={lockLevel} size={18} />
+        ) : (
           <Pressable
             hitSlop={10}
             disabled={!ready || !removeGate.allowed}

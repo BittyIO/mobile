@@ -10,6 +10,7 @@ import {getLockLevel, getPendingChanges, getRiskConfig} from '@/vault/risk';
 import {vaultOwnerOf} from '@/vault/owned-vaults';
 import {handOverToFreshKey} from '@/vault/ownership';
 import {Button} from '@/components/Button';
+import {useCapability} from '@/vault/gate';
 import {PendingRow} from '@/components/PendingRow';
 import {QuantumInfoButton, QuantumKeys} from '@/components/QuantumHandover';
 import {SettingsGroup, SettingsRow} from '@/components/SettingsRow';
@@ -160,6 +161,7 @@ export function QuantumSafeScreen() {
             ? 'orders'
             : 'used';
   const canHandOver = on && ours && state === 'used' && ready;
+  const transferGate = useCapability('transferOwnership');
 
   const handOver = () =>
     canHandOver &&
@@ -201,7 +203,7 @@ export function QuantumSafeScreen() {
             ) : null}
           </SettingsGroup>
           {state === 'used' && ours ? (
-            <Button title={t('mobile.quantum.hand_over_now')} onPress={handOver} loading={busy === 'rotate'} disabled={!canHandOver} />
+            <Button title={t('mobile.quantum.hand_over_now')} onPress={handOver} loading={busy === 'rotate'} disabled={!canHandOver} locked={!transferGate.allowed} />
           ) : null}
         </View>
       ) : null}
