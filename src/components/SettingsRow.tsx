@@ -1,6 +1,7 @@
 import React from 'react';
 import {Pressable, StyleSheet, Switch, Text, View} from 'react-native';
 import {SettingsIcon, type SettingsIconName} from '@/components/SettingsIcon';
+import {Explain, type ExplainId} from '@/components/Explain';
 import {useStyles, type Colors} from '@/theme';
 
 /**
@@ -24,6 +25,7 @@ export function SettingsRow({
   last,
   toggle,
   right,
+  info,
 }: {
   icon: SettingsIconName;
   title: string;
@@ -36,13 +38,22 @@ export function SettingsRow({
   toggle?: {value: boolean; onValueChange: (v: boolean) => void};
   /** Where a row's current answer is a set of things rather than a word — icons, marks. */
   right?: React.ReactNode;
+  /** An ⓘ after the title, opening the explanation of what the row is (components/Explain). */
+  info?: ExplainId;
 }) {
   const styles = useStyles(makeStyles);
   const body = (
     <>
       <SettingsIcon name={icon} />
       <View style={styles.rowText}>
-        <Text style={styles.rowTitle}>{title}</Text>
+        {info ? (
+          <View style={styles.titleInfo}>
+            <Text style={[styles.rowTitle, styles.titleShrink]}>{title}</Text>
+            <Explain id={info} />
+          </View>
+        ) : (
+          <Text style={styles.rowTitle}>{title}</Text>
+        )}
         {sub ? <Text style={styles.rowSub}>{sub}</Text> : null}
       </View>
       <View style={styles.rowRight}>
@@ -106,15 +117,41 @@ export function OptionRow({
 
 /**
  * The rounded card a run of rows sits in, with an optional label above it and an optional
- * description below it — the iOS footer that says what the rows in the card do.
+ * description below it — the iOS footer that says what the rows in the card do. `info` puts an ⓘ
+ * after the label, opening the explanation of what the card is about (components/Explain).
  */
-export function SettingsGroup({label, footer, children}: {label?: string; footer?: string; children: React.ReactNode}) {
+export function SettingsGroup({
+  label,
+  footer,
+  info,
+  children,
+}: {
+  label?: string;
+  footer?: string;
+  info?: ExplainId;
+  children: React.ReactNode;
+}) {
   const styles = useStyles(makeStyles);
   return (
     <View style={styles.section}>
-      {label ? <Text style={styles.groupLabel}>{label}</Text> : null}
+      {label && info ? (
+        <View style={styles.labelInfo}>
+          <Text style={[styles.groupLabel, styles.labelInline]}>{label}</Text>
+          <Explain id={info} size={16} />
+        </View>
+      ) : label ? (
+        <Text style={styles.groupLabel}>{label}</Text>
+      ) : null}
       <View style={styles.group}>{children}</View>
-      {footer ? <Text style={styles.groupFooter}>{footer}</Text> : null}
+      {/* With no label to sit beside, the ⓘ ends the footer. */}
+      {footer && info && !label ? (
+        <View style={styles.footerInfo}>
+          <Text style={[styles.groupFooter, styles.footerInline]}>{footer}</Text>
+          <Explain id={info} size={15} />
+        </View>
+      ) : footer ? (
+        <Text style={styles.groupFooter}>{footer}</Text>
+      ) : null}
     </View>
   );
 }
@@ -122,6 +159,12 @@ export function SettingsGroup({label, footer, children}: {label?: string; footer
 export const makeSettingsStyles = (c: Colors) =>
   StyleSheet.create({
     groupLabel: {color: c.subtext, fontSize: 15, fontWeight: '600', paddingHorizontal: 16, marginTop: 8, marginBottom: 6},
+    labelInfo: {flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, marginTop: 8, marginBottom: 6},
+    labelInline: {paddingHorizontal: 0, marginTop: 0, marginBottom: 0},
+    footerInfo: {flexDirection: 'row', alignItems: 'flex-start', gap: 6, paddingHorizontal: 16, marginTop: 6},
+    footerInline: {flex: 1, paddingHorizontal: 0, marginTop: 0},
+    titleInfo: {flexDirection: 'row', alignItems: 'center', gap: 6},
+    titleShrink: {flexShrink: 1},
     groupFooter: {color: c.subtext, fontSize: 12, lineHeight: 17, paddingHorizontal: 16, marginTop: 6},
     section: {gap: 0},
     group: {backgroundColor: c.card, borderRadius: 20, overflow: 'hidden'},

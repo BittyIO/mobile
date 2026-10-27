@@ -18,6 +18,7 @@ import {fees} from './fees';
 import {vaults} from './vaults';
 import {quantum} from './quantum';
 import {scan} from './scan';
+import {explain} from './explain';
 
 export const MOBILE_STRINGS: Record<string, MobileTable> = {
   settings,
@@ -33,4 +34,5 @@ export const MOBILE_STRINGS: Record<string, MobileTable> = {
   vaults,
   quantum,
   scan,
+  explain,
 };
