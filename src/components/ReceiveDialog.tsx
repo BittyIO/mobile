@@ -4,6 +4,7 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import QRCode from 'react-native-qrcode-svg';
 import {useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
+import {Explain} from '@/components/Explain';
 import {useWallet} from '@/wallet/store';
 import {isPhraseVerified} from '@/wallet/phrase-backup';
 import {navigationRef} from '@/core/open-link';
@@ -80,7 +81,16 @@ export function ReceiveDialog({
             </>
           ) : (
             <>
-              <Text style={styles.sub}>{sub ?? t('mobile.home.your_vault_on', {network: networkLabel})}</Text>
+              {/* The vault's own address, with what it is; an address given by the caller (the owner
+                  wallet's) is not the vault's, and has nothing to explain. */}
+              {sub ? (
+                <Text style={styles.sub}>{sub}</Text>
+              ) : (
+                <View style={styles.subLine}>
+                  <Text style={styles.sub}>{t('mobile.home.your_vault_on', {network: networkLabel})}</Text>
+                  <Explain id="vault_address" size={15} />
+                </View>
+              )}
               {vault ? (
                 <View style={styles.qrWrap}>
                   <QRCode value={vault} size={200} backgroundColor="white" />
@@ -112,6 +122,7 @@ export function ReceiveDialog({
 
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
+    subLine: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6},
     gateTitle: {color: c.text, fontSize: 16, fontWeight: '700', textAlign: 'center', marginTop: 8},
     gateBody: {color: c.subtext, fontSize: 14, lineHeight: 20, textAlign: 'center'},
     gateBtn: {

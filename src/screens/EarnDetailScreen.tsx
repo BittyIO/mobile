@@ -33,6 +33,7 @@ import {useT} from '@/i18n';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {GateHint, LockNotice} from '@/components/LockNotice';
 import {useCapability} from '@/vault/gate';
+import {Explain, type ExplainId} from '@/components/Explain';
 
 /**
  * One Earn position, in full.
@@ -272,19 +273,27 @@ export function EarnDetailScreen() {
               `name` itself stays the adapter's registry name — the rate lookup below compares
               against it — and Aave's happens to carry its version while Sky's and Lido's do not,
               which is what left this page naming the brand next to two that named the release. */}
-          <Text style={styles.sub}>{protocolDisplayName(name)}</Text>
+          <View style={styles.inline}>
+            <Text style={styles.sub}>{protocolDisplayName(name)}</Text>
+            <Explain id="protocol_risk" size={15} />
+          </View>
         </View>
         {rate != null ? (
-          <View style={styles.apyPill}>
-            <Text style={styles.apyText}>{t('mobile.earn.apy_rate', {rate: rate.toFixed(2)})}</Text>
+          <View style={styles.inline}>
+            <View style={styles.apyPill}>
+              <Text style={styles.apyText}>{t('mobile.earn.apy_rate', {rate: rate.toFixed(2)})}</Text>
+            </View>
+            <Explain id="apy" />
           </View>
         ) : null}
       </View>
 
       <View style={styles.card}>
-        <Row label={t('mobile.earn.detail_position')} value={`${fmtNum(held)} ${sym}`} />
+        {/* How earned is worked out sits on the Earned row, or — while there is none to show — on the
+            position, where the user looks for it. */}
+        <Row label={t('mobile.earn.detail_position')} value={`${fmtNum(held)} ${sym}`} info={earned != null && earned > 0 ? undefined : 'earned'} />
         {earned != null && earned > 0 ? (
-          <Row label={t('mobile.earn.detail_earned')} value={`+${fmtNum(earned)} ${sym}`} tone="good" />
+          <Row label={t('mobile.earn.detail_earned')} value={`+${fmtNum(earned)} ${sym}`} tone="good" info="earned" />
         ) : null}
         {/* BALANCE, not "available". What the vault holds of this coin is a fact; whether any of it
             can be deposited is a question the form answers, and on a balance under the relayer's
@@ -299,7 +308,10 @@ export function EarnDetailScreen() {
       {isLido ? (
         <View style={styles.card}>
           <View style={styles.row}>
-            <Text style={styles.rowLabel}>{t('vault.unstaking')}</Text>
+            <View style={styles.inline}>
+              <Text style={styles.rowLabel}>{t('vault.unstaking')}</Text>
+              <Explain id="lido_unstake" size={15} />
+            </View>
             <View style={styles.claimRight}>
               {/* Lido's estimate, while anything is queued: the ring runs from the first request to
                   the last one's expected finalization. Approximate, so "~" and never red. */}
@@ -343,7 +355,10 @@ export function EarnDetailScreen() {
 
       <View style={styles.card}>
         <View style={styles.autoRow}>
-          <Text style={styles.autoLabel}>{autoLabel}</Text>
+          <View style={styles.inline}>
+            <Text style={styles.autoLabel}>{autoLabel}</Text>
+            <Explain id="auto_yield" size={15} />
+          </View>
           <PendingSwitch
             value={autoOn}
             pending={autoBusy}
@@ -400,12 +415,15 @@ export function EarnDetailScreen() {
   );
 }
 
-function Row({label, value, tone}: {label: string; value: string; tone?: 'good'}) {
+function Row({label, value, tone, info}: {label: string; value: string; tone?: 'good'; info?: ExplainId}) {
   const styles = useStyles(makeStyles);
   const c = useColors();
   return (
     <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
+      <View style={styles.inline}>
+        <Text style={styles.rowLabel}>{label}</Text>
+        {info ? <Explain id={info} size={15} /> : null}
+      </View>
       <Text style={[styles.rowValue, tone === 'good' && styles.rowValueGood]}>
         <Amount v={value} size={15} color={tone === 'good' ? c.success : undefined} />
       </Text>
@@ -418,6 +436,7 @@ const makeStyles = (c: Colors) =>
     container: {flex: 1, backgroundColor: c.bg},
     body: {flexGrow: 1, padding: 16, paddingBottom: 32, gap: 12},
     head: {flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 4},
+    inline: {flexDirection: 'row', alignItems: 'center', gap: 6},
     headText: {flex: 1},
     sym: {color: c.text, fontSize: 20, fontWeight: '700'},
     sub: {color: c.subtext, fontSize: 13, marginTop: 2},
