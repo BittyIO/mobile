@@ -19,7 +19,7 @@ import {Button} from '@/components/Button';
 import {useVaultWrite} from '@/components/useVaultWrite';
 import {useT} from '@/i18n';
 import {useStyles, type Colors} from '@/theme';
-import {GateHint, useVaultLocked} from '@/components/LockNotice';
+import {GateHint, useLockLevel} from '@/components/LockNotice';
 import {useCapability} from '@/vault/gate';
 
 type Field = 'maxFeePerOp' | 'dailyLimit';
@@ -85,7 +85,7 @@ export function NetworkFeeLimitsScreen() {
   const dirty = FIELDS.some((f) => draft[f] !== undefined && draft[f] !== current(f));
   // A lock freezes the fee limits as it does every other setting (vault/gate).
   const gasGate = useCapability('setTokenAsGas');
-  const vaultLocked = useVaultLocked();
+  const vaultLocked = useLockLevel() > 0;
   const locked = !cfg || preActivation || busy !== null || !gasGate.allowed;
 
   // Leaving with changes unsaved asks first, by the back button or the swipe — before the page goes.

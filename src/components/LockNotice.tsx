@@ -1,11 +1,11 @@
 import React from 'react';
-import {Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle} from 'react-native';
+import {Alert, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
 import {SettingsIcon} from '@/components/SettingsIcon';
 import {LOCK_ICON, LOCK_TITLE} from '@/core/lock-status';
-import {useColors, useStyles, type Colors} from '@/theme';
+import {useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 import {gateReasonKey, useVaultGate} from '@/vault/gate';
 import type {Gate} from '@/vault/capabilities';
@@ -59,40 +59,28 @@ export function LockNotice({
 }
 
 /**
- * An operation's confirm button while the lock refuses that operation: the whole pill in the lock's
- * colour — yellow for the emergency lock, red for the forever one — dimmed like any disabled
- * button, the lock's icon and name where the action was, and under it why.
- *
- * The notice at the top of the page said the same thing a screen away from the control it was
- * about; here it is the control. Screens draw this in place of their button (see {Button}'s and
- * {ConfirmButton}'s `locked`).
+ * The lock's icon, at the front of an operation's confirm button while the lock refuses it — where
+ * the Face ID mark would be. The button keeps its own colour and words and is simply disabled; the
+ * icon says why, and a tap on it says so in words: the lock's name, and that this operation is not
+ * supported while it holds.
  */
-export function LockedButton({style}: {style?: StyleProp<ViewStyle>}) {
+export function LockIcon({level, size = 20}: {level: 1 | 2; size?: number}) {
   const {t} = useT();
-  const c = useColors();
-  const styles = useStyles(makeStyles);
-  const {lockLevel} = useVaultGate();
-  const level = lockLevel === 2 ? 2 : 1;
   return (
-    <View style={[styles.lockedWrap, style]}>
-      <View
-        accessible
-        accessibilityRole="button"
-        accessibilityState={{disabled: true}}
-        accessibilityLabel={`${t(LOCK_TITLE[level])}. ${t('mobile.vault.lock_notice_op')}`}
-        style={[styles.locked, {backgroundColor: level === 2 ? FOREVER : c.warning}]}>
-        <SettingsIcon name={LOCK_ICON[level]} size={20} round />
-        <Text style={[styles.lockedLabel, {color: '#fff'}]}>{t(LOCK_TITLE[level])}</Text>
-      </View>
-      <Text style={styles.hint}>{t('mobile.vault.lock_notice_op')}</Text>
-    </View>
+    <Pressable
+      onPress={() => Alert.alert(t(LOCK_TITLE[level]), t('mobile.vault.lock_notice_op'))}
+      hitSlop={10}
+      accessibilityRole="button"
+      accessibilityLabel={t(LOCK_TITLE[level])}>
+      <SettingsIcon name={LOCK_ICON[level]} size={size} round />
+    </Pressable>
   );
 }
 
-/** Whether the vault is locked right now — what decides that a refused operation shows {LockedButton}. */
-export function useVaultLocked(): boolean {
+/** The vault's lock right now: 0 unlocked, 1 the emergency lock, 2 locked forever. */
+export function useLockLevel(): 0 | 1 | 2 {
   const {lockLevel} = useVaultGate();
-  return lockLevel === 1 || lockLevel === 2;
+  return lockLevel === 1 || lockLevel === 2 ? lockLevel : 0;
 }
 
 /** The reason a control is disabled, under it. Nothing while it is allowed. */
@@ -123,18 +111,4 @@ const makeStyles = (c: Colors) =>
     title: {fontSize: 15, fontWeight: '600'},
     text: {color: c.subtext, fontSize: 13, lineHeight: 18},
     hint: {color: c.subtext, fontSize: 12, lineHeight: 17, textAlign: 'center'},
-    lockedWrap: {gap: 8},
-    // The confirm pill's shape, in the card colour with the lock's outline: plainly not the action.
-    locked: {
-      height: 52,
-      borderRadius: 26,
-      // The disabled look every Button uses.
-      opacity: 0.5,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      paddingHorizontal: 20,
-    },
-    lockedLabel: {fontSize: 17, fontWeight: '600'},
   });

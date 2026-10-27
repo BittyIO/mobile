@@ -9,7 +9,7 @@ import {Button} from '@/components/Button';
 import {useVaultWrite} from '@/components/useVaultWrite';
 import {EXPIRIES, PERM_ROWS, isSet} from '@/components/useAssetManagerRow';
 import {useT} from '@/i18n';
-import {GateHint, useVaultLocked} from '@/components/LockNotice';
+import {GateHint, useLockLevel} from '@/components/LockNotice';
 import {useCapability} from '@/vault/gate';
 import {useColors, useStyles, type Colors} from '@/theme';
 
@@ -56,7 +56,7 @@ export function SetAssetManagerScreen() {
   const daysOk = Number.isInteger(grantDays) && grantDays >= 1 && grantDays <= 365;
   // A lock freezes the appointment like every other setting (vault/gate).
   const managerGate = useCapability('setAssetManager');
-  const vaultLocked = useVaultLocked();
+  const vaultLocked = useLockLevel() > 0;
   const canSet = managerGate.allowed && ready && isPayableAddress(addr, network) && daysOk && perms !== 0;
 
   const set = () => {

@@ -12,7 +12,7 @@ import {useColors, useStyles, type Colors} from '@/theme';
 import {FaceIdIcon} from '@/components/FaceIdIcon';
 import {NetworkFee} from '@/components/NetworkFee';
 import {useT} from '@/i18n';
-import {LockedButton, useVaultLocked} from '@/components/LockNotice';
+import {LockIcon, useLockLevel} from '@/components/LockNotice';
 
 type Props = {
   title: string;
@@ -22,7 +22,7 @@ type Props = {
   variant?: 'primary' | 'secondary' | 'danger';
   loading?: boolean;
   disabled?: boolean;
-  /** The lock refuses this operation: drawn as {LockedButton} while the vault is locked. */
+  /** The lock refuses this operation: while the vault is locked, disabled behind a {LockIcon}. */
   locked?: boolean;
   style?: StyleProp<ViewStyle>;
 };
@@ -37,9 +37,8 @@ export function Button(props: Props) {
 }
 
 function LockAwareButton({locked, ...props}: Props) {
-  const vaultLocked = useVaultLocked();
-  if (locked && vaultLocked) return <LockedButton style={props.style} />;
-  return <PlainButton {...props} />;
+  const level = useLockLevel();
+  return <PlainButton {...props} lockLevel={locked ? level : 0} />;
 }
 
 function PlainButton({
@@ -50,7 +49,8 @@ function PlainButton({
   loading,
   disabled,
   style,
-}: Props) {
+  lockLevel = 0,
+}: Props & {lockLevel?: 0 | 1 | 2}) {
   const styles = useStyles(makeStyles);
   const c = useColors();
   const bg =
@@ -61,7 +61,7 @@ function PlainButton({
         : c.buttonSecondary; // a quiet fill that still reads as a button on a white card
   // Label / spinner colour: a primary fill carries the on-accent colour so it stays legible in light.
   const fg = variant === 'primary' ? c.onAccent : variant === 'danger' ? c.danger : c.text;
-  const isDisabled = disabled || loading;
+  const isDisabled = disabled || loading || lockLevel > 0;
   return (
     <Pressable
       onPress={onPress}
@@ -74,6 +74,11 @@ function PlainButton({
       ]}>
       {loading ? (
         <ActivityIndicator color={fg} />
+      ) : lockLevel ? (
+        <View style={styles.confirmRow}>
+          <LockIcon level={lockLevel} />
+          <Text style={[styles.label, {color: fg}]}>{title}</Text>
+        </View>
       ) : faceId ? (
         <View style={styles.confirmRow}>
           <FaceIdIcon size={20} color={fg} />
@@ -96,9 +101,8 @@ export function ConfirmButton(props: ConfirmProps) {
 }
 
 function LockAwareConfirmButton({locked, ...props}: ConfirmProps) {
-  const vaultLocked = useVaultLocked();
-  if (locked && vaultLocked) return <LockedButton style={props.style} />;
-  return <PlainConfirmButton {...props} />;
+  const level = useLockLevel();
+  return <PlainConfirmButton {...props} lockLevel={locked ? level : 0} />;
 }
 
 type ConfirmProps = {
@@ -113,7 +117,7 @@ type ConfirmProps = {
   fee?: boolean;
   /** Set where the fee is known to be nothing: the line says $0 rather than disappearing. */
   free?: boolean;
-  /** The lock refuses this operation: drawn as {LockedButton}, with no fee line, while locked. */
+  /** The lock refuses this operation: while the vault is locked, disabled behind a {LockIcon}. */
   locked?: boolean;
 };
 
@@ -126,11 +130,12 @@ function PlainConfirmButton({
   gas,
   fee = true,
   free,
-}: ConfirmProps) {
+  lockLevel = 0,
+}: ConfirmProps & {lockLevel?: 0 | 1 | 2}) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
-  const isDisabled = disabled || loading;
+  const isDisabled = disabled || loading || lockLevel > 0;
   const button = (
     <Pressable
       onPress={onPress}
@@ -142,7 +147,7 @@ function PlainConfirmButton({
         <ActivityIndicator color={c.onAccent} />
       ) : (
         <View style={styles.confirmRow}>
-          <FaceIdIcon size={20} color={c.onAccent} />
+          {lockLevel ? <LockIcon level={lockLevel} /> : <FaceIdIcon size={20} color={c.onAccent} />}
           <Text style={[styles.label, {color: c.onAccent}]}>{t('vault.confirm')}</Text>
         </View>
       )}

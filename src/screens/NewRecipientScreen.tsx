@@ -17,7 +17,7 @@ import {useT} from '@/i18n';
 import {useVaultWrite} from '@/components/useVaultWrite';
 import {addWhitelisted, fetchWhitelist, type WhitelistedRecipient} from '@/vault/payments';
 import {WHITELIST_STATUS} from '@/core/abi';
-import {GateHint, LockedButton, useVaultLocked} from '@/components/LockNotice';
+import {GateHint, LockIcon, useLockLevel} from '@/components/LockNotice';
 import {useCapability} from '@/vault/gate';
 
 /**
@@ -62,9 +62,11 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
   // Locked, the same holds — the vault pays only the book — and nothing can be added to it.
   const sendGate = useCapability('send');
   const addGate = useCapability('addWhitelistedRecipient');
-  const vaultLocked = useVaultLocked();
+  const lockLevel = useLockLevel();
   const lockedSends = !manage && !sendGate.allowed && sendGate.reason !== 'send_allowance_off';
   const bookOnly = sendsOff || lockedSends;
+  // The lock refuses what this page does: adding to the book, or paying a new address.
+  const lockedHere = lockLevel > 0 && (manage ? !addGate.allowed : lockedSends);
   const [book, setBook] = useState<WhitelistedRecipient[]>([]);
   useEffect(() => {
     if (bookOnly && vault) fetchWhitelist(vault, network).then(setBook).catch(() => setBook([]));
@@ -166,19 +168,16 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
           ) : null}
         </View>
 
-        {vaultLocked && (manage ? !addGate.allowed : lockedSends) ? (
-          <LockedButton />
-        ) : (
-          <>
-            <Pressable
-              style={({pressed}) => [styles.use, !canConfirm && styles.useOff, pressed && styles.pressed]}
-              disabled={!canConfirm}
-              onPress={confirm}>
-              <Text style={[styles.useText, !canConfirm && styles.useTextOff]}>{t('vault.confirm')}</Text>
-            </Pressable>
-            {manage ? <GateHint gate={addGate} style={styles.gap} /> : null}
-          </>
-        )}
+        <Pressable
+          style={({pressed}) => [styles.use, (!canConfirm || lockedHere) && styles.useOff, pressed && styles.pressed]}
+          disabled={!canConfirm || lockedHere}
+          onPress={confirm}>
+          <View style={styles.useRow}>
+            {lockedHere ? <LockIcon level={lockLevel as 1 | 2} /> : null}
+            <Text style={[styles.useText, (!canConfirm || lockedHere) && styles.useTextOff]}>{t('vault.confirm')}</Text>
+          </View>
+        </Pressable>
+        {manage && !lockedHere ? <GateHint gate={addGate} style={styles.gap} /> : null}
       </Pressable>
       {write.sheet}
     </ScrollView>
@@ -204,6 +203,7 @@ const makeStyles = (c: Colors) =>
     switch: {marginRight: 10},
     use: {height: 52, borderRadius: 26, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', marginTop: 24},
     useOff: {backgroundColor: c.neutralSoft},
+    useRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
     useText: {color: '#fff', fontSize: 15, fontWeight: '700'},
     useTextOff: {color: c.subtext},
     pressed: {opacity: 0.6},
