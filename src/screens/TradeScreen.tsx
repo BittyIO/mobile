@@ -1186,6 +1186,27 @@ export function TradeScreen() {
   }, [owner, network]);
 
   /**
+   * An order filling moves the balances, and nothing else would say so.
+   *
+   * A CoW fill is settled by a solver, not sent from the app, so no confirmed transaction prompts
+   * the reads that follow one: the sheet kept offering the Yielding balance from before a limit
+   * order sold it, and the bought asset did not show until a pull. The poll above is what notices
+   * a fill, so a fill it notices re-reads the balances and the positions. The first list only sets
+   * the mark — the orders filled before this screen opened are already in the balances.
+   */
+  const filledSeen = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const filled = orders.filter((o) => o.status === 'fulfilled').map((o) => o.uid.toLowerCase());
+    const seen = filledSeen.current;
+    filledSeen.current = new Set(filled);
+    if (seen && filled.some((u) => !seen.has(u))) {
+      balances.refresh();
+      positions.refresh();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders]);
+
+  /**
    * Choosing either leg of the pair turns "Others" back off.
    *
    * The flag is sticky on purpose — re-ticking it on every visit would make the filter feel broken
@@ -2513,6 +2534,7 @@ export function TradeScreen() {
     setPulled(true);
     setRefreshNonce((n) => n + 1);
     balances.refresh();
+    positions.refresh();
     refreshOrders();
     // The reads are short; the spinner clears on its own rather than waiting on each of them.
     setTimeout(() => setPulled(false), 1200);

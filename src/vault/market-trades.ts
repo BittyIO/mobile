@@ -179,18 +179,24 @@ export function tradeFeedFromTransfers(legs: TransferRow[]): TradeFeed {
   const cowFills = new Map<string, number>();
   for (const [txHash, group] of groups) {
     const opLegs = group.filter((l) => !(l.direction === 'out' && BITTY_FEE_COLLECTORS.has(lc(l.counterparty))));
-    const swapLegs = splitMarketSwap(opLegs);
-    if (swapLegs.length === 0) continue;
     // A swap settled by CoW is a limit or TWAP order being filled, and the orderbook already has
     // it as an order. Recovering it here as well listed one filled order twice in Finished: once
     // from CoW with its price and expiry, once from the chain as an anonymous swap. This feed is
     // for the trades that leave NO order record, which is what "market" means here.
-    const at = swapLegs.find((l) => l.timestamp)?.timestamp;
-    const secs = at ? Math.floor(Date.parse(at) / 1000) : undefined;
-    if (swapLegs.some((l) => lc(l.counterparty) === lc(GPV2_SETTLEMENT))) {
-      if (secs) cowFills.set(lc(txHash), secs);
+    //
+    // Recognised by the settlement contract alone, BEFORE the swap split: an order paid from a
+    // position sells sUSDS or an aToken, which the split sets aside as a receipt-token move, so
+    // the fill was never seen and the order showed no time.
+    const settled = opLegs.filter((l) => lc(l.counterparty) === lc(GPV2_SETTLEMENT));
+    if (settled.length) {
+      const at = settled.find((l) => l.timestamp)?.timestamp;
+      if (at) cowFills.set(lc(txHash), Math.floor(Date.parse(at) / 1000));
       continue;
     }
+    const swapLegs = splitMarketSwap(opLegs);
+    if (swapLegs.length === 0) continue;
+    const at = swapLegs.find((l) => l.timestamp)?.timestamp;
+    const secs = at ? Math.floor(Date.parse(at) / 1000) : undefined;
     const t = netTrade(swapLegs);
     if (!t) continue;
     trades.push({txHash, blockNum: swapLegs[0].blockNum, ts: secs, sold: t.sold, bought: t.bought});
