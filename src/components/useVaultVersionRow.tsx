@@ -18,6 +18,8 @@ import {useConfirmAction} from '@/components/ConfirmAction';
 import {relayGasFor} from '@/vault/fee-quote';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {canRunVault, forgetVaultVersion, vaultAbiFor} from '@/vault/vault-abi';
+import {Alert} from 'react-native';
+import {gateReasonKey, useCapability} from '@/vault/gate';
 
 /**
  * The Version row of Settings › Vault, as on the web's Security tab: the running release, an arrow to
@@ -158,12 +160,18 @@ export function useVaultVersionRow(): {
   };
 
   const upgradeable = !!up?.available && runs.latest && !working;
+  // A locked vault cannot be upgraded (vault/gate): the update is still shown, with the reason.
+  const upgradeGate = useCapability('upgradeVault');
   // The app's own confirmation rather than a system alert, so an upgrade is agreed to the same way
   // every other on-chain action is: a Face ID button with the fee it will cost beside it.
   const onPress = () => {
     if (working) return;
     if (!upgradeable || !up) {
       recheck();
+      return;
+    }
+    if (!upgradeGate.allowed) {
+      Alert.alert(t('vault.upgrade_available'), t(gateReasonKey(upgradeGate)!));
       return;
     }
     // The release note for the build being upgraded TO (the vault implementation is note-category 0),
@@ -206,7 +214,9 @@ export function useVaultVersionRow(): {
     ? t('mobile.settings.vault_needs_app_update')
     : up.available && !runs.latest
       ? t('mobile.settings.vault_upgrade_needs_app_update', {version: up.latestVersion ?? ''})
-      : up.available
+      : up.available && !upgradeGate.allowed
+        ? t(gateReasonKey(upgradeGate)!)
+        : up.available
         ? t('vault.upgrade_available')
         : up.latestVersion
           ? t('mobile.settings.vault_no_new_version')

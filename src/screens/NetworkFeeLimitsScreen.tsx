@@ -19,6 +19,8 @@ import {Button} from '@/components/Button';
 import {useVaultWrite} from '@/components/useVaultWrite';
 import {useT} from '@/i18n';
 import {useStyles, type Colors} from '@/theme';
+import {GateHint, LockNotice} from '@/components/LockNotice';
+import {useCapability} from '@/vault/gate';
 
 type Field = 'maxFeePerOp' | 'dailyLimit';
 const FIELDS: Field[] = ['maxFeePerOp', 'dailyLimit'];
@@ -81,7 +83,9 @@ export function NetworkFeeLimitsScreen() {
     preActivation ? (f === 'dailyLimit' ? STABLE_COIN_AS_GAS_MAX_DAILY : STABLE_COIN_AS_GAS_MAX_PER_OP) : cfg ? Number(cfg[f]) : null;
   const value = (f: Field): number | null => draft[f] ?? current(f);
   const dirty = FIELDS.some((f) => draft[f] !== undefined && draft[f] !== current(f));
-  const locked = !cfg || preActivation || busy !== null;
+  // A lock freezes the fee limits as it does every other setting (vault/gate).
+  const gasGate = useCapability('setTokenAsGas');
+  const locked = !cfg || preActivation || busy !== null || !gasGate.allowed;
 
   // Leaving with changes unsaved asks first, by the back button or the swipe — before the page goes.
   const {edge} = useDiscardGuard(dirty && !busy, () => setDraft({}));
@@ -129,8 +133,10 @@ export function NetworkFeeLimitsScreen() {
   return (
     <View style={styles.fill}>
       <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
+        <LockNotice />
         <View style={styles.group}>{FIELDS.map((f, i) => row(f, i === FIELDS.length - 1))}</View>
         <Button title={t('vault.save')} onPress={save} loading={busy === 'save'} disabled={!dirty || !ready || locked} />
+        <GateHint gate={gasGate} />
         <PickerSheet
           visible={picking !== null}
           title={picking ? t(TITLE[picking]) : ''}

@@ -19,26 +19,31 @@ import {vaultFunctionName} from './vault-abi';
 
 const LOCK_ABI = parseAbi(['function lockLevel() view returns (uint8)']);
 
-/** Throws, with the reason in the user's language, when the vault's lock refuses one of `calls`. */
-export async function assertVaultAccepts(vault: Address, network: Network, calls: readonly Hex[]): Promise<void> {
-  const actions = calls.flatMap((data) => {
-    const name = vaultFunctionName(data);
-    const action = name ? ACTION_FOR_FUNCTION[name] : undefined;
-    return action ? [action] : [];
-  });
-  if (actions.length === 0) return;
-
+/**
+ * Throws, with the reason in the user's language, when the vault's lock refuses one of `calls`.
+ * Returns the lock level it read — the caller also needs it to choose who pays — or null when it
+ * could not be read.
+ */
+export async function assertVaultAccepts(
+  vault: Address,
+  network: Network,
+  calls: readonly Hex[],
+): Promise<LockLevel | null> {
   let level: LockLevel;
   try {
     const raw = Number(await publicClientFor(network).readContract({address: vault, abi: LOCK_ABI, functionName: 'lockLevel'}));
-    if (raw !== 0 && raw !== 1 && raw !== 2) return;
+    if (raw !== 0 && raw !== 1 && raw !== 2) return null;
     level = raw;
   } catch {
-    return;
+    return null;
   }
 
-  for (const action of actions) {
+  for (const data of calls) {
+    const name = vaultFunctionName(data);
+    const action = name ? ACTION_FOR_FUNCTION[name] : undefined;
+    if (!action) continue;
     const gate = capability(action, {lockLevel: level, role: 'owner'});
     if (!gate.allowed) throw new Error(translate(useLanguage.getState().language, `vault.gate.${gate.reason}`));
   }
+  return level;
 }

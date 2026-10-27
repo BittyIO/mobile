@@ -31,6 +31,8 @@ import {displaySymbol, fmtNum} from '@/core/format';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 import {useAssetCatalog} from '@/core/asset-catalog';
+import {GateHint, LockNotice} from '@/components/LockNotice';
+import {useCapability} from '@/vault/gate';
 import {Explain, type ExplainId} from '@/components/Explain';
 
 /**
@@ -106,7 +108,10 @@ export function EarnDetailScreen() {
    * Which is also why Available below is the plain balance: this page says what is held, the form
    * says what can be moved.
    */
-  const canDeposit = free != null && Number(free) > 0;
+  // A lock pauses deposits and the auto route; withdrawing and claiming stay open.
+  const depositGate = useCapability('deposit');
+  const autoGate = useCapability('setAutoYielding');
+  const canDeposit = depositGate.allowed && free != null && Number(free) > 0;
   /**
    * What the position has made: its balance now, less the principal the flow ledger says went in.
    * Null until both the position and the ledger have landed — a zero there would read as "earned
@@ -258,6 +263,7 @@ export function EarnDetailScreen() {
           colors={[c.accent]}
         />
       }>
+      <LockNotice />
       {/* Who and what, with the rate it pays. */}
       <View style={styles.head}>
         <TokenIcon symbol={symbol} size={40} />
@@ -356,7 +362,7 @@ export function EarnDetailScreen() {
           <PendingSwitch
             value={autoOn}
             pending={autoBusy}
-            disabled={ownerPays && !autoOn}
+            disabled={(ownerPays && !autoOn) || !autoGate.allowed}
             onValueChange={() =>
               ask({
                 title: autoLabel,
@@ -368,6 +374,7 @@ export function EarnDetailScreen() {
           />
         </View>
         <Text style={styles.explain}>{t(lend ? 'mobile.earn.auto_supply_what' : 'mobile.earn.auto_yield_what', {symbol: sym})}</Text>
+        <GateHint gate={autoGate} />
         {ownerPays ? (
           <Pressable onPress={() => nav.navigate('NetworkFee')} hitSlop={6}>
             <Text style={styles.ownerPays}>{t('mobile.earn.auto_needs_vault_fee')}</Text>
@@ -401,6 +408,7 @@ export function EarnDetailScreen() {
           <Text style={styles.priText} numberOfLines={1}>{t(lend ? 'vault.supply' : 'vault.deposit')}</Text>
         </Pressable>
       </View>
+      <GateHint gate={depositGate} />
       {sheet}
       {claim.sheet}
     </ScrollView>

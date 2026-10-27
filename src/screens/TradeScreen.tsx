@@ -88,6 +88,9 @@ import {useAssetCatalog} from '@/core/asset-catalog';
 import {useAssetPick} from '@/core/asset-pick';
 import {activeVaultAddress, useActiveVaultAddress} from '@/core/active-vault';
 import {useAllowancesOff} from '@/vault/risk';
+import {GateHint, LockNotice} from '@/components/LockNotice';
+import {capability} from '@/vault/capabilities';
+import {gateReasonKey, useVaultGate} from '@/vault/gate';
 
 /**
  * What a market swap may fill from its quote before the router refuses it.
@@ -585,7 +588,23 @@ export function TradeScreen() {
   const [mode, setMode] = useState<Mode>('Market');
   // Market trade slippage in 24 hours at $0: the owner turned market trading off (see `marketOk`).
   const tradeVault = useActiveVaultAddress(network);
-  const marketOff = useAllowancesOff(tradeVault, network).marketTrades;
+  const allowanceMarketOff = useAllowancesOff(tradeVault, network).marketTrades;
+  // A lock pauses market trades as well, for its own reason: Market then reads off exactly as it
+  // does at $0, but says the lock is why and leads to Vault status rather than Risk settings.
+  const vaultGate = useVaultGate();
+  const marketGate = capability('marketTrade', vaultGate);
+  const marketLocked = !marketGate.allowed && marketGate.reason !== 'market_trade_off';
+  const marketOff = allowanceMarketOff || marketLocked;
+  // A locked vault cancels nothing (nor will the orderbook take an off-chain cancel from it): the
+  // Cancel stays, dimmed, and says why and when the order runs out on its own.
+  const cancelGate = capability('cancelIntentOrder', vaultGate);
+  const explainNoCancel = (validTo?: number) =>
+    Alert.alert(
+      t('vault.cancel'),
+      [t(gateReasonKey(cancelGate)!), validTo ? t('mobile.vault.order_expires', {time: fmtExpiry(validTo, language)}) : null]
+        .filter(Boolean)
+        .join('\n\n'),
+    );
   /**
    * Which balance of the PAY asset funds the order: the vault's free balance, its Sky savings, or its
    * Aave supply. Chosen in the order sheet, and it never hides Market — a market swap withdraws from
@@ -1601,11 +1620,17 @@ export function TradeScreen() {
     return ((preferred ?? held[0] ?? spent ?? quoteAsset)?.address ?? quoteSym) as Address;
   };
 
+  // A locked vault fills only orders that BUY a stablecoin (the vault checks when the order fills):
+  // selling the base for the quote passes, buying a non-stable base does not.
+  const orderBuys = shownSide === 'buy' ? base : quoteAsset;
+  const intentGate = capability('placeIntentOrder', vaultGate, {buysStablecoin: orderBuys ? orderBuys.kind === 'stable' : undefined});
+  const lockedOrder = intentGate.allowed && (vaultGate.lockLevel === 1 || vaultGate.lockLevel === 2);
+
   // The same checks onSubmit makes, so the button is disabled rather than erroring on tap.
   const canConfirm =
     !!sheetSide && unlocked && !!owner && !!base && !!quoteAsset &&
     Number(amount) > 0 &&
-    (mode === 'Market' ? !marketOff : Number(price) > 0) &&
+    (mode === 'Market' ? !marketOff : Number(price) > 0 && intentGate.allowed) &&
     (mode !== 'TWAP' || Number(parts) >= 2) &&
     !overBalance;
 
@@ -2307,7 +2332,18 @@ export function TradeScreen() {
   };
 
   const explainMarketOff = () =>
-    Alert.alert(t('mobile.trade.market_off_title'), t('mobile.trade.market_off'), [
+    marketLocked
+      ? Alert.alert(t('mobile.trade.market_off_title'), t(gateReasonKey(marketGate)!), [
+          {text: t('common.cancel'), style: 'cancel'},
+          {
+            text: t('mobile.vault.vault_lock'),
+            onPress: () => {
+              setSheetSide(null);
+              nav.navigate('VaultLock');
+            },
+          },
+        ])
+      : Alert.alert(t('mobile.trade.market_off_title'), t('mobile.trade.market_off'), [
       {text: t('common.cancel'), style: 'cancel'},
       {
         text: t('mobile.vault.market_trade_loss_allowance'),
@@ -2845,15 +2881,17 @@ export function TradeScreen() {
             canCancel ? (
               <Pressable
                 onPress={() =>
-                  ask({
-                    title: t('mobile.actions.cancel_intent'),
-                    gas: relayGasFor({}),
-                    run: () => onCancelTwap(g),
-                  })
+                  !cancelGate.allowed
+                    ? explainNoCancel()
+                    : ask({
+                        title: t('mobile.actions.cancel_intent'),
+                        gas: relayGasFor({}),
+                        run: () => onCancelTwap(g),
+                      })
                 }
                 disabled={cancellingTwap === g.appData}
                 hitSlop={8}>
-                <Text style={styles.cancelInline}>
+                <Text style={[styles.cancelInline, !cancelGate.allowed && styles.cancelOff]}>
                   {cancellingTwap === g.appData ? t('mobile.trade.cancelling') : t('vault.cancel')}
                 </Text>
               </Pressable>
@@ -2961,6 +2999,7 @@ export function TradeScreen() {
               <Pressable
                 onPress={(ev) => {
                   ev.stopPropagation();
+                  if (!cancelGate.allowed) return explainNoCancel(o.validTo);
                   ask({
                     title: t('mobile.actions.cancel_intent'),
                     message: describeOrder(o, network),
@@ -2970,7 +3009,7 @@ export function TradeScreen() {
                 }}
                 disabled={cancelling === o.uid}
                 hitSlop={8}>
-                <Text style={styles.cancelInline}>{cancelling === o.uid ? t('mobile.trade.cancelling') : t('common.cancel')}</Text>
+                <Text style={[styles.cancelInline, !cancelGate.allowed && styles.cancelOff]}>{cancelling === o.uid ? t('mobile.trade.cancelling') : t('common.cancel')}</Text>
               </Pressable>
             ) : null
           }
@@ -3319,7 +3358,7 @@ export function TradeScreen() {
             <Pressable
               style={styles.cancelAllRow}
               onPress={() =>
-                ask({
+                !cancelGate.allowed ? explainNoCancel() : ask({
                   title: t('mobile.actions.cancel_intents', {count: openUids.length}),
                   // One transaction invalidates every uid, so the fee does not scale with the count.
                   gas: relayGasFor({}),
@@ -3442,6 +3481,7 @@ export function TradeScreen() {
         closable={!busy}
         overlay={orderOverlay}>
         <View style={styles.sheetBody}>
+            <LockNotice beforeNavigate={() => setSheetSide(null)} />
 
             {/* Order type as plain labels from the left, like the Overview's asset categories, rather
                 than a segmented control stretched across the sheet. */}
@@ -3469,7 +3509,9 @@ export function TradeScreen() {
             </View>
             {mode === 'Market' && marketOff ? (
               <Pressable onPress={explainMarketOff} hitSlop={6}>
-                <Text style={styles.marketOff}>{t('mobile.trade.market_off_line')}</Text>
+                <Text style={styles.marketOff}>
+                  {marketLocked ? t(gateReasonKey(marketGate)!) : t('mobile.trade.market_off_line')}
+                </Text>
               </Pressable>
             ) : null}
 
@@ -3623,6 +3665,10 @@ export function TradeScreen() {
               fee={feeApplies}
               free={feeFree}
             />
+            {mode !== 'Market' ? <GateHint gate={intentGate} /> : null}
+            {mode !== 'Market' && lockedOrder ? (
+              <Text style={styles.marketOff}>{t('mobile.vault.lock_order_no_cancel')}</Text>
+            ) : null}
         </View>
       </FormSheet>
       {/* The full position, opened from the Today P&L on the header line — amount, cost basis,
@@ -3767,6 +3813,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   // the top only, which left this sitting against the card's top edge instead of in it.
   emptySearch: {color: c.subtext, fontSize: 13, textAlign: 'center', paddingVertical: 36},
   cancelInline: {color: c.danger, fontSize: 15, fontWeight: '600'},
+  cancelOff: {opacity: 0.4},
   /**
    * Over the page, not a band of it.
    *

@@ -9,7 +9,9 @@ import {showTx} from '@/components/Toast';
 import {usePending} from '@/vault/pending';
 import {useConfirmAction} from '@/components/ConfirmAction';
 import {relayGasFor} from '@/vault/fee-quote';
+import {Alert} from 'react-native';
 import {useAssetCatalog} from '@/core/asset-catalog';
+import {gateReasonKey, useCapability} from '@/vault/gate';
 
 export type AdapterUpgradeRow = {
   key: string;
@@ -41,6 +43,8 @@ export function useAdapterVersions(): {
   const vault = useActiveVaultAddress(network);
 
   const [statuses, setStatuses] = useState<AdapterStatus[]>([]);
+  // A locked vault upgrades nothing: the row stays, and a tap says why (vault/gate).
+  const upgradeGate = useCapability('upgradeProtocol');
   // Cleared first and guarded, as on the version row: a switch never shows the last network's
   // versions, nor lets its late answer land on the new one.
   const load = useCallback(() => {
@@ -110,7 +114,9 @@ export function useAdapterVersions(): {
         value: working === key ? t('vault.confirming') : versions,
         confirming: working === key,
         onPress: () => {
-          if (!busyHere) ask({title, message: versions, gas: relayGasFor({setup: true}), run});
+          if (busyHere) return;
+          if (!upgradeGate.allowed) return Alert.alert(title, t(gateReasonKey(upgradeGate)!));
+          ask({title, message: versions, gas: relayGasFor({setup: true}), run});
         },
       },
     ];

@@ -6,7 +6,8 @@ import type {RootStackParamList} from '@/App';
 import {useT} from '@/i18n';
 import {useStyles, type Colors} from '@/theme';
 import {SettingsRow, SettingsGroup} from '@/components/SettingsRow';
-import {getLockLevel, getRiskConfig, type LockLevel} from '@/vault/risk';
+import {getRiskConfig} from '@/vault/risk';
+import {useVaultGate} from '@/vault/gate';
 import {SAFETY_TITLE, levelOf, valuesInForce, type SafetyLevelOrCustom} from '@/core/safety-levels';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
@@ -36,13 +37,9 @@ export function SecurityScreen() {
   const isSafe = useVaults((s) => !!s.vaults.find((v) => v.index === s.activeIndex)?.safe);
   const quantumOn = useRotationOn(network, vault);
 
-  // The lock state answers the Vault lock row. Re-read on focus: the row's own page changes it.
-  const [lockLevel, setLockLevel] = useState<LockLevel | null>(null);
-  useFocusEffect(
-    useCallback(() => {
-      if (vault) getLockLevel(vault, network).then(setLockLevel);
-    }, [vault, network]),
-  );
+  // The lock state answers the Vault lock row: the shared gate, read again on focus and whenever a
+  // write settles — the row's own page changes it.
+  const {lockLevel} = useVaultGate();
   // The safety level answers the Safety settings row.
   const [level, setLevel] = useState<SafetyLevelOrCustom | null>(null);
   useFocusEffect(

@@ -16,6 +16,8 @@ import {relayGasFor} from '@/vault/fee-quote';
 import {useStyles, type Colors} from '@/theme';
 import {displaySymbol} from '@/core/format';
 import {useAssetCatalog} from '@/core/asset-catalog';
+import {GateHint, LockNotice} from '@/components/LockNotice';
+import {useCapability} from '@/vault/gate';
 
 /**
  * Auto-yield — pick a default yield protocol per asset. Idle balances of that asset are swept into the
@@ -99,9 +101,14 @@ export function AutoYieldScreen() {
     }
   };
 
+  // A lock pauses both the routes and the sweep: setAutoYielding and autoYield are refused alike.
+  const routeGate = useCapability('setAutoYielding');
+  const sweepGate = useCapability('autoYield');
   return (
     <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
+      <LockNotice />
       <Text style={styles.hint}>{t('mobile.vault.auto_yield_hint')}</Text>
+      <GateHint gate={routeGate} />
 
       {assets.map((a) => {
         const current = routes.get(a.address.toLowerCase()) ?? zeroAddress;
@@ -115,7 +122,7 @@ export function AutoYieldScreen() {
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
               <Pressable
-                disabled={busy !== null}
+                disabled={busy !== null || !routeGate.allowed}
                 onPress={() => askSet(a.address, zeroAddress, `${a.symbol}-none`, t('vault.none'))}
                 style={[styles.chip, noneOn && styles.chipOn]}>
                 <Text style={[styles.chipText, noneOn && styles.chipTextOn]}>
@@ -128,7 +135,7 @@ export function AutoYieldScreen() {
                 return (
                   <Pressable
                     key={y.address}
-                    disabled={busy !== null}
+                    disabled={busy !== null || !routeGate.allowed}
                     onPress={() => askSet(a.address, y.address, key, y.name)}
                     style={[styles.chip, on && styles.chipOn]}>
                     <Text style={[styles.chipText, on && styles.chipTextOn]}>
@@ -140,7 +147,7 @@ export function AutoYieldScreen() {
             </ScrollView>
               {!noneOn ? (
                 <Pressable
-                  disabled={busy !== null}
+                  disabled={busy !== null || !sweepGate.allowed}
                   onPress={() => askSweep(a.address, `${a.symbol}-sweep`)}
                   style={styles.sweepBtn}>
                   <Text style={styles.sweepText}>

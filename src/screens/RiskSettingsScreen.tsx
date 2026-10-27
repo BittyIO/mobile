@@ -4,7 +4,8 @@ import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import {useDiscardGuard} from '@/components/DiscardGuard';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
-import {getLockLevel, getRiskConfig, updateRiskSettings, useAllowsZeroAllowance, ZERO_ALLOWANCE_SINCE, type LockLevel, type RiskConfig, type RiskField} from '@/vault/risk';
+import {getRiskConfig, updateRiskSettings, useAllowsZeroAllowance, ZERO_ALLOWANCE_SINCE, type RiskConfig, type RiskField} from '@/vault/risk';
+import {useCapability} from '@/vault/gate';
 import {useRiskDraft} from '@/core/risk-draft';
 import {useVaultWrite} from '@/components/useVaultWrite';
 import {Button} from '@/components/Button';
@@ -59,7 +60,6 @@ export function RiskSettingsScreen() {
     return !!v && (v.sendDailyAllowance === 0n || v.marketTradeDailyLossAllowance === 0n);
   };
   const [risk, setRisk] = useState<RiskConfig | null>(null);
-  const [lockLevel, setLockLevel] = useState<LockLevel | null>(null);
   const [customOpen, setCustomOpen] = useState(false);
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const changes = useRiskDraft((s) => s.changes);
@@ -70,7 +70,6 @@ export function RiskSettingsScreen() {
   const load = useCallback(() => {
     if (!vault) return;
     getRiskConfig(vault, network).then(setRisk);
-    getLockLevel(vault, network).then(setLockLevel);
   }, [vault, network]);
 
   const {busy, ready, run, sheet} = useVaultWrite(() => {
@@ -115,7 +114,8 @@ export function RiskSettingsScreen() {
       }
     : null;
   const selected: SafetyLevelOrCustom | null = picked ? levelOf(picked) : null;
-  const locked = lockLevel === 1 || lockLevel === 2;
+  // A lock freezes the risk settings in both directions (vault/gate).
+  const locked = !useCapability('updateRisk').allowed;
 
   // A change already waiting: the level it lands on, and when the last of it does.
   const waiting = risk ? RISK_FIELDS.filter((f) => risk.pending[f]) : [];

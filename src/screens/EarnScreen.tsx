@@ -22,6 +22,7 @@ import type {Position} from '@/vault/positions';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 import {useAssetCatalog} from '@/core/asset-catalog';
+import {LockNotice} from '@/components/LockNotice';
 
 const fmt = (v: number | string): string => fmtNum(Number(v));
 
@@ -276,6 +277,7 @@ export function EarnScreen() {
       scrollIndicatorInsets={{top: headerHeight}}
       automaticallyAdjustContentInsets={false}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.text} colors={[c.accent]} />}>
+      <LockNotice />
       {/* Flexible Yield: Sky and Lido share it, so each row carries its protocol after the APY. */}
       <View style={styles.section}>
         <EarnTable title={t('vault.flexible_yield')}>

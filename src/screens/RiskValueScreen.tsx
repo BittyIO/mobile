@@ -2,7 +2,8 @@ import React, {useCallback, useState} from 'react';
 import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {useFocusEffect, useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '@/App';
-import {getRiskConfig, getLockLevel, RISK_BOUNDS, useAllowsZeroAllowance, type RiskConfig, type LockLevel} from '@/vault/risk';
+import {getRiskConfig, RISK_BOUNDS, useAllowsZeroAllowance, type RiskConfig} from '@/vault/risk';
+import {useCapability} from '@/vault/gate';
 import {OptionRow, SettingsGroup} from '@/components/SettingsRow';
 import {fmtRiskValue, fmtPending, riskHintKey, riskZeroHintKey} from '@/components/riskFormat';
 import {useRiskDraft} from '@/core/risk-draft';
@@ -41,7 +42,6 @@ export function RiskValueScreen() {
   const c = useColors();
   const {field} = useRoute<RouteProp<RootStackParamList, 'VaultRiskValue'>>().params;
   const [risk, setRisk] = useState<RiskConfig | null>(null);
-  const [lockLevel, setLockLevel] = useState<LockLevel | null>(null);
   const [customOpen, setCustomOpen] = useState(false);
   const [custom, setCustom] = useState('');
 
@@ -55,7 +55,6 @@ export function RiskValueScreen() {
   const load = useCallback(() => {
     if (!vault) return;
     getRiskConfig(vault, network).then(setRisk);
-    getLockLevel(vault, network).then(setLockLevel);
   }, [vault, network]);
   useFocusEffect(load);
 
@@ -69,7 +68,7 @@ export function RiskValueScreen() {
   const zeroHint = zeroOk ? riskZeroHintKey(field) : null;
   const isCustom = current != null && !presets.includes(current);
   // A lock freezes these too, so nothing can be picked rather than signed and refused on chain.
-  const locked = lockLevel === 1 || lockLevel === 2;
+  const locked = !useCapability('updateRisk').allowed;
   const canPick = !locked && risk != null;
   const fmt = (v: bigint) => fmtRiskValue(field, v, t);
 

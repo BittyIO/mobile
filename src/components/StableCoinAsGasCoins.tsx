@@ -18,6 +18,7 @@ import {displaySymbol} from '@/core/format';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {inFeeCoinOrder, setFeeCoinOrder} from '@/core/prefs';
 import {useReorder} from '@/components/useReorder';
+import {useCapability} from '@/vault/gate';
 
 /**
  * StableCoinAsGas config as one section card — which stable coins (and the vault's WETH, from v1.0.2) may pay the relay fee. Empty allowlist = any
@@ -154,7 +155,9 @@ export function StableCoinAsGasCoins({
 
   // Nothing is writable until the vault exists and its config has been read: its first action
   // activates it with the defaults, and a switch cannot narrow a list nobody has seen yet.
-  const locked = !known || preActivation || busy !== null;
+  // A lock freezes the fee settings too (vault/gate): the switches show, and do not move.
+  const gasGate = useCapability('setTokenAsGas');
+  const locked = !known || preActivation || busy !== null || !gasGate.allowed;
 
   const rows = coins.length;
   const onCount = coins.filter((a) => allowed(a.address)).length;

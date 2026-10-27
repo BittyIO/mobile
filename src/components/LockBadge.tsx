@@ -1,14 +1,11 @@
-import React, {useCallback, useEffect, useState} from 'react';
-import {AppState, Pressable, StyleSheet} from 'react-native';
-import {useFocusEffect, useNavigation} from '@react-navigation/native';
+import React from 'react';
+import {Pressable, StyleSheet} from 'react-native';
+import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
 import {SettingsIcon} from '@/components/SettingsIcon';
 import {LOCK_ICON, LOCK_TITLE} from '@/core/lock-status';
-import {useNetwork} from '@/core/network-store';
-import {useActiveVaultAddress} from '@/core/active-vault';
-import {getLockLevel, type LockLevel} from '@/vault/risk';
-import {usePending} from '@/vault/pending';
+import {useVaultGate} from '@/vault/gate';
 import {useT} from '@/i18n';
 
 /**
@@ -24,21 +21,8 @@ import {useT} from '@/i18n';
 export function LockBadge() {
   const {t} = useT();
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const network = useNetwork((s) => s.network);
-  const vault = useActiveVaultAddress(network);
-  const [level, setLevel] = useState<LockLevel>(0);
-
-  const read = useCallback(() => {
-    if (!vault) return setLevel(0);
-    getLockLevel(vault, network).then(setLevel);
-  }, [vault, network]);
-  useFocusEffect(read);
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (s) => s === 'active' && read());
-    return () => sub.remove();
-  }, [read]);
-  const settled = usePending((s) => s.txs.filter((x) => x.status !== 'pending').length);
-  useEffect(read, [settled, read]);
+  // The shared gate (vault/gate) reads on the same occasions this badge used to read for itself.
+  const level = useVaultGate().lockLevel ?? 0;
 
   if (level === 0) return null;
   return (
