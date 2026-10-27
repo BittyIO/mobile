@@ -379,18 +379,9 @@ function Root() {
     <NavigationContainer theme={navTheme} ref={navigationRef}>
       <Stack.Navigator
         screenOptions={({route}) => ({
-          // The page's ⓘ, for a page that is about one thing worth explaining (see HEADER_EXPLAIN):
-          // right after the title it explains, not off in the corner where it read as a page action.
-          headerTitle: explainFor(route)
-            ? ({children, tintColor}) => (
-                <View style={styles.headerTitleRow}>
-                  <Text style={[styles.headerTitle, tintColor ? {color: tintColor} : null]} numberOfLines={1}>
-                    {children}
-                  </Text>
-                  <Explain id={explainFor(route)!} size={18} />
-                </View>
-              )
-            : undefined,
+          // The page's ⓘ, for a page that is about one thing worth explaining (see HEADER_EXPLAIN). A
+          // page that sets its own header-right replaces it.
+          headerRight: explainFor(route) ? () => <Explain id={explainFor(route)!} size={20} /> : undefined,
           // Translucent header with the same tinted ground as the tab header, so a pushed page and a
           // tab look alike; the content scrolls under it. Pages set
           // contentInsetAdjustmentBehavior="automatic" so their content starts below the header.
