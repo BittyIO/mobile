@@ -26,8 +26,8 @@ export function Explain({id, size = 17}: {id: ExplainId; size?: number}) {
     <>
       <Pressable onPress={() => setOpen(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel={title}>
         <Svg width={size} height={size} viewBox="0 0 24 24">
-          <Circle cx={12} cy={12} r={10} stroke={c.subtext} strokeWidth={2} fill="none" />
-          <Path d="M12 16v-4M12 8h.01" stroke={c.subtext} strokeWidth={2.2} strokeLinecap="round" />
+          <Circle cx={12} cy={12} r={10} stroke={c.accent} strokeWidth={2} fill="none" />
+          <Path d="M12 16v-4M12 8h.01" stroke={c.accent} strokeWidth={2.2} strokeLinecap="round" />
         </Svg>
       </Pressable>
       <Sheet visible={open} title={title} onClose={() => setOpen(false)}>
