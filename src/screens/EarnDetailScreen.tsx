@@ -31,7 +31,7 @@ import {displaySymbol, fmtNum} from '@/core/format';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 import {useAssetCatalog} from '@/core/asset-catalog';
-import {GateHint} from '@/components/LockNotice';
+import {GateHint, LockIcon, useLockLevel} from '@/components/LockNotice';
 import {useCapability} from '@/vault/gate';
 
 /**
@@ -109,6 +109,8 @@ export function EarnDetailScreen() {
    */
   // A lock pauses deposits and the auto route; withdrawing and claiming stay open.
   const depositGate = useCapability('deposit');
+  const lockLevel = useLockLevel();
+  const depositLocked = lockLevel > 0 && !depositGate.allowed;
   const autoGate = useCapability('setAutoYielding');
   const canDeposit = depositGate.allowed && free != null && Number(free) > 0;
   /**
@@ -385,14 +387,19 @@ export function EarnDetailScreen() {
         {/* Nothing free in the vault, nothing to put in — and null while the balances load, which
             is also not a moment to start a deposit. Faded rather than recoloured: that is what
             every other primary button in the app does when it is disabled. */}
+        {/* A lock refuses a deposit (a withdrawal still goes through): the button keeps its words,
+            disabled behind the lock's icon, as every refused confirm does. */}
         <Pressable
           style={[styles.btn, styles.depBtn, !canDeposit && styles.btnFaded]}
           disabled={!canDeposit}
           onPress={() => go('deposit')}>
-          <Text style={styles.priText} numberOfLines={1}>{t(lend ? 'vault.supply' : 'vault.deposit')}</Text>
+          <View style={styles.btnRow}>
+            {depositLocked ? <LockIcon level={lockLevel as 1 | 2} /> : null}
+            <Text style={styles.priText} numberOfLines={1}>{t(lend ? 'vault.supply' : 'vault.deposit')}</Text>
+          </View>
         </Pressable>
       </View>
-      <GateHint gate={depositGate} />
+      {depositLocked ? null : <GateHint gate={depositGate} />}
       {sheet}
       {claim.sheet}
     </ScrollView>
@@ -434,6 +441,7 @@ const makeStyles = (c: Colors) =>
     explain: {color: c.subtext, fontSize: 13, lineHeight: 19},
     ownerPays: {color: c.warning, fontSize: 13, lineHeight: 19},
     actions: {flexDirection: 'row', gap: 12, marginTop: 8},
+    btnRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
     btn: {flex: 1, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12},
     depBtn: {backgroundColor: c.accent},
     btnFaded: {opacity: 0.5},
