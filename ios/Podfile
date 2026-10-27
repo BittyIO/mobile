@@ -5,6 +5,10 @@ require Pod::Executable.execute_command('node', ['-p',
     {paths: [process.argv[1]]},
   )', __dir__]).strip
 
+# VisionCamera only scans QR codes here: leave out its photo-location code, so the app references no
+# location API and needs no location purpose string (App Store Connect flagged the empty one).
+$VCEnableLocation = false
+
 platform :ios, min_ios_version_supported
 prepare_react_native_project!
 
