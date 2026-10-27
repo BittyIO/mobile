@@ -5,7 +5,7 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
 import {SettingsIcon} from '@/components/SettingsIcon';
 import {LOCK_ICON, LOCK_TITLE} from '@/core/lock-status';
-import {useStyles, type Colors} from '@/theme';
+import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 import {gateReasonKey, useVaultGate} from '@/vault/gate';
 import type {Gate} from '@/vault/capabilities';
@@ -59,35 +59,31 @@ export function LockNotice({
 }
 
 /**
- * An operation's confirm button while the lock refuses that operation: greyed, the lock's own icon
- * and name where the action was, and under it why. Nothing to tap but Lock status — the label says
- * what holds the vault, so the way to undo it is one tap away.
+ * An operation's confirm button while the lock refuses that operation: the whole pill in the lock's
+ * colour — yellow for the emergency lock, red for the forever one — dimmed like any disabled
+ * button, the lock's icon and name where the action was, and under it why.
  *
  * The notice at the top of the page said the same thing a screen away from the control it was
  * about; here it is the control. Screens draw this in place of their button (see {Button}'s and
- * {ConfirmButton}'s `locked`), so a locked confirm reads as locked rather than as merely grey.
+ * {ConfirmButton}'s `locked`).
  */
-export function LockedButton({style, beforeNavigate}: {style?: StyleProp<ViewStyle>; beforeNavigate?: () => void}) {
+export function LockedButton({style}: {style?: StyleProp<ViewStyle>}) {
   const {t} = useT();
+  const c = useColors();
   const styles = useStyles(makeStyles);
-  const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const {lockLevel} = useVaultGate();
   const level = lockLevel === 2 ? 2 : 1;
-  const tint = level === 2 ? FOREVER : TEMP;
   return (
     <View style={[styles.lockedWrap, style]}>
-      <Pressable
-        onPress={() => {
-          beforeNavigate?.();
-          nav.navigate('VaultLock');
-        }}
+      <View
+        accessible
         accessibilityRole="button"
         accessibilityState={{disabled: true}}
         accessibilityLabel={`${t(LOCK_TITLE[level])}. ${t('mobile.vault.lock_notice_op')}`}
-        style={({pressed}) => [styles.locked, {borderColor: tint, opacity: pressed ? 0.7 : 1}]}>
+        style={[styles.locked, {backgroundColor: level === 2 ? FOREVER : c.warning}]}>
         <SettingsIcon name={LOCK_ICON[level]} size={20} round />
-        <Text style={[styles.lockedLabel, {color: tint}]}>{t(LOCK_TITLE[level])}</Text>
-      </Pressable>
+        <Text style={[styles.lockedLabel, {color: level === 2 ? '#fff' : '#000'}]}>{t(LOCK_TITLE[level])}</Text>
+      </View>
       <Text style={styles.hint}>{t('mobile.vault.lock_notice_op')}</Text>
     </View>
   );
@@ -132,8 +128,8 @@ const makeStyles = (c: Colors) =>
     locked: {
       height: 52,
       borderRadius: 26,
-      borderWidth: 1,
-      backgroundColor: c.card,
+      // The disabled look every Button uses.
+      opacity: 0.5,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',

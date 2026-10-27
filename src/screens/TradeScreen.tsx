@@ -3653,7 +3653,6 @@ export function TradeScreen() {
               fee={feeApplies}
               free={feeFree}
               locked={orderLocked}
-              beforeNavigate={() => setSheetSide(null)}
             />
             {mode !== 'Market' && !orderLocked ? <GateHint gate={intentGate} /> : null}
             {mode !== 'Market' && lockedOrder ? (

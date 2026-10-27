@@ -95,9 +95,9 @@ export function ConfirmButton(props: ConfirmProps) {
   return props.locked === undefined ? <PlainConfirmButton {...props} /> : <LockAwareConfirmButton {...props} />;
 }
 
-function LockAwareConfirmButton({locked, beforeNavigate, ...props}: ConfirmProps) {
+function LockAwareConfirmButton({locked, ...props}: ConfirmProps) {
   const vaultLocked = useVaultLocked();
-  if (locked && vaultLocked) return <LockedButton style={props.style} beforeNavigate={beforeNavigate} />;
+  if (locked && vaultLocked) return <LockedButton style={props.style} />;
   return <PlainConfirmButton {...props} />;
 }
 
@@ -115,8 +115,6 @@ type ConfirmProps = {
   free?: boolean;
   /** The lock refuses this operation: drawn as {LockedButton}, with no fee line, while locked. */
   locked?: boolean;
-  /** For a button inside a sheet: close it before the locked state opens Lock status. */
-  beforeNavigate?: () => void;
 };
 
 function PlainConfirmButton({
