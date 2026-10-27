@@ -9,7 +9,6 @@ import {useWallet} from '@/wallet/store';
 import {TabIcon, type TabName} from '@/components/TabIcon';
 import {NetworkSwitcher} from '@/components/NetworkSwitcher';
 import {LockBadge} from '@/components/LockBadge';
-import {Explain, type ExplainId} from '@/components/Explain';
 import {useGuardProtocols} from '@/core/guard-catalog';
 import {useNetwork} from '@/core/network-store';
 import {RISK_TITLE} from '@/components/riskFormat';
@@ -52,7 +51,6 @@ export type RootStackParamList = {
     /** Lending route rather than a staking one — picks the wording throughout. */
     lend: boolean;
   };
-
   EarnAction: {
     mode: 'deposit' | 'withdraw';
     protocol?: string;
@@ -139,39 +137,6 @@ export type RootStackParamList = {
   VaultAssetManager: undefined;
   VaultSetAssetManager: undefined;
 };
-
-/**
- * The explanation each page's ⓘ opens, for pages that are about one thing (components/Explain). One
- * value of a security level opens what that value does: the timelock, or the daily limits.
- */
-const HEADER_EXPLAIN: Partial<Record<keyof RootStackParamList, ExplainId>> = {
-  PendingChanges: 'timelock',
-  VaultLock: 'lock_levels',
-  VaultLockAction: 'lock_levels',
-  NetworkFee: 'fee_payer',
-  NetworkFeeVault: 'fee_payer',
-  NetworkFeeOwner: 'fee_payer',
-  NetworkFeeLimits: 'fee_payer',
-  VaultWhitelist: 'whitelist',
-  VaultWhitelistAdd: 'whitelist',
-  VaultRiskSettings: 'security_level',
-  VaultTransferOwnership: 'transfer_ownership',
-  QuantumSafe: 'quantum',
-  SafeApprovals: 'safe_vault',
-  AddSafeVault: 'safe_vault',
-  VaultAssetManager: 'asset_manager',
-  VaultSetAssetManager: 'asset_manager',
-  VaultRecoveryPhrase: 'recovery_phrase',
-  AutoYield: 'auto_yield',
-  VaultAssets: 'allow_list',
-};
-
-function explainFor(route: {name: string; params?: object}): ExplainId | undefined {
-  if (route.name === 'VaultRiskValue') {
-    return (route.params as {field?: string} | undefined)?.field === 'timelock' ? 'timelock' : 'allowances';
-  }
-  return HEADER_EXPLAIN[route.name as keyof RootStackParamList];
-}
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
@@ -378,10 +343,7 @@ function Root() {
   return (
     <NavigationContainer theme={navTheme} ref={navigationRef}>
       <Stack.Navigator
-        screenOptions={({route}) => ({
-          // The page's ⓘ, for a page that is about one thing worth explaining (see HEADER_EXPLAIN). A
-          // page that sets its own header-right replaces it.
-          headerRight: explainFor(route) ? () => <Explain id={explainFor(route)!} size={20} /> : undefined,
+        screenOptions={{
           // Translucent header with the same tinted ground as the tab header, so a pushed page and a
           // tab look alike; the content scrolls under it. Pages set
           // contentInsetAdjustmentBehavior="automatic" so their content starts below the header.
@@ -394,7 +356,7 @@ function Root() {
           headerBackTitle: '',
           // As above: a pushed screen covers the tabs, and the tabs keep measuring underneath it.
           freezeOnBlur: true,
-        })}>
+        }}>
         <Stack.Screen name="Main" component={MainTabs} options={{headerShown: false}} />
         <Stack.Screen name="Payments" getComponent={() => require('@/screens/PaymentsScreen').PaymentsScreen} options={{title: t('vault.send')}} />
         <Stack.Screen

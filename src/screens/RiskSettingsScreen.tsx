@@ -215,7 +215,6 @@ export function RiskSettingsScreen() {
               key={f}
               icon={ICON[f]}
               title={t(RISK_TITLE[f])}
-              info={f === 'timelock' ? 'timelock' : 'allowances'}
               value={picked ? fmt(f, picked[f]) : undefined}
               sub={sub(f)}
               // Only Custom is edited by hand; a preset level's numbers are shown, not offered.
