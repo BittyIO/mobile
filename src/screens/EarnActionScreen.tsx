@@ -35,7 +35,6 @@ import {displaySymbol, fmtNum, fmtShort, floor6, round6} from '@/core/format';
 import {useT} from '@/i18n';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {activeVaultAddress} from '@/core/active-vault';
-import {GateHint} from '@/components/LockNotice';
 import {useCapability} from '@/vault/gate';
 
 /**
@@ -533,8 +532,8 @@ export function EarnActionScreen() {
         {/* Directly under the field, the way the order sheet puts its confirm under the amount.
             Pinned to the bottom it floated a long way from the thing it confirms, and in a short
             sheet it collided with it. */}
-        <ConfirmButton onPress={onSubmit} disabled={!canSubmit} gas={feeGas} style={styles.submit} />
-        {isDeposit ? <GateHint gate={depositGate} /> : null}
+        {/* A lock refuses a deposit; a withdrawal still goes through. */}
+        <ConfirmButton onPress={onSubmit} disabled={!canSubmit} gas={feeGas} style={styles.submit} locked={isDeposit && !depositGate.allowed} />
       </ScrollView>
       {/* Inside the form sheet, like the order form's own pickers: presented from outside it, a
           sheet opens behind the one being looked at. */}

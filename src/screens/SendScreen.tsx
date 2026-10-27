@@ -34,7 +34,6 @@ import {quoteRelayFeeUsd, relayGasFor} from '@/vault/fee-quote';
 import {FEE_WETH, feeCoinForSpend, reserveHeld, resolveFeeReserve, useWethFeeCoin} from '@/vault/stableCoinAsGas';
 
 import {useAssetCatalog} from '@/core/asset-catalog';
-import {LockNotice} from '@/components/LockNotice';
 import {useCapability} from '@/vault/gate';
 
 /**
@@ -457,7 +456,6 @@ export function SendScreen() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* The scroll view is the whole page, so a drag anywhere scrolls; the button holds the bottom. */}
       <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.scroll} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-        <LockNotice />
         {/* Grouped like Settings: who, then what, then a way to add more. */}
         <SettingsGroup>
             {/* Chosen, not typed. The common case on this screen is paying somewhere the vault
@@ -570,7 +568,7 @@ export function SendScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-      <ConfirmButton onPress={onSubmit} disabled={!canSubmit} gas={feeGas} />
+      <ConfirmButton onPress={onSubmit} disabled={!canSubmit} gas={feeGas} locked={lockedSends && bookBlocked} />
       </View>
       {/* One flat list of every place the vault can pay from. Tapping an entry picks it and
           closes — a row carries one source, and its amount is set on the card. */}

@@ -1,4 +1,5 @@
 import {useCallback, useEffect, useState} from 'react';
+import {create} from 'zustand';
 import type {Address} from 'viem';
 import type {Network} from '@/core/chain';
 import {fetchPositions, fetchSkyPosition, type Position} from './positions';
@@ -13,8 +14,16 @@ type State = {
   refresh: () => void;
 };
 
-const sameRow = (a: Position, b: Position) =>
-  a.protocol.toLowerCase() === b.protocol.toLowerCase() && a.asset.toLowerCase() === b.asset.toLowerCase();
+/**
+ * How many times each vault's positions have been asked to re-read, shared by every screen.
+ *
+ * Each screen holds its own copy of the positions, so a refresh used to reach only the screen that
+ * asked: pulling the Overview after a limit order filled showed the new figures there while Trade
+ * kept offering the old Yielding balance to spend. A refresh now moves this count, and every copy
+ * of that vault's positions re-reads.
+ */
+const useEpoch = create<{byKey: Record<string, number>}>(() => ({byKey: {}}));
+const bumpEpoch = (key: string) => useEpoch.setState((s) => ({byKey: {...s.byKey, [key]: (s.byKey[key] ?? 0) + 1}}));
 
 /**
  * The vault's staking + lending positions.
@@ -35,10 +44,12 @@ export function useVaultPositions(vault: Address | null, network: Network): Stat
   // Which vault the last finished read was for, so a switch counts as not loaded yet.
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [nonce, setNonce] = useState(0);
   const loadKey = vault ? `${network}:${vault.toLowerCase()}` : null;
+  const nonce = useEpoch((s) => (loadKey ? s.byKey[loadKey] ?? 0 : 0));
 
-  const refresh = useCallback(() => setNonce((n) => n + 1), []);
+  const refresh = useCallback(() => {
+    if (loadKey) bumpEpoch(loadKey);
+  }, [loadKey]);
 
   /**
    * Re-read, fresh, whenever a transaction on this network confirms — from any screen.
@@ -72,11 +83,20 @@ export function useVaultPositions(vault: Address | null, network: Network): Stat
     }
     let live = true;
     const forKey = `${network}:${vault.toLowerCase()}`;
-    let sky: Position | null = null;
+    // undefined until the live read answers; null when it answered that there is nothing in Sky.
+    let sky: Position | null | undefined;
     setLoading(true);
     setError(null);
 
-    const merge = (served: Position[]) => (sky && !served.some((p) => sameRow(p, sky!)) ? [...served, sky] : served);
+    // The live Sky read wins over the cache's row for it: the cache can trail the chain by a
+    // refresh, and an order that sold sUSDS left it showing the balance from before the fill —
+    // or showing one at all, after an order that sold the whole of it. A read that failed
+    // (undefined) leaves the cache's row alone.
+    const merge = (served: Position[]) => {
+      if (sky === undefined) return served;
+      const rest = served.filter((p) => !(p.kind === 'staked' && p.protocolName === 'Sky'));
+      return sky ? [...rest, sky] : rest;
+    };
 
     let apiError: string | null = null;
     Promise.all([
@@ -84,7 +104,7 @@ export function useVaultPositions(vault: Address | null, network: Network): Stat
         apiError = String((e as Error)?.message ?? e);
         return [] as Position[];
       }),
-      fetchSkyPosition(vault, network).catch(() => null),
+      fetchSkyPosition(vault, network).catch(() => undefined),
     ])
       .then(([served, live_sky]) => {
         if (!live) return;

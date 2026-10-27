@@ -3,8 +3,7 @@ import type {MobileTable} from './index';
 // Settings › Security / Manage / StableCoinAsGas / Auto-yield / Delegation screens.
 export const vault: MobileTable = {
   en: {
-    lock_notice_temp: 'Deposits, trades, sends to new addresses and settings are paused. You can still withdraw, pay saved recipients whose waiting period is over, and place orders that buy stablecoins. Tap for Vault status.',
-    lock_notice_forever: 'This is permanent. You can still withdraw, pay saved recipients whose waiting period is over, and place orders that buy stablecoins.',
+    lock_notice_op: 'This operation is not supported when the vault is locked.',
     lock_send_book_only: 'The vault is locked: it pays only saved recipients whose waiting period is over.',
     lock_order_no_cancel: 'While the vault is locked this order can\'t be cancelled. It stays open until it fills or expires.',
     order_expires: 'This order expires {{time}}.',
@@ -152,8 +151,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'The delegate loses trading access immediately.',
   },
   zh: {
-    lock_notice_temp: '存入、交易、向新地址转账和设置已暂停。你仍可取出、向等待期已结束的已保存收款人付款，以及下买入稳定币的订单。点按查看金库状态。',
-    lock_notice_forever: '此状态是永久的。你仍可取出、向等待期已结束的已保存收款人付款，以及下买入稳定币的订单。',
+    lock_notice_op: '金库锁定时不支持此操作。',
     lock_send_book_only: '金库已锁定：只向等待期已结束的已保存收款人付款。',
     lock_order_no_cancel: '金库锁定期间无法取消此订单。它会一直有效，直到成交或过期。',
     order_expires: '此订单将于 {{time}} 过期。',
@@ -295,8 +293,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: '受托人将立即失去交易权限。',
   },
   'zh-TW': {
-    lock_notice_temp: '存入、交易、向新地址轉帳和設定已暫停。你仍可取出、向等待期已結束的已儲存收款人付款，以及下買入穩定幣的訂單。點按查看金庫狀態。',
-    lock_notice_forever: '此狀態是永久的。你仍可取出、向等待期已結束的已儲存收款人付款，以及下買入穩定幣的訂單。',
+    lock_notice_op: '金庫鎖定時不支援此操作。',
     lock_send_book_only: '金庫已鎖定：只向等待期已結束的已儲存收款人付款。',
     lock_order_no_cancel: '金庫鎖定期間無法取消此訂單。它會一直有效，直到成交或過期。',
     order_expires: '此訂單將於 {{time}} 過期。',
@@ -407,8 +404,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: '受託人將立即失去交易權限。',
   },
   ja: {
-    lock_notice_temp: '預け入れ、取引、新しいアドレスへの送金、設定は停止中です。引き出し、待機期間が終わった保存済みの受取人への支払い、ステーブルコインを買う注文は引き続き可能です。タップで金庫の状態へ。',
-    lock_notice_forever: 'これは永久的です。引き出し、待機期間が終わった保存済みの受取人への支払い、ステーブルコインを買う注文は引き続き可能です。',
+    lock_notice_op: '金庫がロック中のため、この操作はできません。',
     lock_send_book_only: '金庫はロック中です：待機期間が終わった保存済みの受取人にのみ支払います。',
     lock_order_no_cancel: '金庫のロック中はこの注文をキャンセルできません。約定するか期限切れになるまで有効です。',
     order_expires: 'この注文は {{time}} に期限切れになります。',
@@ -516,8 +512,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: '委任先は直ちに取引アクセスを失います。',
   },
   ko: {
-    lock_notice_temp: '예치, 거래, 새 주소로 보내기, 설정이 일시 중지되었습니다. 출금, 대기 기간이 끝난 저장된 수신자에게 보내기, 스테이블코인을 사는 주문은 계속 할 수 있습니다. 탭하여 금고 상태 보기.',
-    lock_notice_forever: '이 상태는 영구적입니다. 출금, 대기 기간이 끝난 저장된 수신자에게 보내기, 스테이블코인을 사는 주문은 계속 할 수 있습니다.',
+    lock_notice_op: '금고가 잠겨 있는 동안에는 이 작업을 할 수 없습니다.',
     lock_send_book_only: '금고가 잠겨 있습니다: 대기 기간이 끝난 저장된 수신자에게만 보냅니다.',
     lock_order_no_cancel: '금고가 잠겨 있는 동안에는 이 주문을 취소할 수 없습니다. 체결되거나 만료될 때까지 유지됩니다.',
     order_expires: '이 주문은 {{time}}에 만료됩니다.',
@@ -625,8 +620,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: '위임자는 즉시 거래 권한을 잃습니다.',
   },
   fr: {
-    lock_notice_temp: 'Les dépôts, les trades, les envois vers de nouvelles adresses et les réglages sont en pause. Vous pouvez toujours retirer, payer les destinataires enregistrés dont l\'attente est terminée et passer des ordres qui achètent des stablecoins. Touchez pour l\'état du coffre.',
-    lock_notice_forever: 'C\'est définitif. Vous pouvez toujours retirer, payer les destinataires enregistrés dont l\'attente est terminée et passer des ordres qui achètent des stablecoins.',
+    lock_notice_op: 'Cette opération n\'est pas possible tant que le coffre est verrouillé.',
     lock_send_book_only: 'Le coffre est verrouillé : il ne paie que les destinataires enregistrés dont l\'attente est terminée.',
     lock_order_no_cancel: 'Tant que le coffre est verrouillé, cet ordre ne peut pas être annulé. Il reste ouvert jusqu\'à son exécution ou son expiration.',
     order_expires: 'Cet ordre expire le {{time}}.',
@@ -734,8 +728,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Le délégué perd immédiatement l’accès au trading.',
   },
   es: {
-    lock_notice_temp: 'Los depósitos, las operaciones, los envíos a direcciones nuevas y la configuración están en pausa. Aún puedes retirar, pagar a destinatarios guardados cuyo periodo de espera terminó y crear órdenes que compren stablecoins. Toca para ver el estado de la bóveda.',
-    lock_notice_forever: 'Esto es permanente. Aún puedes retirar, pagar a destinatarios guardados cuyo periodo de espera terminó y crear órdenes que compren stablecoins.',
+    lock_notice_op: 'Esta operación no está disponible mientras la bóveda está bloqueada.',
     lock_send_book_only: 'La bóveda está bloqueada: solo paga a destinatarios guardados cuyo periodo de espera terminó.',
     lock_order_no_cancel: 'Mientras la bóveda está bloqueada, esta orden no se puede cancelar. Sigue abierta hasta que se ejecute o caduque.',
     order_expires: 'Esta orden caduca el {{time}}.',
@@ -843,8 +836,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'El delegado pierde el acceso al trading de inmediato.',
   },
   de: {
-    lock_notice_temp: 'Einzahlungen, Trades, Senden an neue Adressen und Einstellungen sind pausiert. Du kannst weiterhin abheben, gespeicherte Empfänger nach Ablauf ihrer Wartezeit bezahlen und Orders platzieren, die Stablecoins kaufen. Tippen für den Tresorstatus.',
-    lock_notice_forever: 'Das ist dauerhaft. Du kannst weiterhin abheben, gespeicherte Empfänger nach Ablauf ihrer Wartezeit bezahlen und Orders platzieren, die Stablecoins kaufen.',
+    lock_notice_op: 'Dieser Vorgang ist nicht möglich, solange der Tresor gesperrt ist.',
     lock_send_book_only: 'Der Tresor ist gesperrt: Er zahlt nur an gespeicherte Empfänger, deren Wartezeit abgelaufen ist.',
     lock_order_no_cancel: 'Solange der Tresor gesperrt ist, kann diese Order nicht storniert werden. Sie bleibt offen, bis sie ausgeführt wird oder abläuft.',
     order_expires: 'Diese Order läuft am {{time}} ab.',
@@ -952,8 +944,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Der Delegierte verliert sofort den Handelszugriff.',
   },
   'pt-BR': {
-    lock_notice_temp: 'Depósitos, negociações, envios para novos endereços e configurações estão pausados. Você ainda pode sacar, pagar destinatários salvos cujo período de espera terminou e criar ordens que compram stablecoins. Toque para ver o status do cofre.',
-    lock_notice_forever: 'Isso é permanente. Você ainda pode sacar, pagar destinatários salvos cujo período de espera terminou e criar ordens que compram stablecoins.',
+    lock_notice_op: 'Esta operação não está disponível enquanto o cofre estiver bloqueado.',
     lock_send_book_only: 'O cofre está bloqueado: ele só paga destinatários salvos cujo período de espera terminou.',
     lock_order_no_cancel: 'Enquanto o cofre estiver bloqueado, esta ordem não pode ser cancelada. Ela fica aberta até ser executada ou expirar.',
     order_expires: 'Esta ordem expira em {{time}}.',
@@ -1060,8 +1051,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'O delegado perde o acesso de negociação imediatamente.',
   },
   tr: {
-    lock_notice_temp: 'Yatırmalar, işlemler, yeni adreslere gönderimler ve ayarlar duraklatıldı. Yine de çekim yapabilir, bekleme süresi bitmiş kayıtlı alıcılara ödeme yapabilir ve stablecoin alan emirler verebilirsiniz. Kasa durumu için dokunun.',
-    lock_notice_forever: 'Bu kalıcıdır. Yine de çekim yapabilir, bekleme süresi bitmiş kayıtlı alıcılara ödeme yapabilir ve stablecoin alan emirler verebilirsiniz.',
+    lock_notice_op: 'Kasa kilitliyken bu işlem yapılamaz.',
     lock_send_book_only: 'Kasa kilitli: yalnızca bekleme süresi bitmiş kayıtlı alıcılara ödeme yapar.',
     lock_order_no_cancel: 'Kasa kilitliyken bu emir iptal edilemez. Gerçekleşene veya süresi dolana kadar açık kalır.',
     order_expires: 'Bu emrin süresi {{time}} tarihinde doluyor.',
@@ -1168,8 +1158,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Yetkili işlem erişimini hemen kaybeder.',
   },
   ru: {
-    lock_notice_temp: 'Пополнения, сделки, отправка на новые адреса и настройки приостановлены. Вы по-прежнему можете выводить средства, платить сохранённым получателям, у которых закончился период ожидания, и размещать ордера на покупку стейблкоинов. Нажмите, чтобы открыть статус хранилища.',
-    lock_notice_forever: 'Это навсегда. Вы по-прежнему можете выводить средства, платить сохранённым получателям, у которых закончился период ожидания, и размещать ордера на покупку стейблкоинов.',
+    lock_notice_op: 'Эта операция недоступна, пока хранилище заблокировано.',
     lock_send_book_only: 'Хранилище заблокировано: оно платит только сохранённым получателям, у которых закончился период ожидания.',
     lock_order_no_cancel: 'Пока хранилище заблокировано, этот ордер нельзя отменить. Он остаётся открытым, пока не исполнится или не истечёт.',
     order_expires: 'Срок действия ордера истекает {{time}}.',
@@ -1276,8 +1265,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Делегат немедленно теряет доступ к торговле.',
   },
   id: {
-    lock_notice_temp: 'Setoran, perdagangan, pengiriman ke alamat baru, dan pengaturan dijeda. Anda masih bisa menarik, membayar penerima tersimpan yang masa tunggunya sudah selesai, dan membuat order yang membeli stablecoin. Ketuk untuk Status vault.',
-    lock_notice_forever: 'Ini permanen. Anda masih bisa menarik, membayar penerima tersimpan yang masa tunggunya sudah selesai, dan membuat order yang membeli stablecoin.',
+    lock_notice_op: 'Operasi ini tidak didukung saat vault terkunci.',
     lock_send_book_only: 'Vault terkunci: hanya membayar penerima tersimpan yang masa tunggunya sudah selesai.',
     lock_order_no_cancel: 'Selama vault terkunci, order ini tidak bisa dibatalkan. Order tetap terbuka sampai terisi atau kedaluwarsa.',
     order_expires: 'Order ini kedaluwarsa pada {{time}}.',
@@ -1384,8 +1372,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Delegasi langsung kehilangan akses perdagangan.',
   },
   vi: {
-    lock_notice_temp: 'Nạp, giao dịch, gửi đến địa chỉ mới và cài đặt đang tạm dừng. Bạn vẫn có thể rút, trả cho người nhận đã lưu đã hết thời gian chờ và đặt lệnh mua stablecoin. Chạm để xem Trạng thái két.',
-    lock_notice_forever: 'Việc này là vĩnh viễn. Bạn vẫn có thể rút, trả cho người nhận đã lưu đã hết thời gian chờ và đặt lệnh mua stablecoin.',
+    lock_notice_op: 'Không thể thực hiện thao tác này khi két đang bị khóa.',
     lock_send_book_only: 'Két đang bị khóa: chỉ trả cho người nhận đã lưu đã hết thời gian chờ.',
     lock_order_no_cancel: 'Khi két bị khóa, lệnh này không thể hủy. Lệnh vẫn mở cho đến khi khớp hoặc hết hạn.',
     order_expires: 'Lệnh này hết hạn lúc {{time}}.',
@@ -1492,8 +1479,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Người được ủy quyền mất quyền giao dịch ngay lập tức.',
   },
   th: {
-    lock_notice_temp: 'การฝาก การเทรด การส่งไปยังที่อยู่ใหม่ และการตั้งค่าถูกหยุดชั่วคราว คุณยังถอนได้ จ่ายให้ผู้รับที่บันทึกไว้ซึ่งพ้นระยะเวลารอแล้ว และวางคำสั่งซื้อสเตเบิลคอยน์ได้ แตะเพื่อดูสถานะห้องนิรภัย',
-    lock_notice_forever: 'นี่เป็นการถาวร คุณยังถอนได้ จ่ายให้ผู้รับที่บันทึกไว้ซึ่งพ้นระยะเวลารอแล้ว และวางคำสั่งซื้อสเตเบิลคอยน์ได้',
+    lock_notice_op: 'ไม่สามารถทำรายการนี้ได้ขณะที่ห้องนิรภัยถูกล็อก',
     lock_send_book_only: 'ห้องนิรภัยถูกล็อก: จ่ายเฉพาะผู้รับที่บันทึกไว้ซึ่งพ้นระยะเวลารอแล้ว',
     lock_order_no_cancel: 'ระหว่างที่ห้องนิรภัยถูกล็อก คำสั่งนี้ยกเลิกไม่ได้ จะเปิดอยู่จนกว่าจะจับคู่สำเร็จหรือหมดอายุ',
     order_expires: 'คำสั่งนี้หมดอายุ {{time}}',
@@ -1600,8 +1586,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'ผู้รับมอบสิทธิ์จะเสียสิทธิ์เทรดทันที',
   },
   hi: {
-    lock_notice_temp: 'जमा, ट्रेड, नए पतों पर भेजना और सेटिंग्स रुकी हुई हैं। आप अब भी निकाल सकते हैं, प्रतीक्षा अवधि पूरी कर चुके सहेजे गए प्राप्तकर्ताओं को भुगतान कर सकते हैं और स्टेबलकॉइन खरीदने वाले ऑर्डर दे सकते हैं। वॉल्ट स्थिति के लिए टैप करें।',
-    lock_notice_forever: 'यह स्थायी है। आप अब भी निकाल सकते हैं, प्रतीक्षा अवधि पूरी कर चुके सहेजे गए प्राप्तकर्ताओं को भुगतान कर सकते हैं और स्टेबलकॉइन खरीदने वाले ऑर्डर दे सकते हैं।',
+    lock_notice_op: 'वॉल्ट लॉक होने पर यह कार्रवाई उपलब्ध नहीं है।',
     lock_send_book_only: 'वॉल्ट लॉक है: यह केवल उन सहेजे गए प्राप्तकर्ताओं को भुगतान करता है जिनकी प्रतीक्षा अवधि पूरी हो गई है।',
     lock_order_no_cancel: 'वॉल्ट लॉक रहने तक यह ऑर्डर रद्द नहीं किया जा सकता। यह भरने या समाप्त होने तक खुला रहेगा।',
     order_expires: 'यह ऑर्डर {{time}} पर समाप्त होगा।',

@@ -42,7 +42,6 @@ import {FINISHED_WINDOWS, finishedSince, setSlippageBps, slippageBps, useFinishe
 import {relayGasFor} from '@/vault/fee-quote';
 import {intentPrepCalls, needsRelayerApproval} from '@/vault/limit';
 import {Sheet} from '@/components/Sheet';
-import {Explain} from '@/components/Explain';
 import {FormSheet} from '@/components/FormSheet';
 import {AvailableLine} from '@/components/AvailableLine';
 import {OrderRow, OrderDetailLines, fmtPrice, type OrderPart, type OrderValue} from '@/components/OrderRow';
@@ -88,7 +87,7 @@ import {useAssetCatalog} from '@/core/asset-catalog';
 import {useAssetPick} from '@/core/asset-pick';
 import {activeVaultAddress, useActiveVaultAddress} from '@/core/active-vault';
 import {useAllowancesOff} from '@/vault/risk';
-import {GateHint, LockNotice} from '@/components/LockNotice';
+import {GateHint} from '@/components/LockNotice';
 import {capability} from '@/vault/capabilities';
 import {gateReasonKey, useVaultGate} from '@/vault/gate';
 
@@ -1186,6 +1185,27 @@ export function TradeScreen() {
   }, [owner, network]);
 
   /**
+   * An order filling moves the balances, and nothing else would say so.
+   *
+   * A CoW fill is settled by a solver, not sent from the app, so no confirmed transaction prompts
+   * the reads that follow one: the sheet kept offering the Yielding balance from before a limit
+   * order sold it, and the bought asset did not show until a pull. The poll above is what notices
+   * a fill, so a fill it notices re-reads the balances and the positions. The first list only sets
+   * the mark — the orders filled before this screen opened are already in the balances.
+   */
+  const filledSeen = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const filled = orders.filter((o) => o.status === 'fulfilled').map((o) => o.uid.toLowerCase());
+    const seen = filledSeen.current;
+    filledSeen.current = new Set(filled);
+    if (seen && filled.some((u) => !seen.has(u))) {
+      balances.refresh();
+      positions.refresh();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders]);
+
+  /**
    * Choosing either leg of the pair turns "Others" back off.
    *
    * The flag is sticky on purpose — re-ticking it on every visit would make the filter feel broken
@@ -1625,6 +1645,8 @@ export function TradeScreen() {
   const orderBuys = shownSide === 'buy' ? base : quoteAsset;
   const intentGate = capability('placeIntentOrder', vaultGate, {buysStablecoin: orderBuys ? orderBuys.kind === 'stable' : undefined});
   const lockedOrder = intentGate.allowed && (vaultGate.lockLevel === 1 || vaultGate.lockLevel === 2);
+  // The lock refuses this order: a market one, or one that does not buy a stablecoin.
+  const orderLocked = mode === 'Market' ? marketLocked : !intentGate.allowed;
 
   // The same checks onSubmit makes, so the button is disabled rather than erroring on tap.
   const canConfirm =
@@ -2513,6 +2535,7 @@ export function TradeScreen() {
     setPulled(true);
     setRefreshNonce((n) => n + 1);
     balances.refresh();
+    positions.refresh();
     refreshOrders();
     // The reads are short; the spinner clears on its own rather than waiting on each of them.
     setTimeout(() => setPulled(false), 1200);
@@ -2617,11 +2640,6 @@ export function TradeScreen() {
               // fractions, and the keyboard has to leave something to read.
               height={Math.round(screenHeight * 0.8)}>
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                {/* What paying from a position does, above the rows that offer it. */}
-                <View style={styles.fundInfo}>
-                  <Text style={styles.fundInfoText}>{t('mobile.explain.funding_from_positions.title')}</Text>
-                  <Explain id="funding_from_positions" size={15} />
-                </View>
                 {mode === 'Market' ? (
                   <>
                 {/* Labelled exactly as the limit sheet labels the same three things, so the two
@@ -3481,7 +3499,6 @@ export function TradeScreen() {
         closable={!busy}
         overlay={orderOverlay}>
         <View style={styles.sheetBody}>
-            <LockNotice beforeNavigate={() => setSheetSide(null)} />
 
             {/* Order type as plain labels from the left, like the Overview's asset categories, rather
                 than a segmented control stretched across the sheet. */}
@@ -3494,9 +3511,6 @@ export function TradeScreen() {
                   <Text style={[styles.segText, mode === m.key && styles.segTextOn]}>{m.label}</Text>
                 </Pressable>
               ))}
-              <View style={styles.segInfo}>
-                <Explain id="order_types" size={16} />
-              </View>
               {/* Pushed to the right edge of the same line, exactly as the Earn card's header
                   carries its protocol: the mark alone, tapped to name itself. */}
               {venues.length > 0 ? (
@@ -3507,11 +3521,10 @@ export function TradeScreen() {
                 </View>
               ) : null}
             </View>
-            {mode === 'Market' && marketOff ? (
+            {/* Off by the owner's $0 allowance. A lock says so on the confirm button instead. */}
+            {mode === 'Market' && marketOff && !marketLocked ? (
               <Pressable onPress={explainMarketOff} hitSlop={6}>
-                <Text style={styles.marketOff}>
-                  {marketLocked ? t(gateReasonKey(marketGate)!) : t('mobile.trade.market_off_line')}
-                </Text>
+                <Text style={styles.marketOff}>{t('mobile.trade.market_off_line')}</Text>
               </Pressable>
             ) : null}
 
@@ -3572,15 +3585,12 @@ export function TradeScreen() {
                  Min received on the right — net of BOTH the slippage tolerance and the 0.2% Bitty
                  fee, so it agrees with the fee line below. */
               <View style={[styles.quoteBox, styles.quoteLine]}>
-                <View style={styles.inlineInfo}>
-                  <Pressable onPress={() => setPicker('slippage')} hitSlop={6}>
-                    <Text style={styles.quoteLabel}>
-                      {t('mobile.trade.max_slippage')}{' '}
-                      <Text style={[styles.quoteValue, styles.quoteLink]}>{slippage / 100}%</Text>
-                    </Text>
-                  </Pressable>
-                  <Explain id="slippage" size={14} />
-                </View>
+                <Pressable onPress={() => setPicker('slippage')} hitSlop={6}>
+                  <Text style={styles.quoteLabel}>
+                    {t('mobile.trade.max_slippage')}{' '}
+                    <Text style={[styles.quoteValue, styles.quoteLink]}>{slippage / 100}%</Text>
+                  </Text>
+                </Pressable>
                 {mktQuote ? (
                   <Text style={styles.quoteLabel}>
                     {t('mobile.trade.min_received')}{' '}
@@ -3664,8 +3674,9 @@ export function TradeScreen() {
               gas={feeGas}
               fee={feeApplies}
               free={feeFree}
+              locked={orderLocked}
             />
-            {mode !== 'Market' ? <GateHint gate={intentGate} /> : null}
+            {mode !== 'Market' && !orderLocked ? <GateHint gate={intentGate} /> : null}
             {mode !== 'Market' && lockedOrder ? (
               <Text style={styles.marketOff}>{t('mobile.vault.lock_order_no_cancel')}</Text>
             ) : null}
@@ -3736,11 +3747,6 @@ export function TradeScreen() {
 }
 
 const makeStyles = (c: Colors) => StyleSheet.create({
-  // The ⓘ for order types, right after the last mode label.
-  segInfo: {justifyContent: 'center', paddingHorizontal: 6},
-  inlineInfo: {flexDirection: 'row', alignItems: 'center', gap: 6},
-  fundInfo: {flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 4, paddingBottom: 10},
-  fundInfoText: {color: c.subtext, fontSize: 13, fontWeight: '600'},
   container: {flex: 1, backgroundColor: c.bg},
   // paddingBottom is set inline from the tab bar's height; see the ScrollView.
   body: {flexGrow: 1, padding: 16, gap: 14},

@@ -181,7 +181,13 @@ export function PendingChangesScreen() {
       {items === null ? (
         <ActivityIndicator />
       ) : items.length === 0 ? (
-        <Text style={styles.empty}>{t('mobile.vault.pending_none')}</Text>
+        // An empty card rather than a line floating under the intro: the page has the same shape
+        // with nothing waiting as with something, and the answer sits where the changes would.
+        <SettingsGroup>
+          <View style={styles.emptyRow}>
+            <Text style={styles.empty}>{t('mobile.vault.pending_none')}</Text>
+          </View>
+        </SettingsGroup>
       ) : (
         <>
         {/* Two cards: what is being added or changed, then what is being removed — a removal is
@@ -250,7 +256,8 @@ const makeStyles = (c: Colors) =>
     container: {flex: 1, backgroundColor: c.bg},
     body: {flexGrow: 1, padding: 16, gap: 24},
     intro: {color: c.subtext, fontSize: 14, lineHeight: 20},
-    empty: {color: c.subtext, fontSize: 15, textAlign: 'center', marginTop: 24},
+    emptyRow: {paddingVertical: 22, paddingHorizontal: 16, alignItems: 'center'},
+    empty: {color: c.subtext, fontSize: 15, textAlign: 'center'},
     // Sized to the bar's 44 like the trade menu's: the native bar anchors a custom view by its bottom.
     notMe: {minHeight: 52, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16},
     notMeText: {color: c.danger, fontSize: 16, fontWeight: '600'},

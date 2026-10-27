@@ -21,7 +21,6 @@ import {useReorder} from '@/components/useReorder';
 import {useVaultPositions} from '@/vault/useVaultPositions';
 import {useFlows} from '@/vault/useFlows';
 import {earnedRaw} from '@/vault/flows';
-import {Explain} from '@/components/Explain';
 import {usePriceFeed} from '@/vault/usePrices';
 import {getLidoUnstake, NO_UNSTAKE, type LidoUnstake} from '@/vault/lido';
 import {adapterByName, protocolDisplayName} from '@/core/protocols';
@@ -890,10 +889,7 @@ export function VaultHomeScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.text} colors={[c.accent]} />}>
       <View style={styles.heroCard}>
         <View style={styles.totalHeader}>
-          <View style={styles.totalLabelLine}>
-            <Text style={styles.totalLabel}>{t('vault.total_value_label')}</Text>
-            <Explain id="overview_total" size={16} />
-          </View>
+          <Text style={styles.totalLabel}>{t('vault.total_value_label')}</Text>
           <Pressable onPress={toggleHidden} hitSlop={10}>
             <EyeIcon off={hidden} color={c.subtext} />
           </Pressable>
@@ -1090,7 +1086,6 @@ const makeStyles = (c: Colors) => StyleSheet.create({
 
   heroCard: {backgroundColor: c.card, borderRadius: 20, padding: 20, gap: 6},
   totalHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
-  totalLabelLine: {flexDirection: 'row', alignItems: 'center', gap: 6},
   totalLabel: {color: c.subtext, fontSize: 13, fontWeight: '600'},
   totalValue: {color: c.text, fontSize: 34, fontWeight: '800'},
   totalLoading: {height: 41, justifyContent: 'center'},

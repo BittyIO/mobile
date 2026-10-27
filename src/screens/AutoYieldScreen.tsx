@@ -16,7 +16,7 @@ import {relayGasFor} from '@/vault/fee-quote';
 import {useStyles, type Colors} from '@/theme';
 import {displaySymbol} from '@/core/format';
 import {useAssetCatalog} from '@/core/asset-catalog';
-import {GateHint, LockNotice} from '@/components/LockNotice';
+import {GateHint, LockIcon, LockNotice, useLockLevel} from '@/components/LockNotice';
 import {useCapability} from '@/vault/gate';
 
 /**
@@ -104,9 +104,10 @@ export function AutoYieldScreen() {
   // A lock pauses both the routes and the sweep: setAutoYielding and autoYield are refused alike.
   const routeGate = useCapability('setAutoYielding');
   const sweepGate = useCapability('autoYield');
+  const lockLevel = useLockLevel();
   return (
     <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
-      <LockNotice />
+      <LockNotice blocked={!routeGate.allowed} />
       <Text style={styles.hint}>{t('mobile.vault.auto_yield_hint')}</Text>
       <GateHint gate={routeGate} />
 
@@ -150,9 +151,12 @@ export function AutoYieldScreen() {
                   disabled={busy !== null || !sweepGate.allowed}
                   onPress={() => askSweep(a.address, `${a.symbol}-sweep`)}
                   style={styles.sweepBtn}>
-                  <Text style={styles.sweepText}>
-                    {busy === `${a.symbol}-sweep` ? t('mobile.vault.sweeping') : t('mobile.vault.sweep_now')}
-                  </Text>
+                  <View style={styles.sweepRow}>
+                    {lockLevel && !sweepGate.allowed ? <LockIcon level={lockLevel} size={16} /> : null}
+                    <Text style={[styles.sweepText, !sweepGate.allowed && styles.sweepOff]}>
+                      {busy === `${a.symbol}-sweep` ? t('mobile.vault.sweeping') : t('mobile.vault.sweep_now')}
+                    </Text>
+                  </View>
                 </Pressable>
               ) : null}
             </View>
@@ -184,4 +188,6 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   chipTextOn: {color: c.text},
   sweepBtn: {alignSelf: 'flex-start', paddingVertical: 4},
   sweepText: {color: c.accent, fontSize: 13, fontWeight: '600'},
+  sweepRow: {flexDirection: 'row', alignItems: 'center', gap: 6},
+  sweepOff: {opacity: 0.5},
 });

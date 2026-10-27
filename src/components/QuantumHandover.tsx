@@ -1,13 +1,14 @@
 import React, {useEffect, useState} from 'react';
 import {Linking, Pressable, StyleSheet, Text, View} from 'react-native';
+import Svg, {Circle, Path} from 'react-native-svg';
 import type {Address} from 'viem';
 import {useNetwork} from '@/core/network-store';
 import {useActiveVaultAddress} from '@/core/active-vault';
 import {explorerAddressUrl} from '@/core/chain';
 import {vaultOwnerOf} from '@/vault/owned-vaults';
-import {Explain} from '@/components/Explain';
+import {Sheet} from '@/components/Sheet';
 import {useT} from '@/i18n';
-import {useStyles, type Colors} from '@/theme';
+import {useColors, useStyles, type Colors} from '@/theme';
 
 /**
  * What a quantum-safe key change is, for a pending row (see wallet/rotation): the two keys, each
@@ -61,7 +62,32 @@ export function QuantumKeys({to}: {to: Address}) {
 
 /** The ⓘ beside a quantum-safe key change's title, opening why the change keeps the vault safe. */
 export function QuantumInfoButton() {
-  return <Explain id="quantum" />;
+  const {t} = useT();
+  const c = useColors();
+  const styles = useStyles(makeStyles);
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Pressable onPress={() => setOpen(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('mobile.quantum.info_title')}>
+        <Svg width={17} height={17} viewBox="0 0 24 24">
+          <Circle cx={12} cy={12} r={10} stroke={c.subtext} strokeWidth={2} fill="none" />
+          <Path d="M12 16v-4M12 8h.01" stroke={c.subtext} strokeWidth={2} strokeLinecap="round" />
+        </Svg>
+      </Pressable>
+      <Sheet visible={open} title={t('mobile.quantum.info_title')} onClose={() => setOpen(false)}>
+        <View style={styles.info}>
+          {(['info_hash', 'info_signed', 'info_move', 'info_phrase'] as const).map((k, i) => (
+            <View key={k} style={styles.point}>
+              <View style={styles.num}>
+                <Text style={styles.numText}>{i + 1}</Text>
+              </View>
+              <Text style={styles.pointText}>{t(`mobile.quantum.${k}`)}</Text>
+            </View>
+          ))}
+        </View>
+      </Sheet>
+    </>
+  );
 }
 
 const makeStyles = (c: Colors) =>
@@ -76,4 +102,9 @@ const makeStyles = (c: Colors) =>
     tag: {fontSize: 11, fontWeight: '600', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6, overflow: 'hidden'},
     tagSigned: {color: c.warning, backgroundColor: c.warningSoft},
     tagFresh: {color: c.success, backgroundColor: c.successSoft},
+    info: {backgroundColor: c.card, borderRadius: 20, padding: 16, gap: 14},
+    point: {flexDirection: 'row', alignItems: 'flex-start', gap: 12},
+    num: {width: 22, height: 22, borderRadius: 11, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center', marginTop: 1},
+    numText: {color: c.accent, fontSize: 12, fontWeight: '700'},
+    pointText: {flex: 1, color: c.text, fontSize: 14, lineHeight: 20},
   });

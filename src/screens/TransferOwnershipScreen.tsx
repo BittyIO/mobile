@@ -138,8 +138,7 @@ export function TransferOwnershipScreen() {
               />
             </View>
             {bad ? <Text style={styles.err}>{t('mobile.vault.transfer_bad_address')}</Text> : null}
-            {locked ? <Text style={styles.err}>{t('mobile.vault.transfer_locked')}</Text> : null}
-            <Button title={t('mobile.vault.transfer_button')} onPress={transfer} loading={busy === 'transfer'} disabled={!canTransfer} style={styles.btn} />
+            <Button title={t('mobile.vault.transfer_button')} onPress={transfer} loading={busy === 'transfer'} disabled={!canTransfer} style={styles.btn} locked={locked} />
           </>
         )}
       </Pressable>

@@ -24,7 +24,7 @@ import {useRecipientPick} from '@/core/recipient-pick';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 import {vaultAddressOf} from '@/core/active-vault';
-import {LockNotice} from '@/components/LockNotice';
+import {LockIcon, LockNotice, useLockLevel} from '@/components/LockNotice';
 import {useCapability} from '@/vault/gate';
 
 /**
@@ -58,6 +58,7 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
   const sendGate = useCapability('send');
   const addGate = useCapability('addWhitelistedRecipient');
   const removeGate = useCapability('removeWhitelistedRecipient');
+  const lockLevel = useLockLevel();
   const lockedSends = !sendGate.allowed && sendGate.reason !== 'send_allowance_off';
 
   /**
@@ -239,7 +240,9 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
         </View>
         {busy === `rm-${b.id}` ? (
           <ActivityIndicator color={c.subtext} />
-        ) : removeAt || b.status === WHITELIST_STATUS.voided ? null : (
+        ) : removeAt || b.status === WHITELIST_STATUS.voided ? null : lockLevel && !removeGate.allowed ? (
+          <LockIcon level={lockLevel} size={18} />
+        ) : (
           <Pressable
             hitSlop={10}
             disabled={!ready || !removeGate.allowed}
@@ -323,7 +326,7 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
     };
     return (
       <View style={[styles.flex, {paddingTop: headerHeight}]}>
-        <LockNotice style={styles.manageNotice} />
+        <LockNotice blocked={!addGate.allowed} style={styles.manageNotice} />
         <View style={styles.tabRow}>
           {tabs.map((x, i) => (
             <Pressable key={x.label} hitSlop={8} onPress={() => goTo(i)} accessibilityRole="tab" accessibilityState={{selected: tab === i}}>
@@ -367,7 +370,6 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
       // A PUSHED screen: the header inset is the system's to apply, so this and nothing else.
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={styles.body}>
-      <LockNotice />
       {/* The whitelist first, and always — even with nothing in it: paying somewhere this vault
           already pays is the common case, and an empty list still says the vault HAS one. */}
       {/* Each group's title on the left and what a payment to it may be on the right. */}
