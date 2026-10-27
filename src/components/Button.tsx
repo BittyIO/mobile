@@ -27,20 +27,32 @@ type Props = {
   style?: StyleProp<ViewStyle>;
 };
 
-export function Button({
+/**
+ * A screen that passes `locked` (even `false`) is one inside the navigator: only then is the lock
+ * read, since reading it needs navigation, and the lock and onboarding screens draw buttons before
+ * there is any. Split into two components so the hooks each one calls never change between renders.
+ */
+export function Button(props: Props) {
+  return props.locked === undefined ? <PlainButton {...props} /> : <LockAwareButton {...props} />;
+}
+
+function LockAwareButton({locked, ...props}: Props) {
+  const vaultLocked = useVaultLocked();
+  if (locked && vaultLocked) return <LockedButton style={props.style} />;
+  return <PlainButton {...props} />;
+}
+
+function PlainButton({
   title,
   onPress,
   faceId,
   variant = 'primary',
   loading,
   disabled,
-  locked,
   style,
 }: Props) {
   const styles = useStyles(makeStyles);
   const c = useColors();
-  const vaultLocked = useVaultLocked();
-  if (locked && vaultLocked) return <LockedButton style={style} />;
   const bg =
     variant === 'primary'
       ? c.accent
@@ -79,25 +91,20 @@ export function Button({
  * `color` overrides the fill (Buy / Sell keep their green and red); the label never changes, so the
  * user learns one control for every signature in the app.
  */
-export function ConfirmButton({
-  onPress,
-  loading,
-  disabled,
-  color,
-  style,
-  gas,
-  fee = true,
-  free,
-  locked,
-  beforeNavigate,
-}: {
+export function ConfirmButton(props: ConfirmProps) {
+  return props.locked === undefined ? <PlainConfirmButton {...props} /> : <LockAwareConfirmButton {...props} />;
+}
+
+function LockAwareConfirmButton({locked, beforeNavigate, ...props}: ConfirmProps) {
+  const vaultLocked = useVaultLocked();
+  if (locked && vaultLocked) return <LockedButton style={props.style} beforeNavigate={beforeNavigate} />;
+  return <PlainConfirmButton {...props} />;
+}
+
+type ConfirmProps = {
   onPress: () => void;
   loading?: boolean;
   disabled?: boolean;
-  /** The lock refuses this operation: drawn as {LockedButton}, with no fee line, while locked. */
-  locked?: boolean;
-  /** For a button inside a sheet: close it before the locked state opens Lock status. */
-  beforeNavigate?: () => void;
   color?: string;
   style?: StyleProp<ViewStyle>;
   /** Gas this particular operation is expected to burn; defaults to a typical relayed write. */
@@ -106,12 +113,25 @@ export function ConfirmButton({
   fee?: boolean;
   /** Set where the fee is known to be nothing: the line says $0 rather than disappearing. */
   free?: boolean;
-}) {
+  /** The lock refuses this operation: drawn as {LockedButton}, with no fee line, while locked. */
+  locked?: boolean;
+  /** For a button inside a sheet: close it before the locked state opens Lock status. */
+  beforeNavigate?: () => void;
+};
+
+function PlainConfirmButton({
+  onPress,
+  loading,
+  disabled,
+  color,
+  style,
+  gas,
+  fee = true,
+  free,
+}: ConfirmProps) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
-  const vaultLocked = useVaultLocked();
-  if (locked && vaultLocked) return <LockedButton style={style} beforeNavigate={beforeNavigate} />;
   const isDisabled = disabled || loading;
   const button = (
     <Pressable
