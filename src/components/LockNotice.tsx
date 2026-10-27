@@ -82,7 +82,7 @@ export function LockedButton({style}: {style?: StyleProp<ViewStyle>}) {
         accessibilityLabel={`${t(LOCK_TITLE[level])}. ${t('mobile.vault.lock_notice_op')}`}
         style={[styles.locked, {backgroundColor: level === 2 ? FOREVER : c.warning}]}>
         <SettingsIcon name={LOCK_ICON[level]} size={20} round />
-        <Text style={[styles.lockedLabel, {color: level === 2 ? '#fff' : '#000'}]}>{t(LOCK_TITLE[level])}</Text>
+        <Text style={[styles.lockedLabel, {color: '#fff'}]}>{t(LOCK_TITLE[level])}</Text>
       </View>
       <Text style={styles.hint}>{t('mobile.vault.lock_notice_op')}</Text>
     </View>
