@@ -17,6 +17,7 @@ import {parseUnits, type Address} from 'viem';
 import {VAULT_AUTOYIELD_ABI, VAULT_DEFI_ABI} from '@/core/abi';
 import {encodeVaultCalls, relayVaultMulticall, type VaultCall} from '@/vault/relay';
 import {estimateRelayGas, relayGasFor} from '@/vault/fee-quote';
+import {useFeeFloor} from '@/vault/useFeeFloor';
 import {Sheet} from '@/components/Sheet';
 import {FundRow} from '@/components/FundRow';
 import {useVaultPositions} from '@/vault/useVaultPositions';
@@ -109,6 +110,7 @@ export function EarnActionScreen() {
       (p.kind === 'supplied' || p.protocolName === 'Sky'),
   );
   const weth = useWethFeeCoin(network, bal.vault);
+  const feeFloor = useFeeFloor(network);
   /**
    * The float the relayer bills against, held back from a DEPOSIT as the order sheet holds it back
    * from a trade.
@@ -133,6 +135,7 @@ export function EarnActionScreen() {
       ...(weth ? [{symbol: FEE_WETH, amount: Number(balanceOfSymbol(bal.balances, FEE_WETH) || 0), usd: weth.usd}] : []),
     ],
     spendSymbol: isDeposit ? targetSymbol : undefined,
+    floorUsd: feeFloor,
   });
   const freeBal = isDeposit ? floor6(Number(balanceOfSymbol(bal.balances, targetSymbol) || 0)) : 0;
   /**

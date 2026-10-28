@@ -23,7 +23,7 @@ import {useT} from '@/i18n';
  * figure invites a stray zero that locks the whole stablecoin balance behind a reserve nobody
  * meant to set — with Max then offering nothing and no clue why.
  *
- * Mainnet starts at ten because a relay there costs the better part of a dollar and the vault's
+ * Mainnet starts at five (its default) because a relay there costs the better part of a dollar and the vault's
  * own per-operation ceiling is ten; everywhere else a relay costs cents, so one is a real choice
  * and a thousand would be absurd.
  */

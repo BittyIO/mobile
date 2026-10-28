@@ -6,6 +6,7 @@ import {API_BASE, apiFetch} from '@/core/chain';
 import {useNetwork} from '@/core/network-store';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
+import {getPref, setPref} from '@/core/prefs';
 
 /**
  * Cached history, keyed by symbol and range.
@@ -27,6 +28,16 @@ const RANGES: {label: string; days: number}[] = [
   {label: 'vault.period_1y', days: 365},
 ];
 
+/**
+ * The range last chosen, on any chart. One for the whole app: it is how the owner likes to look at
+ * a price, not a fact about one asset, and each new pair page used to open back on 1W.
+ */
+const RANGE_PREF = 'chart.range';
+const savedRange = (): number => {
+  const i = RANGES.findIndex((r) => String(r.days) === getPref(RANGE_PREF));
+  return i >= 0 ? i : 1; // 1W
+};
+
 const H = 150;
 
 /**
@@ -36,15 +47,19 @@ const H = 150;
  * `reload` is a counter the screen bumps on pull-to-refresh. It is a PROP and not a remount — the
  * Trade tab used to put it in the chart's `key`, which threw the component away and built a new
  * one, and a new one starts on 1W: a pull after choosing 24H silently moved the chart back to a
- * week. The selected range belongs to the user, so it survives both a refresh and a change of
- * asset, and only the series is re-read.
+ * week. The selected range belongs to the user, so it survives a refresh, a change of asset and a
+ * new pair page (see {RANGE_PREF}), and only the series is re-read.
  */
 export function PriceChart({symbol, reload = 0}: {symbol: string; reload?: number}) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
   const network = useNetwork((st) => st.network);
-  const [rangeIdx, setRangeIdx] = useState(1); // 1W
+  const [rangeIdx, setRangeIdxState] = useState(savedRange);
+  const setRangeIdx = (i: number) => {
+    setRangeIdxState(i);
+    setPref(RANGE_PREF, String(RANGES[i].days));
+  };
   const [pts, setPts] = useState<[number, number][] | null>(null);
   const [error, setError] = useState(false);
 

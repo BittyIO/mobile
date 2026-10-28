@@ -77,18 +77,30 @@ export async function fetchFlows(vault: string, network: Network): Promise<Flows
 const MAX_PLAUSIBLE_EARNED_BPS = BigInt(2000); // 20% of principal
 const BPS = BigInt(10000);
 
-/** Earned for a position in its asset's raw units, or null when there's nothing (positive) to show. */
-export function earnedRaw(pos: Position, flows: Flows): bigint | null {
+/**
+ * Earned for a position in its asset's raw units, or null when there's nothing (positive) to show.
+ *
+ * A position withdrawn in full still earned what it earned: pass it with `raw` 0 (see
+ * {closedPosition}) and the figure is what came out less what went in.
+ */
+export function earnedRaw(pos: Pick<Position, 'protocol' | 'asset' | 'kind' | 'raw'>, flows: Flows): bigint | null {
   const map = pos.kind === 'staked' ? flows.stake : flows.supply;
   const t = map.get(`${pos.protocol.toLowerCase()}:${pos.asset.toLowerCase()}`);
   if (!t) return null;
   const earned = pos.raw + t.unstaked - t.staked;
   if (earned <= BigInt(0)) return null;
+  if (t.staked <= BigInt(0)) return null; // nothing recorded going in: no basis to call this yield
+  // Measured against what is still in, or — once more has come out than went in, as it does when
+  // a position is withdrawn with its yield — against everything that went in.
   const principal = t.staked - t.unstaked;
-  if (principal <= BigInt(0)) return null; // nothing recorded going in: no basis to call this yield
-  if (earned * BPS > principal * MAX_PLAUSIBLE_EARNED_BPS) return null;
+  const basis = principal > BigInt(0) ? principal : t.staked;
+  if (earned * BPS > basis * MAX_PLAUSIBLE_EARNED_BPS) return null;
   return earned;
 }
+
+/** A route the vault no longer holds anything in, as {earnedRaw} takes it. */
+export const closedPosition = (protocol: string, asset: string, kind: Position['kind']) =>
+  ({protocol: protocol as Position['protocol'], asset: asset as Position['asset'], kind, raw: BigInt(0)});
 
 /**
  * Tell the server about a deposit or withdrawal, so `earned` has a principal to measure against.

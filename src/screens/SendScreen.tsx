@@ -31,6 +31,7 @@ import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {displaySymbol, fmtNum, fmtShort} from '@/core/format';
 import {quoteRelayFeeUsd, relayGasFor} from '@/vault/fee-quote';
+import {useFeeFloor} from '@/vault/useFeeFloor';
 import {FEE_WETH, feeCoinForSpend, reserveHeld, resolveFeeReserve, useWethFeeCoin} from '@/vault/stableCoinAsGas';
 
 import {useAssetCatalog} from '@/core/asset-catalog';
@@ -140,6 +141,7 @@ export function SendScreen() {
 
   const bal = useVaultBalances(network);
   const weth = useWethFeeCoin(network, vault);
+  const feeFloor = useFeeFloor(network);
   const pos = useVaultPositions(vault, network);
   // Tokens pasted in by contract address. A line on one carries the ADDRESS as its `sym` — a pasted
   // token may call itself anything, "USDC" included, so its name never keys or matches anything.
@@ -219,6 +221,7 @@ export function SendScreen() {
         ...(weth ? [{symbol: FEE_WETH, amount: Number(balanceOfSymbol(bal.balances, FEE_WETH) || 0), usd: weth.usd}] : []),
       ],
       spendSymbol: sym,
+      floorUsd: feeFloor,
     }).keep;
   const sourceLabel = (source: Source) =>
     source === 'yield'
@@ -411,6 +414,7 @@ export function SendScreen() {
           .map((a) => ({symbol: a.symbol, amount: Number(balanceOfSymbol(bal.balances, a.symbol))})),
         ...(weth ? [{symbol: FEE_WETH, amount: Number(balanceOfSymbol(bal.balances, FEE_WETH) || 0), usd: weth.usd}] : []),
       ],
+      floorUsd: feeFloor,
     }).coin;
     const spent = recipient.lines.filter((l) => Number(l.amount) > 0).map((l) => l.sym.toUpperCase());
     const pinned = floatCoin && !spent.includes(floatCoin.toUpperCase()) ? feeCoinForSpend(network, floatCoin, '') : null;

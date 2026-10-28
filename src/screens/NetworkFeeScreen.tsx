@@ -34,19 +34,16 @@ export function NetworkFeeScreen() {
   const {payer, canChoose, vault, owner} = useActiveFeePayer(network);
 
   /**
-   * Choosing a way to pay. The owner wallet with no ETH in it cannot pay a single fee, so choosing
-   * it then asks first: every write would stop at "not enough ETH" until the wallet is funded. A
-   * balance that cannot be read does not stand in the way.
+   * Choosing a way to pay. The owner wallet with no ETH in it cannot pay a single fee, so it cannot
+   * be chosen then: every write would stop at "not enough ETH" until the wallet is funded, so the
+   * owner is told to fund it first. A balance that cannot be read does not stand in the way.
    */
   const choose = async (p: FeePayer) => {
     if (!vault || payer === p) return;
     if (p === 'owner' && owner) {
       const eth = await ownerEthBalance(network, owner).catch(() => null);
       if (eth === 0n) {
-        Alert.alert(t('mobile.fees.owner_empty_title'), t('mobile.fees.owner_empty_body'), [
-          {text: t('common.cancel'), style: 'cancel'},
-          {text: t('mobile.fees.owner_empty_confirm'), onPress: () => setFeePayer(network, vault, 'owner')},
-        ]);
+        Alert.alert(t('mobile.fees.owner_empty_title'), t('mobile.fees.owner_empty_body'));
         return;
       }
     }

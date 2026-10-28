@@ -31,6 +31,11 @@ export type WatchList = {
   /** What the user called it. Empty means "not named", and the UI falls back to "Watch list". */
   name: string;
   symbols: string[];
+  /**
+   * A list the app made (see {seedStocks}). Unnamed, it is called what it is in the language on
+   * screen — "Stocks", "股票" — and only a name the owner types is stored.
+   */
+  preset?: 'stocks';
 };
 
 const store = new MMKV({id: 'bitty.favorites'});
@@ -50,6 +55,8 @@ const sharedOrderKey = (n: Network, id: string) => `order:${n}:${id}`;
 // Pre-multi-list storage, read once so an existing install keeps its stars and its arrangement.
 const legacyKey = (n: Network) => `fav:${n}`;
 const legacyOrderKey = (n: Network) => `order:${n}`;
+// Set once the Stocks list has been offered, so a list the owner deleted is never put back.
+const stocksSeededKey = (n: Network, v: number) => `seeded:stocks2:${n}:v${v}`;
 
 /**
  * The first list is not a list the user curated — it is the vault itself.
@@ -144,6 +151,14 @@ type State = {
    * have put the vault into every signature in this file and every call site of them.
    */
   reload: (vault: number) => void;
+  /**
+   * Add a list of stocks, once per network and vault, behind the lists already there.
+   *
+   * A network that trades tokenized stocks says so nowhere on the Overview until someone opens the
+   * Trade tab's Stocks page, so the largest of them arrive as a list of their own. Once: deleted, it
+   * stays deleted, and the Assets list in front is left as it was.
+   */
+  seedStocks: (network: Network, symbols: string[]) => void;
 };
 
 /** Which vault's lists are loaded and written. Read at call time, never captured. */
@@ -243,6 +258,16 @@ export const useFavorites = create<State>((set, get) => {
     },
 
     reload: (vault) => set(loadAll(vault)),
+
+    seedStocks: (network, symbols) => {
+      const flag = stocksSeededKey(network, vaultIndex());
+      if (!symbols.length || store.getBoolean(flag)) return;
+      const id = `l${Date.now().toString(36)}`;
+      const next = [...(get().lists[network] ?? []), {id, name: '', symbols, preset: 'stocks' as const}];
+      persist(network, next);
+      store.set(flag, true);
+      set({lists: {...get().lists, [network]: next}, order: {...get().order, [okey(network, id)]: []}});
+    },
   };
 });
 
@@ -259,6 +284,16 @@ useVaults.subscribe((s, prev) => {
 
 /** The label to show: what the user named it, or the generic one. */
 export const watchListLabel = (l: WatchList | undefined, fallback: string) => l?.name || fallback;
+
+/**
+ * What a list is called while it has no name of its own: "Assets", a preset's own name, or
+ * "Watch list #2". The placeholder of the title field, and the label wherever the list is shown.
+ */
+export function unnamedListLabel(lists: WatchList[], l: WatchList | undefined, t: (key: string, params?: Record<string, string | number>) => string): string {
+  if (isAssetsList(l?.id)) return t('mobile.home.all_assets');
+  if (l?.preset === 'stocks') return t('mobile.home.stocks_list');
+  return t('mobile.home.watch_list_n', {n: watchListNumber(lists, l?.id ?? '')});
+}
 
 /**
  * The number an unnamed list is shown as — "Watch list #2".

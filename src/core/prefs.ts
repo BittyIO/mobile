@@ -61,8 +61,11 @@ export function setPref(key: string, value: string): void {
 const RESERVE_AMOUNT = 'fees.reserveAmount';
 const FEE_COIN_ORDER = 'fees.coinOrder';
 
-/** What the reserve is unless the owner says otherwise, in whole dollars. */
-export const DEFAULT_GAS_RESERVE = 10;
+/**
+ * What the reserve is unless the owner says otherwise, in whole dollars: five on mainnet, where a
+ * relay costs the better part of a dollar, and one on a layer 2, where it costs cents.
+ */
+export const defaultGasReserve = (network: string): number => (network === 'mainnet' ? 5 : 1);
 
 const scoped = (base: string, network: string, vault: string | null | undefined) =>
   `${base}:${network}:${(vault ?? 'none').toLowerCase()}`;
@@ -98,7 +101,7 @@ export function inFeeCoinOrder<T extends {symbol: string}>(
 }
 
 export const gasReserveAmount = (network: string, vault: string | null | undefined): string =>
-  getPref(scoped(RESERVE_AMOUNT, network, vault)) ?? String(DEFAULT_GAS_RESERVE);
+  getPref(scoped(RESERVE_AMOUNT, network, vault)) ?? String(defaultGasReserve(network));
 
 export const setGasReserveAmount = (network: string, vault: string | null | undefined, v: string): void =>
   setPref(scoped(RESERVE_AMOUNT, network, vault), v);
@@ -106,7 +109,7 @@ export const setGasReserveAmount = (network: string, vault: string | null | unde
 /** The configured size of the reserve, whichever coin ends up holding it. */
 export function gasReserveSize(network: string, vault: string | null | undefined): number {
   const n = Number(gasReserveAmount(network, vault));
-  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_GAS_RESERVE;
+  return Number.isFinite(n) && n >= 0 ? n : defaultGasReserve(network);
 }
 
 /**

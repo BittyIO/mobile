@@ -4,7 +4,7 @@ import Svg, {Circle, Path} from 'react-native-svg';
 import {Sheet} from '@/components/Sheet';
 import {displaySymbol} from '@/core/format';
 import {useNetwork, NETWORKS, NETWORK_LABEL, networkLabel} from '@/core/network-store';
-import {isAssetsList, storedLists, watchListLabel, watchListNumber} from '@/core/favorites-store';
+import {isAssetsList, storedLists, unnamedListLabel, watchListLabel} from '@/core/favorites-store';
 import {useVaults, vaultLabel} from '@/core/vault-store';
 import {LANGUAGES} from '@/core/language-store';
 import {translate} from '@/i18n';
@@ -236,7 +236,7 @@ export function WatchlistMenu({
             label: `${
               isAssetsList(l.id)
                 ? t('mobile.home.all_assets')
-                : watchListLabel(l, t('mobile.home.watch_list_n', {n: watchListNumber(lists, l.id)}))
+                : watchListLabel(l, unnamedListLabel(lists, l, t))
             } # ${vaultLabel(v, name)}`,
             symbols: l.symbols,
           }));

@@ -12,7 +12,7 @@ import {WatchlistMenu} from '@/components/WatchlistMenu';
 import {ProtocolChip} from '@/components/ProtocolIcon';
 import {ammAdapters, intentAdapters, venueNames, isNamedProtocol} from '@/core/protocols';
 import {fetchVaultVersions, currentServices, type VaultVersionsCatalog} from '@/vault/versions';
-import {isAssetsList, useFavorites, useWatchLists, watchListLabel, watchListNumber} from '@/core/favorites-store';
+import {isAssetsList, unnamedListLabel, useFavorites, useWatchLists, watchListLabel} from '@/core/favorites-store';
 import {useWatchDraft} from '@/core/watch-draft';
 import {Amount} from '@/components/Amount';
 import {ConfirmButton} from '@/components/Button';
@@ -40,6 +40,7 @@ import {balanceOfSymbol} from '@/vault/read';
 import {FEE_WETH, feeCoinForSpend, resolveFeeReserve, reserveHeld, useWethFeeCoin} from '@/vault/stableCoinAsGas';
 import {FINISHED_WINDOWS, finishedSince, setSlippageBps, slippageBps, useFinishedWindow, type FinishedWindow} from '@/core/prefs';
 import {relayGasFor} from '@/vault/fee-quote';
+import {useFeeFloor} from '@/vault/useFeeFloor';
 import {intentPrepCalls, needsRelayerApproval} from '@/vault/limit';
 import {Sheet} from '@/components/Sheet';
 import {FormSheet} from '@/components/FormSheet';
@@ -185,9 +186,7 @@ function WatchlistTitle({network}: {network: Network}) {
   const draftNumber = watch.lists.filter((l) => !isAssetsList(l.id)).length + 1;
   const fallback = drafting
     ? t('mobile.home.watch_list_n', {n: draftNumber})
-    : builtIn
-      ? t('mobile.home.all_assets')
-      : t('mobile.home.watch_list_n', {n: watchListNumber(watch.lists, watch.active?.id ?? '')});
+    : unnamedListLabel(watch.lists, watch.active, t);
   if (builtIn) return <Text style={styles.navTitle}>{fallback}</Text>;
   return (
     <TextInput
@@ -400,9 +399,7 @@ export function TradeScreen() {
     toggleFavorite(network, symbol);
   };
   /** What an unnamed list is called: "Assets" for the built-in one, "Watch list #2" for the rest. */
-  const listFallback = builtIn
-    ? t('mobile.home.all_assets')
-    : t('mobile.home.watch_list_n', {n: watchListNumber(watch.lists, watch.active?.id ?? '')});
+  const listFallback = unnamedListLabel(watch.lists, watch.active, t);
   const listName = watchListLabel(watch.active, listFallback);
 
   /**
@@ -705,6 +702,7 @@ export function TradeScreen() {
 
   const balances = useVaultBalances(network);
   const weth = useWethFeeCoin(network, balances.vault);
+  const feeFloor = useFeeFloor(network);
   const positions = useVaultPositions(balances.vault, network);
 
   /**
@@ -860,6 +858,7 @@ export function TradeScreen() {
       ...(weth ? [{symbol: FEE_WETH, amount: Number(balanceOfSymbol(balances.balances, FEE_WETH) || 0), usd: weth.usd}] : []),
     ],
     spendSymbol: spendSym,
+    floorUsd: feeFloor,
   });
   const feeReserve = reserve.keep;
   /**
@@ -1393,6 +1392,19 @@ export function TradeScreen() {
         }),
       }
     : undefined;
+  /**
+   * Keep the pager on the tab that is chosen when pages come or go.
+   *
+   * "Selected" appears in front once the balances load, and the pager stays at the same x — so a new
+   * list that opened on Crypto before then went on to show the Selected page (only what the vault
+   * holds) under a Crypto tab.
+   */
+  const pagesKey = pages.join(',');
+  useEffect(() => {
+    const i = pages.indexOf(category);
+    if (i >= 0 && pageW > 0) pagerRef.current?.scrollTo({x: i * pageW, animated: false});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagesKey]);
   // A new network is a different catalog: start from the first category again.
   useEffect(() => {
     setPageH({});

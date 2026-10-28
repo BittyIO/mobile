@@ -14,6 +14,8 @@ import {useVaultPositions} from '@/vault/useVaultPositions';
 import {useFlows} from '@/vault/useFlows';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {earnedRaw} from '@/vault/flows';
+import {usePrices} from '@/vault/usePrices';
+import {usdValue} from '@/core/prices';
 import {balanceOfSymbol} from '@/vault/read';
 import {fetchProtocolApy, EMPTY_APY, type ProtocolApy} from '@/vault/apy';
 import {stakeRoutes as buildStakeRoutes, lendRoutes as buildLendRoutes, type EarnRoute} from '@/vault/earn-routes';
@@ -135,6 +137,7 @@ export function EarnScreen() {
   const bal = useVaultBalances(network);
   const pos = useVaultPositions(bal.vault, network);
   const flows = useFlows(bal.vault, network);
+  const prices = usePrices(network, 0, useMemo(() => assets.map((a) => a.symbol), [assets]));
   // Auto-Yield routes: lowercased asset address → configured protocol (zero = off).
   const [apy, setApy] = useState<ProtocolApy>(EMPTY_APY);
 
@@ -177,8 +180,21 @@ export function EarnScreen() {
        */
       .sort((x, y) => Number(y.route.asset.kind === 'stable') - Number(x.route.asset.kind === 'stable'));
 
-  const earnedFor = (p: Position | null): string | null => {
+  /**
+   * Earned, on a position still worth more than a dollar.
+   *
+   * A withdrawal never quite empties a position — interest accrues between the read and the call —
+   * so a route the owner has left still holds dust, and the lifetime earned beside a balance of
+   * nothing reads as money still at work. The lifetime total lives on the detail page instead.
+   * Unpriced is unknown, and shows nothing until the price arrives (a dollar is a dollar).
+   */
+  const MIN_EARNED_ROW_USD = 1;
+  const earnedFor = (row: Row): string | null => {
+    const p = row.pos;
     if (!p || !flows.flows) return null;
+    const amount = Number(p.formatted);
+    const value = row.route.asset.kind === 'stable' ? amount : usdValue(amount, row.route.asset.symbol, prices);
+    if (value == null || value <= MIN_EARNED_ROW_USD) return null;
     const raw = earnedRaw(p, flows.flows);
     return raw != null ? formatUnits(raw, p.decimals) : null;
   };
@@ -247,7 +263,7 @@ export function EarnScreen() {
         row={row}
         free={freeFor(row.route.asset.symbol)}
         amountKnown={!pos.loading || pos.positions.length > 0}
-        earned={earnedFor(row.pos)}
+        earned={earnedFor(row)}
         apy={apyFor(row.route)}
         protocolName={showProtocol ? row.route.name : undefined}
         onOpen={() =>

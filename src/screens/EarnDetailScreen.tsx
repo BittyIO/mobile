@@ -15,7 +15,7 @@ import {useNetwork} from '@/core/network-store';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {useVaultPositions} from '@/vault/useVaultPositions';
 import {useFlows} from '@/vault/useFlows';
-import {earnedRaw} from '@/vault/flows';
+import {closedPosition, earnedRaw} from '@/vault/flows';
 import {balanceOfSymbol} from '@/vault/read';
 import {getAutoYields, setAutoYield} from '@/vault/autoyield';
 import {fetchProtocolApy, EMPTY_APY, type ProtocolApy} from '@/vault/apy';
@@ -119,9 +119,12 @@ export function EarnDetailScreen() {
    * nothing" when the truth is "not known yet".
    */
   const earned = (() => {
-    if (!position || !flows.flows) return null;
-    const raw = earnedRaw(position, flows.flows);
-    return raw != null ? Number(formatUnits(raw, position.decimals)) : null;
+    if (!flows.flows || (!position && pos.loading)) return null;
+    // Withdrawn in full, it still earned what it earned.
+    const p = position ?? closedPosition(protocol, asset, lend ? 'supplied' : 'staked');
+    const raw = earnedRaw(p, flows.flows);
+    const decimals = position?.decimals ?? meta?.decimals;
+    return raw != null && decimals != null ? Number(formatUnits(raw, decimals)) : null;
   })();
 
   // ── live rate, and the series it feeds ────────────────────────────────

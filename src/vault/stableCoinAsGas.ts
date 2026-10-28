@@ -238,8 +238,13 @@ export function resolveFeeReserve(opts: {
   heldStables: {symbol: string; amount: number; usd?: number}[];
   /** The coin this operation is spending, when there is one. */
   spendSymbol?: string;
+  /**
+   * The fee THIS operation will be billed, in dollars (see {useFeeFloor}). The float never drops
+   * below it, so a reserve of None still leaves enough to pay for the operation it is spent by.
+   */
+  floorUsd?: number;
 }): {coin: string | null; size: number; keep: number} {
-  const dollars = gasReserveSize(opts.network, opts.vault);
+  const dollars = Math.max(gasReserveSize(opts.network, opts.vault), opts.floorUsd ?? 0);
   const value = (h: {amount: number; usd?: number}) => h.amount * (h.usd ?? 1);
   const covers = (h: {amount: number; usd?: number}) => value(h) >= dollars;
   // Short of a coin that covers it, the one holding the most: a partial float still pays fees, and

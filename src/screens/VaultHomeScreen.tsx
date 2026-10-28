@@ -31,7 +31,7 @@ import {fmtNum, displaySymbol} from '@/core/format';
 
 import {useAssetCatalog, useCatalogSettled} from '@/core/asset-catalog';
 import {assetCategory, type AssetCategory} from '@/core/assets';
-import {isAssetsList, useFavorites, useWatchLists, watchListLabel, watchListNumber} from '@/core/favorites-store';
+import {isAssetsList, unnamedListLabel, useFavorites, useWatchLists, watchListLabel} from '@/core/favorites-store';
 import {getFlag, setFlag, getPref, setPref, HIDE_BALANCES} from '@/core/prefs';
 import {useWatchDraft} from '@/core/watch-draft';
 import {balanceOfSymbol} from '@/vault/read';
@@ -501,6 +501,24 @@ export function VaultHomeScreen() {
    * One answer covers all of them, and it refreshes on the same pull the prices do.
    */
   const marketStats = useMarketStats(network, catalogSymbols, priceNonce);
+  /**
+   * The seven largest stocks this network trades, as a watch list of their own — once, so a new
+   * owner sees that stocks are here at all (see {seedStocks}). Ranked by live market cap, so it
+   * waits for the caps to arrive; a network with no stocks gets nothing.
+   */
+  const seedStocks = useFavorites((s) => s.seedStocks);
+  const listsHere = useFavorites((s) => s.lists[network]);
+  React.useEffect(() => {
+    const ranked = catalog
+      .filter((a) => assetCategory(a.category) === 'stock')
+      .map((a) => ({symbol: a.symbol, cap: marketStats.get(a.symbol)?.marketCap ?? null}))
+      .filter((x): x is {symbol: string; cap: number} => x.cap != null && x.cap > 0)
+      .sort((x, y) => y.cap - x.cap)
+      .slice(0, 7)
+      .map((x) => x.symbol);
+    if (ranked.length) seedStocks(network, ranked);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [network, catalog, marketStats, listsHere]);
   const unstakeKey = bal.vault ? `${network}:${bal.vault.toLowerCase()}` : '';
   const rowsLive = useMemo<Row[]>(() => {
     // Stablecoins lead the list, then the rest in catalog order.
@@ -980,12 +998,7 @@ export function VaultHomeScreen() {
                   nav.navigate('Watchlist');
                 }}>
                 <Text style={[styles.listTitle, on && styles.listTitleOn]}>
-                  {watchListLabel(
-                    l,
-                    isAssetsList(l.id)
-                      ? t('mobile.home.all_assets')
-                      : t('mobile.home.watch_list_n', {n: watchListNumber(watch.lists, l.id)}),
-                  )}
+                  {watchListLabel(l, unnamedListLabel(watch.lists, l, t))}
                 </Text>
               </Pressable>
             );
