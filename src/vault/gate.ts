@@ -7,6 +7,7 @@ import {publicClientFor, type Network} from '@/core/chain';
 import {useNetwork} from '@/core/network-store';
 import {useActiveVaultAddress} from '@/core/active-vault';
 import {usePending} from '@/vault/pending';
+import {runningVaultVersion} from './vault-abi';
 import {
   capability,
   type Gate,
@@ -23,7 +24,8 @@ import {
  *
  * One store for every screen, keyed by network and vault, so the Trade, Earn and Send screens read
  * the same answer. Read when a screen using it comes into focus, when the app comes back, and when
- * a relayed write settles (a lock made on this device is one).
+ * a relayed write settles (a lock made on this device is one). The vault's release comes with it,
+ * since a newer one gates more tightly (STRICT_GATES_SINCE).
  *
  * The app always acts as the vault's owner, so the role is fixed: an asset manager uses web.
  */
@@ -37,17 +39,21 @@ const UNKNOWN: VaultGateState = {lockLevel: null, role: 'owner'};
 
 /** One read. A part that fails (a vault not activated yet, a flaky RPC) stays unknown, which allows. */
 export async function readVaultGateState(vault: Address, network: Network): Promise<VaultGateState> {
-  const [lock, risk] = await publicClientFor(network).multicall({
-    allowFailure: true,
-    contracts: [
-      {address: vault, abi: GATE_ABI, functionName: 'lockLevel'},
-      {address: vault, abi: GATE_ABI, functionName: 'riskSettings'},
-    ],
-  });
+  const [[lock, risk], vaultVersion] = await Promise.all([
+    publicClientFor(network).multicall({
+      allowFailure: true,
+      contracts: [
+        {address: vault, abi: GATE_ABI, functionName: 'lockLevel'},
+        {address: vault, abi: GATE_ABI, functionName: 'riskSettings'},
+      ],
+    }),
+    runningVaultVersion(vault, network).catch(() => null),
+  ]);
   const level = lock.status === 'success' ? Number(lock.result) : null;
   const state: VaultGateState = {
     lockLevel: level === 0 || level === 1 || level === 2 ? (level as LockLevel) : null,
     role: 'owner',
+    vaultVersion,
   };
   if (risk.status === 'success') {
     // The effective allowances: never-set reads as the ceiling, so only a real 0 means "off".

@@ -39,11 +39,10 @@ const PROTOCOLS: Record<Network, Record<string, ProtocolInfo>> = {
     '0xb5b4313d88b4aa68d03bd6467eb1460ffaf136e5': {name: 'Uniswap Universal', category: 'amm'},
     '0x646248f1ad34a4ef927726bd818c19107231322b': {name: 'CoW Swap', category: 'intent'},
   },
-  // Read off the Robinhood guard 2026-10-23. Its intent adapter is UniswapX, not CoW, so the Trade
-  // sheet offers no Limit/TWAP there (they are CoW orders).
+  // Read off the Robinhood guard 2026-10-23. No intent adapter: its UniswapX one is retired (see
+  // {RETIRED}), and CoW does not run there, so the Trade sheet offers no Limit/TWAP.
   robinhood: {
     '0xc1608cfc8c272c693f8b0a65cfe16597b9e281ae': {name: 'Uniswap Universal', category: 'amm'},
-    '0x2db440cf6215d68d44736a287b253f4461399aa0': {name: 'UniswapX', category: 'intent'},
   },
   // Registered on the Arbitrum guard 2026-10-19. Names only; routing reads the guard.
   arbitrum: {
@@ -59,6 +58,24 @@ const PROTOCOLS: Record<Network, Record<string, ProtocolInfo>> = {
     '0x236b4b260bd29dca1df29360fa09c084e37fb100': {name: 'CoW Swap', category: 'intent'},
   },
 };
+
+/**
+ * Adapters the guard has retired, kept only to NAME them: a past order, approval or cancel in the
+ * history, and an order still open on a vault that cloned one. They are not in {table}, so nothing
+ * lists, routes or clones them.
+ */
+const RETIRED: Partial<Record<Network, Record<string, ProtocolInfo>>> = {
+  // UniswapX: deprecated on the Robinhood guard with vault 1.0.6, which takes no UniswapX order.
+  robinhood: {
+    '0x2db440cf6215d68d44736a287b253f4461399aa0': {name: 'UniswapX', category: 'intent'},
+  },
+};
+
+/** A retired adapter's address by name (see {RETIRED}), or null where the network had none. */
+export function retiredAdapterByName(network: Network, name: string): Address | null {
+  const hit = Object.entries(RETIRED[network] ?? {}).find(([, info]) => info.name.toLowerCase() === name.toLowerCase());
+  return hit ? (hit[0] as Address) : null;
+}
 
 /**
  * What a protocol is CALLED on screen, where that differs from the adapter's registry name.
@@ -141,7 +158,7 @@ const byCategory = (network: Network, category: ProtocolCategory): Address[] =>
  * belongs to.
  */
 export function protocolMeta(network: Network, address: string): ProtocolInfo {
-  const vendored = table(network)[address.toLowerCase()];
+  const vendored = table(network)[address.toLowerCase()] ?? RETIRED[network]?.[address.toLowerCase()];
   if (vendored) return vendored;
   const live = currentGuardProtocols(network)?.find((p) => p.address.toLowerCase() === address.toLowerCase());
   return {name: short(address), category: live?.category ?? 'unknown'};

@@ -19,6 +19,23 @@ export const PERM_SUPPLY = 1 << 1;
 export const PERM_MARKET_TRADE = 1 << 2;
 export const PERM_INTENT = 1 << 3;
 
+/**
+ * The first vault release whose gates are tighter, in three places: a manager takes a position out
+ * only with the bit that put it in (PERM_YIELD for staking, PERM_SUPPLY for lending), cancels an
+ * intent order only with PERM_INTENT, and the allow-list switch is frozen under a lock in both
+ * directions. An older vault keeps the looser rules, which is also what an unknown release reads as.
+ */
+export const STRICT_GATES_SINCE = '1.0.6';
+
+/** Whether `version` ("1.0.6") is `since` or later. Unknown (null) is not. */
+export function versionAtLeast(version: string | null | undefined, since: string): boolean {
+  if (!version) return false;
+  const a = version.split('.').map(Number);
+  const b = since.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((a[i] ?? 0) !== b[i]) return (a[i] ?? 0) > b[i];
+  return true;
+}
+
 export type VaultAction =
   // DeFi
   | 'deposit'
@@ -84,10 +101,15 @@ export interface VaultGateState {
   sendAllowanceOff?: boolean;
   /** The market-trade daily loss allowance is set to 0: market trading is off. */
   marketTradeOff?: boolean;
+  /** The vault's release ("1.0.6"), which picks the rules — see {STRICT_GATES_SINCE}. */
+  vaultVersion?: string | null;
 }
 
 export interface GateOptions {
-  /** deposit: the protocol stakes (needs PERM_YIELD) rather than supplies (PERM_SUPPLY). */
+  /**
+   * deposit (and, from 1.0.6, withdraw / claimWithdrawal): the protocol stakes (needs PERM_YIELD)
+   * rather than supplies (PERM_SUPPLY).
+   */
   staking?: boolean;
   /** placeIntentOrder: the order buys an allowed stablecoin. Unknown reads as allowed. */
   buysStablecoin?: boolean;
@@ -96,7 +118,10 @@ export interface GateOptions {
 const ALLOWED: Gate = {allowed: true};
 const refuse = (reason: GateReason): Gate => ({allowed: false, reason});
 
-/** Who may call it: the owner alone, or also a manager holding `perm` (0 = any live manager). */
+/**
+ * Who may call it: the owner alone, or also a manager holding `perm` (0 = any live manager). Up to
+ * 1.0.5; STRICT_MANAGER_PERMISSION overrides it from 1.0.6.
+ */
 const MANAGER_PERMISSION: Partial<Record<VaultAction, number>> = {
   withdraw: 0,
   claimWithdrawal: 0,
@@ -106,12 +131,29 @@ const MANAGER_PERMISSION: Partial<Record<VaultAction, number>> = {
   approveIntentSpender: PERM_INTENT,
 };
 
+/** From 1.0.6 no unwind is free: cancelling needs PERM_INTENT (exits are sized by `staking`). */
+const STRICT_MANAGER_PERMISSION: Partial<Record<VaultAction, number>> = {
+  cancelIntentOrder: PERM_INTENT,
+};
+
+/** Positions in or out, from 1.0.6: the bit for the protocol's kind. */
+const POSITION_ACTIONS = new Set<VaultAction>([
+  'deposit',
+  'withdraw',
+  'claimWithdrawal',
+]);
+
+const strict = (state: VaultGateState) =>
+  versionAtLeast(state.vaultVersion, STRICT_GATES_SINCE);
+
 /** Still open under either lock: value coming home, and the ways out the owner drew in advance. */
 const OPEN_WHILE_LOCKED = new Set<VaultAction>([
   'withdraw',
   'claimWithdrawal',
   'approveIntentSpender',
   'sendToWhitelistedRecipient',
+  // Up to 1.0.5 only (back to Bitty's list; leaving it is updateAllowList). From 1.0.6 the switch is
+  // frozen under a lock in both directions.
   'useBittyAllowList',
 ]);
 
@@ -148,7 +190,12 @@ export function capability(
         : ALLOWED;
   }
 
-  if (level !== 0 && !OPEN_WHILE_LOCKED.has(action)) return refuse(lockReason);
+  if (
+    level !== 0 &&
+    (!OPEN_WHILE_LOCKED.has(action) ||
+      (action === 'useBittyAllowList' && strict(state)))
+  )
+    return refuse(lockReason);
 
   if (action === 'send' && state.sendAllowanceOff)
     return refuse('send_allowance_off');
@@ -164,12 +211,14 @@ function checkRole(
 ): Gate {
   if (state.role === null || state.role === 'owner') return ALLOWED;
   if (NO_ROLE_CHECK.has(action)) return ALLOWED;
+  const strictGates = strict(state);
   const perm =
-    action === 'deposit'
+    action === 'deposit' || (strictGates && POSITION_ACTIONS.has(action))
       ? opts.staking
         ? PERM_YIELD
         : PERM_SUPPLY
-      : MANAGER_PERMISSION[action];
+      : ((strictGates ? STRICT_MANAGER_PERMISSION[action] : undefined) ??
+        MANAGER_PERMISSION[action]);
   if (perm === undefined) return refuse('owner_only');
   if (state.role !== 'assetManager') return refuse('no_permission');
   if (perm === 0) return ALLOWED;

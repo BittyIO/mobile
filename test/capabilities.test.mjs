@@ -87,7 +87,8 @@ test("asset manager: only what its permissions name", () => {
   assert.equal(verdict(capability("marketTrade", mgr(PERM_INTENT))), "no_permission");
   assert.equal(verdict(capability("placeIntentOrder", mgr(PERM_INTENT))), OK);
   assert.equal(verdict(capability("approveIntentSpender", mgr(PERM_MARKET_TRADE))), "no_permission");
-  // Any live manager may bring value home and cancel orders, whatever its permissions.
+  // Before 1.0.6 (and with the release unknown) any live manager may bring value home and cancel
+  // orders, whatever its permissions.
   assert.equal(verdict(capability("withdraw", mgr(0))), OK);
   assert.equal(verdict(capability("claimWithdrawal", mgr(0))), OK);
   assert.equal(verdict(capability("cancelIntentOrder", mgr(0))), OK);
@@ -105,4 +106,37 @@ test("a wallet with no role here may do nothing it would have to sign", () => {
   const none = { lockLevel: 0, role: "none" };
   assert.equal(verdict(capability("withdraw", none)), "no_permission");
   assert.equal(verdict(capability("send", none)), "owner_only");
+});
+
+test("from 1.0.6 the allow-list switch is frozen under either lock", () => {
+  const owner = (lockLevel, vaultVersion) => ({ lockLevel, role: "owner", vaultVersion });
+  assert.equal(verdict(capability("useBittyAllowList", owner(0, "1.0.6"))), OK);
+  assert.equal(verdict(capability("useBittyAllowList", owner(1, "1.0.6"))), T);
+  assert.equal(verdict(capability("useBittyAllowList", owner(2, "1.0.6"))), F);
+  assert.equal(verdict(capability("useBittyAllowList", owner(1, "1.1.0"))), T);
+  // An older vault, or one whose release is not known yet, keeps the way back to Bitty's list.
+  assert.equal(verdict(capability("useBittyAllowList", owner(1, "1.0.5"))), OK);
+  assert.equal(verdict(capability("useBittyAllowList", owner(2, null))), OK);
+  // The rest of the open set is unchanged.
+  for (const action of ["withdraw", "claimWithdrawal", "approveIntentSpender", "sendToWhitelistedRecipient"]) {
+    assert.equal(verdict(capability(action, owner(2, "1.0.6"))), OK, action);
+  }
+});
+
+test("from 1.0.6 a manager unwinds only with the permission that put it in", () => {
+  const mgr = (permissions, lockLevel = 0) => ({ lockLevel, role: "assetManager", managerPermissions: permissions, vaultVersion: "1.0.6" });
+
+  assert.equal(verdict(capability("withdraw", mgr(0))), "no_permission");
+  assert.equal(verdict(capability("withdraw", mgr(PERM_SUPPLY))), OK);
+  assert.equal(verdict(capability("withdraw", mgr(PERM_SUPPLY), { staking: true })), "no_permission");
+  assert.equal(verdict(capability("withdraw", mgr(PERM_YIELD), { staking: true })), OK);
+  assert.equal(verdict(capability("claimWithdrawal", mgr(PERM_MARKET_TRADE), { staking: true })), "no_permission");
+  assert.equal(verdict(capability("claimWithdrawal", mgr(PERM_YIELD), { staking: true })), OK);
+  assert.equal(verdict(capability("cancelIntentOrder", mgr(PERM_MARKET_TRADE))), "no_permission");
+  assert.equal(verdict(capability("cancelIntentOrder", mgr(PERM_INTENT))), OK);
+  assert.equal(verdict(capability("cancelIntentOrder", mgr(PERM_INTENT, 1))), T);
+  // Still open under a lock, for a manager holding the bit.
+  assert.equal(verdict(capability("withdraw", mgr(PERM_SUPPLY, 2))), OK);
+  // The owner needs no bit.
+  assert.equal(verdict(capability("withdraw", { lockLevel: 0, role: "owner", vaultVersion: "1.0.6" }, { staking: true })), OK);
 });

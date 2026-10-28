@@ -1,6 +1,9 @@
 /**
- * UniswapX limit orders: Limit on a chain whose intent adapter is UniswapX (Robinhood). Gasless once
- * set up, like a CoW limit order:
+ * UniswapX limit orders: Limit on a chain whose intent adapter was UniswapX (Robinhood). RETIRED:
+ * vault {UNISWAPX_REMOVED_SINCE} takes no UniswapX order, and the guard deprecated the adapter for
+ * every vault, so a new order is placed only where {uniswapXOpen} still says yes. An order already
+ * placed is still listed ({fetchUniswapXOrders}) and cancelled on the vault's clone, and the history
+ * still names it. Gasless once set up, like a CoW limit order:
  *  1. the server fetches a V3 Dutch order for the sell from Uniswap's Trading API — the API key
  *     never reaches the app — and it is decoded here from `encodedOrder`;
  *  2. it is made a limit order: a fixed output at the user's price (no auction decay) and a deadline
@@ -21,7 +24,9 @@ import {decodeAbiParameters, encodeAbiParameters, hashStruct, parseAbiParameters
 import type {Signer} from '@/wallet/signer';
 import {apiFetch, apiUrl, type Network} from '@/core/chain';
 import {orderSignerSig} from '@/core/cow';
-import {adapterByName} from '@/core/protocols';
+import {retiredAdapterByName} from '@/core/protocols';
+import {currentGuardProtocols} from '@/core/guard-catalog';
+import {versionAtLeast} from './capabilities';
 import {assetMeta} from '@/core/assets';
 import type {CowOrder} from './limit';
 
@@ -32,8 +37,23 @@ const FEE_BPS = BigInt(20);
 // leaves it short.
 const FEE_ASK_BPS = BigInt(21);
 
-/** The chain's UniswapX adapter, or null where there is none. */
-export const uniswapXAdapter = (network: Network): Address | null => adapterByName(network, 'UniswapX');
+/** The chain's UniswapX adapter, or null where there never was one: for its orders, not new ones. */
+export const uniswapXAdapter = (network: Network): Address | null => retiredAdapterByName(network, 'UniswapX');
+
+/** The first vault release that takes no UniswapX order: protocol-store dropped the adapter. */
+export const UNISWAPX_REMOVED_SINCE = '1.0.6';
+
+/**
+ * Whether a NEW UniswapX order may be placed: the vault is older than {UNISWAPX_REMOVED_SINCE}
+ * (known, not guessed) and the guard still lists the adapter among its active ones — a deprecated
+ * adapter is refused for anything but a cancel. No to both today; kept as a check rather than a
+ * constant so an older vault reads the guard, not this build.
+ */
+export function uniswapXOpen(network: Network, vaultVersion: string | null | undefined): boolean {
+  const adapter = uniswapXAdapter(network);
+  if (!adapter || !vaultVersion || versionAtLeast(vaultVersion, UNISWAPX_REMOVED_SINCE)) return false;
+  return !!currentGuardProtocols(network)?.some((p) => p.address.toLowerCase() === adapter.toLowerCase());
+}
 
 const DECAY = '(uint256 relativeBlocks,int256[] relativeAmounts)';
 const INFO = '(address reactor,address swapper,uint256 nonce,uint256 deadline,address additionalValidationContract,bytes additionalValidationData)';

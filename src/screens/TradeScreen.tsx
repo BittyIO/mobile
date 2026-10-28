@@ -52,7 +52,7 @@ import {marketSell, buildMarketSell, poolSpotPrice, quotePreview} from '@/vault/
 import {PositionPanel} from '@/components/PositionPanel';
 import {AssetPickRow} from '@/components/AssetPickRow';
 import {fetchPosition, type Position} from '@/vault/position';
-import {placeUniswapXLimit, uniswapXAdapter, UniswapXNoQuoteError} from '@/vault/uniswapx';
+import {placeUniswapXLimit, uniswapXAdapter, uniswapXOpen, UniswapXNoQuoteError} from '@/vault/uniswapx';
 import {placeLimitOrder, prepareIntent, cancelLimitOrders, fetchRecentOrders, type CowOrder} from '@/vault/limit';
 import {cancelledAt, cancelledAtAny, recordCancelled} from '@/vault/cancel-log';
 import {placeTwap, fetchTwapSchedules, cancelTwap, type TwapSchedule} from '@/vault/twap';
@@ -746,11 +746,14 @@ export function TradeScreen() {
   const [pulled, setPulled] = useState(false);
   const prices = usePrices(network, refreshNonce);
   const base = assets.find((a) => a.symbol === baseSym);
-  // The intent adapter Limit goes to: CoW, or UniswapX where it stands in for CoW (Robinhood).
-  // TWAP is CoW's alone.
+  // The intent adapter Limit goes to: CoW, or UniswapX where it stood in for CoW (Robinhood).
+  // TWAP is CoW's alone. UniswapX is retired — vault 1.0.6 takes none of its orders and the guard
+  // has deprecated it — so its orders already placed are still listed and cancelled through
+  // `intent`, but a new one goes to `placeIntent`, which names it only while it is still open.
   const cowIntent = adapterByName(network, 'CoW Swap');
   const uxIntent = cowIntent ? null : uniswapXAdapter(network);
   const intent = cowIntent ?? uxIntent;
+  const placeIntent = cowIntent ?? (uxIntent && uniswapXOpen(network, vaultGate.vaultVersion) ? uxIntent : null);
 
   // The base asset's position + P&L, computed on the server from the vault's swap history. Re-read
   // whenever the asset, network or a pull changes — the panel above the action shows it when the
@@ -1020,18 +1023,18 @@ export function TradeScreen() {
   const payTokenAddr = spendAsset?.address as Address | undefined;
   const buyTokenAddr = (paysBase ? quoteAsset : base)?.address as Address | undefined;
   useEffect(() => {
-    if (mode === 'Market' || !intent || !owner || !payTokenAddr || !buyTokenAddr) {
+    if (mode === 'Market' || !placeIntent || !owner || !payTokenAddr || !buyTokenAddr) {
       setIntentSetup(null);
       return;
     }
     let live = true;
     const vault = activeVaultAddress(network)!;
     (async () => {
-      const approve = await needsRelayerApproval({vault, network, intentProtocol: intent, token: payTokenAddr});
+      const approve = await needsRelayerApproval({vault, network, intentProtocol: placeIntent, token: payTokenAddr});
       const calls = await intentPrepCalls({
         vault,
         network,
-        intentProtocol: intent,
+        intentProtocol: placeIntent,
         tokens: [payTokenAddr, buyTokenAddr],
         approveToken: approve ? payTokenAddr : undefined,
       });
@@ -1040,7 +1043,7 @@ export function TradeScreen() {
     return () => {
       live = false;
     };
-  }, [mode, intent, owner, network, payTokenAddr, buyTokenAddr]);
+  }, [mode, placeIntent, owner, network, payTokenAddr, buyTokenAddr]);
 
   const feeGas = useMemo(
     () =>
@@ -1809,7 +1812,7 @@ export function TradeScreen() {
           tx.success(hash);
         }
       } else {
-        if (!intent) throw new Error(t('mobile.trade.cow_unavailable'));
+        if (!placeIntent) throw new Error(t('mobile.trade.cow_unavailable'));
         // Bundle the one-time setup (allowlist assets, register the intent adapter so the vault clones it,
         // approve the relayer) — plus any Sky top-up — into a single mined tx before posting, so the USDC is
         // in the vault when the order settles.
@@ -1833,8 +1836,8 @@ export function TradeScreen() {
 
         // Asked of the chain, not of a Set that empties on restart: an unlimited allowance is
         // already there after the first order, and approving it again costs a relay fee for nothing.
-        const needApprove = await needsRelayerApproval({vault, network, intentProtocol: intent, token: payToken});
-        await prepareIntent({account: acct, vault, network, intentProtocol: intent, tokens: [payToken, buyToken], approveToken: needApprove ? payToken : undefined, stableCoin: feeCoin});
+        const needApprove = await needsRelayerApproval({vault, network, intentProtocol: placeIntent, token: payToken});
+        await prepareIntent({account: acct, vault, network, intentProtocol: placeIntent, tokens: [payToken, buyToken], approveToken: needApprove ? payToken : undefined, stableCoin: feeCoin});
         // Minimum received (what the user wants), in the receive leg's units. Falls back to the
         // price-derived amount if they left the field to auto-fill. Bounded decimals so parseUnits round-trips.
         const recvNum = Number(receiveInput) > 0 ? Number(receiveInput) : effPrice > 0 && Number(amount) > 0 ? (paysBase ? Number(amount) * effPrice : Number(amount) / effPrice) : 0;
@@ -1852,10 +1855,10 @@ export function TradeScreen() {
             throw e instanceof UniswapXNoQuoteError ? new Error(t('mobile.trade.uniswapx_no_quote')) : e;
           });
         } else if (mode === 'Limit') {
-          await placeLimitOrder({account: acct, vault, network, intentProtocol: intent, sellToken: payToken, buyToken, sellAmount: payAmount, buyAmount: minRecv, kind: 'sell', validSeconds: validSec});
+          await placeLimitOrder({account: acct, vault, network, intentProtocol: placeIntent, sellToken: payToken, buyToken, sellAmount: payAmount, buyAmount: minRecv, kind: 'sell', validSeconds: validSec});
         } else {
           const n = Math.max(1, parseInt(parts || '1', 10));
-          await placeTwap({account: acct, vault, network, intentProtocol: intent, sellToken: payToken, buyToken, totalSell: payAmount, totalMinBuy: minRecv, parts: n, partDuration: Math.max(60, Math.floor(validSec / n))});
+          await placeTwap({account: acct, vault, network, intentProtocol: placeIntent, sellToken: payToken, buyToken, totalSell: payAmount, totalMinBuy: minRecv, parts: n, partDuration: Math.max(60, Math.floor(validSec / n))});
         }
         /**
          * Done, with no hash to wait on.
@@ -2296,8 +2299,9 @@ export function TradeScreen() {
   // stays on the tabs, greyed: the sheet opens on Limit, and picking Market shows why it cannot be
   // placed — only there, never under Limit or TWAP.
   const marketOk = marketable && !marketOff;
-  // Limit goes to the intent adapter, CoW or UniswapX; TWAP is a CoW order, offered only with CoW.
-  const intentable = !!intent;
+  // Limit goes to the intent adapter a new order may be placed on, CoW or (on an older vault, while
+  // the guard still runs it) UniswapX; TWAP is a CoW order, offered only with CoW.
+  const intentable = !!placeIntent;
   const twapable = !!cowIntent;
   // Until the catalog has served guard categories, "not marketable" means "not known yet" — demoting
   // the default Market mode to Limit then would stick after the answer turned out to be yes.
