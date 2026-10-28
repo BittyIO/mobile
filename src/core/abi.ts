@@ -179,7 +179,9 @@ export const VAULT_DELEGATE_ABI = parseAbi([
  *  - yield: deposit into staking protocols.     - supply: deposit into lending protocols.
  *  - marketTrade: `marketSell` / `marketBuy`.   - intent: limit orders and TWAP (relayer approval,
  *    order signatures).
- * Withdrawing and cancelling orders take no permission — any active manager may unwind.
+ * Up to vault 1.0.5 withdrawing and cancelling orders take no permission — any active manager may
+ * unwind. From 1.0.6 taking a position out needs the bit that put it in (yield for staking, supply
+ * for lending) and cancelling an order needs intent (STRICT_GATES_SINCE in vault/capabilities).
  */
 export const ASSET_MANAGER_PERMS = {
   yield: 1 << 0,

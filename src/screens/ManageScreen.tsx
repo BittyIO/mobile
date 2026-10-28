@@ -74,6 +74,8 @@ export function ManageScreen() {
   const versions = useAdapterVersions();
   // A lock freezes the allow lists, and adapter upgrades with them (vault/gate).
   const listGate = useCapability('updateAllowList');
+  // Going back to Bitty's list: open under a lock before vault 1.0.6, frozen with the rest from it.
+  const bittyListGate = useCapability('useBittyAllowList');
 
   // The services come from the server version catalog (the single source shared with the web), not
   // from a bundled adapter table. One adapter per name (canonical address), in service order.
@@ -285,8 +287,8 @@ export function ManageScreen() {
           <PendingSwitch
               value={!restricted}
               pending={busy === 'allowlist'}
-              // Locked, the vault may still go back to Bitty's list, never narrow to its own.
-              disabled={busy !== null || (!restricted && !listGate.allowed)}
+              // Locked, the vault never narrows to its own list; it goes back to Bitty's only before 1.0.6.
+              disabled={busy !== null || !(restricted ? bittyListGate : listGate).allowed}
               onValueChange={(v) =>
                 run('allowlist', t('mobile.vault.bitty_allowlist'), (acct) =>
                   setAllowlistEnabled({account: acct, vault: vault!, network, enabled: !v, stableCoin: stable!.address}),

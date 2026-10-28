@@ -168,8 +168,8 @@ export function AssetDetailScreen() {
         {/* Why a pair offers Limit only: the guard registers the Ondo and Robinhood stocks without
             the AMM-liquid bit, because no Uniswap pool prices them. Said here rather than left for
             the order form to refuse. */}
-        {/* And where there are no limit orders either (Robinhood: its intent adapter is UniswapX,
-            not CoW), an asset the guard cannot price for Market is not tradable at all. */}
+        {/* And where there are no limit orders either (Robinhood: no CoW, and its UniswapX adapter
+            is retired), an asset the guard cannot price for Market is not tradable at all. */}
         <Row
           label={t('mobile.trade.market_trading')}
           value={

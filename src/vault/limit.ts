@@ -329,7 +329,8 @@ export async function fetchRecentOrders(vault: Address, network: Network): Promi
     const res = await apiFetch(`${cowApiBase(network)}/account/${vault}/orders?limit=30`);
     return res.ok ? ((await res.json()) as CowOrder[]) : [];
   };
-  // Where the intent adapter is UniswapX (Robinhood), its limit orders share this list.
+  // Where the intent adapter was UniswapX (Robinhood), its limit orders share this list: retired,
+  // but an order placed before still shows, and can be cancelled, until it ends.
   const ux = (): Promise<CowOrder[]> => (uniswapXAdapter(network) ? fetchUniswapXOrders(vault, network) : Promise.resolve([]));
   try {
     const [a, b] = await Promise.all([cow().catch(() => []), ux().catch(() => [])]);
@@ -351,10 +352,14 @@ const CLONE_ABI = parseAbi([
  * clone. That cancel never reaches CoW's orderbook, so without this a cancelled order reads open on
  * every device but the one that cancelled it, until it expires. A clone older than the generic intent
  * interface has no isOrderCancelled; those reads fail and the order keeps CoW's status.
+ *
+ * The retired UniswapX adapter is asked as well: the guard no longer lists it, but its orders are
+ * still on its clone.
  */
 async function markCancelledOrders(vault: Address, network: Network, orders: CowOrder[]): Promise<CowOrder[]> {
   const open = orders.filter((o) => o.status === 'open');
-  const adapters = intentAdapters(network);
+  const ux = uniswapXAdapter(network);
+  const adapters = [...intentAdapters(network), ...(ux ? [ux] : [])];
   if (open.length === 0 || adapters.length === 0) return orders;
   const client = publicClientFor(network);
   // Clones are per lineage, so every version of an adapter names the same one.
