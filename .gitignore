@@ -1,0 +1,95 @@
+# OSX
+.DS_Store
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.eslintcache
+
+# Metro
+.metro-health-check*
+metro.cache/
+*.jsbundle
+
+# Xcode
+build/
+DerivedData/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.xcuserstate
+project.xcworkspace/
+
+# CocoaPods — Podfile.lock stays tracked so every machine installs the same pods
+ios/Pods/
+ios/.xcode.env.local
+
+# Ruby / Fastlane
+vendor/bundle/
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+
+# Tests and coverage
+coverage/
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+
+# Editors
+.idea/
+*.iml
+*.swp
+
+# Android / Gradle
+android/.gradle/
+android/.kotlin/
+android/app/.cxx/
+android/local.properties
+android/keystore.properties
+*.keystore
+!android/app/debug.keystore
+*.apk
+*.aab
+android/app/build/
+android/build/
+android/app/release/
+
+# Signing and store credentials — never commit
+*.jks
+*.p8
+*.p12
+*.pem
+*.key
+*.mobileprovision
+*.provisionprofile
+*.cer
+*.certSigningRequest
+android/app/google-services.json
+ios/GoogleService-Info.plist
+fastlane/.env*
+AuthKey_*.p8
+
+# Build outputs and archives
+*.xcarchive
+*.dSYM.zip
+*.dSYM/
+
+# Logs and local tooling
+*.log
+.claude/
+.vscode/

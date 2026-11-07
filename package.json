@@ -1,0 +1,55 @@
+{
+  "name": "bitty-mobile",
+  "version": "1.0.4",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "description": "Bitty — native iOS + Android app (React Native, embedded keyring). Vault product only.",
+  "scripts": {
+    "start": "react-native start",
+    "ios": "react-native run-ios",
+    "ios:release": "bash scripts/ios-release.sh",
+    "android": "react-native run-android",
+    "android:apk": "cd android && ./gradlew assembleRelease",
+    "android:bundle": "cd android && ./gradlew bundleRelease",
+    "pods": "cd ios && pod install",
+    "tsc": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "node --test test/capabilities.test.mjs"
+  },
+  "dependencies": {
+    "@react-native-clipboard/clipboard": "^1.16.1",
+    "@react-native-community/datetimepicker": "^9.2.1",
+    "@react-navigation/bottom-tabs": "^7.4.0",
+    "@react-navigation/native": "^7.1.0",
+    "@react-navigation/native-stack": "^7.3.0",
+    "@scure/bip39": "1.6.0",
+    "buffer": "^6.0.3",
+    "react": "19.1.0",
+    "react-native": "0.81.0",
+    "react-native-gesture-handler": "^2.30.0",
+    "react-native-get-random-values": "^1.11.0",
+    "react-native-keychain": "^9.2.0",
+    "react-native-mmkv": "^3.3.0",
+    "react-native-qrcode-svg": "^6.3.2",
+    "react-native-reanimated": "^3.19.0",
+    "react-native-safe-area-context": "^5.4.0",
+    "react-native-screens": "4.24.0",
+    "react-native-svg": "^15.12.0",
+    "react-native-vision-camera": "4.7.3",
+    "react-native-webview": "^14.0.1",
+    "viem": "^2.41.2",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@react-native-community/cli": "^15.0.0",
+    "@react-native/babel-preset": "0.81.0",
+    "@react-native/metro-config": "0.81.0",
+    "@react-native/typescript-config": "0.81.0",
+    "@types/react": "^19.1.0",
+    "babel-plugin-module-resolver": "^5.0.2",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

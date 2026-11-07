@@ -1,0 +1,15 @@
+{
+  "extends": "@react-native/typescript-config/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    // The base config asks for jest types the project does not install; with them missing tsc
+    // stops before checking any source, so every error goes unreported.
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  },
+  "include": ["src", "index.js"],
+  "exclude": ["node_modules"]
+}

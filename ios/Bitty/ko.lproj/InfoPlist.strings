@@ -1,0 +1,3 @@
+"CFBundleDisplayName" = "Bitty 볼트";
+"CFBundleName" = "Bitty 볼트";
+"NSFaceIDUsageDescription" = "Face ID로 Bitty 볼트의 잠금을 해제하고 각 서명을 승인합니다.";

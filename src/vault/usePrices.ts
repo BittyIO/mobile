@@ -1,0 +1,66 @@
+import {useEffect, useMemo, useState} from 'react';
+import type {Network} from '@/core/chain';
+import {knownAssets} from '@/core/assets';
+import {useCatalogVersion} from '@/core/asset-catalog';
+import {fetchPrices, type PriceMap} from '@/core/prices';
+import {livePrice, useLivePrices} from '@/core/live-price-store';
+
+/**
+ * USD prices for a screen's assets, from the app's own /api/prices.
+ *
+ * `symbols` is what the screen actually renders, because the bundled catalog and the live one are
+ * not the same list: the live catalog is the source the Overview draws from, and anything only in
+ * there was never being priced. Passing nothing falls back to the bundled list, which is right for
+ * a caller that has no catalog of its own.
+ *
+ * One request for the whole screen. The server holds each answer for a minute and coalesces
+ * concurrent readers, so asking for thirty symbols costs about what asking for one does.
+ */
+export function usePrices(network: Network, nonce = 0, symbols?: string[]): PriceMap {
+  return usePriceFeed(network, nonce, symbols).prices;
+}
+
+/**
+ * {usePrices}, plus whether the answer on hand is for the symbols asked for NOW. False until the
+ * first answer, and again while a grown list (the live catalog landing) is being priced — which is
+ * what lets the Overview hold its total back instead of showing a sum with assets missing.
+ */
+export function usePriceFeed(network: Network, nonce = 0, symbols?: string[]): {prices: PriceMap; loaded: boolean} {
+  const [prices, setPrices] = useState<PriceMap>(new Map());
+  const [loadedKey, setLoadedKey] = useState('');
+  // On a cold launch the first render runs BEFORE the live catalog has answered, so the fallback
+  // list is the bundled one — and without this subscription it stayed that way: the memo below
+  // never recomputed, a catalog-only asset (every Base tokenized stock) was never asked for, and
+  // the Limit sheet seeded no price for it. The version bump re-derives the list once the rows land.
+  const catalogVersion = useCatalogVersion();
+  // Sorted and joined so a re-render with the same set does not re-fetch.
+  const key = useMemo(
+    // `knownAssets`, not the bundled table: the fallback has to cover a token the catalog added
+    // after this build, or it renders with a balance and no value beside it.
+    () => [...new Set(['ETH', ...(symbols ?? knownAssets(network).map((a) => a.symbol))])].sort().join(','),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogVersion invalidates knownAssets()
+    [network, symbols, catalogVersion],
+  );
+  useEffect(() => {
+    let live = true;
+    fetchPrices(key.split(','), network)
+      .then((p) => live && setPrices(p))
+      .catch(() => {})
+      .finally(() => live && setLoadedKey(`${network}|${key}`));
+    return () => {
+      live = false;
+    };
+  }, [key, network, nonce]);
+  // Trade's live quote, where it has one, over the spot answer — so an asset reads the same price
+  // on every screen. See {useLivePrices}.
+  const live = useLivePrices((s) => s.prices);
+  const merged = useMemo(() => {
+    const m: PriceMap = new Map(prices);
+    for (const sym of key.split(',')) {
+      const p = livePrice(live, network, sym);
+      if (p != null) m.set(sym, p);
+    }
+    return m;
+  }, [prices, live, key, network]);
+  return {prices: merged, loaded: loadedKey === `${network}|${key}`};
+}
