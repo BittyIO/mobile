@@ -1,7 +1,7 @@
 import {useEffect, useState, useSyncExternalStore} from 'react';
 import {ASSETS, RECEIPT_TOKENS, assetCategory, knownAssets, registerCatalogAssets, type Asset, type AssetKind} from '@/core/assets';
-import {isAddress} from 'viem';
-import {apiFetch, API_BASE} from '@/core/chain';
+import {isAddress, parseAbi} from 'viem';
+import {apiFetch, API_BASE, publicClientFor} from '@/core/chain';
 import type {Network} from '@/core/chain';
 import type {Address} from 'viem';
 import {API_VERSION} from '@/core/vault-contracts';
@@ -57,6 +57,8 @@ const inflight = new Map<string, Promise<Asset[] | null>>();
  * none of them could ever hold a balance here, because the read that would have found one had
  * already gone out against the bundled list.
  */
+const DECIMALS_ABI = parseAbi(['function decimals() view returns (uint8)']);
+
 let version = 0;
 const listeners = new Set<() => void>();
 /**
@@ -171,6 +173,23 @@ async function loadCatalog(network: Network): Promise<Asset[] | null> {
     const list = [...(j.assets ?? []), ...(j.stableCoins ?? [])]
       .filter((it) => !it.hidden && !receipts[it.address.toLowerCase()] && it.guardCategory !== 0)
       .map(toAsset);
+    if (list.length === 0) return null;
+    // A token this build does not ship has its decimals read from the token itself, not taken from
+    // the server: a typed amount is scaled by them. One that cannot be read, or reads differently,
+    // is left out.
+    const bundled = new Set(ASSETS[network].map((a) => a.address.toLowerCase()));
+    const checked = await Promise.all(
+      list.map(async (a) => {
+        if (bundled.has(a.address.toLowerCase())) return a;
+        try {
+          const d = await publicClientFor(network).readContract({address: a.address, abi: DECIMALS_ABI, functionName: 'decimals'});
+          return Number(d) === a.decimals ? a : null;
+        } catch {
+          return null;
+        }
+      }),
+    );
+    list.splice(0, list.length, ...checked.filter((a): a is Asset => a != null));
     if (list.length === 0) return null;
     const before = cache.get(network);
     cache.set(network, list);

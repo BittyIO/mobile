@@ -10,13 +10,51 @@
  * AWAY no longer answers to this device's key, and the list greys it out.
  */
 import {useEffect, useState} from 'react';
-import {getAddress, parseAbi, type Address} from 'viem';
+import {getAddress, parseAbi, type Address, type Hex} from 'viem';
 import {apiFetch, apiUrl, publicClientFor, type Network} from '@/core/chain';
 import {keyIndexOf, type VaultRef} from '@/core/vault-store';
 import {keyPathOf} from '@/wallet/rotation-store';
 import {vaultAddressOf} from '@/core/active-vault';
+import {VAULT_GUARD} from '@/core/vault-contracts';
+import {VAULT_RISK_ABI} from '@/core/abi';
+import {ERC1967_PROXY_RUNTIME_CODE} from '@/core/predict-vault';
 
 const OWNER_ABI = parseAbi(['function owner() view returns (address)']);
+const GUARD_REGISTRY_ABI = parseAbi(['function isImplementationRegisteredFor(address implementation, uint8 category) view returns (bool)']);
+/** ERC-1967's implementation slot. */
+const IMPL_SLOT = '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc';
+const VAULT_CATEGORY = 1;
+
+/**
+ * Whether `vault` is a real Bitty vault that answers to `key` — checked on chain, because the list
+ * it came from is the server's. A tampered list could otherwise slip in a contract that only looks
+ * like a vault (or someone else's vault) for the user to fund. Real means: the factory's proxy code,
+ * pointing at an implementation the guard registers, and owned by `key` — or, for a handover still
+ * waiting, queued to `key`.
+ */
+export async function isGenuineVaultFor(network: Network, vault: Address, key: Address, pending: boolean): Promise<boolean> {
+  try {
+    const client = publicClientFor(network);
+    const [code, slot] = await Promise.all([client.getCode({address: vault}), client.getStorageAt({address: vault, slot: IMPL_SLOT})]);
+    if (!code || code.toLowerCase() !== ERC1967_PROXY_RUNTIME_CODE.toLowerCase() || !slot) return false;
+    const impl = getAddress(`0x${slot.slice(-40)}` as Hex);
+    const registered = await client.readContract({
+      address: VAULT_GUARD,
+      abi: GUARD_REGISTRY_ABI,
+      functionName: 'isImplementationRegisteredFor',
+      args: [impl, VAULT_CATEGORY],
+    });
+    if (!registered) return false;
+    if (!pending) {
+      const owner = await client.readContract({address: vault, abi: OWNER_ABI, functionName: 'owner'});
+      return owner.toLowerCase() === key.toLowerCase();
+    }
+    const p = await client.readContract({address: vault, abi: VAULT_RISK_ABI, functionName: 'pendingChanges'});
+    return p.newOwnerReadyAt > 0n && p.newOwner.toLowerCase() === key.toLowerCase();
+  } catch {
+    return false;
+  }
+}
 
 /**
  * On `network`, the vaults `owner` owns, and those handed to it that it has yet to accept (the
@@ -91,6 +129,9 @@ export function useVaultDirectory(
           }
         }
       });
+      // Only what the chain confirms is shown: the server only suggested these.
+      const ok = await Promise.all(add.map((f) => isGenuineVaultFor(network, f.vault, f.key.address, f.pending)));
+      const confirmed = add.filter((_, i) => ok[i]);
       // Whose each listed vault is now. A Safe vault answers to the Safe, every other to its key.
       const gone = new Map<number, Address>();
       await Promise.all(
@@ -105,7 +146,7 @@ export function useVaultDirectory(
         }),
       );
       if (!live) return;
-      setFound(add);
+      setFound(confirmed);
       setTransferredTo(gone);
     })();
     return () => {

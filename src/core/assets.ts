@@ -293,7 +293,12 @@ export function knownAssets(network: Network): Asset[] {
     const row = byAddress.get(a.address.toLowerCase());
     // Field by field, not row for row: a catalog that omits something keeps the bundled answer
     // rather than blanking it.
-    return row ? {...a, ...Object.fromEntries(Object.entries(row).filter(([, v]) => v != null))} : a;
+    // Except what an amount is built from: the symbol the user picks by and the decimals a typed
+    // amount is scaled by stay this build's own. A served row that changed either could turn
+    // "send 1 USDC" into a far larger transfer.
+    return row
+      ? {...a, ...Object.fromEntries(Object.entries(row).filter(([, v]) => v != null)), symbol: a.symbol, decimals: a.decimals, address: a.address}
+      : a;
   });
   const have = new Set(ASSETS[network].map((a) => a.address.toLowerCase()));
   return [...bundled, ...live.filter((a) => !have.has(a.address.toLowerCase()))];
