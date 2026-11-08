@@ -11,7 +11,9 @@
  *     without sending anything. Kept apart from the send cap so neither uses up the other.
  *  From vault {ZERO_ALLOWANCE_SINCE} either allowance may also be 0, which turns regular sends or
  *  market trading off; an older vault refuses 0. A vault that never set one reads 1 day and 10,000
- *  (see {RISK_BOUNDS}); the contract refuses anything outside the bounds.
+ *  (see {RISK_BOUNDS}), except one created on {NEW_VAULT_DEFAULTS_VERSION} or later, which starts
+ *  with regular sends at 0 and market-trade loss at {NEW_VAULT_LOSS_ALLOWANCE}. The contract refuses
+ *  anything outside the bounds.
  *  Each setter writes only its field (the others go in as UNCHANGED = type(uint256).max).
  *
  *  The locks, which the risk numbers exist to serve:
@@ -31,6 +33,7 @@ import {useCallback, useState} from 'react';
 import {useFocusEffect} from '@react-navigation/native';
 import {VAULT_RISK_ABI, WHITELIST_STATUS} from '@/core/abi';
 import {runningVaultVersion} from './vault-abi';
+import {bornVault, NEW_VAULT_DEFAULTS_VERSION, NEW_VAULT_LOSS_ALLOWANCE} from './activate';
 import {relayVaultWrite} from './relay';
 import {fetchWhitelist} from './payments';
 
@@ -62,7 +65,11 @@ export function allowsZeroAllowance(version: string | null): boolean {
 }
 
 export type RiskConfig = {
-  /** False for an un-activated vault or a failed read: every number is then 0 and means nothing. */
+  /**
+   * False for a failed read, or an un-activated vault born on a release older than
+   * {NEW_VAULT_DEFAULTS_VERSION}: every number is then 0 and means nothing. An un-activated vault
+   * born on that release or later reads what it will start with, since nothing else can set it.
+   */
   read: boolean;
   timelock: bigint; // seconds
   /** Whole USD regular sends may move per day; 0 = regular sends are off. */
@@ -81,7 +88,37 @@ export type LockLevel = 0 | 1 | 2;
 
 const zeroRisk = (): RiskConfig => ({read: false, timelock: 0n, sendDailyAllowance: 0n, marketTradeDailyLossAllowance: 0n, pending: {}});
 
-/** The risk numbers in force. Zeros for an un-activated vault or a failed read. */
+/**
+ * What a vault with no code yet will start with, when the release it will be born on writes its own
+ * starting risk (from {NEW_VAULT_DEFAULTS_VERSION}): a day's timelock, regular sends off, and a
+ * market-trade loss allowance below the ceiling. Null for an older release, a vault that already has
+ * code, or when the chain cannot be read — those are told apart from real numbers by `read: false`.
+ *
+ * Without it the screens took an un-activated vault for one with the largest allowance, and offered
+ * a send that rides on activation only for the vault to refuse it.
+ */
+async function bornRisk(vault: Address, network: Network): Promise<RiskConfig | null> {
+  try {
+    const code = await publicClientFor(network).getBytecode({address: vault});
+    if (code && code !== '0x') return null;
+    const born = await bornVault(network);
+    if (!born || born.version < NEW_VAULT_DEFAULTS_VERSION) return null;
+    return {
+      read: true,
+      timelock: RISK_BOUNDS.timelock.min,
+      sendDailyAllowance: 0n,
+      marketTradeDailyLossAllowance: NEW_VAULT_LOSS_ALLOWANCE,
+      pending: {},
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The risk numbers in force; for an un-activated vault, what it will start with where that is known
+ * (see {bornRisk}). Zeros otherwise, or on a failed read.
+ */
 export async function getRiskConfig(vault: Address, network: Network): Promise<RiskConfig> {
   try {
     const client = publicClientFor(network);
@@ -97,7 +134,7 @@ export async function getRiskConfig(vault: Address, network: Network): Promise<R
       pending.marketTradeDailyLossAllowance = {value: changes.marketTradeDailyLossAllowance, at: changes.marketTradeDailyLossAllowanceAt};
     return {read: true, timelock, sendDailyAllowance, marketTradeDailyLossAllowance, pending};
   } catch {
-    return zeroRisk();
+    return (await bornRisk(vault, network)) ?? zeroRisk();
   }
 }
 

@@ -169,7 +169,6 @@ export type RootStackParamList = {
   VaultSecurity: undefined;
   VaultUpgrade: undefined;
   /** Security › Risk settings, Vault lock, Legacy ETH — each a row on the Security page. */
-  VaultRiskSettings: undefined;
   /** Pick one risk number: presets, or a custom value. */
   VaultRiskValue: {field: 'timelock' | 'sendDailyAllowance' | 'marketTradeDailyLossAllowance'};
   VaultLock: undefined;
@@ -586,7 +585,6 @@ function Root() {
         />
         <Stack.Screen name="VaultSecurity" getComponent={() => require('@/screens/SecurityScreen').SecurityScreen} options={{title: t('mobile.app.security')}} />
         <Stack.Screen name="VaultUpgrade" getComponent={() => require('@/screens/UpgradeScreen').UpgradeScreen} options={{title: t('mobile.settings.contract_upgrade')}} />
-        <Stack.Screen name="VaultRiskSettings" getComponent={() => require('@/screens/RiskSettingsScreen').RiskSettingsScreen} options={{title: t('mobile.vault.risk_settings')}} />
         <Stack.Screen
           name="VaultRiskValue"
           getComponent={() => require('@/screens/RiskValueScreen').RiskValueScreen}

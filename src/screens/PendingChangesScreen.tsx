@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {PendingRow} from '@/components/PendingRow';
 import {QuantumInfoButton, QuantumKeys} from '@/components/QuantumHandover';
@@ -14,6 +14,7 @@ import {OptionRow, SettingsGroup} from '@/components/SettingsRow';
 import {RISK_TITLE, fmtRiskValue} from '@/components/riskFormat';
 import {PERM_ROWS} from '@/components/useAssetManagerRow';
 import {Sheet} from '@/components/Sheet';
+import {InfoIcon} from '@/components/TradeMenu';
 import {Button} from '@/components/Button';
 import Svg, {Circle, Path} from 'react-native-svg';
 import {useWallet} from '@/wallet/store';
@@ -162,6 +163,17 @@ export function PendingChangesScreen() {
     setNotMe(false);
     setTimeout(() => nav.navigate('VaultLockAction', {action}), 320);
   };
+  // Why these wait, behind the ⓘ at the top right rather than as a paragraph over the list.
+  const [aboutOpen, setAboutOpen] = useState(false);
+  useLayoutEffect(() => {
+    nav.setOptions({
+      headerRight: () => (
+        <Pressable onPress={() => setAboutOpen(true)} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('mobile.vault.timelock_page_title')}>
+          <InfoIcon color={c.accent} size={22} />
+        </Pressable>
+      ),
+    });
+  }, [nav, c, t]);
   const [refreshing, setRefreshing] = useState(false);
   const onPull = () => {
     setRefreshing(true);
@@ -191,25 +203,23 @@ export function PendingChangesScreen() {
       style={styles.container}
       contentContainerStyle={styles.body}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} tintColor={c.text} colors={[c.accent]} />}>
-      {/* Why these wait: the timelock, said without the word. */}
-      <Text style={styles.intro}>{t('mobile.vault.timelock_intro')}</Text>
-      {items === null ? (
-        <ActivityIndicator />
-      ) : items.length === 0 ? (
-        // An empty card rather than a line floating under the intro: the page has the same shape
+      {items === null || items.length === 0 ? (
+        // An empty card rather than a line floating on its own: the page has the same shape
         // with nothing waiting as with something, and the answer sits where the changes would.
-        <SettingsGroup>
+        // Loading is the same card with a spinner in it, as History's.
+        <SettingsGroup label={t('mobile.vault.pending_section')}>
           <View style={styles.emptyRow}>
-            <Text style={styles.empty}>{t('mobile.vault.pending_none')}</Text>
+            {items === null ? <ActivityIndicator /> : <Text style={styles.empty}>{t('mobile.vault.pending_none')}</Text>}
           </View>
         </SettingsGroup>
       ) : (
         <>
         {/* Two cards: what is being added or changed, then what is being removed — a removal is
             the one that takes something away, so it is never mixed into the rest. */}
-        {[items.filter((p) => p.kind !== 'whitelistRemove'), items.filter((p) => p.kind === 'whitelistRemove')].map((group, g) =>
+        {[items.filter((p) => p.kind !== 'whitelistRemove'), items.filter((p) => p.kind === 'whitelistRemove')].map((group, g, all) =>
           group.length === 0 ? null : (
-            <SettingsGroup key={g}>
+            // The section's title goes on whichever card comes first.
+            <SettingsGroup key={g} label={all.findIndex((x) => x.length > 0) === g ? t('mobile.vault.pending_section') : undefined}>
               {group.map((p, i) => {
                 const cancel = cancelFor(p);
                 return (
@@ -278,6 +288,12 @@ export function PendingChangesScreen() {
           ))
         )}
       </SettingsGroup>
+      {/* Why these wait: the timelock, said without the word. */}
+      <Sheet visible={aboutOpen} title={t('mobile.vault.timelock_page_title')} onClose={() => setAboutOpen(false)}>
+        <View style={styles.about}>
+          <Text style={styles.notMeIntro}>{t('mobile.vault.timelock_intro')}</Text>
+        </View>
+      </Sheet>
       <Sheet visible={notMe} title={t('mobile.vault.not_me_title')} onClose={() => setNotMe(false)}>
         <View style={styles.notMeBody}>
           <Text style={styles.notMeIntro}>{t('mobile.vault.not_me_intro')}</Text>
@@ -307,7 +323,7 @@ const makeStyles = (c: Colors) =>
   StyleSheet.create({
     container: {flex: 1, backgroundColor: c.bg},
     body: {flexGrow: 1, padding: 16, gap: 24},
-    intro: {color: c.subtext, fontSize: 14, lineHeight: 20},
+    about: {paddingHorizontal: 4, paddingBottom: 24},
     emptyRow: {paddingVertical: 22, paddingHorizontal: 16, alignItems: 'center'},
     empty: {color: c.subtext, fontSize: 15, textAlign: 'center'},
     // Sized to the bar's 44 like the trade menu's: the native bar anchors a custom view by its bottom.

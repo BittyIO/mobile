@@ -253,6 +253,14 @@ export class RelayerUnfunded extends Error {
   }
 }
 
+/**
+ * From this release the vault writes its own starting risk at creation: regular sends off ($0) and
+ * a market-trade loss allowance of {NEW_VAULT_LOSS_ALLOWANCE}, below the $10,000 ceiling. Every
+ * network's guard now creates vaults on it, so activation adds nothing of its own.
+ */
+export const NEW_VAULT_DEFAULTS_VERSION = BigInt(1_000_009);
+export const NEW_VAULT_LOSS_ALLOWANCE = BigInt(1_000);
+
 export async function activateVault(o: {
   account: Signer;
   network: Network;

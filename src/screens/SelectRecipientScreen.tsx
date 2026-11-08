@@ -265,7 +265,9 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
   const isPending = (b: WhitelistedRecipient) => b.status === WHITELIST_STATUS.pending || b.status === WHITELIST_STATUS.voided;
   const live = book.filter((b) => !isPending(b));
   const waiting = book.filter(isPending);
-  const allowance = risk ? t('mobile.payments.max_send_daily', {value: fmtAllowance(risk.sendDailyAllowance, t)}) : null;
+  // Off says just that: "Off per 24 hours" would read as a limit.
+  const sendsToNewOff = !!risk?.read && risk.sendDailyAllowance === 0n;
+  const allowance = !risk ? null : risk.sendDailyAllowance === 0n ? fmtAllowance(0n, t) : t('mobile.payments.max_send_daily', {value: fmtAllowance(risk.sendDailyAllowance, t)});
   const whitelisted = (a: string) => live.some((b) => b.recipientAddress.toLowerCase() === a.toLowerCase());
 
   /** One card of book entries, or its loading / empty state. */
@@ -394,7 +396,9 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
         </>
       ) : null}
 
-      {!manage && mine.length > 0 ? (
+      {/* Off when send to new is off: a vault of your own that is not whitelisted then cannot be
+          paid, and one that is already shows in the whitelist above. */}
+      {!manage && mine.length > 0 && !sendsToNewOff ? (
         <>
           {/* Your own vaults are paid like anyone else: no limit once whitelisted, else the allowance. */}
           <View style={styles.sectionRow}>

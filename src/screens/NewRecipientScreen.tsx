@@ -83,7 +83,9 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
   const max = addToBook || addsOnChain
     ? t('mobile.payments.max_send_none')
     : risk
-      ? t('mobile.payments.max_send_daily', {value: fmtAllowance(risk.sendDailyAllowance, t)})
+      ? risk.sendDailyAllowance === 0n
+        ? fmtAllowance(0n, t)
+        : t('mobile.payments.max_send_daily', {value: fmtAllowance(risk.sendDailyAllowance, t)})
       : '…';
 
   const write = useVaultWrite(() => nav.goBack());

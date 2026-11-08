@@ -1,14 +1,17 @@
-import React, {useCallback, useState} from 'react';
+import React, {useCallback, useEffect, useLayoutEffect, useState} from 'react';
 import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {useFocusEffect, useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '@/App';
-import {getRiskConfig, RISK_BOUNDS, useAllowsZeroAllowance, type RiskConfig} from '@/vault/risk';
+import {getRiskConfig, RISK_BOUNDS, updateRiskSettings, useAllowsZeroAllowance, type RiskConfig} from '@/vault/risk';
 import {useCapability} from '@/vault/gate';
 import {LockNotice} from '@/components/LockNotice';
 import {OptionRow, SettingsGroup} from '@/components/SettingsRow';
-import {fmtRiskValue, fmtPending, riskHintKey, riskZeroHintKey} from '@/components/riskFormat';
-import {useRiskDraft} from '@/core/risk-draft';
-import {useWallet} from '@/wallet/store';
+import {Button} from '@/components/Button';
+import {Sheet} from '@/components/Sheet';
+import {InfoIcon} from '@/components/TradeMenu';
+import {useVaultWrite} from '@/components/useVaultWrite';
+import {RISK_TITLE, fmtCountdown, fmtRiskValue, fmtPending, riskHintKey, riskZeroHintKey} from '@/components/riskFormat';
+import {isLoosening, valuesInForce} from '@/core/safety-levels';
 import {useNetwork} from '@/core/network-store';
 import {useActiveVaultAddress} from '@/core/active-vault';
 import {useT} from '@/i18n';
@@ -29,13 +32,14 @@ const PRESETS = {
 } as const;
 
 /**
- * One risk number, picked (Security › Risk settings › Timelock / Daily send allowance / Market trade
- * daily loss allowance).
+ * One risk number, on a page of its own: Security › Timelock, Send to new in
+ * 24 hours, and Market trade slippage in 24 hours.
  *
- * A pick-one list of presets with the value in force checked, and Custom for any other value, typed
- * in hours (timelock) or whole USD (the allowances).
- * Choosing signs nothing: it goes into the page's draft and back to Risk settings, which saves every
- * changed field in one transaction. The check shows the draft value where there is one.
+ * The page is the choices, with the value in force checked — what the number protects against, its
+ * rules and what $0 does are behind the ⓘ in the header — and Custom for any other value (hours for the timelock, whole USD for the allowances).
+ * Save writes this one number. Before saving it says when the change lands: a stricter value at
+ * once, a looser one after the timelock in force now. A change already waiting shows under the
+ * choices. A locked vault shows the page but nothing can be picked.
  */
 export function RiskValueScreen() {
   const {t} = useT();
@@ -43,41 +47,63 @@ export function RiskValueScreen() {
   const c = useColors();
   const {field} = useRoute<RouteProp<RootStackParamList, 'VaultRiskValue'>>().params;
   const [risk, setRisk] = useState<RiskConfig | null>(null);
+  const [chosen, setChosen] = useState<bigint | null>(null);
   const [customOpen, setCustomOpen] = useState(false);
   const [custom, setCustom] = useState('');
-
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
+  // The explanation lives behind an ⓘ in the header, so the page itself is just the choices.
+  const [explainOpen, setExplainOpen] = useState(false);
   const nav = useNavigation();
-  const owner = useWallet((s) => s.address);
+
   const network = useNetwork((s) => s.network);
   const vault = useActiveVaultAddress(network);
-  const drafted = useRiskDraft((s) => s.changes[field]);
-  const setDraft = useRiskDraft((s) => s.set);
 
   const load = useCallback(() => {
     if (!vault) return;
     getRiskConfig(vault, network).then(setRisk);
   }, [vault, network]);
   useFocusEffect(load);
+  useLayoutEffect(() => {
+    nav.setOptions({
+      headerRight: () => (
+        <Pressable onPress={() => setExplainOpen(true)} hitSlop={12} accessibilityRole="button" accessibilityLabel={t(RISK_TITLE[field])}>
+          <InfoIcon color={c.accent} size={22} />
+        </Pressable>
+      ),
+    });
+  }, [nav, c, t, field]);
+  // The countdown to a change already waiting.
+  useEffect(() => {
+    const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const {busy, ready, run, sheet} = useVaultWrite(() => {
+    setChosen(null);
+    setCustomOpen(false);
+    load();
+  });
 
   const isTimelock = field === 'timelock';
-  const inForce = risk ? risk[field] : null;
+  const inForceAll = risk ? valuesInForce(risk) : null;
+  const inForce = inForceAll ? inForceAll[field] : null;
   // What the page is set to: the unsaved pick where there is one, otherwise the value in force.
-  const current = drafted ?? inForce;
-  const zeroOk = useAllowsZeroAllowance(vault, network) && field !== 'timelock';
+  const current = chosen ?? inForce;
+  // A vault not activated yet is born on a release that takes 0 (and starts with sends at 0).
+  const zeroOk = (useAllowsZeroAllowance(vault, network) || (risk != null && !risk.read)) && !isTimelock;
   const presets: readonly bigint[] = zeroOk ? [0n, ...PRESETS[field]] : PRESETS[field];
   const bounds = {min: zeroOk ? 0n : RISK_BOUNDS[field].min, max: RISK_BOUNDS[field].max};
   const zeroHint = zeroOk ? riskZeroHintKey(field) : null;
   const isCustom = current != null && !presets.includes(current);
   // A lock freezes these too, so nothing can be picked rather than signed and refused on chain.
-  const locked = !useCapability('updateRisk').allowed;
-  const canPick = !locked && risk != null;
-  const fmt = (v: bigint) => fmtRiskValue(field, v, t);
+  const gate = useCapability('updateRisk');
+  const locked = !gate.allowed;
+  const canPick = !locked && risk != null && busy === null;
+  // The window lives here, on the choices, rather than in the setting's name: "$500 per 24 hours".
+  const fmt = (v: bigint) => (isTimelock || v === 0n ? fmtRiskValue(field, v, t) : t('mobile.vault.per_24h', {value: fmtRiskValue(field, v, t)}));
 
-  // Picking the value in force again drops the field from the draft rather than saving a no-op.
-  const pick = (value: bigint) => {
-    setDraft(field, value === inForce ? undefined : value);
-    nav.goBack();
-  };
+  // Picking the value in force again clears the pick rather than offering a no-op save.
+  const pick = (value: bigint) => setChosen(value === inForce ? null : value);
 
   const customValue = (): bigint | null => {
     const n = Number(custom);
@@ -94,83 +120,112 @@ export function RiskValueScreen() {
   const range = isTimelock
     ? `${Number(bounds.min / HOUR)}–${Number(bounds.max / HOUR)}`
     : `${Number(bounds.min).toLocaleString()}–${Number(bounds.max).toLocaleString()}`;
-
   const unit = isTimelock ? t('vault.time_unit.hours') : 'USD';
 
+  // When the pick would land: at once when it is stricter (or the vault is not activated yet, where
+  // it is written at creation), otherwise after the timelock in force now.
+  const dirty = chosen != null && inForce != null && chosen !== inForce;
+  const loosens = dirty && risk!.read && isLoosening(field, inForce!, chosen!);
+  const effectAt = inForceAll ? now + Number(inForceAll.timelock) : 0;
+  const applies = !dirty
+    ? undefined
+    : loosens
+      ? t('mobile.vault.safety_applies_later', {date: new Date(effectAt * 1000).toLocaleString(), time: fmtCountdown(effectAt - now, t) ?? ''})
+      : t('mobile.vault.safety_applies_now');
+
+  const save = () =>
+    chosen != null && run('save', t(RISK_TITLE[field]), (b) => updateRiskSettings({...b, changes: {[field]: chosen}}));
+
   return (
-    <ScrollView
-      showsVerticalScrollIndicator={false}
-      alwaysBounceVertical
-      keyboardShouldPersistTaps="handled"
-      contentInsetAdjustmentBehavior="automatic"
-      style={styles.container}
-      contentContainerStyle={styles.body}>
-      <LockNotice blocked={locked} />
-      <SettingsGroup
-        footer={[
-          fmtPending(field, risk, t),
-          t(riskHintKey(field)),
-        ]
-          .filter(Boolean)
-          .join('\n\n')}>
-        {presets.map((v) => (
+    <View style={styles.fill}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        alwaysBounceVertical
+        keyboardShouldPersistTaps="handled"
+        contentInsetAdjustmentBehavior="automatic"
+        style={styles.container}
+        contentContainerStyle={styles.body}>
+        <LockNotice blocked={locked} />
+        <SettingsGroup footer={fmtPending(field, risk, t)}>
+          {presets.map((v) => (
+            <OptionRow
+              key={String(v)}
+              title={fmt(v)}
+              checked={!customOpen && current === v}
+              disabled={!canPick}
+              onPress={() => {
+                setCustomOpen(false);
+                pick(v);
+              }}
+            />
+          ))}
           <OptionRow
-            key={String(v)}
-            title={fmt(v)}
-            // What off means, on the row that turns it off.
-            sub={v === 0n && zeroHint ? t(zeroHint) : undefined}
-            checked={!customOpen && current === v}
+            title={t('common.custom')}
+            sub={isCustom && !customOpen ? fmt(current!) : undefined}
+            checked={customOpen || isCustom}
             disabled={!canPick}
             onPress={() => {
-              setCustomOpen(false);
-              pick(v);
+              setCustom(isCustom && current != null ? (isTimelock ? String(Number(current) / Number(HOUR)) : String(current)) : '');
+              setCustomOpen(true);
             }}
+            last={!customOpen}
           />
-        ))}
-        <OptionRow
-          title={t('common.custom')}
-          sub={isCustom && !customOpen ? fmt(current!) : undefined}
-          checked={customOpen || isCustom}
-          disabled={!canPick}
-          onPress={() => {
-            setCustom(isCustom && current != null ? (isTimelock ? String(Number(current) / Number(HOUR)) : String(current)) : '');
-            setCustomOpen(true);
-          }}
-          last={!customOpen}
-        />
-        {customOpen ? (
-          <View style={styles.customRow}>
-            <TextInput
-              style={styles.input}
-              autoFocus
-              keyboardType="decimal-pad"
-              placeholder={range}
-              placeholderTextColor={c.subtext}
-              value={custom}
-              onChangeText={setCustom}
-            />
-            <Text style={styles.unit}>{unit}</Text>
-            <Pressable
-              disabled={customOff}
-              onPress={() => parsed != null && pick(parsed)}
-              style={[styles.saveBtn, customOff && styles.saveOff]}>
-              <Text style={[styles.saveText, customOff && styles.saveTextOff]}>{t('vault.done')}</Text>
-            </Pressable>
+          {customOpen ? (
+            <View style={styles.customRow}>
+              <TextInput
+                style={styles.input}
+                autoFocus
+                keyboardType="decimal-pad"
+                placeholder={range}
+                placeholderTextColor={c.subtext}
+                value={custom}
+                onChangeText={setCustom}
+              />
+              <Text style={styles.unit}>{unit}</Text>
+              <Pressable
+                disabled={customOff}
+                onPress={() => {
+                  if (parsed == null) return;
+                  pick(parsed);
+                  setCustomOpen(false);
+                }}
+                style={[styles.doneBtn, customOff && styles.doneOff]}>
+                <Text style={[styles.doneText, customOff && styles.doneTextOff]}>{t('vault.done')}</Text>
+              </Pressable>
+            </View>
+          ) : null}
+        </SettingsGroup>
+        <View style={styles.saveArea}>
+          {applies ? <Text style={styles.applies}>{applies}</Text> : null}
+          <Button title={t('vault.save')} onPress={save} loading={busy === 'save'} disabled={!dirty || !ready} locked={locked} />
+        </View>
+        {sheet}
+        {/* What this number is for, put as what it protects against, then its rules and what $0
+            does: opened from the ⓘ in the header. */}
+        <Sheet visible={explainOpen} title={t(RISK_TITLE[field])} onClose={() => setExplainOpen(false)}>
+          <View style={styles.explain}>
+            <Text style={styles.explainText}>{t(`${RISK_TITLE[field]}_why`)}</Text>
+            <Text style={styles.explainSub}>{t(riskHintKey(field))}</Text>
+            {zeroHint ? <Text style={styles.explainSub}>{t(zeroHint)}</Text> : null}
           </View>
-        ) : null}
-      </SettingsGroup>
-    </ScrollView>
+        </Sheet>
+      </ScrollView>
+    </View>
   );
 }
 
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
+    fill: {flex: 1},
     container: {flex: 1, backgroundColor: c.bg},
     body: {flexGrow: 1, padding: 16, gap: 24},
+    explain: {gap: 12, paddingHorizontal: 4, paddingBottom: 24},
+    explainSub: {color: c.subtext, fontSize: 13, lineHeight: 19},
+    explainText: {color: c.text, fontSize: 15, lineHeight: 22},
     customRow: {flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 10},
     input: {flex: 1, height: 40, borderRadius: 10, backgroundColor: c.input, color: c.text, paddingHorizontal: 12, fontSize: 17},
     unit: {color: c.subtext, fontSize: 13},
-    saveBtn: {
+    doneBtn: {
       height: 40,
       paddingHorizontal: 16,
       borderRadius: 20,
@@ -180,7 +235,9 @@ const makeStyles = (c: Colors) =>
       borderColor: c.accent,
       backgroundColor: c.accentSoft,
     },
-    saveOff: {borderColor: c.border, backgroundColor: c.card},
-    saveText: {color: c.accent, fontSize: 14, fontWeight: '700'},
-    saveTextOff: {color: c.subtext},
+    doneOff: {borderColor: c.border, backgroundColor: c.card},
+    doneText: {color: c.accent, fontSize: 14, fontWeight: '700'},
+    doneTextOff: {color: c.subtext},
+    saveArea: {gap: 10},
+    applies: {color: c.subtext, fontSize: 13, lineHeight: 18, paddingHorizontal: 4, textAlign: 'center'},
   });

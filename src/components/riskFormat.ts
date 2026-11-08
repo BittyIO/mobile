@@ -33,9 +33,9 @@ export function fmtDuration(s: bigint, t: T): string {
   return t('mobile.vault.duration_hours', {n: Number.isInteger(h) ? h : Number(h.toFixed(2))});
 }
 
-/** The send cap, whole USD a day. 0 turns regular sends off. */
+/** The send cap, whole USD a day. 0 turns regular sends off, and reads just "Off". */
 export function fmtAllowance(v: bigint, t: T): string {
-  return v === 0n ? `$0 · ${t('mobile.vault.protection_off')}` : `$${Number(v).toLocaleString()}`;
+  return v === 0n ? t('mobile.vault.protection_off') : `$${Number(v).toLocaleString()}`;
 }
 
 /** The market-trade loss cap, whole USD. 0 turns market trading off. */

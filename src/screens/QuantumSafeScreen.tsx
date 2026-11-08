@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {Alert, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
 import Svg, {Circle, Path} from 'react-native-svg';
 import {useFocusEffect} from '@react-navigation/native';
 import type {Address} from 'viem';
@@ -9,7 +9,6 @@ import {shortAddress} from '@/core/format';
 import {getLockLevel, getPendingChanges, getRiskConfig} from '@/vault/risk';
 import {vaultOwnerOf} from '@/vault/owned-vaults';
 import {handOverToFreshKey} from '@/vault/ownership';
-import {Button} from '@/components/Button';
 import {useCapability} from '@/vault/gate';
 import {PendingRow} from '@/components/PendingRow';
 import {QuantumInfoButton, QuantumKeys} from '@/components/QuantumHandover';
@@ -70,7 +69,7 @@ type Status = {
  *
  * The switch, then — while it is on — which key holds the vault now and whether it has signed: a
  * fresh key, a used one already being handed on (the handover's ring), or a used one waiting for the
- * next operation, with a button to hand it on at once. Under it, what the feature asks of the user,
+ * next operation, with a button on its row to hand it on at once. Under it, what the feature asks of the user,
  * because the one thing the app cannot check is the one that matters most: that this phrase signs
  * nothing anywhere else.
  */
@@ -163,6 +162,7 @@ export function QuantumSafeScreen() {
   const canHandOver = on && ours && state === 'used' && ready;
   const transferGate = useCapability('transferOwnership');
 
+  const showHandOver = state === 'used' && ours;
   const handOver = () =>
     canHandOver &&
     run('rotate', t('mobile.quantum.hand_over_now'), (b) => handOverToFreshKey(b), t('mobile.quantum.hand_over_confirm'));
@@ -182,10 +182,32 @@ export function QuantumSafeScreen() {
       {on && status ? (
         <View style={styles.section}>
           <SettingsGroup footer={t(`mobile.quantum.state_${state}`)}>
+            {/* The key in charge, and — when it has signed and nothing is handing it on yet — the
+                button that hands it on now, on its right, with the address under the title. */}
             <SettingsRow
               icon="recovery"
               title={t('mobile.quantum.owner_address')}
-              value={owner ? shortAddress(owner) : undefined}
+              value={showHandOver ? undefined : owner ? shortAddress(owner) : undefined}
+              sub={showHandOver && owner ? shortAddress(owner) : undefined}
+              right={
+                showHandOver ? (
+                  <Pressable
+                    onPress={handOver}
+                    disabled={!canHandOver || !transferGate.allowed}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('mobile.quantum.hand_over_now')}
+                    style={[styles.pill, (!canHandOver || !transferGate.allowed) && styles.pillOff]}>
+                    {busy === 'rotate' ? (
+                      <ActivityIndicator size="small" color={c.accent} />
+                    ) : (
+                      <Text style={[styles.pillText, (!canHandOver || !transferGate.allowed) && styles.pillTextOff]}>
+                        {t('mobile.quantum.hand_over_now')}
+                      </Text>
+                    )}
+                  </Pressable>
+                ) : undefined
+              }
               chevron={false}
               last={!pending}
             />
@@ -203,9 +225,6 @@ export function QuantumSafeScreen() {
               />
             ) : null}
           </SettingsGroup>
-          {state === 'used' && ours ? (
-            <Button title={t('mobile.quantum.hand_over_now')} onPress={handOver} loading={busy === 'rotate'} disabled={!canHandOver} locked={!transferGate.allowed} />
-          ) : null}
         </View>
       ) : null}
 
@@ -238,4 +257,18 @@ const makeStyles = (c: Colors) =>
     note: {flexDirection: 'row', alignItems: 'flex-start', gap: 12},
     noteText: {flex: 1, color: c.text, fontSize: 14, lineHeight: 20},
     noteWarn: {color: c.danger, fontWeight: '600'},
+    pill: {
+      height: 32,
+      minWidth: 64,
+      paddingHorizontal: 14,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: c.accent,
+      backgroundColor: c.accentSoft,
+    },
+    pillOff: {borderColor: c.border, backgroundColor: c.card},
+    pillText: {color: c.accent, fontSize: 13, fontWeight: '700'},
+    pillTextOff: {color: c.subtext},
   });
