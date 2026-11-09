@@ -1,3 +1,4 @@
+import {displayAddress, parseAddress} from '@/core/address';
 import React, {useCallback, useEffect, useState} from 'react';
 import {ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
@@ -7,7 +8,7 @@ import {isAddress, type Address} from 'viem';
 import {publicClientFor} from '@/core/chain';
 import {VAULT_OWNERSHIP_ABI} from '@/core/abi';
 import {isPayableAddress} from '@/core/asset-catalog';
-import {shortAddress} from '@/core/format';
+import {shortAddress, asShown} from '@/core/format';
 import {getLockLevel, getPendingChanges, getRiskConfig} from '@/vault/risk';
 import {cancelOwnershipTransfer, transferOwnership} from '@/vault/ownership';
 import {Button, ConfirmButton} from '@/components/Button';
@@ -84,14 +85,14 @@ export function OwnershipScreen() {
 
   const copyOwner = () => {
     if (!owner) return;
-    Clipboard.setString(owner);
+    Clipboard.setString(displayAddress(network, owner));
     showToast('success', t('common.copied'), shortAddress(owner));
   };
 
   // Not the key in charge now, not the vault itself, not a token: each would strand the vault.
-  const lc = addr.trim().toLowerCase();
-  const valid =
-    isAddress(addr.trim()) && isPayableAddress(addr.trim(), network) && lc !== owner?.toLowerCase() && lc !== vault?.toLowerCase();
+  const parsed = parseAddress(network, addr);
+  const lc = parsed?.toLowerCase() ?? '';
+  const valid = !!parsed && isPayableAddress(addr.trim(), network) && lc !== owner?.toLowerCase() && lc !== vault?.toLowerCase();
   const bad = addr.trim().length > 0 && !valid;
   // Once a handover has run, this key is no longer the owner and the vault would refuse it anything.
   // On quantum-safe keys the owner is one of this phrase's one-time keys, and still this phone's.
@@ -102,7 +103,7 @@ export function OwnershipScreen() {
   // pressing that button sends the handover with no second sheet in between.
   const transfer = () => {
     if (!canTransfer) return;
-    const to = addr.trim() as Address;
+    const to = parseAddress(network, addr) as Address;
     setForm(false);
     runConfirmed('transfer', t('mobile.vault.transfer_ownership'), (b) => transferOwnership({...b, newOwner: to}));
   };
@@ -145,7 +146,7 @@ export function OwnershipScreen() {
             now={now}
             timelock={Number(timelock ?? 0)}
             title={t(keyPathOf(pending.address) ? 'mobile.quantum.pending_title' : 'mobile.vault.pending_new_owner')}
-            value={pending.address}
+            value={asShown(pending.address)}
             titleRight={keyPathOf(pending.address) ? <QuantumInfoButton /> : undefined}
             detail={keyPathOf(pending.address) ? <QuantumKeys to={pending.address} /> : undefined}
             onCancel={cancel}

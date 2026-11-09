@@ -8,8 +8,9 @@ import {NetworkIcon} from '@/components/NetworkSwitcher';
 import {useNetwork} from '@/core/network-store';
 
 /**
- * Earn and Trade with Tron picked: both run through the vault, and there is no vault on Tron — only
- * the phrase's wallet. The tabs stay where they are so the bar does not change shape with the
+ * Earn and Trade with Tron picked: both run through the vault, and there is no vault on Tron mainnet
+ * — only the phrase's wallet. And on Tron Nile, which has the vault but no protocol for it to use.
+ * The tabs stay where they are so the bar does not change shape with the
  * chain; the page says why there is nothing here, and where the vault's chains are.
  */
 export function TronUnavailableScreen({feature}: {feature: 'earn' | 'trade'}) {
@@ -17,7 +18,10 @@ export function TronUnavailableScreen({feature}: {feature: 'earn' | 'trade'}) {
   const styles = useStyles(makeStyles);
   const headerHeight = useTransparentHeaderInset();
   const tabBarHeight = useBottomTabBarHeight();
-  const net = useNetwork((s) => s.tron) ?? 'tron';
+  // The Tron wallet's chain, or a vault network with no protocol on it (Tron Nile).
+  const tron = useNetwork((s) => s.tron);
+  const network = useNetwork((s) => s.network);
+  const net = tron ?? network;
   return (
     <View style={[styles.container, {paddingTop: headerHeight, paddingBottom: tabBarHeight}]}>
       <NetworkIcon network={net} size={56} />

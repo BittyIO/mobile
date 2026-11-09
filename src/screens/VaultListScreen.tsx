@@ -25,7 +25,7 @@ import {getPref, setPref} from '@/core/prefs';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {SettingsGroup, makeSettingsStyles} from '@/components/SettingsRow';
 import {useT} from '@/i18n';
-import {wrappableAddress} from '@/core/format';
+import {wrappableAddress, asShown} from '@/core/format';
 import {useColors, useStyles, type Colors, MONO} from '@/theme';
 
 /**
@@ -195,8 +195,8 @@ export function VaultListScreen() {
 
   const copyAddress = (address: string | null) => {
     if (!address) return;
-    Clipboard.setString(address);
-    showToast('success', t('common.copied'), address, 1500);
+    Clipboard.setString(asShown(address));
+    showToast('success', t('common.copied'), asShown(address), 1500);
   };
   const [busy, setBusy] = useState(false);
   const stable = useAssetCatalog(network).find((a) => a.kind === 'stable')?.address;

@@ -7,7 +7,8 @@
  * the user confirmed, and only the recent block they reference (TaPoS) comes from the node.
  *
  * The encoding is the protobuf of java-tron's `Transaction.raw` (core/Tron.proto) for the two
- * contracts a wallet pays with — a TRX transfer and a TRC-20 `transfer` call — and nothing more.
+ * contracts the app sends — a TRX transfer, a TRC-20 `transfer`, and a call to a vault contract (any
+ * calldata, see ./vault-tx) — and nothing more.
  */
 import {secp256k1} from '@noble/curves/secp256k1';
 import {sha256} from '@noble/hashes/sha256';
@@ -39,7 +40,9 @@ const TRIGGER = 31; // ContractType.TriggerSmartContract
 
 export type TronCall =
   | {kind: 'trx'; from: string; to: string; amountSun: bigint}
-  | {kind: 'trc20'; from: string; token: string; to: string; amount: bigint};
+  | {kind: 'trc20'; from: string; token: string; to: string; amount: bigint}
+  /** Any contract call: the ABI calldata as it is, and TRX sent with it (call_value, in sun). A vault write. */
+  | {kind: 'call'; from: string; contract: string; data: Uint8Array; callValueSun?: bigint};
 
 const addr = (a: string) => {
   const b = decodeTronAddress(a);
@@ -63,7 +66,11 @@ function contractOf(call: TronCall): number[] {
     const any = [...fString(1, 'type.googleapis.com/protocol.TransferContract'), ...fBytes(2, value)];
     return [...fInt(1, BigInt(TRANSFER)), ...fBytes(2, any)];
   }
-  const value = [...fBytes(1, addr(call.from)), ...fBytes(2, addr(call.token)), ...fBytes(4, trc20TransferData(call.to, call.amount))];
+  // TriggerSmartContract: owner_address = 1, contract_address = 2, call_value = 3, data = 4.
+  const value =
+    call.kind === 'call'
+      ? [...fBytes(1, addr(call.from)), ...fBytes(2, addr(call.contract)), ...fInt(3, call.callValueSun ?? 0n), ...fBytes(4, call.data)]
+      : [...fBytes(1, addr(call.from)), ...fBytes(2, addr(call.token)), ...fBytes(4, trc20TransferData(call.to, call.amount))];
   const any = [...fString(1, 'type.googleapis.com/protocol.TriggerSmartContract'), ...fBytes(2, value)];
   return [...fInt(1, BigInt(TRIGGER)), ...fBytes(2, any)];
 }

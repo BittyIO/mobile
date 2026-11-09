@@ -15,9 +15,9 @@ import {apiFetch, apiUrl, publicClientFor, type Network} from '@/core/chain';
 import {keyIndexOf, type VaultRef} from '@/core/vault-store';
 import {keyPathOf} from '@/wallet/rotation-store';
 import {vaultAddressOf} from '@/core/active-vault';
-import {VAULT_GUARD} from '@/core/vault-contracts';
+import {vaultGuard} from '@/core/vault-contracts';
 import {VAULT_RISK_ABI} from '@/core/abi';
-import {ERC1967_PROXY_RUNTIME_CODE} from '@/core/predict-vault';
+import {vaultProxyRuntimeCode} from '@/core/predict-vault';
 
 const OWNER_ABI = parseAbi(['function owner() view returns (address)']);
 const GUARD_REGISTRY_ABI = parseAbi(['function isImplementationRegisteredFor(address implementation, uint8 category) view returns (bool)']);
@@ -36,10 +36,10 @@ export async function isGenuineVaultFor(network: Network, vault: Address, key: A
   try {
     const client = publicClientFor(network);
     const [code, slot] = await Promise.all([client.getCode({address: vault}), client.getStorageAt({address: vault, slot: IMPL_SLOT})]);
-    if (!code || code.toLowerCase() !== ERC1967_PROXY_RUNTIME_CODE.toLowerCase() || !slot) return false;
+    if (!code || code.toLowerCase() !== vaultProxyRuntimeCode(network).toLowerCase() || !slot) return false;
     const impl = getAddress(`0x${slot.slice(-40)}` as Hex);
     const registered = await client.readContract({
-      address: VAULT_GUARD,
+      address: vaultGuard(network),
       abi: GUARD_REGISTRY_ABI,
       functionName: 'isImplementationRegisteredFor',
       args: [impl, VAULT_CATEGORY],

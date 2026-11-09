@@ -1,3 +1,4 @@
+import {asShown} from '@/core/format';
 import React, {useEffect, useRef, useState} from 'react';
 import {Modal, Pressable, Share, StyleSheet, Text, View} from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -54,14 +55,14 @@ export function ReceiveDialog({
 
   const copy = () => {
     if (!vault) return;
-    Clipboard.setString(vault);
+    Clipboard.setString(asShown(vault));
     setCopied(true);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setCopied(false), 1500);
   };
   // The system sheet, so the address can go to any app the phone has — the common way it leaves
   // this screen is into a message to whoever is sending the funds.
-  const share = () => vault && Share.share({message: vault}).catch(() => {});
+  const share = () => vault && Share.share({message: asShown(vault)}).catch(() => {});
 
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
@@ -81,13 +82,13 @@ export function ReceiveDialog({
               <Text style={styles.sub}>{sub ?? t('mobile.home.your_vault_on', {network: networkLabel})}</Text>
               {vault ? (
                 <View style={styles.qrWrap}>
-                  <QRCode value={vault} size={200} backgroundColor="white" />
+                  <QRCode value={asShown(vault)} size={200} backgroundColor="white" />
                 </View>
               ) : null}
               {/* One line, shrinking to fit rather than wrapping: the whole address is here to be
               read across in one go. */}
               <Text style={styles.addr} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-                {vault ?? '—'}
+                {vault ? asShown(vault) : '—'}
               </Text>
               {vault ? (
                 <View style={styles.actions}>

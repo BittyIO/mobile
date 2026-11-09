@@ -75,6 +75,10 @@ function tracked(a: LocalAccount): Signer & LocalAccount {
       markUsed(a.address);
       return a.signTransaction(tx, o);
     }) as LocalAccount['signTransaction'],
+    sign: ((p: Parameters<NonNullable<LocalAccount['sign']>>[0]) => {
+      markUsed(a.address);
+      return a.sign!(p);
+    }) as LocalAccount['sign'],
     signMessage: ((p: Parameters<LocalAccount['signMessage']>[0]) => {
       markUsed(a.address);
       return a.signMessage(p);

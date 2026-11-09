@@ -174,7 +174,9 @@ function Row({item, index}: {item: Toast; index: number}) {
   const short = item.hash ? `${item.hash.slice(0, 12)}…${item.hash.slice(-8)}` : null;
   const detail = item.detail ?? t(stage);
   const tint = item.kind === 'success' ? c.success : item.kind === 'error' ? c.danger : c.subtext;
-  const link = item.hash && explorer ? explorer + item.hash : null;
+  // Tronscan names a transaction by its id without the 0x the app carries it with.
+  const tronTx = item.network === 'tron-nile' || explorer?.includes('tronscan');
+  const link = item.hash && explorer ? explorer + (tronTx ? item.hash.replace(/^0x/, '') : item.hash) : null;
 
   /**
    * Swipe sideways to get rid of it; the ✕ in the corner for anyone who does not know that.
@@ -235,7 +237,7 @@ function Row({item, index}: {item: Toast; index: number}) {
         style={styles.body}
         // The transaction, which is what a reader wants from a toast that names one. Nothing to
         // open while it is still being signed, so the card is inert until the hash arrives.
-        onPress={link ? () => openLink(link, item.explorer?.name ?? 'Etherscan') : undefined}
+        onPress={link ? () => openLink(link, item.explorer?.name ?? (tronTx ? 'Tronscan' : 'Etherscan')) : undefined}
         onLongPress={() => item.hash && Clipboard.setString(item.hash)}
         accessibilityRole={link ? 'link' : 'text'}
         accessibilityLabel={[item.title, detail, short].filter(Boolean).join(' · ')}>

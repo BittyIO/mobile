@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react';
 import {parseAbi, type Address} from 'viem';
 import {publicClientFor, type Network} from '@/core/chain';
-import {GUARD_CATEGORIES, IGNORED_GUARD_CATEGORIES, VAULT_GUARD} from '@/core/vault-contracts';
+import {GUARD_CATEGORIES, IGNORED_GUARD_CATEGORIES, vaultGuard} from '@/core/vault-contracts';
 import type {ProtocolCategory} from '@/core/protocols';
 
 /**
@@ -55,7 +55,7 @@ export async function fetchGuardProtocols(network: Network): Promise<GuardProtoc
     try {
       const client = publicClientFor(network);
       const list = (await client.readContract({
-        address: VAULT_GUARD,
+        address: vaultGuard(network),
         abi: GUARD_ABI,
         functionName: 'getProtocols',
       })) as readonly Address[];
@@ -67,7 +67,7 @@ export async function fetchGuardProtocols(network: Network): Promise<GuardProtoc
       const cats = await Promise.all(
         list.map((a) =>
           client
-            .readContract({address: VAULT_GUARD, abi: GUARD_ABI, functionName: 'protocolCategory', args: [a]})
+            .readContract({address: vaultGuard(network), abi: GUARD_ABI, functionName: 'protocolCategory', args: [a]})
             .catch(() => 0),
         ),
       );

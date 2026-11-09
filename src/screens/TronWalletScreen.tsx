@@ -144,7 +144,6 @@ export function TronWalletScreen() {
           <View style={styles.totalHeader}>
             <View style={styles.totalLabelRow}>
               <Text style={styles.totalLabel}>{t('vault.total_value_label')}</Text>
-              {net === 'tron-nile' ? <Text style={styles.testnet}>{t('mobile.app.testnet')}</Text> : null}
             </View>
             <Pressable onPress={toggleHidden} hitSlop={10}>
               <EyeIcon off={hidden} color={c.subtext} />

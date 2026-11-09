@@ -9,7 +9,7 @@ import {useIsDark} from '@/theme';
 import type {Network} from '@/core/chain';
 
 // Static requires (Metro can't resolve dynamic paths). Icons vendored from the web repo (public/icons).
-const ICONS: Record<Exclude<Network, 'base' | 'robinhood'>, number> = {
+const ICONS: Record<Exclude<Network, 'base' | 'robinhood' | 'tron-nile'>, number> = {
   mainnet: require('@/assets/networks/ethereum.png'),
   sepolia: require('@/assets/networks/sepolia.png'),
   arbitrum: require('@/assets/networks/arbitrum.png'),
@@ -58,7 +58,8 @@ function RobinhoodIcon({size}: {size: number}) {
 const TRON_MARK =
   'M61.55,19.28c-3-2.77-7.15-7-10.53-10l-.2-.14a3.82,3.82,0,0,0-1.11-.62l0,0C41.56,7,3.63-.09,2.89,0a1.4,1.4,0,0,0-.58.22L2.12.37a2.23,2.23,0,0,0-.52.84l-.05.13v.71l0,.11C5.82,14.05,22.68,53,26,62.14c.2.62.58,1.8,1.29,1.86h.16c.38,0,2-2.14,2-2.14S58.41,26.74,61.34,23a9.46,9.46,0,0,0,1-1.48A2.41,2.41,0,0,0,61.55,19.28ZM36.88,23.37,49.24,13.12l7.25,6.68Zm-4.8-.67L10.8,5.26l34.43,6.35ZM34,27.27l21.78-3.51-24.9,30ZM7.91,7,30.3,26,27.06,53.78Z';
 
-function TronIcon({size, testnet}: {size: number; testnet?: boolean}) {
+/** The Tron mark on its red disc (grey for a testnet): the network's icon, and TRX's own (see TokenIcon). */
+export function TronIcon({size, testnet}: {size: number; testnet?: boolean}) {
   return (
     <Svg width={size} height={size} viewBox="0 0 32 32">
       <Circle cx={16} cy={16} r={16} fill={testnet ? '#8E8E93' : '#FF060A'} />
@@ -70,7 +71,8 @@ function TronIcon({size, testnet}: {size: number; testnet?: boolean}) {
 }
 
 export function NetworkIcon({network, size}: {network: ChainChoice; size: number}) {
-  if (isTronNet(network)) return <TronIcon size={size} testnet={network === 'tron-nile'} />;
+  if (network === 'tron-nile') return <TronIcon size={size} testnet />;
+  if (isTronNet(network)) return <TronIcon size={size} />;
   if (network === 'base') return <BaseIcon size={size} />;
   if (network === 'robinhood') return <RobinhoodIcon size={size} />;
   return <Image source={ICONS[network]} style={{width: size, height: size}} resizeMode="contain" />;
@@ -85,14 +87,10 @@ export function NetworkSwitcher({stack = false}: {stack?: boolean} = {}) {
   const setTron = useNetwork((s) => s.setTron);
   const [open, setOpen] = useState(false);
   // Tron second, straight after Ethereum, as the other chain people most often hold dollars on;
-  // its testnet, Nile, at the end beside Sepolia, so the two testnets sit together.
-  const evmNets = useNetworks();
-  const networks: ChainChoice[] = [
-    ...evmNets.slice(0, 1),
-    'tron',
-    ...evmNets.slice(1),
-    'tron-nile',
-  ];
+  // its testnet, Nile — a vault network, unlike Tron mainnet's wallet — is the last of the vault
+  // networks, beside Sepolia, so the two testnets sit together.
+  const vaultNets = useNetworks();
+  const networks: ChainChoice[] = [...vaultNets.slice(0, 1), 'tron', ...vaultNets.slice(1)];
   const network: ChainChoice = tron ?? evm;
 
   return (

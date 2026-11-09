@@ -1,3 +1,4 @@
+import {displayAddress, parseAddress} from '@/core/address';
 import React, {useEffect, useState} from 'react';
 import {Alert, Keyboard, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
@@ -90,12 +91,15 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
 
   const write = useVaultWrite(() => nav.goBack());
   const confirm = () => {
+    // What was typed, as the 0x… the vault takes: on Tron the T… form is what people paste.
+    const to = parseAddress(network, draft);
+    if (!to) return;
     const given = nameDraft.trim();
-    if (given) setName(network, draft, given);
-    const listed = book.find((b) => b.recipientAddress.toLowerCase() === draft.toLowerCase());
+    if (given) setName(network, to, given);
+    const listed = book.find((b) => b.recipientAddress.toLowerCase() === to.toLowerCase());
     if (manage || (addsOnChain && !listed)) {
       write.run('add', `${t('vault.add')} · ${t('vault.address_book')}`, (base) =>
-        addWhitelisted({...base, recipient: draft as Address}),
+        addWhitelisted({...base, recipient: to}),
       );
       return;
     }
@@ -111,7 +115,7 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
         ]);
       return;
     }
-    setPicked({address: draft as Address, label: given || undefined, addToBook: addToBook && addGate.allowed});
+    setPicked({address: to, label: given || undefined, addToBook: addToBook && addGate.allowed});
     nav.pop(2);
   };
   const canConfirm = valid && (!addsOnChain || (write.ready && addGate.allowed));
@@ -196,7 +200,7 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
         visible={scanning}
         onScan={(a) => {
           setScanning(false);
-          setDraft(a);
+          setDraft(displayAddress(network, a));
         }}
         onClose={() => setScanning(false)}
       />

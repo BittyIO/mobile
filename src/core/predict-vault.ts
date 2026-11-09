@@ -2,10 +2,13 @@ import {
   concat,
   encodeAbiParameters,
   encodePacked,
+  getAddress,
   getContractAddress,
   keccak256,
   type Address,
 } from 'viem';
+import type {Network} from '@/core/chain';
+import {TRON_VAULT_PROXY, vaultBootstrap, vaultFactory} from '@/core/vault-contracts';
 
 /**
  * Local CREATE2 prediction of an owner's vault address — no RPC. Ported verbatim from
@@ -46,3 +49,20 @@ export function predictVaultAddress(
     bytecode: initCode,
   });
 }
+
+/**
+ * The owner's vault address on `network`. On an EVM chain, OpenZeppelin's CREATE2 (0xff) over the
+ * proxy code above; on Tron, the TVM's (0x41) over the Tron build's proxy, by its init-code hash —
+ * the same formula as the factory's own `Create2Address`, so this is where the factory puts it.
+ */
+export function predictVaultAddressOn(network: Network, owner: Address): Address {
+  const tron = TRON_VAULT_PROXY[network];
+  if (!tron) return predictVaultAddress(owner, vaultFactory(network), vaultBootstrap(network));
+  const salt = keccak256(encodePacked(['address'], [owner]));
+  const hash = keccak256(concat([tron.prefix, vaultFactory(network), salt, tron.initCodeHash]));
+  return getAddress(`0x${hash.slice(-40)}`);
+}
+
+/** The runtime code of a vault proxy the factory made on `network`. */
+export const vaultProxyRuntimeCode = (network: Network): `0x${string}` =>
+  TRON_VAULT_PROXY[network]?.runtimeCode ?? ERC1967_PROXY_RUNTIME_CODE;

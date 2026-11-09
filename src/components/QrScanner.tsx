@@ -12,6 +12,14 @@ import {useT} from '@/i18n';
  * in the text is the address.
  */
 export function addressInQr(text: string): `0x${string}` | null {
+  // On Tron, a wallet's code holds the T… form (bare, or as a `tron:` link): the same 20 bytes.
+  const {useNetwork} = require('@/core/network-store') as typeof import('@/core/network-store');
+  if (useNetwork.getState().network === 'tron-nile') {
+    const {tronAddressInQr, tronToEvm} = require('@/tron/address') as typeof import('@/tron/address');
+    const t = tronAddressInQr(text);
+    const evm = t ? tronToEvm(t) : null;
+    if (evm) return getAddress(evm);
+  }
   const m = /0x[0-9a-fA-F]{40}(?![0-9a-fA-F])/.exec(text);
   if (!m) return null;
   try {

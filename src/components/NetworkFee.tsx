@@ -3,7 +3,8 @@ import {StyleSheet, Text, View} from 'react-native';
 import {GasIcon} from '@/components/GasIcon';
 import {useNetwork} from '@/core/network-store';
 import {quoteOwnerFeeWei, quoteRelayFeeUsd, TYPICAL_RELAY_GAS} from '@/vault/fee-quote';
-import {formatEth} from '@/vault/direct';
+import {formatNative} from '@/vault/direct';
+import {NATIVE} from '@/core/chain';
 import {Amount} from '@/components/Amount';
 import {useActiveFeePayer} from '@/vault/useFeePayer';
 import {useColors, useStyles, type Colors} from '@/theme';
@@ -65,7 +66,7 @@ function OwnerFee({gas}: {gas: bigint}) {
     <View style={styles.row}>
       <GasIcon color={c.subtext} />
       <Text style={styles.line}>
-        <Amount v={formatEth(wei)} size={12} color={c.subtext} /> ETH
+        <Amount v={formatNative(network, wei)} size={12} color={c.subtext} /> {NATIVE[network].symbol}
       </Text>
     </View>
   );

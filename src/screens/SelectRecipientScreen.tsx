@@ -1,3 +1,4 @@
+import {asShown} from '@/core/format';
 import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {useTransparentHeaderInset} from '@/components/header-inset';
 import Svg, {Path} from 'react-native-svg';
@@ -172,8 +173,8 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
   /** One book entry: its name, the full address, a status note where it has one, and the ✕. */
   // Long press any address to copy it.
   const copy = (a: string) => {
-    Clipboard.setString(a);
-    showToast('success', t('common.copied'), a, 1500);
+    Clipboard.setString(asShown(a));
+    showToast('success', t('common.copied'), asShown(a), 1500);
   };
 
   // A clock for the pending rings, ticking while the page is up.
@@ -234,7 +235,7 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
               </>
             ) : null}
           </View>
-          <Text style={styles.addrMuted}>{b.recipientAddress}</Text>
+          <Text style={styles.addrMuted}>{asShown(b.recipientAddress)}</Text>
           {note ? (
             <Text style={[styles.sub, b.status === WHITELIST_STATUS.voided && styles.subWarn]} numberOfLines={1}>
               {note}
@@ -417,7 +418,7 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
                 onLongPress={() => copy(v.address)}>
                 <View style={styles.entryCol}>
                   <Text style={styles.entryName} numberOfLines={1}>{v.name}</Text>
-                  <Text style={styles.addrMuted}>{v.address}</Text>
+                  <Text style={styles.addrMuted}>{asShown(v.address)}</Text>
                   {whitelisted(v.address) ? (
                     <Text style={styles.sub}>
                       {t('mobile.payments.whitelisted_book')} · {t('mobile.payments.max_send_none')}

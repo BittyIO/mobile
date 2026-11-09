@@ -1,3 +1,4 @@
+import {parseAddress} from '@/core/address';
 import {useEffect, useState, useSyncExternalStore} from 'react';
 import {ASSETS, RECEIPT_TOKENS, assetCategory, knownAssets, registerCatalogAssets, type Asset, type AssetKind} from '@/core/assets';
 import {isAddress, parseAbi} from 'viem';
@@ -296,11 +297,13 @@ function tokenAddresses(network: Network): Set<string> {
  * alternative is refusing to pay a multisig or another vault.
  */
 export function isPayableAddress(value: string, network: Network): boolean {
-  if (!isAddress(value)) return false;
-  return !tokenAddresses(network).has(value.toLowerCase());
+  const a = parseAddress(network, value);
+  if (!a) return false;
+  return !tokenAddresses(network).has(a.toLowerCase());
 }
 
 /** True when the address is one of our known tokens — for telling the user WHY it was refused. */
 export function isTokenAddress(value: string, network: Network): boolean {
-  return isAddress(value) && tokenAddresses(network).has(value.toLowerCase());
+  const a = parseAddress(network, value);
+  return !!a && tokenAddresses(network).has(a.toLowerCase());
 }
