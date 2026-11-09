@@ -13,7 +13,7 @@
  */
 import {create} from 'zustand';
 import {MMKV} from 'react-native-mmkv';
-import {publicClientFor, type Network} from '@/core/chain';
+import {isTronNetwork, publicClientFor, type Network} from '@/core/chain';
 import {activeVaultAddress} from '@/core/active-vault';
 
 /**
@@ -172,6 +172,9 @@ export const usePending = create<State>((set, get) => ({
  *    "known, pending" for the hash and no receipt ever arrives. That is what left a supply spinning
  *    in Confirming against a hash Etherscan had no record of, so it is checked explicitly here.
  */
+/** A Tron transaction expires a minute after its reference block; with time to land and be read. */
+const TRON_EXPIRY_MS = 3 * 60_000;
+
 async function watch(hash: `0x${string}`, network: Network) {
   const client = publicClientFor(network);
   // The sender and nonce of the transaction itself, which is what makes the third case detectable.
@@ -187,6 +190,9 @@ async function watch(hash: `0x${string}`, network: Network) {
 
   const until = Date.now() + GIVE_UP_MS;
   const stillWatched = () => usePending.getState().txs.some((t) => t.hash === hash && t.status === 'pending');
+  // Tron has no nonces: a transaction that is not in a block by its expiration — a minute past the
+  // block it was anchored to (tron/tx `encodeRaw`) — can never be, so that is the third case there.
+  const tronDropAt = isTronNetwork(network) ? Date.now() + TRON_EXPIRY_MS : null;
 
   while (Date.now() < until) {
     if (!stillWatched()) return; // settled elsewhere, or cleared by the user
@@ -213,7 +219,12 @@ async function watch(hash: `0x${string}`, network: Network) {
       }
     }
 
-    if (sender && nonce != null) {
+    if (tronDropAt != null) {
+      if (Date.now() > tronDropAt) {
+        usePending.getState().settle(hash, 'dropped');
+        return;
+      }
+    } else if (sender && nonce != null) {
       try {
         // The mined nonce, not the pending one: pending counts this very transaction.
         const used = await client.getTransactionCount({address: sender, blockTag: 'latest'});

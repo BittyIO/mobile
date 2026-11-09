@@ -1,3 +1,4 @@
+import {parseAddress} from '@/core/address';
 import {useCallback, useEffect, useState} from 'react';
 import {erc20Abi, formatUnits, getAddress, isAddress, type Address} from 'viem';
 import {publicClientFor, type Network} from '@/core/chain';
@@ -60,9 +61,9 @@ export function useCustomTokens(network: Network, vault: Address | null | undefi
 
   /** Read and keep `address`. Throws a short reason when it cannot be added. */
   const add = async (address: string): Promise<CustomToken> => {
-    const a = address.trim();
-    if (!vault || !isAddress(a)) throw new Error('invalid-address');
-    const token = await readCustomToken(network, vault, getAddress(a)).catch(() => null);
+    const a = parseAddress(network, address);
+    if (!vault || !a) throw new Error('invalid-address');
+    const token = await readCustomToken(network, vault, a).catch(() => null);
     if (!token) throw new Error('not-a-token');
     const list = saved(network, vault).filter((x) => x.toLowerCase() !== token.address.toLowerCase());
     setPref(keyOf(network, vault), [...list, token.address].join(','));

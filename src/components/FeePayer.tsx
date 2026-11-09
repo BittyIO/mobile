@@ -5,7 +5,8 @@ import {ReceiveDialog} from '@/components/ReceiveDialog';
 import {Amount} from '@/components/Amount';
 import {networkLabel, useNetwork} from '@/core/network-store';
 import {useActiveFeePayer} from '@/vault/useFeePayer';
-import {formatEth, ownerEthBalance} from '@/vault/direct';
+import {formatNative, ownerEthBalance} from '@/vault/direct';
+import {NATIVE} from '@/core/chain';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors, MONO} from '@/theme';
 import {wrappableAddress} from '@/core/format';
@@ -60,7 +61,7 @@ export function OwnerWalletCard() {
         <View style={styles.row}>
           <Text style={styles.rowTitle}>{t('mobile.fees.balance')}</Text>
           <Text style={styles.rowValue}>
-            {balance == null ? '…' : <><Amount v={formatEth(balance)} color={c.subtext} /> ETH</>}
+            {balance == null ? '…' : <><Amount v={formatNative(network, balance)} color={c.subtext} /> {NATIVE[network].symbol}</>}
           </Text>
         </View>
       </SettingsGroup>

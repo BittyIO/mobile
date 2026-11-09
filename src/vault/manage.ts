@@ -5,7 +5,7 @@
  */
 import {getAddress, type Address, type Hex, parseAbi} from 'viem';
 import {publicClientFor, type Network} from '@/core/chain';
-import {VAULT_GUARD} from '@/core/vault-contracts';
+import {vaultGuard} from '@/core/vault-contracts';
 import {
   VAULT_MANAGE_ABI,
   VAULT_ALLOWLIST_V2_ABI,
@@ -132,7 +132,7 @@ export async function vaultImplVersion(vault: Address, network: Network): Promis
     // A deployed pre-versioned implementation reads 0; only counterfactual vaults inherit latest.
     if (code && code !== '0x') return 0;
     const latest = (await client.readContract({
-      address: VAULT_GUARD,
+      address: vaultGuard(network),
       abi: GUARD_IMPL_ABI,
       functionName: 'latestImplementation',
       args: [IMPLEMENTATION_VAULT],
@@ -197,7 +197,7 @@ export async function checkVaultUpgrade(vault: Address, network: Network): Promi
     const [slot, latest] = await Promise.all([
       client.getStorageAt({address: vault, slot: ERC1967_IMPL_SLOT}),
       client.readContract({
-        address: VAULT_GUARD,
+        address: vaultGuard(network),
         abi: GUARD_IMPL_ABI,
         functionName: 'latestImplementation',
         args: [IMPLEMENTATION_VAULT],

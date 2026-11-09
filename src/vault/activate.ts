@@ -9,15 +9,10 @@
  */
 import {encodeFunctionData, keccak256, parseAbi, stringToHex, type Address, type Hex} from 'viem';
 import type {Signer} from '@/wallet/signer';
-import {
-  apiUrl,
-  CHAIN_ID,
-  publicClientFor,
-  type Network,
-} from '@/core/chain';
+import {apiUrl, CHAIN_ID, isTronNetwork, NATIVE, publicClientFor, type Network} from '@/core/chain';
 import {ACTIVATION_TYPES, GUARD_IMPL_ABI, IMPLEMENTATION_VAULT, PRICE_FEED_ABI} from '@/core/abi';
-import {API_VERSION, VAULT_FACTORY, VAULT_GUARD} from '@/core/vault-contracts';
-import {ACTIVATION_GAS, SIGNED_ACTIVATION_OVERHEAD_GAS, relayFeeUnits} from '@/core/activation-fee';
+import {API_VERSION, vaultFactory, vaultGuard} from '@/core/vault-contracts';
+import {ACTIVATION_GAS, SIGNED_ACTIVATION_OVERHEAD_GAS, activationMarginBps, relayFeeUnits} from '@/core/activation-fee';
 // One copy of the ETH/USD feeds: the fee shown before signing and the fee actually signed must be
 // priced from the same source, or the two disagree for no reason the user can see.
 import {ETH_USD_FEED} from './fee-quote';
@@ -82,7 +77,7 @@ const WETH_ACTIVATION_VERSION = BigInt(1_000_003);
 export async function bornVault(network: Network): Promise<{version: bigint; weth: Address} | null> {
   try {
     const client = publicClientFor(network);
-    const guard = VAULT_GUARD;
+    const guard = vaultGuard(network);
     const impl = await client.readContract({
       address: guard,
       abi: GUARD_IMPL_ABI,
@@ -261,21 +256,41 @@ export class RelayerUnfunded extends Error {
 export const NEW_VAULT_DEFAULTS_VERSION = BigInt(1_000_009);
 export const NEW_VAULT_LOSS_ALLOWANCE = BigInt(1_000);
 
-export async function activateVault(o: {
-  account: Signer;
+/** What one activation costs the vault, priced exactly as {activateVault} will sign it. */
+export type ActivationPrice = {
+  factory: Address;
+  vault: Address;
+  /** The coin the fee is taken in: a stablecoin, or the vault's wrapped native coin. */
+  coin: Address;
+  weth: boolean;
+  /** In `coin`'s own units. */
+  feeAmount: bigint;
+  feeUsd: number;
+  /** The fee in the chain's native coin (ETH, TRX), for showing beside the dollars. */
+  feeNative: number;
+  calls: Hex[];
+};
+
+/**
+ * Price an activation without signing anything: the same gas, gas price, coin and margin
+ * {activateVault} signs with. Throws {ActivationFeeTooHigh} over the per-operation cap, as that does.
+ */
+export async function priceActivation(o: {
+  owner: Address;
   network: Network;
   stableCoin: Address;
   allowlistEnabled: boolean;
-  /** The owner's first vault operations, run during init ("activate and call"). Empty = plain activation. */
   calls?: readonly Hex[];
-}): Promise<{hash: Hex; vault: Address; feeAmount: bigint}> {
+  /** Hold the fee to the vault's per-operation cap (the vault pays). Off when the owner key pays, which no cap applies to. */
+  capped?: boolean;
+}): Promise<ActivationPrice> {
   const client = publicClientFor(o.network);
-  const factory = VAULT_FACTORY;
+  const factory = vaultFactory(o.network);
   const vault = await client.readContract({
     address: factory,
     abi: FACTORY_VAULT_ABI,
     functionName: 'vaultAddress',
-    args: [o.account.address],
+    args: [o.owner],
   });
   const {coin, weth} = await activationCoin(o.network, vault, o.stableCoin);
 
@@ -286,9 +301,9 @@ export async function activateVault(o: {
     // (Robinhood Chain has no feed).
     feedAddress
       ? (client.readContract({address: feedAddress, abi: PRICE_FEED_ABI, functionName: 'latestRoundData'}) as Promise<readonly [bigint, bigint, bigint, bigint, bigint]>).then((feed) => Number(feed[1]) / 1e8)
-      : fetchPrices(['ETH'], o.network).then((p) => {
-          const usd = p.get('ETH');
-          if (!usd) throw new Error('ETH price unavailable');
+      : fetchPrices([NATIVE[o.network].symbol], o.network).then((p) => {
+          const usd = p.get(NATIVE[o.network].symbol);
+          if (!usd) throw new Error(`${NATIVE[o.network].symbol} price unavailable`);
           return usd;
         }),
     client.readContract({
@@ -310,20 +325,48 @@ export async function activateVault(o: {
     args: [o.allowlistEnabled, calls],
   });
   const gasUnits =
-    ((await billedGas(client, o.account.address, factory, activateData)) ??
-      (await client.estimateGas({account: o.account.address, to: factory, data: activateData}).catch((e) => {
+    ((await billedGas(client, o.owner, factory, activateData)) ??
+      (await client.estimateGas({account: o.owner, to: factory, data: activateData}).catch((e) => {
         if (calls.length > 0) throw activationReverted(e);
         return ACTIVATION_GAS - SIGNED_ACTIVATION_OVERHEAD_GAS;
       }))) + SIGNED_ACTIVATION_OVERHEAD_GAS;
   // In WETH the fee is the gas cost itself, in wei, with no margin — as the server quotes it.
   const feeAmount = weth
     ? gasUnits * gasPrice + l1FeeWei
-    : relayFeeUnits(gasUnits, gasPrice, ethUsd, Number(decimals), l1FeeWei);
+    : relayFeeUnits(gasUnits, gasPrice, ethUsd, Number(decimals), l1FeeWei, NATIVE[o.network].decimals, activationMarginBps(isTronNetwork(o.network)));
 
   // Over the vault's per-operation cap the activation cannot be paid, however the vault is funded:
   // said now, in dollars, before anything is signed — not as the relayer's refusal afterwards.
-  const feeUsd = weth ? (Number(feeAmount) / 1e18) * ethUsd : Number(feeAmount) / 10 ** Number(decimals);
-  if (feeUsd > ACTIVATION_FEE_CAP_USD) throw new ActivationFeeTooHigh(feeUsd);
+  const feeUsd = weth ? (Number(feeAmount) / 10 ** NATIVE[o.network].decimals) * ethUsd : Number(feeAmount) / 10 ** Number(decimals);
+  if (o.capped !== false && feeUsd > ACTIVATION_FEE_CAP_USD) throw new ActivationFeeTooHigh(feeUsd);
+  const feeNative = gasUnits * gasPrice;
+  return {
+    factory,
+    vault,
+    coin,
+    weth,
+    feeAmount,
+    feeUsd,
+    feeNative: Number(feeNative) / 10 ** NATIVE[o.network].decimals,
+    calls,
+  };
+}
+
+export async function activateVault(o: {
+  account: Signer;
+  network: Network;
+  stableCoin: Address;
+  allowlistEnabled: boolean;
+  /** The owner's first vault operations, run during init ("activate and call"). Empty = plain activation. */
+  calls?: readonly Hex[];
+}): Promise<{hash: Hex; vault: Address; feeAmount: bigint}> {
+  const {factory, vault, coin, feeAmount, calls} = await priceActivation({
+    owner: o.account.address,
+    network: o.network,
+    stableCoin: o.stableCoin,
+    allowlistEnabled: o.allowlistEnabled,
+    calls: o.calls,
+  });
 
   const domain = {
     name: 'BittyV1VaultFactory',
@@ -375,7 +418,7 @@ export async function activateVaultDirect(o: {
   return sendFromOwner({
     account: o.account,
     network: o.network,
-    to: VAULT_FACTORY,
+    to: vaultFactory(o.network),
     data: encodeFunctionData({
       abi: ACTIVATE_ESTIMATE_ABI,
       functionName: 'activateVault',

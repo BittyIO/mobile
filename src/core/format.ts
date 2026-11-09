@@ -124,7 +124,7 @@ const RECEIPT_UNDERLYING: Record<string, string> = {
 export function displaySymbol(symbol: string | null | undefined): string {
   const s = symbol ?? '';
   const up = s.toUpperCase();
-  return up === 'WETH' ? 'ETH' : (RECEIPT_UNDERLYING[up] ?? s);
+  return up === 'WETH' ? 'ETH' : up === 'WTRX' ? 'TRX' : (RECEIPT_UNDERLYING[up] ?? s);
 }
 
 /**
@@ -136,7 +136,21 @@ export function displaySymbol(symbol: string | null | undefined): string {
  * manager and a payout recipient can easily share them.
  */
 export function shortAddress(address: string): string {
-  return `${address.slice(0, 8)}…${address.slice(-6)}`;
+  const a = asShown(address);
+  return `${a.slice(0, 8)}…${a.slice(-6)}`;
+}
+
+/**
+ * A 0x… address as the network in front writes it: unchanged on the EVM chains, base58 T… on Tron
+ * (core/address `displayAddress`). Every address these formatters are handed belongs to the network
+ * in front, so it is decided here, once, for every row that shows one. Anything that is not a
+ * 20-byte hex address — a Tron wallet's own T… address, a name — is left as it is.
+ */
+export function asShown(address: string): string {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return address;
+  const {useNetwork} = require('@/core/network-store') as typeof import('@/core/network-store');
+  const {displayAddress} = require('@/core/address') as typeof import('@/core/address');
+  return displayAddress(useNetwork.getState().network, address);
 }
 
 /**
@@ -150,7 +164,9 @@ export function shortAddress(address: string): string {
  */
 export function wrappableAddress(address: string): string {
   if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return address;
-  return `${address.slice(0, 21)}\u200B${address.slice(21)}`;
+  const a = asShown(address);
+  const half = Math.ceil(a.length / 2);
+  return `${a.slice(0, half)}\u200B${a.slice(half)}`;
 }
 
 /**

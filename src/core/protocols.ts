@@ -57,6 +57,8 @@ const PROTOCOLS: Record<Network, Record<string, ProtocolInfo>> = {
     '0x67bd4c240d513e7eb35bf8d871cbed314856b125': {name: 'Uniswap Universal', category: 'amm'},
     '0x236b4b260bd29dca1df29360fa09c084e37fb100': {name: 'CoW Swap', category: 'intent'},
   },
+  // The Nile guard lists no protocol: none ships with the vault on Tron.
+  'tron-nile': {},
 };
 
 /**

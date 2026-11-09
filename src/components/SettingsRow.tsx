@@ -127,11 +127,14 @@ export function OptionRow({
  */
 export function SettingsGroup({
   label,
+  labelInfo,
   footer,
   footerInfo,
   children,
 }: {
   label?: string;
+  /** An ⓘ after the label, for a card whose rows need a word of warning; opens whatever this does. */
+  labelInfo?: () => void;
   footer?: string;
   /** An ⓘ after the footer, for a footer that needs explaining; opens whatever this does. */
   footerInfo?: () => void;
@@ -141,7 +144,16 @@ export function SettingsGroup({
   const c = useColors();
   return (
     <View style={styles.section}>
-      {label ? <Text style={styles.groupLabel}>{label}</Text> : null}
+      {label && labelInfo ? (
+        <View style={styles.groupLabelLine}>
+          <Text style={[styles.groupLabel, styles.groupLabelInline]}>{label}</Text>
+          <Pressable onPress={labelInfo} hitSlop={10} accessibilityRole="button" accessibilityLabel={label}>
+            <InfoIcon color={c.subtext} size={16} />
+          </Pressable>
+        </View>
+      ) : label ? (
+        <Text style={styles.groupLabel}>{label}</Text>
+      ) : null}
       <View style={styles.group}>{children}</View>
       {footer && footerInfo ? (
         <View style={styles.groupFooterLine}>
@@ -161,6 +173,8 @@ export const makeSettingsStyles = (c: Colors) =>
   StyleSheet.create({
     groupLabel: {color: c.subtext, fontSize: 15, fontWeight: '600', paddingHorizontal: 16, marginTop: 8, marginBottom: 6},
     groupFooter: {color: c.subtext, fontSize: 12, lineHeight: 17, paddingHorizontal: 16, marginTop: 6},
+    groupLabelLine: {flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, marginTop: 8, marginBottom: 6},
+    groupLabelInline: {paddingHorizontal: 0, marginTop: 0, marginBottom: 0},
     groupFooterLine: {flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6, paddingRight: 16},
     groupFooterShrink: {flexShrink: 1, paddingRight: 0, marginTop: 0},
     section: {gap: 0},

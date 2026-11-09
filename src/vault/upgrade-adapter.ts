@@ -12,7 +12,7 @@ import {encodeFunctionData, parseAbi, type Address, type Hex} from 'viem';
 import {publicClientFor, type Network} from '@/core/chain';
 import {ADAPTER_ABI, VAULT_UPGRADE_ABI} from '@/core/abi';
 import {isNamedProtocol, protocolMeta} from '@/core/protocols';
-import {VAULT_GUARD} from '@/core/vault-contracts';
+import {vaultGuard} from '@/core/vault-contracts';
 import {relayVaultWrite} from './relay';
 
 type Acct = Parameters<typeof relayVaultWrite>[0]['account'];
@@ -47,7 +47,7 @@ export type AdapterStatus = {lineage: string; addresses: string[]; version: bigi
 
 export async function adapterStatuses(vault: Address, network: Network): Promise<AdapterStatus[]> {
   const client = publicClientFor(network);
-  const guard = VAULT_GUARD;
+  const guard = vaultGuard(network);
   const [live, deprecated] = await Promise.all([
     client.readContract({address: guard, abi: GUARD_LIST_ABI, functionName: 'getProtocols'}),
     client.readContract({address: guard, abi: GUARD_LIST_ABI, functionName: 'getDeprecatedProtocols'}).catch(() => []),

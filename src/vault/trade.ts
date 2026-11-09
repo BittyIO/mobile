@@ -68,6 +68,7 @@ async function bestSellQuote(
 ): Promise<{fee: number; amountOut: bigint} | null> {
   const client = publicClientFor(network);
   const quoter = QUOTER_V2[network];
+  if (!quoter) return null;
   // Quote every fee tier in ONE round-trip (they're independent) instead of three sequential RPC calls.
   const quotes = await Promise.all(
     FEE_TIERS.map(async (fee) => {
@@ -99,6 +100,7 @@ async function bestBuyQuote(
 ): Promise<{fee: number; amountIn: bigint} | null> {
   const client = publicClientFor(network);
   const quoter = QUOTER_V2[network];
+  if (!quoter) return null;
   const quotes = await Promise.all(
     FEE_TIERS.map(async (fee) => {
       try {

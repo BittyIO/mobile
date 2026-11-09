@@ -16,7 +16,8 @@ import {apiUrl, CHAIN_ID, publicClientFor, type Network} from '@/core/chain';
 import {FORWARDER_ABI, FORWARD_REQUEST_TYPES, VAULT_FWD_ABI, VAULT_MULTICALL_ABI, VAULT_OWNERSHIP_ABI, VAULT_RISK_ABI} from '@/core/abi';
 import {rotationOn} from '@/wallet/rotation-store';
 import {ActivationCallReverted, ActivationFeeTooHigh, ConnectionLost, RelayerUnfunded, isActivated, activateVault, activateVaultDirect, revertData} from './activate';
-import {formatEth, OwnerGasShort, ownerEthBalance, sendFromOwner} from './direct';
+import {displayAddress} from '@/core/address';
+import {formatNative, OwnerGasShort, ownerEthBalance, sendFromOwner} from './direct';
 import {feePayerFor, type FeePayer} from '@/core/fee-payer-store';
 import {feeCoinOrder} from '@/core/prefs';
 import {knownAssets} from '@/core/assets';
@@ -293,8 +294,8 @@ async function viaOwnerLockedForever(opts: EncodedWrite): Promise<RelayResult> {
     if (!(e instanceof OwnerGasShort)) throw e;
     throw new Error(
       translate(useLanguage.getState().language, 'mobile.vault.forever_owner_pays', {
-        need: formatEth(e.need),
-        owner: e.owner,
+        need: formatNative(opts.network, e.need),
+        owner: displayAddress(opts.network, e.owner),
       }),
     );
   }

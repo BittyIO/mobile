@@ -85,3 +85,20 @@ export function fromHex(hex: string): Uint8Array {
   for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
   return out;
 }
+
+/**
+ * The same account in Tron's base58 form: an EVM address's 20 bytes behind Tron's 0x41 prefix.
+ * Tron contracts see exactly those 20 bytes (`msg.sender`, `address(this)`), so a vault address
+ * read through JSON-RPC as 0x… and the T… one Tronscan shows are one address, written two ways.
+ */
+export function evmToTron(address: string): string {
+  const h = address.replace(/^0x/i, '');
+  if (!/^[0-9a-fA-F]{40}$/.test(h)) throw new Error(`Not an address: ${address}`);
+  return fromTronHex('41' + h);
+}
+
+/** A base58 T… address as the 0x… the contracts and JSON-RPC use, or null when it is not one. */
+export function tronToEvm(address: string): `0x${string}` | null {
+  const b = decodeTronAddress(address);
+  return b ? (`0x${toHex(b.slice(1))}` as `0x${string}`) : null;
+}

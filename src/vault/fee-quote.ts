@@ -12,7 +12,7 @@
  * a fee being a surprise.
  */
 import type {Address, Hex} from 'viem';
-import {publicClientFor, type Network} from '@/core/chain';
+import {publicClientFor, type Network, NATIVE} from '@/core/chain';
 import {PRICE_FEED_ABI} from '@/core/abi';
 import {fetchPrices} from '@/core/prices';
 
@@ -71,15 +71,19 @@ export const TYPICAL_RELAY_GAS = relayGasFor({transfer: 1});
 const RELAY_MARGIN_BPS = 1500;
 const BPS = 10000;
 
-// Chainlink ETH/USD feeds, answer at 8 decimals. Shared with the activation quote, which prices the
-// same way; Robinhood Chain has no feed and falls back to the app's own price service.
+// The chain's coin in US dollars: Chainlink ETH/USD feeds, answer at 8 decimals — and on Tron Nile
+// the TRX/USD feed the Nile guard prices TRX by (TWZ37cpV6LJAoTNuiqEWrEUxQLvvKGmbrm, guard repo
+// deployments/tron-nile.json), same interface, same 8 decimals. Shared with the activation quote,
+// which prices the same way; Robinhood Chain has no feed and falls back to the app's own price service.
 export const ETH_USD_FEED: Partial<Record<Network, Address>> = {
   mainnet: '0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419',
   base: '0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70',
   sepolia: '0x694AA1769357215DE4FAC081bf1f309aDC325306',
   arbitrum: '0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612',
+  'tron-nile': '0xE1C867Bb4f2FE0dd8CBFa9F0789e2dd029BD841A',
 };
 
+/** The network's own coin (ETH; TRX on Tron) in US dollars. Named for the EVM chains it began on. */
 export async function ethUsd(network: Network): Promise<number> {
   const feed = ETH_USD_FEED[network];
   if (feed) {
@@ -90,9 +94,10 @@ export async function ethUsd(network: Network): Promise<number> {
     })) as readonly [bigint, bigint, bigint, bigint, bigint];
     return Number(r[1]) / 1e8;
   }
-  const p = await fetchPrices(['ETH'], network);
-  const usd = p.get('ETH');
-  if (!usd) throw new Error('ETH price unavailable');
+  const coin = NATIVE[network].symbol;
+  const p = await fetchPrices([coin], network);
+  const usd = p.get(coin);
+  if (!usd) throw new Error(`${coin} price unavailable`);
   return usd;
 }
 
@@ -108,7 +113,7 @@ export async function quoteRelayFeeUsd(network: Network, gasUnits = TYPICAL_RELA
   try {
     const [gasPrice, usd] = await Promise.all([publicClientFor(network).getGasPrice(), ethUsd(network)]);
     const wei = (gasUnits * gasPrice * BigInt(BPS + RELAY_MARGIN_BPS)) / BigInt(BPS);
-    return (Number(wei) / 1e18) * usd;
+    return (Number(wei) / 10 ** NATIVE[network].decimals) * usd;
   } catch {
     return null;
   }

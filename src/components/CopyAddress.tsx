@@ -1,3 +1,4 @@
+import {asShown} from '@/core/format';
 import React, {useEffect, useRef, useState} from 'react';
 import {Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle} from 'react-native';
 import Svg, {Path, Rect} from 'react-native-svg';
@@ -32,7 +33,7 @@ export function CopyAddress({
     if (timer.current) clearTimeout(timer.current);
   }, []);
   const copy = () => {
-    Clipboard.setString(address);
+    Clipboard.setString(asShown(address));
     setCopied(true);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setCopied(false), 1500);

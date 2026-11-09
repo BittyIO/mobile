@@ -42,14 +42,17 @@ export const useFeePayerStore = create<State>((set, get) => ({
   },
 }));
 
+/** The payer when the owner has not chosen one: the vault, through Bitty's relayer, on every network. */
+const defaultPayer = (_network: string): FeePayer => 'vault';
+
 /** Who pays on `network` for `vault`, read now — for the write path, which is not a component. */
 export function feePayerFor(network: string, vault: string): FeePayer {
-  return useFeePayerStore.getState().payers[keyOf(network, vault)] ?? 'vault';
+  return useFeePayerStore.getState().payers[keyOf(network, vault)] ?? defaultPayer(network);
 }
 
 /** The same, as a subscription — for the screens that show or change it. */
 export function useFeePayer(network: string, vault: string | null | undefined): FeePayer {
-  return useFeePayerStore((s) => (vault ? s.payers[keyOf(network, vault)] : undefined)) ?? 'vault';
+  return useFeePayerStore((s) => (vault ? s.payers[keyOf(network, vault)] : undefined)) ?? defaultPayer(network);
 }
 
 export function setFeePayer(network: string, vault: string, payer: FeePayer): void {

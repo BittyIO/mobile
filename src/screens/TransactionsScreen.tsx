@@ -22,7 +22,7 @@ import {Amount} from '@/components/Amount';
 import {GasIcon} from '@/components/GasIcon';
 import {splitMarketSwap, netTrade, isReceiptToken, STAKE_TOKENS, SUPPLY_TOKENS, STAKE_COUNTERPARTY, SUPPLY_COUNTERPARTY, BITTY_FEE_COLLECTORS} from '@/vault/market-trades';
 import {fmtNum, fmtShort, displaySymbol, shortAddress} from '@/core/format';
-import {EXPLORER_TX, type Network} from '@/core/chain';
+import {EXPLORER_TX, NATIVE, type Network} from '@/core/chain';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 import {asUnderlying, categoryForActions, defiMoveFromActions, defiMovesFromActions, describeActions, earnProtocolName, ordersBySetup, stakeClaimFromActions, orderTrade, swapFromActions} from '@/vault/tx-actions';
@@ -31,7 +31,7 @@ import {GPV2_SETTLEMENT, fetchRecentOrders, type CowOrder} from '@/vault/limit';
 import {currentCatalog} from '@/core/asset-catalog';
 import {openLink} from '@/core/open-link';
 import {attemptTrade, isFailure, useVaultAttempts, wasSent, type Attempt} from '@/vault/attempts';
-import {formatEth} from '@/vault/direct';
+import {formatNative} from '@/vault/direct';
 import {formatUnits} from 'viem';
 import {protocolDisplayName} from '@/core/protocols';
 import {assetMeta, RECEIPT_TOKENS} from '@/core/assets';
@@ -335,15 +335,16 @@ function Leg({r, counterparty, via}: {r: TransferRow; counterparty?: Part['count
   );
 }
 
-/** The ETH the owner wallet paid in gas, drawn where a relayed row draws the relay fee. */
+/** The ETH (TRX on Tron) the owner wallet paid in gas, drawn where a relayed row draws the relay fee. */
 function OwnerFee({fee}: {fee: bigint}) {
   const styles = useStyles(makeStyles);
   const c = useColors();
+  const network = useNetwork((s) => s.network);
   return (
     <>
       <GasIcon color={c.subtext} size={12} />
       <Text style={styles.fee}>
-        <Amount v={formatEth(fee)} size={12} color={c.subtext} /> ETH
+        <Amount v={formatNative(network, fee)} size={12} color={c.subtext} /> {NATIVE[network].symbol}
       </Text>
     </>
   );
@@ -377,7 +378,7 @@ function Op({
   // left every line on screen as it was.
   const v = classify(op, network, t, orders, words, details, rates, placed);
   return (
-    <Pressable style={styles.op} onPress={() => openLink(explorer + op.txHash, 'Etherscan')}>
+    <Pressable style={styles.op} onPress={() => openLink(explorer + (network === 'tron-nile' ? op.txHash.replace(/^0x/, '') : op.txHash), network === 'tron-nile' ? 'Tronscan' : 'Etherscan')}>
       {v.parts.map((part, i) => (
         <View key={`${op.txHash}-${i}`} style={i > 0 ? styles.partGap : undefined}>
           {/* The title owns the line. It shared it with the timestamp until a Russian
@@ -494,7 +495,7 @@ function FailedOp({tx, explorer, network}: {tx: Attempt; explorer: string; netwo
     <Pressable
       style={styles.op}
       disabled={!onChain}
-      onPress={onChain ? () => openLink(explorer + tx.txHash, 'Etherscan') : undefined}>
+      onPress={onChain ? () => openLink(explorer + (network === 'tron-nile' ? tx.txHash!.replace(/^0x/, '') : tx.txHash), network === 'tron-nile' ? 'Tronscan' : 'Etherscan') : undefined}>
       <View style={styles.opHeader}>
         <Text style={styles.title}>{title}</Text>
       </View>

@@ -5,7 +5,7 @@ import {useFocusEffect} from '@react-navigation/native';
 import type {Address} from 'viem';
 import {publicClientFor} from '@/core/chain';
 import {FORWARDER_ABI, VAULT_FWD_ABI} from '@/core/abi';
-import {shortAddress} from '@/core/format';
+import {shortAddress, asShown} from '@/core/format';
 import {getLockLevel, getPendingChanges, getRiskConfig} from '@/vault/risk';
 import {vaultOwnerOf} from '@/vault/owned-vaults';
 import {handOverToFreshKey} from '@/vault/ownership';
@@ -217,7 +217,7 @@ export function QuantumSafeScreen() {
                 now={now}
                 timelock={Number(status.timelock ?? 0)}
                 title={t(freshPending ? 'mobile.quantum.pending_title' : 'mobile.vault.pending_new_owner')}
-                value={pending.address}
+                value={asShown(pending.address)}
                 titleRight={freshPending ? <QuantumInfoButton /> : undefined}
                 detail={freshPending ? <QuantumKeys to={pending.address} /> : undefined}
                 onMatured={() => void load()}
