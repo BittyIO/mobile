@@ -119,7 +119,7 @@
       "owner_only": "Bunu yalnızca kasa sahibi yapabilir.",
       "no_permission": "Varlık yöneticisi izinleriniz bunu kapsamıyor.",
       "err_vault_locked": "Bu kasa kilitli, bu yüzden bu işlem kullanılamıyor.",
-      "err_payment_not_stable": "Yeni bir adrese yalnızca stablecoin gönderilebilir. Başka varlıklar göndermek için adresi beyaz listenize ekleyin.",
+      "err_payment_not_stable": "Yeni bir adrese yalnızca stablecoin gönderilebilir. Başka varlıklar göndermek için adresi alıcı olarak ekleyin.",
       "err_send_limit": "Bu, günlük gönderim limitinizden kalan tutarı aşıyor.",
       "err_market_loss": "Bu işlem bugünkü piyasa işlemi kayıp limitini aşar.",
       "err_market_price": "Fiyat piyasa fiyatından çok uzaklaştı, işlem gerçekleşmedi. Tekrar deneyin.",
@@ -129,7 +129,7 @@
       "err_unauthorized": "Bu cüzdanın bu kasada bunu yapma izni yok.",
       "err_not_registered": "Bu varlık veya protokol desteklenmiyor.",
       "err_recipient_waiting": "Bu alıcı henüz fon alamaz. Bekleme süresi bitince alabilecek.",
-      "err_no_escape": "Halihazırda fon alabilen bir beyaz liste alıcısı seçin.",
+      "err_no_escape": "Halihazırda fon alabilen bir alıcı seçin.",
       "err_gas_budget": "Bugünkü ağ ücreti bütçesi tükendi.",
       "err_price_unavailable": "Şu anda bir fiyat beslemesi kullanılamıyor. Birazdan tekrar deneyin."
     }

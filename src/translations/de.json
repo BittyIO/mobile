@@ -1457,7 +1457,7 @@
       "owner_only": "Nur der Tresorbesitzer kann das tun.",
       "no_permission": "Deine Asset-Manager-Berechtigungen umfassen diese Aktion nicht.",
       "err_vault_locked": "Dieser Tresor ist gesperrt, daher ist diese Aktion nicht verfügbar.",
-      "err_payment_not_stable": "An eine neue Adresse können nur Stablecoins gesendet werden. Füge sie deiner Whitelist hinzu, um andere Assets zu senden.",
+      "err_payment_not_stable": "An eine neue Adresse können nur Stablecoins gesendet werden. Füge sie als Zahlungsempfänger hinzu, um andere Assets zu senden.",
       "err_send_limit": "Das übersteigt den Rest deines täglichen Sendelimits.",
       "err_market_loss": "Dieser Trade würde das heutige Verlustlimit für Markthandel überschreiten.",
       "err_market_price": "Der Preis hat sich zu weit vom Marktpreis entfernt, der Trade wurde nicht ausgeführt. Versuche es erneut.",
@@ -1467,7 +1467,7 @@
       "err_unauthorized": "Diese Wallet darf das bei diesem Tresor nicht tun.",
       "err_not_registered": "Dieses Asset oder Protokoll wird nicht unterstützt.",
       "err_recipient_waiting": "Dieser Empfänger kann noch keine Mittel erhalten. Das ist möglich, sobald seine Wartezeit endet.",
-      "err_no_escape": "Wähle einen Whitelist-Empfänger, der bereits Mittel erhalten kann.",
+      "err_no_escape": "Wähle einen Zahlungsempfänger, der bereits Mittel erhalten kann.",
       "err_gas_budget": "Das heutige Netzwerkgebühren-Budget ist aufgebraucht.",
       "err_price_unavailable": "Ein Preis-Feed ist gerade nicht verfügbar. Versuche es gleich noch einmal."
     }

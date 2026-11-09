@@ -119,7 +119,7 @@
       "owner_only": "Chỉ chủ sở hữu két mới làm được việc này.",
       "no_permission": "Quyền quản lý tài sản của bạn không bao gồm thao tác này.",
       "err_vault_locked": "Két này đang bị khóa nên không thể thực hiện thao tác này.",
-      "err_payment_not_stable": "Chỉ có thể gửi stablecoin đến địa chỉ mới. Thêm địa chỉ vào danh sách trắng để gửi tài sản khác.",
+      "err_payment_not_stable": "Chỉ có thể gửi stablecoin đến địa chỉ mới. Thêm địa chỉ làm người nhận để gửi tài sản khác.",
       "err_send_limit": "Số tiền này vượt quá phần còn lại của hạn mức gửi hằng ngày.",
       "err_market_loss": "Giao dịch này sẽ vượt hạn mức lỗ hằng ngày của giao dịch thị trường.",
       "err_market_price": "Giá lệch quá xa giá thị trường nên giao dịch không thực hiện. Hãy thử lại.",
@@ -129,7 +129,7 @@
       "err_unauthorized": "Ví này không được phép làm việc này trên két này.",
       "err_not_registered": "Tài sản hoặc giao thức này không được hỗ trợ.",
       "err_recipient_waiting": "Người nhận này chưa thể nhận tiền. Sẽ nhận được khi hết thời gian chờ.",
-      "err_no_escape": "Hãy chọn một người nhận trong danh sách trắng đã có thể nhận tiền.",
+      "err_no_escape": "Hãy chọn một người nhận đã có thể nhận tiền.",
       "err_gas_budget": "Ngân sách phí mạng hôm nay đã hết.",
       "err_price_unavailable": "Nguồn giá hiện không khả dụng. Hãy thử lại sau ít phút."
     }

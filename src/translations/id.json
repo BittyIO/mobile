@@ -119,7 +119,7 @@
       "owner_only": "Hanya pemilik vault yang bisa melakukan ini.",
       "no_permission": "Izin pengelola aset Anda tidak mencakup tindakan ini.",
       "err_vault_locked": "Vault ini terkunci, jadi tindakan ini tidak tersedia.",
-      "err_payment_not_stable": "Hanya stablecoin yang bisa dikirim ke alamat baru. Tambahkan ke daftar putih Anda untuk mengirim aset lain.",
+      "err_payment_not_stable": "Hanya stablecoin yang bisa dikirim ke alamat baru. Tambahkan sebagai penerima untuk mengirim aset lain.",
       "err_send_limit": "Ini melebihi sisa batas pengiriman harian Anda.",
       "err_market_loss": "Perdagangan ini akan melampaui batas kerugian harian perdagangan pasar.",
       "err_market_price": "Harga bergerak terlalu jauh dari harga pasar, jadi perdagangan tidak terjadi. Coba lagi.",
@@ -129,7 +129,7 @@
       "err_unauthorized": "Dompet ini tidak diizinkan melakukan ini di vault ini.",
       "err_not_registered": "Aset atau protokol ini tidak didukung.",
       "err_recipient_waiting": "Penerima ini belum bisa menerima dana. Bisa setelah masa tunggunya berakhir.",
-      "err_no_escape": "Pilih penerima daftar putih yang sudah bisa menerima dana.",
+      "err_no_escape": "Pilih penerima yang sudah bisa menerima dana.",
       "err_gas_budget": "Anggaran biaya jaringan hari ini sudah habis.",
       "err_price_unavailable": "Feed harga sedang tidak tersedia. Coba lagi sebentar lagi."
     }

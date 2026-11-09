@@ -1457,7 +1457,7 @@
       "owner_only": "Seul le propriétaire du coffre peut faire cela.",
       "no_permission": "Vos autorisations de gestionnaire d'actifs n'incluent pas cette action.",
       "err_vault_locked": "Ce coffre est verrouillé, cette action n'est donc pas disponible.",
-      "err_payment_not_stable": "Seuls des stablecoins peuvent être envoyés à une nouvelle adresse. Ajoutez-la à votre liste blanche pour envoyer d'autres actifs.",
+      "err_payment_not_stable": "Seuls des stablecoins peuvent être envoyés à une nouvelle adresse. Ajoutez-la comme bénéficiaire pour envoyer d'autres actifs.",
       "err_send_limit": "Cela dépasse ce qu'il reste de votre plafond d'envoi quotidien.",
       "err_market_loss": "Cette transaction dépasserait la limite de perte quotidienne du trading au marché.",
       "err_market_price": "Le prix s'est trop éloigné du prix du marché, la transaction n'a pas abouti. Réessayez.",
@@ -1467,7 +1467,7 @@
       "err_unauthorized": "Ce portefeuille n'est pas autorisé à faire cela sur ce coffre.",
       "err_not_registered": "Cet actif ou ce protocole n'est pas pris en charge.",
       "err_recipient_waiting": "Ce destinataire ne peut pas encore recevoir de fonds. Il le pourra à la fin de sa période d'attente.",
-      "err_no_escape": "Choisissez un destinataire de la liste blanche qui peut déjà recevoir des fonds.",
+      "err_no_escape": "Choisissez un bénéficiaire qui peut déjà recevoir des fonds.",
       "err_gas_budget": "Le budget de frais réseau du jour est épuisé.",
       "err_price_unavailable": "Un flux de prix est indisponible pour le moment. Réessayez dans un instant."
     }
