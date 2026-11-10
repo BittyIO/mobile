@@ -4,6 +4,7 @@ import type {MobileTable} from './index';
 // what Bitty uses it for, and a button to its own app. Keyed by brand (see core/protocol-info).
 export const protocols: MobileTable = {
   en: {
+    pancakeswap: 'PancakeSwap is the largest decentralized exchange on BNB Chain, trading tokens against on-chain liquidity pools. Bitty sends your market trades on BNB Chain through it.',
     open: 'Open {{name}}',
     sky: 'Sky (formerly MakerDAO) issues the USDS stablecoin and pays the Sky Savings Rate on USDS saved with it. Bitty uses it to earn that rate on your stablecoins.',
     lido: 'Lido is the largest liquid staking protocol on Ethereum: ETH staked with it earns staking rewards as stETH. Bitty uses it to stake your vault\'s ETH.',
@@ -13,6 +14,7 @@ export const protocols: MobileTable = {
     cow: 'CoW Swap is a decentralized exchange where solvers compete to fill orders at the best price, which also protects them from front-running. Bitty uses it for your limit orders and TWAP orders.',
   },
   zh: {
+    pancakeswap: 'PancakeSwap 是 BNB Chain 上最大的去中心化交易所，通过链上流动性池交易代币。Bitty 通过它执行你在 BNB Chain 上的市价交易。',
     open: '打开 {{name}}',
     sky: 'Sky（原 MakerDAO）发行 USDS 稳定币，并为存入的 USDS 支付 Sky 储蓄利率。Bitty 用它让你的稳定币赚取这一利率。',
     lido: 'Lido 是以太坊上最大的流动性质押协议：质押的 ETH 以 stETH 的形式获得质押收益。Bitty 用它质押你金库中的 ETH。',
@@ -22,6 +24,7 @@ export const protocols: MobileTable = {
     cow: 'CoW Swap 是一个去中心化交易所，求解者竞相以最优价格成交订单，同时保护订单免受抢跑。Bitty 用它执行你的限价单和 TWAP 订单。',
   },
   'zh-TW': {
+    pancakeswap: 'PancakeSwap 是 BNB Chain 上最大的去中心化交易所，透過鏈上流動性池交易代幣。Bitty 透過它執行你在 BNB Chain 上的市價交易。',
     open: '開啟 {{name}}',
     sky: 'Sky（原 MakerDAO）發行 USDS 穩定幣，並為存入的 USDS 支付 Sky 儲蓄利率。Bitty 用它讓你的穩定幣賺取這一利率。',
     lido: 'Lido 是以太坊上最大的流動性質押協議：質押的 ETH 以 stETH 的形式獲得質押收益。Bitty 用它質押你金庫中的 ETH。',
@@ -31,6 +34,7 @@ export const protocols: MobileTable = {
     cow: 'CoW Swap 是一個去中心化交易所，求解者競相以最佳價格成交訂單，同時保護訂單免受搶跑。Bitty 用它執行你的限價單和 TWAP 訂單。',
   },
   ja: {
+    pancakeswap: 'PancakeSwap は BNB Chain 最大の分散型取引所で、オンチェーンの流動性プールでトークンを取引します。Bitty は BNB Chain での成行取引をこれを通じて行います。',
     open: '{{name}} を開く',
     sky: 'Sky（旧 MakerDAO）は USDS ステーブルコインを発行し、預けられた USDS に Sky 貯蓄金利を支払います。Bitty はステーブルコインでこの金利を得るために使います。',
     lido: 'Lido はイーサリアム最大のリキッドステーキングプロトコルで、ステークした ETH が stETH としてステーキング報酬を得ます。Bitty はボールトの ETH をステークするために使います。',
@@ -40,6 +44,7 @@ export const protocols: MobileTable = {
     cow: 'CoW Swap は分散型取引所で、ソルバーが最良価格での約定を競い、フロントランニングからも注文を守ります。Bitty は指値注文と TWAP 注文に使います。',
   },
   ko: {
+    pancakeswap: 'PancakeSwap은 BNB Chain 최대의 탈중앙화 거래소로, 온체인 유동성 풀에서 토큰을 거래합니다. Bitty는 BNB Chain에서의 시장가 거래를 이를 통해 실행합니다.',
     open: '{{name}} 열기',
     sky: 'Sky(구 MakerDAO)는 USDS 스테이블코인을 발행하고 예치된 USDS에 Sky 저축 금리를 지급합니다. Bitty는 스테이블코인으로 이 금리를 받기 위해 사용합니다.',
     lido: 'Lido는 이더리움 최대의 리퀴드 스테이킹 프로토콜로, 스테이킹한 ETH가 stETH로 스테이킹 보상을 받습니다. Bitty는 볼트의 ETH를 스테이킹하는 데 사용합니다.',
@@ -49,6 +54,7 @@ export const protocols: MobileTable = {
     cow: 'CoW Swap은 솔버들이 최적 가격으로 주문을 체결하려고 경쟁하는 탈중앙화 거래소로, 프런트러닝으로부터 주문을 보호합니다. Bitty는 지정가 주문과 TWAP 주문에 사용합니다.',
   },
   fr: {
+    pancakeswap: 'PancakeSwap est le plus grand échange décentralisé de BNB Chain : il échange des jetons contre des pools de liquidité on-chain. Bitty y fait passer vos ordres au marché sur BNB Chain.',
     open: 'Ouvrir {{name}}',
     sky: 'Sky (anciennement MakerDAO) émet le stablecoin USDS et verse le taux d’épargne Sky sur les USDS déposés. Bitty l’utilise pour faire rapporter ce taux à vos stablecoins.',
     lido: 'Lido est le plus grand protocole de staking liquide sur Ethereum : l’ETH staké rapporte des récompenses sous forme de stETH. Bitty l’utilise pour staker l’ETH de votre coffre.',
@@ -58,6 +64,7 @@ export const protocols: MobileTable = {
     cow: 'CoW Swap est un échange décentralisé où des solveurs rivalisent pour exécuter les ordres au meilleur prix, ce qui les protège aussi du front-running. Bitty l’utilise pour vos ordres à cours limité et TWAP.',
   },
   es: {
+    pancakeswap: 'PancakeSwap es el mayor exchange descentralizado de BNB Chain: intercambia tokens contra pools de liquidez on-chain. Bitty envía por él tus operaciones a mercado en BNB Chain.',
     open: 'Abrir {{name}}',
     sky: 'Sky (antes MakerDAO) emite la stablecoin USDS y paga la Tasa de Ahorro de Sky por los USDS depositados. Bitty la usa para que tus stablecoins ganen esa tasa.',
     lido: 'Lido es el mayor protocolo de staking líquido de Ethereum: el ETH en staking gana recompensas como stETH. Bitty lo usa para hacer staking del ETH de tu bóveda.',
@@ -67,6 +74,7 @@ export const protocols: MobileTable = {
     cow: 'CoW Swap es un exchange descentralizado donde los solvers compiten por llenar las órdenes al mejor precio, lo que también las protege del front-running. Bitty lo usa para tus órdenes límite y TWAP.',
   },
   de: {
+    pancakeswap: 'PancakeSwap ist die größte dezentrale Börse auf BNB Chain und handelt Token gegen On-Chain-Liquiditätspools. Bitty führt deine Markt-Trades auf BNB Chain darüber aus.',
     open: '{{name}} öffnen',
     sky: 'Sky (früher MakerDAO) gibt den Stablecoin USDS aus und zahlt auf eingezahlte USDS die Sky Savings Rate. Bitty nutzt ihn, damit deine Stablecoins diesen Zins verdienen.',
     lido: 'Lido ist das größte Liquid-Staking-Protokoll auf Ethereum: Gestaktes ETH verdient Staking-Erträge als stETH. Bitty nutzt es, um das ETH deines Tresors zu staken.',
@@ -76,6 +84,7 @@ export const protocols: MobileTable = {
     cow: 'CoW Swap ist eine dezentrale Börse, bei der Solver darum konkurrieren, Orders zum besten Preis auszuführen, was sie auch vor Front-Running schützt. Bitty nutzt es für deine Limit- und TWAP-Orders.',
   },
   'pt-BR': {
+    pancakeswap: 'PancakeSwap é a maior exchange descentralizada da BNB Chain, negociando tokens contra pools de liquidez on-chain. A Bitty envia suas negociações a mercado na BNB Chain por ela.',
     open: 'Abrir {{name}}',
     sky: 'Sky (antiga MakerDAO) emite a stablecoin USDS e paga a Taxa de Poupança Sky sobre os USDS depositados. Bitty a usa para suas stablecoins renderem essa taxa.',
     lido: 'Lido é o maior protocolo de staking líquido do Ethereum: o ETH em staking rende recompensas como stETH. Bitty o usa para fazer staking do ETH do seu cofre.',
@@ -85,6 +94,7 @@ export const protocols: MobileTable = {
     cow: 'CoW Swap é uma exchange descentralizada em que solvers competem para executar ordens pelo melhor preço, o que também as protege de front-running. Bitty a usa para suas ordens limitadas e TWAP.',
   },
   tr: {
+    pancakeswap: 'PancakeSwap, BNB Chain\'deki en büyük merkeziyetsiz borsadır; tokenları zincir üstü likidite havuzlarına karşı takas eder. Bitty, BNB Chain\'deki piyasa işlemlerinizi onun üzerinden yapar.',
     open: '{{name}} aç',
     sky: 'Sky (eski adıyla MakerDAO) USDS stablecoin\'ini çıkarır ve yatırılan USDS\'ye Sky Tasarruf Oranı öder. Bitty, stablecoin\'lerinizin bu oranı kazanması için kullanır.',
     lido: 'Lido, Ethereum\'daki en büyük likit staking protokolüdür: stake edilen ETH, stETH olarak staking ödülü kazanır. Bitty, kasanızdaki ETH\'yi stake etmek için kullanır.',
@@ -94,6 +104,7 @@ export const protocols: MobileTable = {
     cow: 'CoW Swap, çözücülerin emirleri en iyi fiyattan doldurmak için yarıştığı merkeziyetsiz bir borsadır; bu, emirleri front-running\'e karşı da korur. Bitty, limit ve TWAP emirleriniz için kullanır.',
   },
   ru: {
+    pancakeswap: 'PancakeSwap — крупнейшая децентрализованная биржа в BNB Chain: обменивает токены через ончейн-пулы ликвидности. Bitty проводит через неё ваши рыночные сделки в BNB Chain.',
     open: 'Открыть {{name}}',
     sky: 'Sky (бывший MakerDAO) выпускает стейблкоин USDS и платит ставку Sky Savings Rate на внесённые USDS. Bitty использует его, чтобы ваши стейблкоины приносили эту ставку.',
     lido: 'Lido — крупнейший протокол ликвидного стейкинга в Ethereum: застейканный ETH приносит вознаграждение в виде stETH. Bitty использует его для стейкинга ETH вашего хранилища.',
@@ -103,6 +114,7 @@ export const protocols: MobileTable = {
     cow: 'CoW Swap — децентрализованная биржа, где решатели соревнуются за исполнение ордеров по лучшей цене, что также защищает их от фронтраннинга. Bitty использует её для ваших лимитных и TWAP-ордеров.',
   },
   id: {
+    pancakeswap: 'PancakeSwap adalah bursa terdesentralisasi terbesar di BNB Chain, memperdagangkan token melalui pool likuiditas on-chain. Bitty menjalankan trading pasar Anda di BNB Chain lewat PancakeSwap.',
     open: 'Buka {{name}}',
     sky: 'Sky (dulu MakerDAO) menerbitkan stablecoin USDS dan membayar Sky Savings Rate untuk USDS yang disimpan. Bitty memakainya agar stablecoin Anda mendapat bunga itu.',
     lido: 'Lido adalah protokol liquid staking terbesar di Ethereum: ETH yang di-stake mendapat imbalan staking dalam bentuk stETH. Bitty memakainya untuk men-stake ETH di brankas Anda.',
@@ -112,6 +124,7 @@ export const protocols: MobileTable = {
     cow: 'CoW Swap adalah bursa terdesentralisasi tempat para solver bersaing mengisi order di harga terbaik, yang juga melindunginya dari front-running. Bitty memakainya untuk order limit dan TWAP Anda.',
   },
   vi: {
+    pancakeswap: 'PancakeSwap là sàn giao dịch phi tập trung lớn nhất trên BNB Chain, giao dịch token qua các pool thanh khoản on-chain. Bitty thực hiện các lệnh thị trường của bạn trên BNB Chain qua đó.',
     open: 'Mở {{name}}',
     sky: 'Sky (trước đây là MakerDAO) phát hành stablecoin USDS và trả lãi suất tiết kiệm Sky cho USDS gửi vào. Bitty dùng nó để stablecoin của bạn nhận lãi suất đó.',
     lido: 'Lido là giao thức staking thanh khoản lớn nhất trên Ethereum: ETH được stake nhận phần thưởng dưới dạng stETH. Bitty dùng nó để stake ETH trong kho của bạn.',
@@ -121,6 +134,7 @@ export const protocols: MobileTable = {
     cow: 'CoW Swap là sàn giao dịch phi tập trung nơi các solver cạnh tranh khớp lệnh ở giá tốt nhất, đồng thời bảo vệ lệnh khỏi front-running. Bitty dùng nó cho lệnh giới hạn và lệnh TWAP của bạn.',
   },
   th: {
+    pancakeswap: 'PancakeSwap คือกระดานเทรดแบบกระจายศูนย์ที่ใหญ่ที่สุดบน BNB Chain ซื้อขายโทเคนผ่านพูลสภาพคล่องบนเชน Bitty ส่งคำสั่งซื้อขายแบบตลาดของคุณบน BNB Chain ผ่าน PancakeSwap',
     open: 'เปิด {{name}}',
     sky: 'Sky (เดิมชื่อ MakerDAO) ออกสเตเบิลคอยน์ USDS และจ่ายอัตราออมทรัพย์ Sky ให้ USDS ที่ฝากไว้ Bitty ใช้เพื่อให้สเตเบิลคอยน์ของคุณได้รับอัตรานี้',
     lido: 'Lido เป็นโปรโตคอล liquid staking ที่ใหญ่ที่สุดบน Ethereum ETH ที่สเตกจะได้รับผลตอบแทนเป็น stETH Bitty ใช้เพื่อสเตก ETH ในห้องนิรภัยของคุณ',
@@ -130,6 +144,7 @@ export const protocols: MobileTable = {
     cow: 'CoW Swap เป็นกระดานเทรดแบบกระจายศูนย์ที่ solver แข่งกันจับคู่คำสั่งในราคาที่ดีที่สุด ซึ่งยังช่วยป้องกันการ front-running ด้วย Bitty ใช้สำหรับคำสั่งจำกัดราคาและคำสั่ง TWAP ของคุณ',
   },
   hi: {
+    pancakeswap: 'PancakeSwap, BNB Chain का सबसे बड़ा विकेंद्रीकृत एक्सचेंज है, जो ऑन-चेन लिक्विडिटी पूल से टोकन का व्यापार करता है। Bitty BNB Chain पर आपके मार्केट ट्रेड इसी से करता है।',
     open: '{{name}} खोलें',
     sky: 'Sky (पहले MakerDAO) USDS स्टेबलकॉइन जारी करता है और जमा किए गए USDS पर Sky बचत दर देता है। Bitty इसका उपयोग आपके स्टेबलकॉइन पर यह दर कमाने के लिए करता है।',
     lido: 'Lido एथेरियम का सबसे बड़ा लिक्विड स्टेकिंग प्रोटोकॉल है: स्टेक किया गया ETH stETH के रूप में स्टेकिंग रिवॉर्ड कमाता है। Bitty इसका उपयोग आपके वॉल्ट का ETH स्टेक करने के लिए करता है।',
