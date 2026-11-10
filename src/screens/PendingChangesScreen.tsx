@@ -11,7 +11,7 @@ import {removeWhitelisted} from '@/vault/payments';
 import {cancelPendingAssetManager, getAssetManager} from '@/vault/delegate';
 import {cancelOwnershipTransfer} from '@/vault/ownership';
 import {useVaultWrite} from '@/components/useVaultWrite';
-import {OptionRow, SettingsGroup} from '@/components/SettingsRow';
+import {OptionRow, SettingsGroup, SettingsRow} from '@/components/SettingsRow';
 import {RISK_TITLE, fmtRiskValue} from '@/components/riskFormat';
 import {PERM_ROWS} from '@/components/useAssetManagerRow';
 import {Sheet} from '@/components/Sheet';
@@ -126,6 +126,8 @@ export function PendingChangesScreen() {
   const nameOf = useEntryLabel(network);
   const [items, setItems] = useState<PendingChange[] | null>(null);
   const [timelock, setTimelock] = useState(0);
+  // Whether `timelock` has been read: 0 until then, which would read as no wait at all.
+  const [timelockRead, setTimelockRead] = useState(false);
   // What already went through: `undefined` while the first read is out, `null` when the server could
   // not say, else the list (empty when nothing has gone through).
   const [history, setHistory] = useState<TimelockHistoryItem[] | null | undefined>(undefined);
@@ -138,7 +140,10 @@ export function PendingChangesScreen() {
     lastRead.current = Date.now();
     return Promise.all([
       getPendingChanges(vault, network).then(setItems),
-      getRiskConfig(vault, network).then((r) => setTimelock(Number(r.timelock))),
+      getRiskConfig(vault, network).then((r) => {
+        setTimelock(Number(r.timelock));
+        setTimelockRead(r.read);
+      }),
       fetchTimelockHistory(vault, network).then(setHistory),
     ]);
   }, [vault, network]);
@@ -239,6 +244,17 @@ export function PendingChangesScreen() {
       style={styles.container}
       contentContainerStyle={styles.body}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} tintColor={c.text} colors={[c.accent]} />}>
+      {/* The wait itself, first: everything below is sitting it out, so this is the number the page is
+          about. A tap opens the same editor as Security › Timelock, and it comes back here on return. */}
+      <SettingsGroup label={t('mobile.vault.current_timelock')}>
+        <SettingsRow
+          icon="timelock"
+          title={t(RISK_TITLE.timelock)}
+          value={timelockRead ? fmtRiskValue('timelock', BigInt(timelock), t) : undefined}
+          onPress={() => nav.navigate('VaultRiskValue', {field: 'timelock'})}
+          last
+        />
+      </SettingsGroup>
       {items === null || items.length === 0 ? (
         // An empty card rather than a line floating on its own: the page has the same shape
         // with nothing waiting as with something, and the answer sits where the changes would.

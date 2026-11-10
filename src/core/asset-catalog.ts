@@ -72,7 +72,7 @@ const listeners = new Set<() => void>();
  * out, and only a catalog that actually CHANGED since bumps the version and triggers a re-read.
  */
 const STORE_KEY = (network: string) => `catalog.${network}`;
-for (const network of ['mainnet', 'base', 'sepolia', 'robinhood', 'arbitrum'] as Network[]) {
+for (const network of ['mainnet', 'base', 'sepolia', 'robinhood', 'arbitrum', 'bsc'] as Network[]) {
   try {
     const raw = getPref(STORE_KEY(network));
     if (!raw) continue;

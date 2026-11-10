@@ -28,7 +28,7 @@ import {PriceChart} from '@/components/PriceChart';
 import {CategoryTabs} from '@/components/ui';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
-import type {Network} from '@/core/chain';
+import {NATIVE, type Network} from '@/core/chain';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {useVaultPositions} from '@/vault/useVaultPositions';
 import {positionToken} from '@/vault/position-token';
@@ -38,7 +38,7 @@ import {usePrices} from '@/vault/usePrices';
 import {getFlag, setFlag, getPref, setPref, SHOW_OTHER_ORDERS, LAST_PAIR} from '@/core/prefs';
 import {usdValue, fmtUsd} from '@/core/prices';
 import {balanceOfSymbol} from '@/vault/read';
-import {FEE_WETH, feeCoinForSpend, resolveFeeReserve, reserveHeld, useWethFeeCoin} from '@/vault/stableCoinAsGas';
+import {feeWeth, feeCoinForSpend, resolveFeeReserve, reserveHeld, useWethFeeCoin} from '@/vault/stableCoinAsGas';
 import {FINISHED_WINDOWS, finishedSince, setSlippageBps, slippageBps, useFinishedWindow, type FinishedWindow} from '@/core/prefs';
 import {relayGasFor} from '@/vault/fee-quote';
 import {useFeeFloor} from '@/vault/useFeeFloor';
@@ -816,7 +816,7 @@ export function TradeScreen() {
     vault: balances.vault,
     heldStables: [
       ...stables.map((a) => ({symbol: a.symbol, amount: Number(balanceOfSymbol(balances.balances, a.symbol))})),
-      ...(weth ? [{symbol: FEE_WETH, amount: Number(balanceOfSymbol(balances.balances, FEE_WETH) || 0), usd: weth.usd}] : []),
+      ...(weth ? [{symbol: feeWeth(network), amount: Number(balanceOfSymbol(balances.balances, feeWeth(network)) || 0), usd: weth.usd}] : []),
     ],
     spendSymbol: spendSym,
     floorUsd: feeFloor,
@@ -1094,7 +1094,7 @@ export function TradeScreen() {
     if (livePoolPrice == null || quoteUsd == null || !(quoteUsd > 0)) return;
     const usd = livePoolPrice * quoteUsd;
     publishLive(network, baseSym, usd);
-    if (baseSym === 'WETH') publishLive(network, 'ETH', usd);
+    if (baseSym === NATIVE[network].wrapped) publishLive(network, NATIVE[network].symbol, usd);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [livePoolPrice, quoteUsd, network, baseSym]);
 

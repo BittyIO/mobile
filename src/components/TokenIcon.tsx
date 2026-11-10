@@ -25,6 +25,9 @@ import {useNetwork} from '@/core/network-store';
  */
 const ICONS: Record<string, number> = {
   ETH: require('@/assets/tokens/eth.png'),
+  BNB: require('@/assets/tokens/bnb.png'),
+  WBNB: require('@/assets/tokens/bnb.png'),
+  BTCB: require('@/assets/tokens/btcb.png'),
   WBTC: require('@/assets/tokens/wbtc.png'),
   cbBTC: require('@/assets/tokens/cbbtc.png'),
   USDC: require('@/assets/tokens/usdc.png'),

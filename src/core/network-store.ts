@@ -44,7 +44,7 @@ export const useNetwork = create<NetworkState>((set) => ({
 /** What the picker offers: the vault chains (Tron Nile among them), and Tron mainnet's wallet. */
 export type ChainChoice = Network | TronNet;
 
-export const NETWORKS: Network[] = ['mainnet', 'base', 'arbitrum', 'robinhood', 'sepolia', 'tron-nile'];
+export const NETWORKS: Network[] = ['mainnet', 'base', 'arbitrum', 'bsc', 'robinhood', 'sepolia', 'tron-nile'];
 /** The networks to offer. */
 export const useNetworks = (): Network[] => NETWORKS;
 
@@ -54,6 +54,7 @@ export const NETWORK_LABEL: Record<Network, string> = {
   sepolia: 'Ethereum Sepolia',
   robinhood: 'Robinhood',
   arbitrum: 'Arbitrum',
+  bsc: 'BNB Chain',
   'tron-nile': 'Tron Nile',
 };
 

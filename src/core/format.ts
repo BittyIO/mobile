@@ -119,12 +119,18 @@ const RECEIPT_UNDERLYING: Record<string, string> = {
   AUSDT: 'USDT',
   AWBTC: 'WBTC',
   ACBBTC: 'cbBTC',
+  // Aave's BNB market.
+  ABNBWBNB: 'BNB',
+  ABNBBTCB: 'BTCB',
+  ABNBETH: 'ETH',
+  ABNBUSDT: 'USDT',
+  ABNBUSDC: 'USDC',
 };
 
 export function displaySymbol(symbol: string | null | undefined): string {
   const s = symbol ?? '';
   const up = s.toUpperCase();
-  return up === 'WETH' ? 'ETH' : up === 'WTRX' ? 'TRX' : (RECEIPT_UNDERLYING[up] ?? s);
+  return up === 'WETH' ? 'ETH' : up === 'WTRX' ? 'TRX' : up === 'WBNB' ? 'BNB' : (RECEIPT_UNDERLYING[up] ?? s);
 }
 
 /**

@@ -26,7 +26,7 @@ const DAY = 86400n;
  * regular sends or market trading off, only on a vault release that accepts it.
  */
 const PRESETS = {
-  timelock: [DAY, 2n * DAY, 7n * DAY, 14n * DAY, 30n * DAY],
+  timelock: [DAY, 2n * DAY, 3n * DAY, 5n * DAY, 7n * DAY, 14n * DAY, 30n * DAY],
   sendDailyAllowance: [100n, 500n, 1_000n, 5_000n, 10_000n],
   marketTradeDailyLossAllowance: [50n, 100n, 500n, 1_000n, 5_000n, 10_000n],
 } as const;

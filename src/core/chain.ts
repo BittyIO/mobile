@@ -7,7 +7,7 @@
  * becomes a thin re-export. Keep the addresses in sync with the web config until then.
  */
 import {createPublicClient, http, fallback, type PublicClient} from 'viem';
-import {mainnet, base, sepolia, arbitrum} from 'viem/chains';
+import {mainnet, base, sepolia, arbitrum, bsc} from 'viem/chains';
 import {defineChain} from 'viem';
 import {API_VERSION} from '@/core/vault-contracts';
 import {rpcUrlsFor} from '@/core/rpc-store';
@@ -15,7 +15,7 @@ import {evmToTron} from '@/tron/address';
 
 // Sepolia is the testnet — included so the app can be exercised end to end (activate, deposit, trade)
 // without real funds. "Ethereum" in the UI means Sepolia on a testnet build, mainnet on production.
-export type Network = 'mainnet' | 'base' | 'sepolia' | 'robinhood' | 'arbitrum' | 'tron-nile';
+export type Network = 'mainnet' | 'base' | 'sepolia' | 'robinhood' | 'arbitrum' | 'bsc' | 'tron-nile';
 
 /**
  * Tron's testnet, Nile, as a VAULT network: the vault stack is deployed there (vault repo
@@ -48,7 +48,8 @@ export const tronNile = defineChain({
 /**
  * The chain's own coin — what an owner pays fees in, and what the vault's `native` balance is — and
  * the token that wraps it, which is what a vault holds it as (the guard's CFG_GAS_WRAPPED: WETH on
- * the EVM chains, WTRX on Tron).
+ * the EVM chains, WBNB on BNB Smart Chain, WTRX on Tron). On BSC "ETH" is an ordinary token
+ * (Binance-Peg Ethereum), not the chain's coin.
  */
 export const NATIVE: Record<Network, {symbol: string; decimals: number; wrapped: string}> = {
   mainnet: {symbol: 'ETH', decimals: 18, wrapped: 'WETH'},
@@ -56,6 +57,7 @@ export const NATIVE: Record<Network, {symbol: string; decimals: number; wrapped:
   sepolia: {symbol: 'ETH', decimals: 18, wrapped: 'WETH'},
   robinhood: {symbol: 'ETH', decimals: 18, wrapped: 'WETH'},
   arbitrum: {symbol: 'ETH', decimals: 18, wrapped: 'WETH'},
+  bsc: {symbol: 'BNB', decimals: 18, wrapped: 'WBNB'},
   'tron-nile': {symbol: 'TRX', decimals: 6, wrapped: 'WTRX'},
 };
 
@@ -69,6 +71,7 @@ export const NETWORK_FEATURES: Record<Network, {defi: boolean}> = {
   sepolia: {defi: true},
   robinhood: {defi: true},
   arbitrum: {defi: true},
+  bsc: {defi: true},
   'tron-nile': {defi: false},
 };
 
@@ -91,7 +94,7 @@ export const robinhood = defineChain({
 // The nodes each chain is read from — the built-in public list, less any the owner switched off, plus
 // their own — live in `core/rpc-store` (Settings › RPC nodes).
 
-const VIEM_CHAIN = {mainnet, base, sepolia, robinhood, arbitrum, 'tron-nile': tronNile} as const;
+const VIEM_CHAIN = {mainnet, base, sepolia, robinhood, arbitrum, bsc, 'tron-nile': tronNile} as const;
 
 // EIP-712 domain chainId per network — the ForwardRequest is signed against this (see vault/relay.ts).
 export const CHAIN_ID: Record<Network, number> = {
@@ -100,6 +103,7 @@ export const CHAIN_ID: Record<Network, number> = {
   sepolia: sepolia.id,
   robinhood: robinhood.id,
   arbitrum: arbitrum.id,
+  bsc: bsc.id,
   'tron-nile': tronNile.id,
 };
 
@@ -111,6 +115,9 @@ export const QUOTER_V2: Partial<Record<Network, `0x${string}`>> = {
   sepolia: '0xEd1f6473345F45b75F8179591dd5bA1888cf2FB3',
   robinhood: '0x33e885eD0Ec9bF04EcfB19341582aADCb4c8A9E7',
   arbitrum: '0x61fFE014bA17989E743c5F6cB21bF9697530B21e',
+  // PancakeSwap v3's QuoterV2 (same interface; its factory and WETH9 are PancakeSwap's v3 factory and
+  // WBNB, read back 2026-11-10). Its fee tiers are 0.01/0.05/0.25/1%.
+  bsc: '0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997',
 };
 
 /**
@@ -178,6 +185,7 @@ export const EXPLORER_TX: Record<Network, string> = {
   sepolia: 'https://sepolia.etherscan.io/tx/',
   robinhood: 'https://robinhoodchain.blockscout.com/tx/',
   arbitrum: 'https://arbiscan.io/tx/',
+  bsc: 'https://bscscan.com/tx/',
   'tron-nile': 'https://nile.tronscan.org/#/transaction/',
 };
 

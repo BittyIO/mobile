@@ -16,7 +16,9 @@ import {assetMeta} from '@/core/assets';
 import {relayVaultWrite, relayVaultMulticall, type VaultCall} from './relay';
 import {buildSetupCalls} from './trade-setup';
 
-const FEE_TIERS = [500, 3000, 10000] as const;
+/** The v3 fee tiers the QuoterV2 is asked at. PancakeSwap's (BSC) are not Uniswap's: no 0.3%. */
+const FEE_TIERS: Partial<Record<Network, readonly number[]>> = {bsc: [100, 500, 2500, 10000]};
+const feeTiers = (network: Network): readonly number[] => FEE_TIERS[network] ?? [500, 3000, 10000];
 const NO_PRICE_LIMIT = BigInt(0);
 
 /**
@@ -71,7 +73,7 @@ async function bestSellQuote(
   if (!quoter) return null;
   // Quote every fee tier in ONE round-trip (they're independent) instead of three sequential RPC calls.
   const quotes = await Promise.all(
-    FEE_TIERS.map(async (fee) => {
+    feeTiers(network).map(async (fee) => {
       try {
         const sim = await client.simulateContract({
           address: quoter,
@@ -102,7 +104,7 @@ async function bestBuyQuote(
   const quoter = QUOTER_V2[network];
   if (!quoter) return null;
   const quotes = await Promise.all(
-    FEE_TIERS.map(async (fee) => {
+    feeTiers(network).map(async (fee) => {
       try {
         const sim = await client.simulateContract({
           address: quoter,

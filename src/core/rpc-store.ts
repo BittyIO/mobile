@@ -30,6 +30,9 @@ export const BUILTIN_RPC: Record<NodeChain, string[]> = {
   // the way to a second one.
   robinhood: ['https://rpc.mainnet.chain.robinhood.com'],
   arbitrum: ['https://arb1.arbitrum.io/rpc', 'https://arbitrum-one-rpc.publicnode.com', 'https://arbitrum.gateway.tenderly.co', 'https://arbitrum.drpc.org'],
+  // Measured Nov 2026 with 60 parallel batches: PublicNode answered all of them; BNB Chain's own
+  // dataseed nodes, defibit and 1rpc a few each (rate limits). dRPC's free plan refused batches.
+  bsc: ['https://bsc-rpc.publicnode.com', 'https://bsc-dataseed.bnbchain.org', 'https://bsc-dataseed1.defibit.io', 'https://1rpc.io/bnb'],
   // Tron's own node API (java-tron's /wallet/…), not JSON-RPC. These read AND broadcast: Tron has no
   // relayer. TronGrid last: unkeyed it refuses a request that overlaps another (429). It is also the
   // only free source of the account history (/v1/…), which goes nowhere else. Not added: Tatum (5

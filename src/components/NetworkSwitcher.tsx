@@ -13,6 +13,7 @@ const ICONS: Record<Exclude<Network, 'base' | 'robinhood' | 'tron-nile'>, number
   mainnet: require('@/assets/networks/ethereum.png'),
   sepolia: require('@/assets/networks/sepolia.png'),
   arbitrum: require('@/assets/networks/arbitrum.png'),
+  bsc: require('@/assets/networks/bsc.png'),
 };
 
 const BASE_BLUE = '#0052FF';
