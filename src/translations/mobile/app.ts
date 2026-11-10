@@ -3,6 +3,8 @@ import type {MobileTable} from './index';
 // Navigator titles: the four tabs and every pushed or modal page.
 export const app: MobileTable = {
   en: {
+    biometrics_title: 'Turn on fingerprint unlock',
+    biometrics_title_ios: 'Turn on Face ID',
     ethereum: 'Ethereum',
     robinhood: 'Robinhood',
     sepolia: "Ethereum Sepolia",
@@ -22,6 +24,8 @@ export const app: MobileTable = {
     submitting: 'Submitting…',
   },
   zh: {
+    biometrics_title: '请开启指纹解锁',
+    biometrics_title_ios: '请开启面容 ID',
     ethereum: '以太坊',
     robinhood: '罗宾汉',
     sepolia: "以太坊 Sepolia",
@@ -41,6 +45,8 @@ export const app: MobileTable = {
     submitting: '正在提交…',
   },
   'zh-TW': {
+    biometrics_title: '請開啟指紋解鎖',
+    biometrics_title_ios: '請開啟 Face ID',
     ethereum: '以太坊',
     robinhood: '羅賓漢',
     sepolia: "以太坊 Sepolia",
@@ -60,6 +66,8 @@ export const app: MobileTable = {
     submitting: '正在提交…',
   },
   ja: {
+    biometrics_title: '指紋認証をオンにしてください',
+    biometrics_title_ios: 'Face ID をオンにしてください',
     ethereum: 'イーサリアム',
     robinhood: 'Robinhood',
     sepolia: "イーサリアム Sepolia",
@@ -79,6 +87,8 @@ export const app: MobileTable = {
     submitting: '送信準備中…',
   },
   ko: {
+    biometrics_title: '지문 잠금 해제를 켜세요',
+    biometrics_title_ios: 'Face ID를 켜세요',
     ethereum: '이더리움',
     robinhood: '로빈후드',
     sepolia: "이더리움 Sepolia",
@@ -98,6 +108,8 @@ export const app: MobileTable = {
     submitting: '제출 중…',
   },
   fr: {
+    biometrics_title: 'Activez le déverrouillage par empreinte',
+    biometrics_title_ios: 'Activez Face ID',
     ethereum: 'Ethereum',
     robinhood: 'Robinhood',
     sepolia: "Ethereum Sepolia",
@@ -117,6 +129,8 @@ export const app: MobileTable = {
     submitting: 'Envoi…',
   },
   es: {
+    biometrics_title: 'Activa el desbloqueo con huella',
+    biometrics_title_ios: 'Activa Face ID',
     ethereum: 'Ethereum',
     robinhood: 'Robinhood',
     sepolia: "Ethereum Sepolia",
@@ -136,6 +150,8 @@ export const app: MobileTable = {
     submitting: 'Enviando…',
   },
   de: {
+    biometrics_title: 'Fingerabdruck-Entsperrung einschalten',
+    biometrics_title_ios: 'Face ID einschalten',
     ethereum: 'Ethereum',
     robinhood: 'Robinhood',
     sepolia: "Ethereum Sepolia",
@@ -155,6 +171,8 @@ export const app: MobileTable = {
     submitting: 'Senden…',
   },
   'pt-BR': {
+    biometrics_title: 'Ative o desbloqueio por digital',
+    biometrics_title_ios: 'Ative o Face ID',
     ethereum: 'Ethereum',
     robinhood: 'Robinhood',
     sepolia: "Ethereum Sepolia",
@@ -174,6 +192,8 @@ export const app: MobileTable = {
     submitting: 'Enviando…',
   },
   hi: {
+    biometrics_title: 'फ़िंगरप्रिंट अनलॉक चालू करें',
+    biometrics_title_ios: 'Face ID चालू करें',
     ethereum: 'Ethereum',
     robinhood: 'Robinhood',
     sepolia: "Ethereum Sepolia",
@@ -193,6 +213,8 @@ export const app: MobileTable = {
     submitting: 'भेज रहे हैं…',
   },
   tr: {
+    biometrics_title: 'Parmak izi kilidini açın',
+    biometrics_title_ios: 'Face ID\'yi açın',
     ethereum: 'Ethereum',
     robinhood: 'Robinhood',
     sepolia: "Ethereum Sepolia",
@@ -212,6 +234,8 @@ export const app: MobileTable = {
     submitting: 'Gönderiliyor…',
   },
   ru: {
+    biometrics_title: 'Включите разблокировку по отпечатку',
+    biometrics_title_ios: 'Включите Face ID',
     ethereum: 'Ethereum',
     robinhood: 'Robinhood',
     sepolia: "Ethereum Sepolia",
@@ -231,6 +255,8 @@ export const app: MobileTable = {
     submitting: 'Отправка…',
   },
   id: {
+    biometrics_title: 'Aktifkan buka kunci sidik jari',
+    biometrics_title_ios: 'Aktifkan Face ID',
     ethereum: 'Ethereum',
     robinhood: 'Robinhood',
     sepolia: "Ethereum Sepolia",
@@ -250,6 +276,8 @@ export const app: MobileTable = {
     submitting: 'Mengirim…',
   },
   vi: {
+    biometrics_title: 'Bật mở khóa bằng vân tay',
+    biometrics_title_ios: 'Bật Face ID',
     ethereum: 'Ethereum',
     robinhood: 'Robinhood',
     sepolia: "Ethereum Sepolia",
@@ -269,6 +297,8 @@ export const app: MobileTable = {
     submitting: 'Đang gửi…',
   },
   th: {
+    biometrics_title: 'เปิดการปลดล็อกด้วยลายนิ้วมือ',
+    biometrics_title_ios: 'เปิด Face ID',
     ethereum: 'Ethereum',
     robinhood: 'Robinhood',
     sepolia: "Ethereum Sepolia",

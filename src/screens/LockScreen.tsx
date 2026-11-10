@@ -3,7 +3,7 @@ import {Alert, AppState, Image, StyleSheet, Text, View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {Button} from '@/components/Button';
 import {useWallet} from '@/wallet/store';
-import {BiometricsRequiredError} from '@/wallet/keyring';
+import {alertIfBiometricsRequired} from '@/components/biometrics-alert';
 import {deviceCompromised, iosVersionRisk} from '@/core/device-security';
 import {useT} from '@/i18n';
 import {useStyles, type Colors} from '@/theme';
@@ -47,13 +47,13 @@ export function LockScreen() {
       await unlock();
     } catch (e) {
       // No Face ID / fingerprint enrolled: the key will not open without one, so say what to set up.
-      if (e instanceof BiometricsRequiredError) Alert.alert(e.message);
+      alertIfBiometricsRequired(e, t);
       // Otherwise the prompt was cancelled — stay locked; the button below retries.
     } finally {
       inFlight.current = false;
       setBusy(false);
     }
-  }, [unlock]);
+  }, [unlock, t]);
 
   // At launch Face ID starts on its own: as soon as this screen shows, and again each time the app
   // returns to the foreground while still locked. After Lock in Settings it waits for the button, so
