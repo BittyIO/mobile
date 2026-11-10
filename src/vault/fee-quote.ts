@@ -80,6 +80,8 @@ export const ETH_USD_FEED: Partial<Record<Network, Address>> = {
   base: '0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70',
   sepolia: '0x694AA1769357215DE4FAC081bf1f309aDC325306',
   arbitrum: '0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612',
+  // BNB/USD: the coin gas is paid in on BSC, the feed the BSC guard prices WBNB by.
+  bsc: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE',
   'tron-nile': '0xE1C867Bb4f2FE0dd8CBFa9F0789e2dd029BD841A',
 };
 

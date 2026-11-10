@@ -33,7 +33,7 @@ import {useColors, useStyles, type Colors, MONO} from '@/theme';
 import {displaySymbol, fmtNum, fmtShort, asShown} from '@/core/format';
 import {quoteRelayFeeUsd, relayGasFor} from '@/vault/fee-quote';
 import {useFeeFloor} from '@/vault/useFeeFloor';
-import {FEE_WETH, feeCoinForSpend, reserveHeld, resolveFeeReserve, useWethFeeCoin} from '@/vault/stableCoinAsGas';
+import {feeWeth, feeCoinForSpend, reserveHeld, resolveFeeReserve, useWethFeeCoin} from '@/vault/stableCoinAsGas';
 
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {useCapability} from '@/vault/gate';
@@ -241,7 +241,7 @@ export function SendScreen() {
         ...assets
           .filter((a) => a.kind === 'stable')
           .map((a) => ({symbol: a.symbol, amount: Number(balanceOfSymbol(bal.balances, a.symbol))})),
-        ...(weth ? [{symbol: FEE_WETH, amount: Number(balanceOfSymbol(bal.balances, FEE_WETH) || 0), usd: weth.usd}] : []),
+        ...(weth ? [{symbol: feeWeth(network), amount: Number(balanceOfSymbol(bal.balances, feeWeth(network)) || 0), usd: weth.usd}] : []),
       ],
       spendSymbol: sym,
       spending: spentSyms,
@@ -442,7 +442,7 @@ export function SendScreen() {
         ...assets
           .filter((a) => a.kind === 'stable')
           .map((a) => ({symbol: a.symbol, amount: Number(balanceOfSymbol(bal.balances, a.symbol))})),
-        ...(weth ? [{symbol: FEE_WETH, amount: Number(balanceOfSymbol(bal.balances, FEE_WETH) || 0), usd: weth.usd}] : []),
+        ...(weth ? [{symbol: feeWeth(network), amount: Number(balanceOfSymbol(bal.balances, feeWeth(network)) || 0), usd: weth.usd}] : []),
       ],
       spending: spentSyms,
       floorUsd: feeFloor,

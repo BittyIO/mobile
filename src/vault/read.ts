@@ -39,7 +39,9 @@ export function balanceOfSymbol(
   symbol: string,
 ): string {
   if (!balances) return '0';
-  if (symbol === 'ETH' || symbol === balances.native.symbol) return balances.native.formatted;
+  // The chain's own coin by its own symbol only: on BSC "ETH" is a token (Binance-Peg Ethereum),
+  // and answering it with the vault's BNB would offer BNB to spend as ETH.
+  if (symbol === balances.native.symbol) return balances.native.formatted;
   return balances.tokens.find((t) => t.symbol === symbol)?.formatted ?? '0';
 }
 

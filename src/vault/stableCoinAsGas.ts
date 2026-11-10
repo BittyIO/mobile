@@ -5,7 +5,7 @@
  *
  * Changing the config is itself a relayed (gasless) write — a fresh activated vault already relays.
  */
-import {apiUrl, publicClientFor, type Network} from '@/core/chain';
+import {apiUrl, NATIVE, publicClientFor, type Network} from '@/core/chain';
 import {VAULT_STABLE_COIN_AS_GAS_ABI} from '@/core/abi';
 import {bornVault, WETH_GAS_VERSION} from './activate';
 import {relayVaultWrite} from './relay';
@@ -173,8 +173,11 @@ const preferred = (network: string, vault: string | null | undefined): string[] 
   return order.length ? order : PREFERRED;
 };
 
-/** The one fee coin that is not a dollar: the vault's WETH, from v1.0.2. */
-export const FEE_WETH = 'WETH';
+/**
+ * The one fee coin that is not a dollar: the vault's wrapped gas coin, from v1.0.2. WETH on the
+ * Ethereum chains, WBNB on BSC — where "ETH" is an ordinary token and WETH does not exist.
+ */
+export const feeWeth = (network: Network | string): string => NATIVE[network as Network]?.wrapped ?? 'WETH';
 const WETH_REPRICE_MS = 15 * 60 * 1000;
 
 /**
@@ -265,7 +268,7 @@ export function resolveFeeReserve(opts: {
   const inOrder = (ok: (h: {symbol: string; amount: number; usd?: number}) => boolean) =>
     order.map((p) => opts.heldStables.find((h) => h.symbol.toUpperCase() === p && ok(h))?.symbol).find(Boolean) ??
     opts.heldStables.find(ok)?.symbol;
-  const isDollar = (h: {symbol: string}) => h.symbol.toUpperCase() !== FEE_WETH;
+  const isDollar = (h: {symbol: string}) => h.symbol.toUpperCase() !== feeWeth(opts.network);
   // Short of a coin that covers it, the one holding the most: a partial float still pays fees, and
   // "none" would let the keeper sweep the coin the relayer bills down to nothing.
   const largest = opts.heldStables.filter((h) => value(h) > 0).sort((a, b) => value(b) - value(a))[0]?.symbol;
@@ -284,7 +287,7 @@ export function resolveFeeReserve(opts: {
   // The setting is in dollars; what is held back is in the coin's own units. WETH with no price, or
   // on a vault where it cannot pay, holds nothing back rather than ten whole ether.
   const entry = coin ? opts.heldStables.find((h) => h.symbol.toUpperCase() === coin.toUpperCase()) : undefined;
-  const usd = entry?.usd ?? (coin?.toUpperCase() === FEE_WETH ? 0 : 1);
+  const usd = entry?.usd ?? (coin?.toUpperCase() === feeWeth(opts.network) ? 0 : 1);
   const size = usd > 0 ? dollars / usd : 0;
   if (!coin || !(size > 0)) return {coin, size, keep: 0};
   const keep = opts.spendSymbol && opts.spendSymbol.toUpperCase() === coin.toUpperCase() ? size : 0;
@@ -327,11 +330,11 @@ export function useSyncFeeReserve(
     ...catalog
       .filter((a) => a.kind === 'stable')
       .map((a) => ({symbol: a.symbol, amount: Number(balanceOfSymbol(balances, a.symbol) || 0)})),
-    ...(weth ? [{symbol: FEE_WETH, amount: Number(balanceOfSymbol(balances, FEE_WETH) || 0), usd: weth.usd}] : []),
+    ...(weth ? [{symbol: feeWeth(network), amount: Number(balanceOfSymbol(balances, feeWeth(network)) || 0), usd: weth.usd}] : []),
   ];
   const {coin, size} = resolveFeeReserve({network, vault, heldStables: held, floorUsd: feeFloor});
   const asset = coin ? catalog.find((a) => a.symbol.toUpperCase() === coin.toUpperCase()) : undefined;
-  const waiting = !balances || (coin?.toUpperCase() === FEE_WETH && !weth) || (coin && !asset);
+  const waiting = !balances || (coin?.toUpperCase() === feeWeth(network) && !weth) || (coin && !asset);
   const amount =
     asset && size > 0 ? parseUnits(size.toFixed(Math.min(asset.decimals, 6)), asset.decimals) : BigInt(0);
   const body = JSON.stringify({vault, asset: asset?.address ?? zeroAddress, amount: amount.toString()});
@@ -360,6 +363,5 @@ export function useSyncFeeReserve(
 export function feeCoinForSpend(network: string, floatCoin: string | null, spendSymbol: string | undefined): Address | null {
   const coin = floatCoin?.toUpperCase();
   if (!coin || spendSymbol === undefined || coin === spendSymbol.toUpperCase()) return null;
-  const sym = coin === FEE_WETH ? 'WETH' : coin;
-  return (knownAssets(network as Network).find((a) => a.symbol.toUpperCase() === sym)?.address as Address | undefined) ?? null;
+  return (knownAssets(network as Network).find((a) => a.symbol.toUpperCase() === coin)?.address as Address | undefined) ?? null;
 }

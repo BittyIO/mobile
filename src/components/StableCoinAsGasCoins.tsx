@@ -5,7 +5,7 @@ import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {useActiveVaultAddress} from '@/core/active-vault';
 import {isActivated} from '@/vault/activate';
-import {getStableCoinAsGasConfig, setStableCoinAsGasCoins, STABLE_COIN_AS_GAS_MAX_DAILY, STABLE_COIN_AS_GAS_MAX_PER_OP, type StableCoinAsGasConfig} from '@/vault/stableCoinAsGas';
+import {feeWeth, getStableCoinAsGasConfig, setStableCoinAsGasCoins, STABLE_COIN_AS_GAS_MAX_DAILY, STABLE_COIN_AS_GAS_MAX_PER_OP, type StableCoinAsGasConfig} from '@/vault/stableCoinAsGas';
 
 import {TokenIcon} from '@/components/TokenIcon';
 import {PendingSwitch} from '@/components/PendingSwitch';
@@ -79,7 +79,7 @@ export function StableCoinAsGasCoins({
   /** A config was actually read. Anything else — still loading, or unreadable — is not an answer. */
   const known = cfg !== 'loading' && cfg !== null;
   // From v1.0.2 the vault's WETH pays too, and an empty allowlist covers it along with the stablecoins.
-  const listed = known && cfg.weth ? [...stablecoins, {address: cfg.weth, symbol: 'WETH'}] : stablecoins;
+  const listed = known && cfg.weth ? [...stablecoins, {address: cfg.weth, symbol: feeWeth(network)}] : stablecoins;
   // The order is local and the owner's, so it can be set before activation, and re-read on a drop.
   const [, setOrdered] = useState(0);
   const coins = inFeeCoinOrder(network, vault, listed);

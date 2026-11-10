@@ -3,6 +3,7 @@ import type {MobileTable} from './index';
 // Settings › Security / Manage / StableCoinAsGas / Auto-yield / Delegation screens.
 export const vault: MobileTable = {
   en: {
+    current_timelock: 'Current timelock',
     cancel_change: 'Cancel change',
     cancel_change_unread: 'Couldn\'t read the vault\'s current setting. Try again.',
     pending_section: 'Pending',
@@ -173,6 +174,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'The delegate loses its access immediately.',
   },
   zh: {
+    current_timelock: '当前时间锁',
     cancel_change: '取消更改',
     cancel_change_unread: '无法读取金库当前的设置，请重试。',
     pending_section: '待生效',
@@ -337,6 +339,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: '代理人将立即失去所有权限。',
   },
   'zh-TW': {
+    current_timelock: '目前時間鎖',
     cancel_change: '取消變更',
     cancel_change_unread: '無法讀取金庫目前的設定，請再試一次。',
     pending_section: '待生效',
@@ -473,6 +476,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: '代理人將立即失去所有權限。',
   },
   ja: {
+    current_timelock: '現在のタイムロック',
     cancel_change: '変更を取り消す',
     cancel_change_unread: '金庫の現在の設定を読み取れませんでした。もう一度お試しください。',
     pending_section: '適用待ち',
@@ -602,6 +606,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: '代理人は直ちにすべてのアクセスを失います。',
   },
   ko: {
+    current_timelock: '현재 타임락',
     cancel_change: '변경 취소',
     cancel_change_unread: '금고의 현재 설정을 읽을 수 없습니다. 다시 시도하세요.',
     pending_section: '대기 중',
@@ -731,6 +736,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: '대리인은 즉시 모든 권한을 잃습니다.',
   },
   fr: {
+    current_timelock: 'Délai actuel',
     cancel_change: 'Annuler la modification',
     cancel_change_unread: 'Impossible de lire le réglage actuel du coffre. Réessayez.',
     pending_section: 'En attente',
@@ -860,6 +866,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Le délégué perd immédiatement tous ses accès.',
   },
   es: {
+    current_timelock: 'Bloqueo temporal actual',
     cancel_change: 'Cancelar cambio',
     cancel_change_unread: 'No se pudo leer la configuración actual de la bóveda. Inténtalo de nuevo.',
     pending_section: 'Pendientes',
@@ -989,6 +996,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'El delegado pierde todo su acceso de inmediato.',
   },
   de: {
+    current_timelock: 'Aktuelle Zeitsperre',
     cancel_change: 'Änderung abbrechen',
     cancel_change_unread: 'Die aktuelle Einstellung des Tresors konnte nicht gelesen werden. Bitte erneut versuchen.',
     pending_section: 'Ausstehend',
@@ -1118,6 +1126,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Der Vertreter verliert sofort jeden Zugriff.',
   },
   'pt-BR': {
+    current_timelock: 'Bloqueio de tempo atual',
     cancel_change: 'Cancelar alteração',
     cancel_change_unread: 'Não foi possível ler a configuração atual do cofre. Tente novamente.',
     pending_section: 'Pendentes',
@@ -1246,6 +1255,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'O delegado perde todo o acesso imediatamente.',
   },
   tr: {
+    current_timelock: 'Mevcut zaman kilidi',
     cancel_change: 'Değişikliği iptal et',
     cancel_change_unread: 'Kasanın mevcut ayarı okunamadı. Tekrar deneyin.',
     pending_section: 'Bekleyenler',
@@ -1374,6 +1384,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Temsilci tüm erişimini hemen kaybeder.',
   },
   ru: {
+    current_timelock: 'Текущая задержка',
     cancel_change: 'Отменить изменение',
     cancel_change_unread: 'Не удалось прочитать текущую настройку хранилища. Попробуйте ещё раз.',
     pending_section: 'Ожидают',
@@ -1502,6 +1513,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Представитель сразу теряет весь доступ.',
   },
   id: {
+    current_timelock: 'Timelock saat ini',
     cancel_change: 'Batalkan perubahan',
     cancel_change_unread: 'Tidak dapat membaca pengaturan vault saat ini. Coba lagi.',
     pending_section: 'Tertunda',
@@ -1630,6 +1642,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Delegasi langsung kehilangan semua aksesnya.',
   },
   vi: {
+    current_timelock: 'Khóa thời gian hiện tại',
     cancel_change: 'Hủy thay đổi',
     cancel_change_unread: 'Không đọc được cài đặt hiện tại của két. Hãy thử lại.',
     pending_section: 'Đang chờ',
@@ -1758,6 +1771,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Người được ủy quyền mất mọi quyền truy cập ngay lập tức.',
   },
   th: {
+    current_timelock: 'ไทม์ล็อกปัจจุบัน',
     cancel_change: 'ยกเลิกการเปลี่ยนแปลง',
     cancel_change_unread: 'อ่านการตั้งค่าปัจจุบันของห้องนิรภัยไม่ได้ ลองอีกครั้ง',
     pending_section: 'รอดำเนินการ',
@@ -1886,6 +1900,7 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'ผู้รับมอบสิทธิ์จะเสียสิทธิ์ทั้งหมดทันที',
   },
   hi: {
+    current_timelock: 'मौजूदा टाइमलॉक',
     cancel_change: 'बदलाव रद्द करें',
     cancel_change_unread: 'वॉल्ट की मौजूदा सेटिंग पढ़ी नहीं जा सकी। फिर से कोशिश करें।',
     pending_section: 'लंबित',

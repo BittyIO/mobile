@@ -20,7 +20,7 @@ import {currentCatalog} from '@/core/asset-catalog';
  * screen showed as a sell. The pair on screen breaks that tie — its quote is the quote, so spending
  * USDT there is a buy of USDC. A tie the screen cannot settle still reads as a sell.
  */
-const MAJORS = ['WETH', 'ETH', 'WBTC', 'cbBTC'];
+const MAJORS = ['WBNB', 'BNB', 'WETH', 'ETH', 'WBTC', 'cbBTC', 'BTCB'];
 
 /** The symbol a leg trades as: a receipt token's underlying, else its own. */
 export function legSymbol(network: Network, addr: string): string {

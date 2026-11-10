@@ -28,7 +28,7 @@ import {TokenIcon} from '@/components/TokenIcon';
 import {PickerSheet, type PickerItem} from '@/components/AssetPicker';
 import {adapterByName, protocolMeta} from '@/core/protocols';
 import {recordFlow} from '@/vault/flows';
-import {FEE_WETH, feeCoinForSpend, resolveFeeReserve, reserveHeld, useWethFeeCoin} from '@/vault/stableCoinAsGas';
+import {feeWeth, feeCoinForSpend, resolveFeeReserve, reserveHeld, useWethFeeCoin} from '@/vault/stableCoinAsGas';
 import type {RootStackParamList} from '@/App';
 import {FormSheet, FORM_SHEET_BODY} from '@/components/FormSheet';
 import {AvailableLine} from '@/components/AvailableLine';
@@ -133,7 +133,7 @@ export function EarnActionScreen() {
         symbol: a.symbol,
         amount: Number(balanceOfSymbol(bal.balances, a.symbol) || 0),
       })),
-      ...(weth ? [{symbol: FEE_WETH, amount: Number(balanceOfSymbol(bal.balances, FEE_WETH) || 0), usd: weth.usd}] : []),
+      ...(weth ? [{symbol: feeWeth(network), amount: Number(balanceOfSymbol(bal.balances, feeWeth(network)) || 0), usd: weth.usd}] : []),
     ],
     spendSymbol: isDeposit ? targetSymbol : undefined,
     floorUsd: feeFloor,

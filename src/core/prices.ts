@@ -63,7 +63,7 @@ async function coinbaseSpot(symbols: string[]): Promise<Map<string, number>> {
     symbols.map(async (s) => {
       try {
         // Wrapped tokens track the asset they wrap; ask for that.
-        const base = s === 'WETH' ? 'ETH' : s === 'WTRX' ? 'TRX' : s === 'WBTC' || s === 'cbBTC' ? 'BTC' : s;
+        const base = s === 'WETH' ? 'ETH' : s === 'WTRX' ? 'TRX' : s === 'WBNB' ? 'BNB' : s === 'WBTC' || s === 'cbBTC' || s === 'BTCB' ? 'BTC' : s;
         const res = await apiFetch(`https://api.coinbase.com/v2/prices/${base}-USD/spot`);
         if (!res.ok) return;
         const j = (await res.json()) as {data?: {amount?: string}};
