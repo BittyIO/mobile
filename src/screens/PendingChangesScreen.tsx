@@ -5,7 +5,8 @@ import {QuantumInfoButton, QuantumKeys} from '@/components/QuantumHandover';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
-import {fetchTimelockHistory, getPendingChanges, getRiskConfig, type PendingChange, type TimelockHistoryItem} from '@/vault/risk';
+import {fetchTimelockHistory, getPendingChanges, getRiskConfig, updateRiskSettings, type PendingChange, type TimelockHistoryItem} from '@/vault/risk';
+import {getStableCoinAsGasConfig, setStableCoinAsGasCoins} from '@/vault/stableCoinAsGas';
 import {removeWhitelisted} from '@/vault/payments';
 import {cancelPendingAssetManager, getAssetManager} from '@/vault/delegate';
 import {cancelOwnershipTransfer} from '@/vault/ownership';
@@ -23,6 +24,7 @@ import {useNetwork} from '@/core/network-store';
 import {useActiveVaultAddress} from '@/core/active-vault';
 import {recipientName, useRecipientNames} from '@/core/recipient-names';
 import type {Network} from '@/core/chain';
+import type {Address} from 'viem';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 
@@ -78,17 +80,26 @@ function when(seconds: number): string {
   return new Date(seconds * 1000).toLocaleString(undefined, {dateStyle: 'medium', timeStyle: 'short'});
 }
 
-/** A pending item's value: the number it changes to, or the address it is about. */
+/**
+ * A pending item's value: for a limit, what it is now → what it changes to ("2 days → 1 day"), or just
+ * the new value when the current one could not be read (and in the history, which records only that);
+ * otherwise the address it is about.
+ */
 export function pendingValue(p: PendingChange, t: T): string {
   switch (p.kind) {
     case 'timelock':
     case 'sendDailyAllowance':
-    case 'marketTradeDailyLossAllowance':
-      return fmtRiskValue(p.kind, p.value, t);
+    case 'marketTradeDailyLossAllowance': {
+      const kind = p.kind;
+      const fmt = (v: bigint) => fmtRiskValue(kind, v, t);
+      return p.from === undefined ? fmt(p.value) : `${fmt(p.from)} → ${fmt(p.value)}`;
+    }
     case 'gasBudgetDaily':
-    case 'maxFeePerOp':
+    case 'maxFeePerOp': {
       // Whole dollars, as the contract stores them.
-      return `$${Number(p.value).toLocaleString()}`;
+      const fmt = (v: bigint) => `$${Number(v).toLocaleString()}`;
+      return p.from === undefined ? fmt(p.value) : `${fmt(p.from)} → ${fmt(p.value)}`;
+    }
     default:
       return p.address;
   }
@@ -132,7 +143,16 @@ export function PendingChangesScreen() {
     ]);
   }, [vault, network]);
 
-  /** What calls an item off, for the kinds that can be: a new whitelist entry, a new asset manager, a new owner. */
+  /**
+   * What calls an item off. Every kind waiting out the timelock can be, except a payee's removal —
+   * the vault can only queue one or start it over, never take it back.
+   *
+   * A limit (the timelock, the two allowances, the two fee limits) has no cancel of its own on the
+   * vault. It needs none: writing back the value IN FORCE is never a loosening, and anything that is
+   * not a loosening applies at once and drops whatever was waiting (TimelockLib._apply). So the
+   * cancel is that write, with the value read fresh from the vault rather than from this screen.
+   * The two fee limits share one setter, so cancelling either cancels both.
+   */
   const cancelFor = (p: PendingChange) => {
     if (!vault) return null;
     if (p.kind === 'whitelistAdd')
@@ -149,6 +169,22 @@ export function PendingChangesScreen() {
     // nothing to name but the vault.
     if (p.kind === 'newOwner')
       return () => run(`cancel-${p.kind}`, t('mobile.vault.cancel_transfer'), (b) => cancelOwnershipTransfer(b), p.address);
+    if (p.kind === 'timelock' || p.kind === 'sendDailyAllowance' || p.kind === 'marketTradeDailyLossAllowance') {
+      const field = p.kind;
+      return () =>
+        run(`cancel-${p.kind}`, t('mobile.vault.cancel_change'), async (b) => {
+          const r = await getRiskConfig(b.vault, b.network);
+          if (!r.read) throw new Error(t('mobile.vault.cancel_change_unread'));
+          return updateRiskSettings({...b, changes: {[field]: r[field]}});
+        });
+    }
+    if (p.kind === 'gasBudgetDaily' || p.kind === 'maxFeePerOp')
+      return () =>
+        run(`cancel-${p.kind}`, t('mobile.vault.cancel_change'), async (b) => {
+          const cfg = await getStableCoinAsGasConfig(b.vault, b.network);
+          if (!cfg) throw new Error(t('mobile.vault.cancel_change_unread'));
+          return setStableCoinAsGasCoins({...b, coins: cfg.stableCoins as Address[], dailyLimit: cfg.dailyLimit, maxFeePerOp: cfg.maxFeePerOp});
+        });
     return null;
   };
 

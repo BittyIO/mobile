@@ -1,6 +1,6 @@
 {
   "name": "bitty-mobile",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "private": true,
   "license": "GPL-3.0-only",
   "description": "Bitty — native iOS + Android app (React Native, embedded keyring). Vault product only.",

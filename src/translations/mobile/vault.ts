@@ -3,6 +3,8 @@ import type {MobileTable} from './index';
 // Settings › Security / Manage / StableCoinAsGas / Auto-yield / Delegation screens.
 export const vault: MobileTable = {
   en: {
+    cancel_change: 'Cancel change',
+    cancel_change_unread: 'Couldn\'t read the vault\'s current setting. Try again.',
     pending_section: 'Pending',
     lock_notice_op: 'This operation is not supported when the vault is locked.',
     lock_send_book_only: 'The vault is locked: it pays only saved recipients whose waiting period is over.',
@@ -171,6 +173,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'The delegate loses its access immediately.',
   },
   zh: {
+    cancel_change: '取消更改',
+    cancel_change_unread: '无法读取金库当前的设置，请重试。',
     pending_section: '待生效',
     lock_notice_op: '金库锁定时不支持此操作。',
     lock_send_book_only: '金库已锁定：只向等待期已结束的已保存收款人付款。',
@@ -333,6 +337,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: '代理人将立即失去所有权限。',
   },
   'zh-TW': {
+    cancel_change: '取消變更',
+    cancel_change_unread: '無法讀取金庫目前的設定，請再試一次。',
     pending_section: '待生效',
     lock_notice_op: '金庫鎖定時不支援此操作。',
     lock_send_book_only: '金庫已鎖定：只向等待期已結束的已儲存收款人付款。',
@@ -467,6 +473,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: '代理人將立即失去所有權限。',
   },
   ja: {
+    cancel_change: '変更を取り消す',
+    cancel_change_unread: '金庫の現在の設定を読み取れませんでした。もう一度お試しください。',
     pending_section: '適用待ち',
     lock_notice_op: '金庫がロック中のため、この操作はできません。',
     lock_send_book_only: '金庫はロック中です：待機期間が終わった保存済みの受取人にのみ支払います。',
@@ -594,6 +602,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: '代理人は直ちにすべてのアクセスを失います。',
   },
   ko: {
+    cancel_change: '변경 취소',
+    cancel_change_unread: '금고의 현재 설정을 읽을 수 없습니다. 다시 시도하세요.',
     pending_section: '대기 중',
     lock_notice_op: '금고가 잠겨 있는 동안에는 이 작업을 할 수 없습니다.',
     lock_send_book_only: '금고가 잠겨 있습니다: 대기 기간이 끝난 저장된 수신자에게만 보냅니다.',
@@ -721,6 +731,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: '대리인은 즉시 모든 권한을 잃습니다.',
   },
   fr: {
+    cancel_change: 'Annuler la modification',
+    cancel_change_unread: 'Impossible de lire le réglage actuel du coffre. Réessayez.',
     pending_section: 'En attente',
     lock_notice_op: 'Cette opération n\'est pas possible tant que le coffre est verrouillé.',
     lock_send_book_only: 'Le coffre est verrouillé : il ne paie que les destinataires enregistrés dont l\'attente est terminée.',
@@ -848,6 +860,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Le délégué perd immédiatement tous ses accès.',
   },
   es: {
+    cancel_change: 'Cancelar cambio',
+    cancel_change_unread: 'No se pudo leer la configuración actual de la bóveda. Inténtalo de nuevo.',
     pending_section: 'Pendientes',
     lock_notice_op: 'Esta operación no está disponible mientras la bóveda está bloqueada.',
     lock_send_book_only: 'La bóveda está bloqueada: solo paga a destinatarios guardados cuyo periodo de espera terminó.',
@@ -975,6 +989,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'El delegado pierde todo su acceso de inmediato.',
   },
   de: {
+    cancel_change: 'Änderung abbrechen',
+    cancel_change_unread: 'Die aktuelle Einstellung des Tresors konnte nicht gelesen werden. Bitte erneut versuchen.',
     pending_section: 'Ausstehend',
     lock_notice_op: 'Dieser Vorgang ist nicht möglich, solange der Tresor gesperrt ist.',
     lock_send_book_only: 'Der Tresor ist gesperrt: Er zahlt nur an gespeicherte Empfänger, deren Wartezeit abgelaufen ist.',
@@ -1102,6 +1118,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Der Vertreter verliert sofort jeden Zugriff.',
   },
   'pt-BR': {
+    cancel_change: 'Cancelar alteração',
+    cancel_change_unread: 'Não foi possível ler a configuração atual do cofre. Tente novamente.',
     pending_section: 'Pendentes',
     lock_notice_op: 'Esta operação não está disponível enquanto o cofre estiver bloqueado.',
     lock_send_book_only: 'O cofre está bloqueado: ele só paga destinatários salvos cujo período de espera terminou.',
@@ -1228,6 +1246,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'O delegado perde todo o acesso imediatamente.',
   },
   tr: {
+    cancel_change: 'Değişikliği iptal et',
+    cancel_change_unread: 'Kasanın mevcut ayarı okunamadı. Tekrar deneyin.',
     pending_section: 'Bekleyenler',
     lock_notice_op: 'Kasa kilitliyken bu işlem yapılamaz.',
     lock_send_book_only: 'Kasa kilitli: yalnızca bekleme süresi bitmiş kayıtlı alıcılara ödeme yapar.',
@@ -1354,6 +1374,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Temsilci tüm erişimini hemen kaybeder.',
   },
   ru: {
+    cancel_change: 'Отменить изменение',
+    cancel_change_unread: 'Не удалось прочитать текущую настройку хранилища. Попробуйте ещё раз.',
     pending_section: 'Ожидают',
     lock_notice_op: 'Эта операция недоступна, пока хранилище заблокировано.',
     lock_send_book_only: 'Хранилище заблокировано: оно платит только сохранённым получателям, у которых закончился период ожидания.',
@@ -1480,6 +1502,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Представитель сразу теряет весь доступ.',
   },
   id: {
+    cancel_change: 'Batalkan perubahan',
+    cancel_change_unread: 'Tidak dapat membaca pengaturan vault saat ini. Coba lagi.',
     pending_section: 'Tertunda',
     lock_notice_op: 'Operasi ini tidak didukung saat vault terkunci.',
     lock_send_book_only: 'Vault terkunci: hanya membayar penerima tersimpan yang masa tunggunya sudah selesai.',
@@ -1606,6 +1630,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Delegasi langsung kehilangan semua aksesnya.',
   },
   vi: {
+    cancel_change: 'Hủy thay đổi',
+    cancel_change_unread: 'Không đọc được cài đặt hiện tại của két. Hãy thử lại.',
     pending_section: 'Đang chờ',
     lock_notice_op: 'Không thể thực hiện thao tác này khi két đang bị khóa.',
     lock_send_book_only: 'Két đang bị khóa: chỉ trả cho người nhận đã lưu đã hết thời gian chờ.',
@@ -1732,6 +1758,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'Người được ủy quyền mất mọi quyền truy cập ngay lập tức.',
   },
   th: {
+    cancel_change: 'ยกเลิกการเปลี่ยนแปลง',
+    cancel_change_unread: 'อ่านการตั้งค่าปัจจุบันของห้องนิรภัยไม่ได้ ลองอีกครั้ง',
     pending_section: 'รอดำเนินการ',
     lock_notice_op: 'ไม่สามารถทำรายการนี้ได้ขณะที่ห้องนิรภัยถูกล็อก',
     lock_send_book_only: 'ห้องนิรภัยถูกล็อก: จ่ายเฉพาะผู้รับที่บันทึกไว้ซึ่งพ้นระยะเวลารอแล้ว',
@@ -1858,6 +1886,8 @@ export const vault: MobileTable = {
     revoke_manager_msg: 'ผู้รับมอบสิทธิ์จะเสียสิทธิ์ทั้งหมดทันที',
   },
   hi: {
+    cancel_change: 'बदलाव रद्द करें',
+    cancel_change_unread: 'वॉल्ट की मौजूदा सेटिंग पढ़ी नहीं जा सकी। फिर से कोशिश करें।',
     pending_section: 'लंबित',
     lock_notice_op: 'वॉल्ट लॉक होने पर यह कार्रवाई उपलब्ध नहीं है।',
     lock_send_book_only: 'वॉल्ट लॉक है: यह केवल उन सहेजे गए प्राप्तकर्ताओं को भुगतान करता है जिनकी प्रतीक्षा अवधि पूरी हो गई है।',
