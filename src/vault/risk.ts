@@ -301,7 +301,8 @@ export async function triggerAutoYield(o: {
  * queue, and the owner has until `at` to notice and lock against.
  */
 export type PendingChange =
-  | {kind: RiskField | 'gasBudgetDaily' | 'maxFeePerOp'; value: bigint; at: bigint}
+  /** `from`: the value in force now, which `value` replaces at `at`; absent when it could not be read. */
+  | {kind: RiskField | 'gasBudgetDaily' | 'maxFeePerOp'; value: bigint; at: bigint; from?: bigint}
   | {kind: 'newOwner'; address: Address; at: bigint}
   | {kind: 'newAssetManager'; address: Address; perms: number; at: bigint}
   | {kind: 'whitelistAdd' | 'whitelistRemove'; address: Address; at: bigint; id: string};
@@ -320,10 +321,14 @@ export async function getPendingChanges(vault: Address, network: Network): Promi
   ]);
   const out: PendingChange[] = [];
   if (p) {
-    for (const k of ['timelock', 'sendDailyAllowance', 'marketTradeDailyLossAllowance', 'gasBudgetDaily', 'maxFeePerOp'] as const) {
-      const at = p[`${k}At`];
-      if (at) out.push({kind: k, value: p[k], at});
-    }
+    const limits = (['timelock', 'sendDailyAllowance', 'marketTradeDailyLossAllowance', 'gasBudgetDaily', 'maxFeePerOp'] as const).filter(
+      (k) => p[`${k}At`],
+    );
+    // What each limit is NOW, so a row reads "from → to": the new value alone did not say whether a
+    // change loosened anything, which is the one thing the owner looks at a pending change to learn.
+    // Read only when a limit is waiting, and never a reason to show nothing.
+    const now = limits.length ? await currentLimits(vault, network, limits) : {};
+    for (const k of limits) out.push({kind: k, value: p[k], at: p[`${k}At`], from: now[k]});
     if (p.newOwnerReadyAt) out.push({kind: 'newOwner', address: p.newOwner, at: p.newOwnerReadyAt});
     if (p.newAssetManagerAt)
       out.push({kind: 'newAssetManager', address: p.newAssetManager, perms: p.newAssetManagerPerms, at: p.newAssetManagerAt});
@@ -340,6 +345,33 @@ export async function getPendingChanges(vault: Address, network: Network): Promi
   // longer cancel anything.
   const now = BigInt(Math.floor(Date.now() / 1000));
   return out.filter((c) => c.at > now).sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+}
+
+/** The values in force for the limits asked about; a field is left out when its read fails. */
+async function currentLimits(
+  vault: Address,
+  network: Network,
+  kinds: readonly (RiskField | 'gasBudgetDaily' | 'maxFeePerOp')[],
+): Promise<Partial<Record<RiskField | 'gasBudgetDaily' | 'maxFeePerOp', bigint>>> {
+  const risk = kinds.some((k) => k !== 'gasBudgetDaily' && k !== 'maxFeePerOp');
+  const gas = kinds.some((k) => k === 'gasBudgetDaily' || k === 'maxFeePerOp');
+  // Required lazily: stableCoinAsGas sits above this file in the import graph.
+  const {getStableCoinAsGasConfig} = require('./stableCoinAsGas') as typeof import('./stableCoinAsGas');
+  const [r, g] = await Promise.all([
+    risk
+      ? publicClientFor(network)
+          .readContract({address: vault, abi: VAULT_RISK_ABI, functionName: 'riskSettings'})
+          .catch(() => null)
+      : null,
+    gas ? getStableCoinAsGasConfig(vault, network).catch(() => null) : null,
+  ]);
+  const out: Partial<Record<RiskField | 'gasBudgetDaily' | 'maxFeePerOp', bigint>> = {};
+  if (r) [out.timelock, out.sendDailyAllowance, out.marketTradeDailyLossAllowance] = r;
+  if (g) {
+    out.gasBudgetDaily = g.dailyLimit;
+    out.maxFeePerOp = g.maxFeePerOp;
+  }
+  return out;
 }
 
 /** A queued change that went through: what it was, and when it was queued and took effect. */
