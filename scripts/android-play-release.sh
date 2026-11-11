@@ -20,8 +20,8 @@ fail() { echo "error: $*" >&2; exit 1; }
 BRANCH=$(git branch --show-current)
 echo "==> Branch: $BRANCH ($(git rev-parse --short HEAD))"
 case "$BRANCH" in
-  release/*) ;;
-  *) echo "warning: not on a release/* branch — the store build is normally cut from one." >&2 ;;
+  main|develop|release/*) ;;
+  *) echo "warning: not on main — the store build is normally cut from main (tagged v<version>)." >&2 ;;
 esac
 [ -z "$(git status --porcelain)" ] || fail "uncommitted changes: commit or stash them so the bundle matches the branch."
 git fetch -q origin "$BRANCH" 2>/dev/null && {
@@ -60,7 +60,9 @@ CODE=$(node -p "const [a,b,c]=require('./package.json').version.split('.').map(N
 echo "==> Installing JS dependencies"
 npm ci
 echo "==> Building bundleRelease $VERSION (versionCode $CODE)"
-(cd android && ./gradlew --no-daemon clean bundleRelease)
+# No `clean`: it wipes the native libraries' prefab packages (react-native-vision-camera) before the
+# app's CMake configure needs them, and the build fails with "prefab … is not readable".
+(cd android && ./gradlew --no-daemon bundleRelease)
 
 AAB=android/app/build/outputs/bundle/release/app-release.aab
 [ -f "$AAB" ] || fail "the build finished but $AAB is not there."
