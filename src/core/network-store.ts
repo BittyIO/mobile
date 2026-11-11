@@ -22,13 +22,26 @@ type NetworkState = {
   setTron: (n: TronNet) => void;
 };
 
-const storedTron = store.getString(TRON_KEY);
+/**
+ * Tron in this build: both Tron mainnet's wallet and the Tron Nile vault. Off for the store releases,
+ * which ship the EVM chains only — the picker does not offer Tron, and a phone left on it opens on
+ * Ethereum. The code stays; only the way in is closed.
+ */
+export const TRON_ENABLED = false;
+
+const storedTron = TRON_ENABLED ? store.getString(TRON_KEY) : undefined;
+const storedNetwork = store.getString(KEY) as Network | undefined;
 
 /** The active network (mainnet / base / …, or Tron), shared by every screen. */
 export const useNetwork = create<NetworkState>((set) => ({
   // Nile used to be a Tron wallet chain, stored under TRON_KEY; it is a vault network now, so a phone
   // left on it opens on Nile's vault rather than falling back to the last EVM chain.
-  network: storedTron === 'tron-nile' ? 'tron-nile' : ((store.getString(KEY) as Network) ?? 'mainnet'),
+  network:
+    storedTron === 'tron-nile'
+      ? 'tron-nile'
+      : storedNetwork && (TRON_ENABLED || storedNetwork !== 'tron-nile')
+        ? storedNetwork
+        : 'mainnet',
   tron: storedTron && isTronNet(storedTron) ? storedTron : null,
   setNetwork: (network) => {
     store.set(KEY, network);
@@ -44,7 +57,9 @@ export const useNetwork = create<NetworkState>((set) => ({
 /** What the picker offers: the vault chains (Tron Nile among them), and Tron mainnet's wallet. */
 export type ChainChoice = Network | TronNet;
 
-export const NETWORKS: Network[] = ['mainnet', 'base', 'arbitrum', 'bsc', 'robinhood', 'sepolia', 'tron-nile'];
+export const NETWORKS: Network[] = (['mainnet', 'base', 'arbitrum', 'bsc', 'robinhood', 'sepolia', 'tron-nile'] as Network[]).filter(
+  (n) => TRON_ENABLED || n !== 'tron-nile',
+);
 /** The networks to offer. */
 export const useNetworks = (): Network[] => NETWORKS;
 
