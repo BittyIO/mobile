@@ -17,13 +17,22 @@ export const SIGNED_ACTIVATION_OVERHEAD_GAS = BigInt(70_000);
 const ACTIVATION_MARGIN_BPS = BigInt(2000);
 
 /**
- * The margin an activation is signed with: 20% on every chain, Tron included.
- *
- * Tron's energy price is fixed (100 sun), so there the margin is not cover for gas moving between
- * quote and block — it is the charge, the same as on EVM. It never pushes an activation over the
- * per-operation cap: {priceActivation} charges the cap instead whenever the cost itself is under it.
+ * What activating a vault costs, on every chain: a flat $1, whatever the deployment's gas. The
+ * owner's first operations, when they ride on the activation, are charged for their own gas on top,
+ * as any relayed operation is (see vault/activate `priceActivation`). Mirrors web lib/activation-fee,
+ * whose server expects exactly this.
  */
-export const activationMarginBps = (_tron: boolean): bigint => ACTIVATION_MARGIN_BPS;
+export const ACTIVATION_FEE_USD = 1;
+
+/** {ACTIVATION_FEE_USD} in a coin of `decimals`. */
+export const activationFlatUnits = (decimals: number): bigint => BigInt(ACTIVATION_FEE_USD) * BigInt(10) ** BigInt(decimals);
+
+/** {ACTIVATION_FEE_USD} in the native coin's smallest unit (wei, sun) at `nativeUsd`, rounded up. */
+export function activationFlatNative(nativeUsd: number, nativeDecimals: number): bigint {
+  const price = BigInt(Math.round(nativeUsd * 1e6));
+  const num = BigInt(ACTIVATION_FEE_USD) * BigInt(1_000_000) * BigInt(10) ** BigInt(nativeDecimals);
+  return (num + price - BigInt(1)) / price;
+}
 const BPS = BigInt(10000);
 const MICRO = BigInt(1_000_000);
 
@@ -48,20 +57,11 @@ export function relayFeeUnits(
   l1FeeWei: bigint = BigInt(0),
   /** Decimals of the coin gas is priced in: 18 for ETH, 6 for TRX (sun). */
   nativeDecimals = 18,
-  /** Over the gas cost, in basis points: see {activationMarginBps}. */
+  /** Over the gas cost, in basis points. */
   marginBps: bigint = ACTIVATION_MARGIN_BPS,
 ): bigint {
   const weiCost = ((gasUnits * gasPriceWei + l1FeeWei) * (BPS + marginBps)) / BPS;
   const usdMicro = (weiCost * BigInt(Math.round(ethUsd * 1e6))) / BigInt(10) ** BigInt(nativeDecimals);
   const exact = (usdMicro * BigInt(10) ** BigInt(decimals)) / MICRO;
   return roundUpToCents(exact, decimals);
-}
-
-export function activationFeeUnits(
-  gasPriceWei: bigint,
-  ethUsd: number,
-  decimals: number,
-  l1FeeWei: bigint = BigInt(0),
-): bigint {
-  return relayFeeUnits(ACTIVATION_GAS, gasPriceWei, ethUsd, decimals, l1FeeWei);
 }

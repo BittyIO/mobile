@@ -5,6 +5,7 @@ import type {MobileTable} from './index';
 // write the other way when the chosen way cannot.
 export const fees: MobileTable = {
   en: {
+    activation_fee: 'Activation {{fee}}',
     advanced: 'Advanced settings',
     payer_vault: 'Pay from vault',
     payer_owner: 'Pay from owner',
@@ -27,6 +28,7 @@ export const fees: MobileTable = {
     owner_off_safe: 'This vault is owned by a Safe, which can\'t send transactions of its own, so network fees are always paid from the vault.',
   },
   zh: {
+    activation_fee: '激活 {{fee}}',
     advanced: '高级设置',
     payer_vault: '从金库支付',
     payer_owner: '从所有者支付',
@@ -48,6 +50,7 @@ export const fees: MobileTable = {
     owner_off_safe: '此金库由 Safe 持有，Safe 无法自行发送交易，所以网络费始终从金库支付。',
   },
   'zh-TW': {
+    activation_fee: '啟用 {{fee}}',
     advanced: '進階設定',
     payer_vault: '從金庫支付',
     payer_owner: '從擁有者支付',
@@ -69,6 +72,7 @@ export const fees: MobileTable = {
     owner_off_safe: '此金庫由 Safe 持有，Safe 無法自行發送交易，所以網路費始終從金庫支付。',
   },
   ja: {
+    activation_fee: '有効化 {{fee}}',
     advanced: '詳細設定',
     payer_vault: 'ボールトから支払う',
     payer_owner: 'オーナーから支払う',
@@ -90,6 +94,7 @@ export const fees: MobileTable = {
     owner_off_safe: 'このボールトは Safe が所有しています。Safe は自分でトランザクションを送れないため、ネットワーク手数料は常にボールトから支払われます。',
   },
   ko: {
+    activation_fee: '활성화 {{fee}}',
     advanced: '고급 설정',
     payer_vault: '볼트에서 지불',
     payer_owner: '소유자에서 지불',
@@ -111,6 +116,7 @@ export const fees: MobileTable = {
     owner_off_safe: '이 볼트는 Safe가 소유하고 있습니다. Safe는 직접 트랜잭션을 보낼 수 없으므로 네트워크 수수료는 항상 볼트에서 지불됩니다.',
   },
   fr: {
+    activation_fee: 'Activation {{fee}}',
     advanced: 'Paramètres avancés',
     payer_vault: 'Payer depuis le coffre',
     payer_owner: 'Payer par le propriétaire',
@@ -133,6 +139,7 @@ export const fees: MobileTable = {
     owner_off_safe: 'Ce coffre appartient à un Safe, qui ne peut pas envoyer de transactions lui-même, donc les frais de réseau sont toujours payés par le coffre.',
   },
   es: {
+    activation_fee: 'Activación {{fee}}',
     advanced: 'Configuración avanzada',
     payer_vault: 'Pagar desde la bóveda',
     payer_owner: 'Pagar desde el propietario',
@@ -155,6 +162,7 @@ export const fees: MobileTable = {
     owner_off_safe: 'Esta bóveda pertenece a una Safe, que no puede enviar transacciones por sí misma, así que las comisiones de red siempre se pagan desde la bóveda.',
   },
   de: {
+    activation_fee: 'Aktivierung {{fee}}',
     advanced: 'Erweiterte Einstellungen',
     payer_vault: 'Aus dem Tresor zahlen',
     payer_owner: 'Vom Eigentümer zahlen',
@@ -177,6 +185,7 @@ export const fees: MobileTable = {
     owner_off_safe: 'Dieser Tresor gehört einem Safe, der keine eigenen Transaktionen senden kann, daher werden Netzwerkgebühren immer aus dem Tresor bezahlt.',
   },
   'pt-BR': {
+    activation_fee: 'Ativação {{fee}}',
     advanced: 'Configurações avançadas',
     payer_vault: 'Pagar pelo cofre',
     payer_owner: 'Pagar pelo proprietário',
@@ -199,6 +208,7 @@ export const fees: MobileTable = {
     owner_off_safe: 'Este cofre pertence a um Safe, que não envia transações próprias, então as taxas de rede são sempre pagas pelo cofre.',
   },
   hi: {
+    activation_fee: 'सक्रियण {{fee}}',
     advanced: 'उन्नत सेटिंग्स',
     payer_vault: 'वॉल्ट से भुगतान',
     payer_owner: 'ओनर से भुगतान',
@@ -220,6 +230,7 @@ export const fees: MobileTable = {
     owner_off_safe: 'यह वॉल्ट एक Safe के स्वामित्व में है, जो खुद लेनदेन नहीं भेज सकता, इसलिए नेटवर्क शुल्क हमेशा वॉल्ट से चुकाया जाता है।',
   },
   tr: {
+    activation_fee: 'Etkinleştirme {{fee}}',
     advanced: 'Gelişmiş ayarlar',
     payer_vault: 'Kasadan öde',
     payer_owner: 'Sahipten öde',
@@ -241,6 +252,7 @@ export const fees: MobileTable = {
     owner_off_safe: 'Bu kasa bir Safe\'e ait; Safe kendi işlemlerini gönderemez, bu yüzden ağ ücretleri her zaman kasadan ödenir.',
   },
   ru: {
+    activation_fee: 'Активация {{fee}}',
     advanced: 'Расширенные настройки',
     payer_vault: 'Платить из хранилища',
     payer_owner: 'Платит владелец',
@@ -262,6 +274,7 @@ export const fees: MobileTable = {
     owner_off_safe: 'Это хранилище принадлежит Safe, который не может сам отправлять транзакции, поэтому сетевые комиссии всегда оплачиваются из хранилища.',
   },
   id: {
+    activation_fee: 'Aktivasi {{fee}}',
     advanced: 'Pengaturan lanjutan',
     payer_vault: 'Bayar dari brankas',
     payer_owner: 'Bayar dari pemilik',
@@ -283,6 +296,7 @@ export const fees: MobileTable = {
     owner_off_safe: 'Brankas ini dimiliki Safe, yang tidak bisa mengirim transaksi sendiri, jadi biaya jaringan selalu dibayar dari brankas.',
   },
   vi: {
+    activation_fee: 'Kích hoạt {{fee}}',
     advanced: 'Cài đặt nâng cao',
     payer_vault: 'Trả từ két',
     payer_owner: 'Trả từ chủ sở hữu',
@@ -304,6 +318,7 @@ export const fees: MobileTable = {
     owner_off_safe: 'Kho này thuộc sở hữu của một Safe, vốn không tự gửi giao dịch, nên phí mạng luôn được trả từ kho.',
   },
   th: {
+    activation_fee: 'เปิดใช้งาน {{fee}}',
     advanced: 'การตั้งค่าขั้นสูง',
     payer_vault: 'จ่ายจากวอลต์',
     payer_owner: 'จ่ายจากเจ้าของ',

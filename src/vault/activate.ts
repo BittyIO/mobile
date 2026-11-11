@@ -4,15 +4,15 @@
  * takes the fee from what was deposited to it: a stable coin, or — from v1.0.3 — ETH, paid as WETH. A fresh activated vault already relays, so
  * no separate setStableCoinAsGas is needed — activation IS "turning stablecoin-as-gas on".
  *
- * Ported from web `activateByStablecoin`. The fee is priced from live gas + ETH/USD and SIGNED, so the
- * server accepts it within a band (see core/activation-fee).
+ * Ported from web `activateByStablecoin`. The fee is a flat $1, plus the gas of any first calls riding
+ * on the activation, and is SIGNED; the server prices it the same way (see core/activation-fee).
  */
 import {encodeFunctionData, keccak256, parseAbi, stringToHex, type Address, type Hex} from 'viem';
 import type {Signer} from '@/wallet/signer';
-import {apiUrl, CHAIN_ID, isTronNetwork, NATIVE, publicClientFor, type Network} from '@/core/chain';
+import {apiUrl, CHAIN_ID, NATIVE, publicClientFor, type Network} from '@/core/chain';
 import {ACTIVATION_TYPES, GUARD_IMPL_ABI, IMPLEMENTATION_VAULT, PRICE_FEED_ABI} from '@/core/abi';
 import {API_VERSION, vaultFactory, vaultGuard} from '@/core/vault-contracts';
-import {ACTIVATION_GAS, SIGNED_ACTIVATION_OVERHEAD_GAS, activationMarginBps, relayFeeUnits} from '@/core/activation-fee';
+import {ACTIVATION_GAS, SIGNED_ACTIVATION_OVERHEAD_GAS, activationFlatNative, activationFlatUnits, relayFeeUnits} from '@/core/activation-fee';
 // One copy of the ETH/USD feeds: the fee shown before signing and the fee actually signed must be
 // priced from the same source, or the two disagree for no reason the user can see.
 import {ETH_USD_FEED} from './fee-quote';
@@ -316,31 +316,29 @@ export async function priceActivation(o: {
   // TODO(base): add the OP Stack L1 data fee for exact Base pricing (0 undercharges slightly there).
   const l1FeeWei = BigInt(0);
   const calls = (o.calls ?? []) as Hex[];
-  // Priced from this exact activation, calls or none, as the server prices it: the owner's own entry
-  // point by the gas the chain BILLS (eth_simulateV1), or its estimate where the node cannot simulate,
-  // plus the signed path's overhead. A bare activation used to be a flat figure over twice its gas.
-  const activateData = encodeFunctionData({
-    abi: ACTIVATE_ESTIMATE_ABI,
-    functionName: 'activateVault',
-    args: [o.allowlistEnabled, calls],
-  });
-  const gasUnits =
-    ((await billedGas(client, o.owner, factory, activateData)) ??
-      (await client.estimateGas({account: o.owner, to: factory, data: activateData}).catch((e) => {
-        if (calls.length > 0) throw activationReverted(e);
-        return ACTIVATION_GAS - SIGNED_ACTIVATION_OVERHEAD_GAS;
-      }))) + SIGNED_ACTIVATION_OVERHEAD_GAS;
-  // In WETH the fee is the gas cost itself, in wei, with no margin — as the server quotes it.
-  let feeAmount = weth
-    ? gasUnits * gasPrice + l1FeeWei
-    : relayFeeUnits(gasUnits, gasPrice, ethUsd, Number(decimals), l1FeeWei, NATIVE[o.network].decimals, activationMarginBps(isTronNetwork(o.network)));
-  // The margin never takes an activation over the cap: when the cost itself is under it, the cap is
-  // what is charged. Only a cost over the cap is refused (below).
-  const capUnits = BigInt(ACTIVATION_FEE_CAP_USD) * BigInt(10) ** BigInt(Number(decimals));
-  if (!weth && o.capped !== false && feeAmount > capUnits) {
-    const cost = relayFeeUnits(gasUnits, gasPrice, ethUsd, Number(decimals), l1FeeWei, NATIVE[o.network].decimals, BigInt(0));
-    if (cost <= capUnits) feeAmount = capUnits;
-  }
+  // The activation itself is a flat $1 (core/activation-fee). The owner's first calls, when they
+  // ride on it, are charged for their own gas, as any relayed operation is: the gas of this exact
+  // activation, calls and all, less a bare one's — each by the gas the chain BILLS (eth_simulateV1),
+  // or its estimate where the node cannot simulate. The server prices it the same way.
+  const gasOf = async (cs: Hex[]): Promise<bigint> => {
+    const data = encodeFunctionData({abi: ACTIVATE_ESTIMATE_ABI, functionName: 'activateVault', args: [o.allowlistEnabled, cs]});
+    return (
+      ((await billedGas(client, o.owner, factory, data)) ??
+        (await client.estimateGas({account: o.owner, to: factory, data}).catch((e) => {
+          if (cs.length > 0) throw activationReverted(e);
+          return ACTIVATION_GAS - SIGNED_ACTIVATION_OVERHEAD_GAS;
+        }))) + SIGNED_ACTIVATION_OVERHEAD_GAS
+    );
+  };
+  const [gasUnits, bareGas] = await Promise.all([gasOf(calls), calls.length > 0 ? gasOf([]) : null]);
+  const callsGas = bareGas != null && gasUnits > bareGas ? gasUnits - bareGas : BigInt(0);
+  const nativeDecimals = NATIVE[o.network].decimals;
+  // In WETH the dollar is converted at the feed's price, and the calls' gas is charged at cost, with
+  // no margin, as the server quotes it.
+  const feeAmount = weth
+    ? activationFlatNative(ethUsd, nativeDecimals) + (calls.length > 0 ? callsGas * gasPrice + l1FeeWei : BigInt(0))
+    : activationFlatUnits(Number(decimals)) +
+      (calls.length > 0 ? relayFeeUnits(callsGas, gasPrice, ethUsd, Number(decimals), l1FeeWei, nativeDecimals) : BigInt(0));
 
   // Over the vault's per-operation cap the activation cannot be paid, however the vault is funded:
   // said now, in dollars, before anything is signed — not as the relayer's refusal afterwards.

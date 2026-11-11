@@ -3,6 +3,7 @@ import type {MobileTable} from './index';
 // Overview tab, Receive dialog, History, and the Earn action form.
 export const home: MobileTable = {
   en: {
+    activate_fund: 'Send at least {{amount}} to this vault to pay the activation fee.',
     activate_first: 'Activate your vault first: tap Activate at the top of the Overview.',
     activate_title: 'Vault not activated',
     activate_body: 'Activate it to start using it on this network.',
@@ -48,6 +49,7 @@ export const home: MobileTable = {
     your_vault_on: 'Your vault address on {{network}}',
   },
   zh: {
+    activate_fund: '请先向此金库转入至少 {{amount}} 以支付激活费用。',
     activate_first: '请先激活金库：点击总览顶部的“激活”。',
     activate_title: '金库尚未激活',
     activate_body: '激活后即可在此网络上使用。',
@@ -93,6 +95,7 @@ export const home: MobileTable = {
     your_vault_on: '你在 {{network}} 上的金库地址',
   },
   'zh-TW': {
+    activate_fund: '請先向此金庫轉入至少 {{amount}} 以支付啟用費用。',
     activate_first: '請先啟用金庫：點選總覽頂部的「啟用」。',
     activate_title: '金庫尚未啟用',
     activate_body: '啟用後即可在此網路上使用。',
@@ -138,6 +141,7 @@ export const home: MobileTable = {
     your_vault_on: '你在 {{network}} 上的金庫地址',
   },
   ja: {
+    activate_fund: '有効化手数料の支払いのため、このボールトに {{amount}} 以上を送金してください。',
     activate_first: '先に金庫を有効化してください：概要の上部にある「有効化」をタップします。',
     activate_title: '金庫は未有効化です',
     activate_body: '有効化すると、このネットワークで使えるようになります。',
@@ -183,6 +187,7 @@ export const home: MobileTable = {
     your_vault_on: '{{network}} 上のあなたのボールトアドレス',
   },
   ko: {
+    activate_fund: '활성화 수수료를 내려면 이 볼트에 {{amount}} 이상을 보내세요.',
     activate_first: '먼저 금고를 활성화하세요: 개요 상단의 활성화를 누르세요.',
     activate_title: '금고가 활성화되지 않았습니다',
     activate_body: '활성화하면 이 네트워크에서 사용할 수 있습니다.',
@@ -228,6 +233,7 @@ export const home: MobileTable = {
     your_vault_on: '{{network}}의 내 볼트 주소',
   },
   fr: {
+    activate_fund: 'Envoyez au moins {{amount}} à ce coffre pour payer les frais d\'activation.',
     activate_first: 'Activez d\'abord votre coffre : touchez Activer en haut de la Vue d\'ensemble.',
     activate_title: 'Coffre non activé',
     activate_body: 'Activez-le pour l\'utiliser sur ce réseau.',
@@ -273,6 +279,7 @@ export const home: MobileTable = {
     your_vault_on: 'L’adresse de votre coffre sur {{network}}',
   },
   es: {
+    activate_fund: 'Envía al menos {{amount}} a esta bóveda para pagar la comisión de activación.',
     activate_first: 'Activa primero tu bóveda: toca Activar en la parte superior del Resumen.',
     activate_title: 'Bóveda no activada',
     activate_body: 'Actívala para empezar a usarla en esta red.',
@@ -318,6 +325,7 @@ export const home: MobileTable = {
     your_vault_on: 'La dirección de tu bóveda en {{network}}',
   },
   de: {
+    activate_fund: 'Sende mindestens {{amount}} an diesen Tresor, um die Aktivierungsgebühr zu zahlen.',
     activate_first: 'Aktiviere zuerst deinen Tresor: Tippe oben in der Übersicht auf Aktivieren.',
     activate_title: 'Tresor nicht aktiviert',
     activate_body: 'Aktiviere ihn, um ihn in diesem Netzwerk zu nutzen.',
@@ -363,6 +371,7 @@ export const home: MobileTable = {
     your_vault_on: 'Die Adresse deines Tresors auf {{network}}',
   },
   'pt-BR': {
+    activate_fund: 'Envie pelo menos {{amount}} para este cofre para pagar a taxa de ativação.',
     activate_first: 'Ative seu cofre primeiro: toque em Ativar no topo da Visão geral.',
     activate_title: 'Cofre não ativado',
     activate_body: 'Ative-o para começar a usar nesta rede.',
@@ -408,6 +417,7 @@ export const home: MobileTable = {
     your_vault_on: 'O endereço do seu cofre na {{network}}',
   },
   hi: {
+    activate_fund: 'सक्रियण शुल्क चुकाने के लिए इस वॉल्ट में कम से कम {{amount}} भेजें।',
     activate_first: 'पहले अपना वॉल्ट सक्रिय करें: अवलोकन के ऊपर सक्रिय करें पर टैप करें।',
     activate_title: 'वॉल्ट सक्रिय नहीं है',
     activate_body: 'इस नेटवर्क पर इस्तेमाल शुरू करने के लिए इसे सक्रिय करें।',
@@ -453,6 +463,7 @@ export const home: MobileTable = {
     your_vault_on: '{{network}} पर आपके वॉल्ट का पता',
   },
   tr: {
+    activate_fund: 'Etkinleştirme ücretini ödemek için bu kasaya en az {{amount}} gönderin.',
     activate_first: 'Önce kasanızı etkinleştirin: Genel Bakış\'ın üstündeki Etkinleştir\'e dokunun.',
     activate_title: 'Kasa etkin değil',
     activate_body: 'Bu ağda kullanmaya başlamak için etkinleştirin.',
@@ -498,6 +509,7 @@ export const home: MobileTable = {
     your_vault_on: '{{network}} üzerindeki kasa adresiniz',
   },
   ru: {
+    activate_fund: 'Отправьте в это хранилище не менее {{amount}}, чтобы оплатить активацию.',
     activate_first: 'Сначала активируйте хранилище: нажмите «Активировать» вверху обзора.',
     activate_title: 'Хранилище не активировано',
     activate_body: 'Активируйте его, чтобы начать пользоваться им в этой сети.',
@@ -543,6 +555,7 @@ export const home: MobileTable = {
     your_vault_on: 'Адрес вашего хранилища в сети {{network}}',
   },
   id: {
+    activate_fund: 'Kirim minimal {{amount}} ke vault ini untuk membayar biaya aktivasi.',
     activate_first: 'Aktifkan brankas Anda dulu: ketuk Aktifkan di bagian atas Ringkasan.',
     activate_title: 'Brankas belum diaktifkan',
     activate_body: 'Aktifkan untuk mulai menggunakannya di jaringan ini.',
@@ -588,6 +601,7 @@ export const home: MobileTable = {
     your_vault_on: 'Alamat brankas Anda di {{network}}',
   },
   vi: {
+    activate_fund: 'Hãy gửi ít nhất {{amount}} vào vault này để trả phí kích hoạt.',
     activate_first: 'Hãy kích hoạt kho trước: chạm Kích hoạt ở đầu trang Tổng quan.',
     activate_title: 'Kho chưa được kích hoạt',
     activate_body: 'Kích hoạt để bắt đầu dùng trên mạng này.',
@@ -633,6 +647,7 @@ export const home: MobileTable = {
     your_vault_on: 'Địa chỉ kho của bạn trên {{network}}',
   },
   th: {
+    activate_fund: 'โปรดส่งอย่างน้อย {{amount}} เข้าวอลต์นี้เพื่อชำระค่าเปิดใช้งาน',
     activate_first: 'เปิดใช้งานห้องนิรภัยก่อน: แตะ เปิดใช้งาน ที่ด้านบนของภาพรวม',
     activate_title: 'ห้องนิรภัยยังไม่เปิดใช้งาน',
     activate_body: 'เปิดใช้งานเพื่อเริ่มใช้บนเครือข่ายนี้',

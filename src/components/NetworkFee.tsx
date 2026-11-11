@@ -7,6 +7,10 @@ import {formatNative} from '@/vault/direct';
 import {NATIVE} from '@/core/chain';
 import {Amount} from '@/components/Amount';
 import {useActiveFeePayer} from '@/vault/useFeePayer';
+import {isActivated} from '@/vault/activate';
+import {ACTIVATION_FEE_USD} from '@/core/activation-fee';
+import {useActiveVaultAddress} from '@/core/active-vault';
+import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 
 // Quotes are shared across every confirm surface and go stale slowly, so one read per network per
@@ -120,6 +124,37 @@ function VaultFee({gas, free}: {gas: bigint; free?: boolean}) {
       <Text style={styles.line}>{shown}</Text>
     </View>
   );
+}
+
+/**
+ * Whether the vault in front on this network will be activated by the next write the vault pays
+ * for: not deployed yet, and the relayer paying (from the owner key the activation is the owner's
+ * own gas, with no activation fee). False until the chain has answered.
+ */
+export function useActivationDue(): boolean {
+  const network = useNetwork((s) => s.network);
+  const vault = useActiveVaultAddress(network);
+  const {payer} = useActiveFeePayer(network);
+  const [activated, setActivated] = useState<boolean | null>(null);
+  useEffect(() => {
+    setActivated(null);
+    if (!vault) return;
+    let live = true;
+    isActivated(vault, network)
+      .then((v) => live && setActivated(v))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [vault, network]);
+  return payer !== 'owner' && activated === false;
+}
+
+/** The activation fee, at the top left of a confirm button: "Activation $1.00". */
+export function ActivationFee({usd = ACTIVATION_FEE_USD}: {usd?: number}) {
+  const {t} = useT();
+  const styles = useStyles(makeStyles);
+  return <Text style={styles.line}>{t('mobile.fees.activation_fee', {fee: `$${usd.toFixed(2)}`})}</Text>;
 }
 
 const makeStyles = (c: Colors) =>
