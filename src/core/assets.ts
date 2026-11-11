@@ -139,6 +139,22 @@ export const ASSETS: Record<Network, Asset[]> = {
     {symbol: 'USDC', address: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', decimals: 6, kind: 'stable'},
     {symbol: 'USDT', address: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9', decimals: 6, kind: 'stable'},
   ],
+  // BNB Smart Chain: what the BSC guard registers. Every token here is 18 decimals, USDT and USDC
+  // included. WBNB is the gas token; ETH is Binance-Peg Ethereum, an ordinary token on this chain.
+  bsc: [
+    {symbol: 'WBNB', address: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', decimals: 18, kind: 'crypto'},
+    {symbol: 'BTCB', address: '0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c', decimals: 18, kind: 'crypto'},
+    {symbol: 'ETH', tokenName: 'Binance-Peg Ethereum', address: '0x2170Ed0880ac9A755fd29B2688956BD959F933F8', decimals: 18, kind: 'crypto'},
+    {symbol: 'USDT', address: '0x55d398326f99059fF775485246999027B3197955', decimals: 18, kind: 'stable'},
+    {symbol: 'USDC', address: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', decimals: 18, kind: 'stable'},
+  ],
+  // What the Nile guard lists (guard repo deployments/tron-nile.json): Tether's Nile USDT
+  // (TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf) and Wrapped TRX (TYsbWxNnyTgsZaTFaue9hqpxkU3Fkco94a), the
+  // gas token — WTRX is to TRX what WETH is to ETH. The 20 bytes behind each T… address.
+  'tron-nile': [
+    {symbol: 'WTRX', address: '0xfb3b3134F13CcD2C81F4012E53024e8135d58FeE', decimals: 6, kind: 'crypto'},
+    {symbol: 'USDT', address: '0xECa9bC828A3005B9a3b909f2cc5c2a54794DE05F', decimals: 6, kind: 'stable'},
+  ],
 };
 
 /** Bit 4 of the guard's asset category: there is a pool behind this token. */
@@ -208,6 +224,16 @@ export const RECEIPT_TOKENS: Record<Network, Record<string, {symbol: string; dec
     '0xe50fa9b3c56ffb159cb0fca61f5c9d750e8128c8': {symbol: 'aWETH', decimals: 18, underlying: 'WETH'},
     '0x078f358208685046a11c85e8ad32895ded33a249': {symbol: 'aWBTC', decimals: 8, underlying: 'WBTC'},
   },
+  // Aave V3's BNB market. Its aTokens are all 18 decimals, as their reserves are.
+  bsc: {
+    '0x9b00a09492a626678e5a3009982191586c444df9': {symbol: 'aBnbWBNB', decimals: 18, underlying: 'WBNB'},
+    '0x56a7ddc4e848ebf43845854205ad71d5d5f72d3d': {symbol: 'aBnbBTCB', decimals: 18, underlying: 'BTCB'},
+    '0x2e94171493fabe316b6205f1585779c887771e2f': {symbol: 'aBnbETH', decimals: 18, underlying: 'ETH'},
+    '0xa9251ca9de909cb71783723713b21e4233fbf1b1': {symbol: 'aBnbUSDT', decimals: 18, underlying: 'USDT'},
+    '0x00901a076785e0906d1028c7d6372d247bec7d61': {symbol: 'aBnbUSDC', decimals: 18, underlying: 'USDC'},
+  },
+  // No protocol on Tron, so nothing a vault holds there is a receipt for something else.
+  'tron-nile': {},
 };
 
 /**
@@ -293,7 +319,12 @@ export function knownAssets(network: Network): Asset[] {
     const row = byAddress.get(a.address.toLowerCase());
     // Field by field, not row for row: a catalog that omits something keeps the bundled answer
     // rather than blanking it.
-    return row ? {...a, ...Object.fromEntries(Object.entries(row).filter(([, v]) => v != null))} : a;
+    // Except what an amount is built from: the symbol the user picks by and the decimals a typed
+    // amount is scaled by stay this build's own. A served row that changed either could turn
+    // "send 1 USDC" into a far larger transfer.
+    return row
+      ? {...a, ...Object.fromEntries(Object.entries(row).filter(([, v]) => v != null)), symbol: a.symbol, decimals: a.decimals, address: a.address}
+      : a;
   });
   const have = new Set(ASSETS[network].map((a) => a.address.toLowerCase()));
   return [...bundled, ...live.filter((a) => !have.has(a.address.toLowerCase()))];

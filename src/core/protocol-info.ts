@@ -6,7 +6,7 @@
  * user, and the catalog's versioned names ("Sky V1") would otherwise each need a line. UniswapX keeps
  * its own entry: it is not the pools, and the sheet says what it is used for.
  */
-export type ProtocolBrand = 'sky' | 'lido' | 'aave' | 'uniswap' | 'uniswapx' | 'cow';
+export type ProtocolBrand = 'sky' | 'lido' | 'aave' | 'uniswap' | 'uniswapx' | 'cow' | 'pancakeswap';
 
 const APP_URL: Record<ProtocolBrand, string> = {
   sky: 'https://app.sky.money',
@@ -15,6 +15,7 @@ const APP_URL: Record<ProtocolBrand, string> = {
   uniswap: 'https://app.uniswap.org',
   uniswapx: 'https://app.uniswap.org',
   cow: 'https://swap.cow.fi',
+  pancakeswap: 'https://pancakeswap.finance',
 };
 
 /** The brand behind an adapter name, or null for one there is nothing to say about yet. */
@@ -26,6 +27,8 @@ export function protocolBrand(name: string): ProtocolBrand | null {
   if (n.startsWith('lido')) return 'lido';
   if (n.startsWith('sky')) return 'sky';
   if (n.startsWith('cow')) return 'cow';
+  // BNB Chain's market trades: the same trade adapter as Uniswap's, pointed at PancakeSwap's router.
+  if (n.startsWith('pancake')) return 'pancakeswap';
   return null;
 }
 

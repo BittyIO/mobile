@@ -51,12 +51,21 @@ const PROTOCOLS: Record<Network, Record<string, ProtocolInfo>> = {
     '0x2576d292401c03985e41737a09bce9f1214fb7f3': {name: 'Uniswap Universal', category: 'amm'},
     '0x0936b90022eb22ae3329751573d22da26f1b1ad3': {name: 'CoW Swap', category: 'intent'},
   },
+  // Registered on the BSC guard 2026-11-10. PancakeSwap is the Uniswap trade adapter pointed at
+  // PancakeSwap's Universal Router; its routes come from the server, like Uniswap's elsewhere.
+  bsc: {
+    '0x30fb7e82ddd6f0fb6fb94ce117fc2dc33b90a615': {name: 'Aave V3', category: 'lending'},
+    '0x5eda2893c932074bdc2e05b96c81f0bfcb1209c7': {name: 'PancakeSwap', category: 'amm'},
+    '0x1e99b0f8f4c99070e9bee6a160a80a02b74207d6': {name: 'CoW Swap', category: 'intent'},
+  },
   sepolia: {
     '0x9c01f9b6ed7bbd86f7a309a3414595608ab9d80d': {name: 'Aave V3', category: 'lending'},
     '0x9f6d7b2defcf45cb837560209099083ddf59840a': {name: 'Lido', category: 'staking'},
     '0x67bd4c240d513e7eb35bf8d871cbed314856b125': {name: 'Uniswap Universal', category: 'amm'},
     '0x236b4b260bd29dca1df29360fa09c084e37fb100': {name: 'CoW Swap', category: 'intent'},
   },
+  // The Nile guard lists no protocol: none ships with the vault on Tron.
+  'tron-nile': {},
 };
 
 /**

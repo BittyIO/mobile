@@ -1433,7 +1433,7 @@
       "owner_only": "Only the vault owner can do this.",
       "no_permission": "Your asset manager permissions don't include this.",
       "err_vault_locked": "This vault is locked, so this action isn't available.",
-      "err_payment_not_stable": "Only stablecoins can be sent to a new address. Add it to your whitelist to send other assets.",
+      "err_payment_not_stable": "Only stablecoins can be sent to a new address. Add it as a payee to send other assets.",
       "err_send_limit": "This is more than your daily send allowance has left.",
       "err_market_loss": "This trade would go over today's market-trade loss allowance.",
       "err_market_price": "The price moved too far from the market price, so the trade didn't go through. Try again.",
@@ -1443,7 +1443,7 @@
       "err_unauthorized": "This wallet isn't allowed to do this on this vault.",
       "err_not_registered": "This asset or protocol isn't supported.",
       "err_recipient_waiting": "This recipient can't receive funds yet. It becomes payable when its waiting period ends.",
-      "err_no_escape": "Choose a whitelisted recipient that can already receive funds.",
+      "err_no_escape": "Choose a payee that can already receive funds.",
       "err_gas_budget": "Today's network fee budget is used up.",
       "err_price_unavailable": "A price feed isn't available right now. Try again shortly."
     }

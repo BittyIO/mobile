@@ -7,22 +7,20 @@
 import {apiFetch} from '@/core/chain';
 import {fromTronHex, toHex, tronHex} from './address';
 import {trc20TransferData, type RefBlock} from './tx';
-import {SUN_PER_TRX, TRON_API, TRON_ASSETS, type TronAsset, type TronNet} from './config';
+import {SUN_PER_TRX, TRON_API, TRON_ASSETS, type TronAsset, type TronChain, type TronNet} from './config';
+import {isNodeOn, rpcUrlsFor, tronApiHost} from '@/core/rpc-store';
 
 /**
- * The nodes to ask, in order.
+ * The nodes to ask, in order: the ones switched on in Settings › RPC nodes (`core/rpc-store`), the
+ * owner's own first.
  *
  * TronGrid without an API key refuses (429) a second request that arrives while the first is in
- * flight, so a page's handful of parallel reads failed all but one. Mainnet's node API (/wallet/…)
- * goes to PublicNode first, which serves the same API and takes bursts, with TronGrid behind it.
- * The account history (/v1/…) is TronGrid's own index with no second source; it and every other
+ * flight, so a page's handful of parallel reads failed all but one. The node API (/wallet/…) goes
+ * to PublicNode and TronStack first, which serve the same API and take bursts, with TronGrid
+ * behind them. The account history (/v1/…) is TronGrid's own index with no second source: it goes
+ * to TronGrid only while TronGrid is on, and is unavailable while it is off. It and every other
  * TronGrid call go through {paced}, one at a time.
  */
-const WALLET_NODES: Record<TronNet, string[]> = {
-  tron: ['https://tron-rpc.publicnode.com', TRON_API.tron],
-  'tron-nile': [TRON_API['tron-nile']],
-};
-
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** TronGrid, one request at a time and a few hundred milliseconds apart: what it serves unkeyed. */
@@ -38,9 +36,17 @@ function paced<T>(host: string, run: () => Promise<T>): Promise<T> {
   return next;
 }
 
+/**
+ * Where `/wallet/…` goes. Tron mainnet's node list IS java-tron API hosts. Nile is a vault network,
+ * whose node list is JSON-RPC (what every vault read goes to), so its API is the same hosts without
+ * the `/jsonrpc` path — one list in Settings › RPC nodes, for reads and broadcasts alike.
+ */
+const walletHosts = (net: TronChain): string[] => (net === 'tron-nile' ? rpcUrlsFor(net).map(tronApiHost) : rpcUrlsFor(net));
+
 /** One request, retried on a rate limit or a node error, across the nodes for its path. */
-async function request<T>(net: TronNet, path: string, init?: RequestInit): Promise<T> {
-  const hosts = path.startsWith('/wallet/') ? WALLET_NODES[net] : [TRON_API[net]];
+async function request<T>(net: TronChain, path: string, init?: RequestInit): Promise<T> {
+  const hosts = path.startsWith('/wallet/') ? walletHosts(net) : isNodeOn(net, TRON_API[net]) ? [TRON_API[net]] : [];
+  if (!hosts.length) throw new Error('Tron history needs TronGrid, which is off in Settings › RPC nodes');
   let last: unknown = null;
   for (let attempt = 0; attempt < 3; attempt++) {
     for (const host of hosts) {
@@ -60,13 +66,13 @@ async function request<T>(net: TronNet, path: string, init?: RequestInit): Promi
   throw last instanceof Error ? last : new Error('Tron network unreachable');
 }
 
-const post = <T,>(net: TronNet, path: string, body: unknown) =>
+const post = <T,>(net: TronChain, path: string, body: unknown) =>
   request<T>(net, path, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
 
-const get = <T,>(net: TronNet, path: string) => request<T>(net, path);
+const get = <T,>(net: TronChain, path: string) => request<T>(net, path);
 
 /** The latest block, as the reference a new transaction anchors to. */
-export async function refBlock(net: TronNet): Promise<RefBlock> {
+export async function refBlock(net: TronChain): Promise<RefBlock> {
   const b = await post<{blockID: string; block_header: {raw_data: {timestamp: number}}}>(net, '/wallet/getnowblock', {});
   if (!b?.blockID) throw new Error('Tron node returned no block');
   return {blockID: b.blockID, timestamp: b.block_header.raw_data.timestamp};
@@ -75,13 +81,13 @@ export async function refBlock(net: TronNet): Promise<RefBlock> {
 type Account = {balance?: number; address?: string};
 
 /** The account, or null when the address has never received anything (Tron accounts exist only once activated). */
-async function account(net: TronNet, address: string): Promise<Account | null> {
+export async function account(net: TronChain, address: string): Promise<Account | null> {
   const a = await post<Account>(net, '/wallet/getaccount', {address: tronHex(address)});
   return a && a.address ? a : null;
 }
 
 /** A constant (read-only) contract call, returning the first result word, or null when it reverted. */
-async function constantCall(net: TronNet, owner: string, contract: string, selector: string, parameter: string) {
+export async function constantCall(net: TronChain, owner: string, contract: string, selector: string, parameter: string) {
   const r = await post<{constant_result?: string[]; energy_used?: number; result?: {result?: boolean; message?: string}}>(net, '/wallet/triggerconstantcontract', {
     owner_address: tronHex(owner),
     contract_address: tronHex(contract),
@@ -115,8 +121,8 @@ export async function balances(net: TronNet, address: string): Promise<TronBalan
 type Resources = {freeNetLimit?: number; freeNetUsed?: number; NetLimit?: number; NetUsed?: number; EnergyLimit?: number; EnergyUsed?: number};
 type ChainParams = {chainParameter: {key: string; value?: number}[]};
 
-let paramsCache: {net: TronNet; at: number; p: Record<string, number>} | null = null;
-async function chainParams(net: TronNet): Promise<Record<string, number>> {
+let paramsCache: {net: TronChain; at: number; p: Record<string, number>} | null = null;
+export async function chainParams(net: TronChain): Promise<Record<string, number>> {
   if (paramsCache && paramsCache.net === net && Date.now() - paramsCache.at < 10 * 60_000) return paramsCache.p;
   const r = await get<ChainParams>(net, '/wallet/getchainparameters');
   const p: Record<string, number> = {};
@@ -186,7 +192,7 @@ export async function estimateFee(net: TronNet, from: string, to: string, asset:
 const maxBig = (a: bigint, b: bigint) => (a > b ? a : b);
 
 /** The node returns some messages hex-encoded. */
-function hexText(s: string): string {
+export function hexText(s: string): string {
   if (!/^[0-9a-fA-F]+$/.test(s) || s.length % 2) return s;
   let out = '';
   for (let i = 0; i < s.length; i += 2) out += String.fromCharCode(parseInt(s.slice(i, i + 2), 16));
@@ -194,14 +200,14 @@ function hexText(s: string): string {
 }
 
 /** Broadcast a signed transaction. Resolves with its id once a node has accepted it into the pool. */
-export async function broadcast(net: TronNet, signedHex: string, txID: string): Promise<string> {
+export async function broadcast(net: TronChain, signedHex: string, txID: string): Promise<string> {
   const r = await post<{result?: boolean; code?: string; message?: string; txid?: string}>(net, '/wallet/broadcasthex', {transaction: signedHex});
   if (!r.result) throw new Error(r.message ? hexText(r.message) : r.code ?? 'The Tron node refused the transaction');
   return r.txid ?? txID;
 }
 
 /** Whether a broadcast transaction made it: 'pending' until it is in a block, then what it did. */
-export async function txStatus(net: TronNet, txID: string): Promise<'pending' | 'success' | 'failed'> {
+export async function txStatus(net: TronChain, txID: string): Promise<'pending' | 'success' | 'failed'> {
   const r = await post<{id?: string; receipt?: {result?: string}; result?: string}>(net, '/wallet/gettransactioninfobyid', {value: txID});
   if (!r?.id) return 'pending';
   // A TRX transfer has no receipt result; a contract call reports SUCCESS or why it stopped.

@@ -4,19 +4,18 @@
  * from the web API in a later step.
  */
 import {erc20Abi, formatUnits, type Address} from 'viem';
-import {publicClientFor, type Network} from '@/core/chain';
-import {VAULT_BOOTSTRAP, VAULT_FACTORY} from '@/core/vault-contracts';
-import {predictVaultAddress} from '@/core/predict-vault';
+import {NATIVE, publicClientFor, type Network} from '@/core/chain';
+import {predictVaultAddressOn} from '@/core/predict-vault';
 import {ASSETS, type AssetKind} from '@/core/assets';
 import {currentCatalog} from '@/core/asset-catalog';
 
 /**
  * The connected owner's vault address — defined whether or not the vault has been activated yet.
  *
- * The factory is one address on every chain; `network` stays in the signature for the callers.
+ * The factory is one address on every EVM chain; each Tron network has its own (core/vault-contracts).
  */
-export function ownerVaultAddress(owner: Address, _network: Network): Address {
-  return predictVaultAddress(owner, VAULT_FACTORY, VAULT_BOOTSTRAP);
+export function ownerVaultAddress(owner: Address, network: Network): Address {
+  return predictVaultAddressOn(network, owner);
 }
 
 export type TokenBalance = {
@@ -40,7 +39,9 @@ export function balanceOfSymbol(
   symbol: string,
 ): string {
   if (!balances) return '0';
-  if (symbol === 'ETH') return balances.native.formatted;
+  // The chain's own coin by its own symbol only: on BSC "ETH" is a token (Binance-Peg Ethereum),
+  // and answering it with the vault's BNB would offer BNB to spend as ETH.
+  if (symbol === balances.native.symbol) return balances.native.formatted;
   return balances.tokens.find((t) => t.symbol === symbol)?.formatted ?? '0';
 }
 
@@ -97,12 +98,12 @@ export async function readVaultBalances(
     raws = await readEach();
   }
 
-  // Native ETH counts as WETH. A live vault wraps ETH the moment it arrives (receive()), and a vault
+  // Native ETH counts as WETH (TRX as WTRX on Tron: NATIVE.wrapped). A live vault wraps ETH the moment it arrives (receive()), and a vault
   // that is not deployed yet wraps whatever sits at its predicted address during initialize, before
   // the first action's calls run. So ETH sent ahead of activation is spendable as WETH from the first
   // action on, and the row shows it instead of a misleading 0.
   const tokens: TokenBalance[] = assets.map((a, i) => {
-    const raw = a.symbol === 'WETH' ? raws[i] + native : raws[i];
+    const raw = a.symbol === NATIVE[network].wrapped ? raws[i] + native : raws[i];
     return {
       symbol: a.symbol,
       address: a.address,
@@ -116,12 +117,12 @@ export async function readVaultBalances(
   return {
     vault,
     native: {
-      symbol: 'ETH',
+      symbol: NATIVE[network].symbol,
       address: 'native',
-      decimals: 18,
+      decimals: NATIVE[network].decimals,
       kind: 'native',
       raw: native,
-      formatted: formatUnits(native, 18),
+      formatted: formatUnits(native, NATIVE[network].decimals),
     },
     tokens,
   };

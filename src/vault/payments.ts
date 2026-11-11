@@ -234,6 +234,9 @@ export async function sendToWhitelisted(o: {
  * be reached.
  */
 export async function fetchWhitelist(vault: Address, network: Network): Promise<WhitelistedRecipient[]> {
+  // From the vault only, never the server: these are the addresses money may leave to, so a list a
+  // compromised server supplied could steer a payment. A failed read shows an empty book, not a
+  // stand-in.
   try {
     const [, entries] = await publicClientFor(network).readContract({
       address: vault,
@@ -250,14 +253,6 @@ export async function fetchWhitelist(vault: Address, network: Network): Promise<
         effectiveAt: Number(e.effectiveAt),
         removeAt: Number(e.removeAt),
       }));
-  } catch {
-    // Fall through to the server's list.
-  }
-  try {
-    const res = await apiFetch(apiUrl(`/api/ethereum/vaults/whitelisted-recipients/${vault}`, network));
-    if (!res.ok) return [];
-    const j = (await res.json()) as {data?: WhitelistedRecipient[]};
-    return j.data ?? [];
   } catch {
     return [];
   }

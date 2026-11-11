@@ -21,6 +21,7 @@ const COW_API: Record<number, string> = {
   11155111: 'https://api.cow.fi/sepolia/api/v1',
   8453: 'https://api.cow.fi/base/api/v1',
   42161: 'https://api.cow.fi/arbitrum_one/api/v1',
+  56: 'https://api.cow.fi/bnb/api/v1',
 };
 
 /** Whether CoW (limit / TWAP orders) exists on this network. */

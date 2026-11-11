@@ -5,6 +5,7 @@ import {Button} from '@/components/Button';
 import {useWallet} from '@/wallet/store';
 import {backupChoices, markPhraseVerified} from '@/wallet/phrase-backup';
 import {generateNewMnemonic} from '@/wallet/keyring';
+import {alertIfBiometricsRequired} from '@/components/biometrics-alert';
 import {useRevealGuard} from '@/core/device-security';
 import {PhraseInput} from '@/components/PhraseInput';
 import {validateMnemonic} from '@scure/bip39';
@@ -97,6 +98,7 @@ export function OnboardingScreen() {
       await createWallet(mnemonic);
       markPhraseVerified();
     } catch (e) {
+      if (alertIfBiometricsRequired(e, t)) return;
       Alert.alert(t('vault.failed'), String((e as Error)?.message ?? e));
     } finally {
       setBusy(false);
@@ -110,7 +112,11 @@ export function OnboardingScreen() {
       // Typed in from the backup, so the backup is proven.
       markPhraseVerified();
     } catch (e) {
-      Alert.alert(t('mobile.payments.onboarding_invalid_phrase'), String((e as Error)?.message ?? e));
+      // The words are checked before this can be pressed, so a failure here is almost never the
+      // phrase: most often there is no Face ID to keep it behind. Only a phrase error says "invalid".
+      if (alertIfBiometricsRequired(e, t)) return;
+      const msg = String((e as Error)?.message ?? e);
+      Alert.alert(msg === 'Invalid recovery phrase' ? t('mobile.payments.onboarding_invalid_phrase') : t('vault.failed'), msg);
     } finally {
       setBusy(false);
     }

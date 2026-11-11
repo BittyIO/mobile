@@ -1,3 +1,4 @@
+import {displayAddress, parseAddress} from '@/core/address';
 import React, {useCallback, useState} from 'react';
 import {Keyboard, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
@@ -45,7 +46,7 @@ export function SetAssetManagerScreen() {
       getAssetManager(vault, network)
         .then((r) => {
           const current = isSet(r.manager);
-          setAddr(current ? r.manager : '');
+          setAddr(current ? displayAddress(network, r.manager) : '');
           setPerms(current && r.permissions > 0n ? Number(r.permissions) : ASSET_MANAGER_ALL_PERMISSIONS);
         })
         .catch(() => {});
@@ -65,7 +66,7 @@ export function SetAssetManagerScreen() {
     // that cap, so it is pulled in by an hour: a phone clock running ahead must not push it past.
     const expiresAt = BigInt(Math.floor(Date.now() / 1000) + Math.min(grantDays * 86400, MAX_GRANT_SECONDS - 3600));
     run('set', t('mobile.vault.set_asset_manager'), (b) =>
-      setAssetManager({...b, manager: addr as Address, expiresAt, permissions: perms}),
+      setAssetManager({...b, manager: parseAddress(network, addr) as Address, expiresAt, permissions: perms}),
     );
   };
 

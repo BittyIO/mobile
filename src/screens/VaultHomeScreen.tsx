@@ -1,3 +1,4 @@
+import {isTestnet, isTronNetwork, NATIVE, NETWORK_FEATURES} from '@/core/chain';
 import {useTransparentHeaderInset} from '@/components/header-inset';
 import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
@@ -12,6 +13,7 @@ import {TokenIcon} from '@/components/TokenIcon';
 import {HoldingRow, MASK} from '@/components/HoldingRow';
 import {Amount} from '@/components/Amount';
 import {ReceiveDialog} from '@/components/ReceiveDialog';
+import {ActivateBanner} from '@/components/ActivateBanner';
 import {Sheet} from '@/components/Sheet';
 import type {PieSlice} from '@/components/PortfolioPie';
 import {useNetwork, networkLabel} from '@/core/network-store';
@@ -621,6 +623,8 @@ export function VaultHomeScreen() {
    */
   const tradeFor = useCallback(
     (row: Row): (() => void) | null => {
+      // No protocol, no market to trade on (Tron Nile): the row offers no trade.
+      if (!NETWORK_FEATURES[network].defi) return null;
       const held = (sym: string) => (rows.find((r) => r.symbol === sym)?.total ?? 0) > 0;
       const options = catalog.filter((a) => a.kind === 'stable').map((a) => a.symbol).filter((s) => s !== row.symbol);
       const quote =
@@ -632,7 +636,7 @@ export function VaultHomeScreen() {
       // Pushed, not a tab switch: it is a detour into one pair, with a back button out of it.
       return () => nav.navigate('TradePair', {base: row.symbol, quote});
     },
-    [rows, catalog, nav],
+    [rows, catalog, nav, network],
   );
 
 
@@ -733,11 +737,18 @@ export function VaultHomeScreen() {
    * because those are what a vault is funded in and what fees are paid from, and a row that is
    * already there is a row someone can act on. From there it is theirs to change.
    */
+  /**
+   * On Tron, an empty TRX row is left off Assets: USDT is what to deposit. A vault holding nothing
+   * but TRX pays its activation in TRX, and wrapping it costs about $10, right at the per-operation
+   * cap, while USDT costs about $9. So with no TRX in the vault, USDT is the only row asking to be
+   * funded. TRX shows again the moment the vault holds any.
+   */
+  const hideEmptyNative = (r: Row) => isTronNetwork(network) && r.symbol === NATIVE[network].wrapped && r.total === 0;
   const rowsForList = (listId: string): Row[] => {
     const held = isAssetsList(listId);
     const starred = new Set(watch.lists.find((l) => l.id === listId)?.symbols ?? []);
     const visible = held
-      ? rows.filter((r) => starred.has(r.symbol) || r.total > 0)
+      ? rows.filter((r) => (starred.has(r.symbol) && !hideEmptyNative(r)) || r.total > 0)
       : rows.filter((r) => starred.has(r.symbol));
     // A list of the user's own keeps the order they dragged it into: they chose what is on it,
     // so they choose the sequence, and it shows no balance to sort by anyway.
@@ -960,7 +971,7 @@ export function VaultHomeScreen() {
             <GasIcon color={c.accent} size={20} />
           </View>
           <View style={styles.feeTipText}>
-            <Text style={styles.feeTipTitle}>{t('mobile.home.fee_tip_title')}</Text>
+            <Text style={styles.feeTipTitle}>{t('mobile.home.fee_tip_title', {coin: NATIVE[network].symbol})}</Text>
             <Text style={styles.feeTipBody}>{t('mobile.home.fee_tip_body')}</Text>
           </View>
           <Pressable onPress={closeFeeTip} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('common.close')} style={styles.feeTipClose}>
@@ -970,12 +981,14 @@ export function VaultHomeScreen() {
           </Pressable>
         </View>
       ) : null}
+      {/* A Tron vault not activated yet: activation is its own step, before anything else. */}
+      <ActivateBanner onActivated={onRefresh} />
       <View style={styles.heroCard}>
         <View style={styles.totalHeader}>
-          {/* A testnet's figures are test money: said once, beside the total, as on Tron Nile. */}
+          {/* A testnet's figures are test money: said once, beside the total (Sepolia, Tron Nile). */}
           <View style={styles.totalLabelRow}>
             <Text style={styles.totalLabel}>{t('vault.total_value_label')}</Text>
-            {network === 'sepolia' ? <Text style={styles.testnet}>{t('mobile.app.testnet')}</Text> : null}
+            {isTestnet(network) ? <Text style={styles.testnet}>{t('mobile.app.testnet')}</Text> : null}
           </View>
           <Pressable onPress={toggleHidden} hitSlop={10}>
             <EyeIcon off={hidden} color={c.subtext} />

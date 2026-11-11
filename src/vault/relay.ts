@@ -12,11 +12,12 @@
 import {Alert} from 'react-native';
 import {decodeFunctionData, encodeFunctionData, type Abi, type Address, type Hex, type PublicClient} from 'viem';
 import type {Signer} from '@/wallet/signer';
-import {apiUrl, CHAIN_ID, publicClientFor, type Network} from '@/core/chain';
+import {apiUrl, CHAIN_ID, isTronNetwork, publicClientFor, type Network} from '@/core/chain';
 import {FORWARDER_ABI, FORWARD_REQUEST_TYPES, VAULT_FWD_ABI, VAULT_MULTICALL_ABI, VAULT_OWNERSHIP_ABI, VAULT_RISK_ABI} from '@/core/abi';
 import {rotationOn} from '@/wallet/rotation-store';
 import {ActivationCallReverted, ActivationFeeTooHigh, ConnectionLost, RelayerUnfunded, isActivated, activateVault, activateVaultDirect, revertData} from './activate';
-import {formatEth, OwnerGasShort, ownerEthBalance, sendFromOwner} from './direct';
+import {displayAddress} from '@/core/address';
+import {formatNative, OwnerGasShort, ownerEthBalance, sendFromOwner} from './direct';
 import {feePayerFor, type FeePayer} from '@/core/fee-payer-store';
 import {feeCoinOrder} from '@/core/prefs';
 import {knownAssets} from '@/core/assets';
@@ -229,6 +230,11 @@ async function relayEncodedNow(given: EncodedWrite): Promise<RelayResult> {
   // Every vault write passes here, so this is where a vault on a release newer than this build is
   // stopped — before a signature is asked for.
   await assertCanWrite(vault, network);
+  // On Tron activation is its own step, from the Overview's banner (components/ActivateBanner):
+  // nothing else rides on it, so its fee is the deployment's alone. Refused before anything is signed.
+  if (isTronNetwork(network) && given.activationCalls.length > 0 && !(await isActivated(vault, network))) {
+    throw new Error(t('mobile.home.activate_first'));
+  }
   // A lock made since the screen last looked: say so before anything is signed or paid for.
   const lockLevel = await assertVaultAccepts(vault, network, given.activationCalls);
   // The vault's and its protocols' upgrades ride in front, when Auto upgrade is on. Once: a retry
@@ -293,8 +299,8 @@ async function viaOwnerLockedForever(opts: EncodedWrite): Promise<RelayResult> {
     if (!(e instanceof OwnerGasShort)) throw e;
     throw new Error(
       translate(useLanguage.getState().language, 'mobile.vault.forever_owner_pays', {
-        need: formatEth(e.need),
-        owner: e.owner,
+        need: formatNative(opts.network, e.need),
+        owner: displayAddress(opts.network, e.owner),
       }),
     );
   }
@@ -596,6 +602,17 @@ function withCode(message: string, reason?: string, code?: string): string {
   // (shipped, or downloaded for a newer release) may know it.
   const tail = [reason, code ? nameRevert(code) : code].filter(Boolean).join(' · ');
   return tail ? `${message}\n\n${tail.slice(0, 140)}` : message;
+}
+
+/**
+ * Activate the vault and do nothing else: an empty `calls` batch, so the fee is the deployment's
+ * alone. Goes through the same queue, payer choice and fallbacks as every write — the relayer
+ * billing the vault, or the owner key paying with Pay from owner — and never rotates the key.
+ * On Tron the Overview offers this on its own (components/ActivateBanner).
+ */
+export async function activateVaultOnly(opts: {account: Signer; vault: Address; network: Network; stableCoin: Address}): Promise<RelayResult> {
+  if (await isActivated(opts.vault, opts.network)) throw new Error('This vault is already activated.');
+  return relayEncoded({...opts, data: '0x', activationCalls: [], noRotate: true});
 }
 
 export async function relayVaultWrite(opts: {

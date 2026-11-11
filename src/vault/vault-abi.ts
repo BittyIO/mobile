@@ -2,7 +2,7 @@ import {decodeFunctionData, keccak256, parseAbi, toBytes, type Abi, type Address
 import {MMKV} from 'react-native-mmkv';
 import {apiFetch, apiUrl, publicClientFor, type Network} from '@/core/chain';
 import {GUARD_IMPL_ABI, IMPLEMENTATION_VAULT} from '@/core/abi';
-import {VAULT_GUARD} from '@/core/vault-contracts';
+import {vaultGuard} from '@/core/vault-contracts';
 import {translate} from '@/i18n';
 import {useLanguage} from '@/core/language-store';
 import {APP_BUILD, SUPPORTED_VAULT_MAJOR} from '@/core/app-version';
@@ -202,7 +202,7 @@ export async function runningVaultVersion(vault: Address, network: Network): Pro
   } catch {
     try {
       const latest = (await client.readContract({
-        address: VAULT_GUARD,
+        address: vaultGuard(network),
         abi: GUARD_IMPL_ABI,
         functionName: 'latestImplementation',
         args: [IMPLEMENTATION_VAULT],

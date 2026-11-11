@@ -35,6 +35,12 @@ export interface Signer {
    */
   signTransaction?: LocalAccount['signTransaction'];
   /**
+   * Sign a raw 32-byte hash with the key. Only for a Tron transaction, which is signed over its
+   * transaction id (tron/vault-tx) rather than as an Ethereum transaction. A key has it; a Safe does
+   * not. Never used to sign anything a contract would read as a message.
+   */
+  sign?: LocalAccount['sign'];
+  /**
    * For a vault on quantum-safe keys (see ./rotation): the fresh key this write hands the vault to,
    * appended to the write itself by the relay — or why this one does not. Absent for a vault that
    * does not use them.

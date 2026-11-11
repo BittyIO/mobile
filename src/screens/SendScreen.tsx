@@ -1,3 +1,4 @@
+import {displayAddress, parseAddress} from '@/core/address';
 import React, {useEffect, useMemo, useState} from 'react';
 import {Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
@@ -29,10 +30,10 @@ import type {Position} from '@/vault/positions';
 
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors, MONO} from '@/theme';
-import {displaySymbol, fmtNum, fmtShort} from '@/core/format';
+import {displaySymbol, fmtNum, fmtShort, asShown} from '@/core/format';
 import {quoteRelayFeeUsd, relayGasFor} from '@/vault/fee-quote';
 import {useFeeFloor} from '@/vault/useFeeFloor';
-import {FEE_WETH, feeCoinForSpend, reserveHeld, resolveFeeReserve, useWethFeeCoin} from '@/vault/stableCoinAsGas';
+import {feeWeth, feeCoinForSpend, reserveHeld, resolveFeeReserve, useWethFeeCoin} from '@/vault/stableCoinAsGas';
 
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {useCapability} from '@/vault/gate';
@@ -240,7 +241,7 @@ export function SendScreen() {
         ...assets
           .filter((a) => a.kind === 'stable')
           .map((a) => ({symbol: a.symbol, amount: Number(balanceOfSymbol(bal.balances, a.symbol))})),
-        ...(weth ? [{symbol: FEE_WETH, amount: Number(balanceOfSymbol(bal.balances, FEE_WETH) || 0), usd: weth.usd}] : []),
+        ...(weth ? [{symbol: feeWeth(network), amount: Number(balanceOfSymbol(bal.balances, feeWeth(network)) || 0), usd: weth.usd}] : []),
       ],
       spendSymbol: sym,
       spending: spentSyms,
@@ -441,7 +442,7 @@ export function SendScreen() {
         ...assets
           .filter((a) => a.kind === 'stable')
           .map((a) => ({symbol: a.symbol, amount: Number(balanceOfSymbol(bal.balances, a.symbol))})),
-        ...(weth ? [{symbol: FEE_WETH, amount: Number(balanceOfSymbol(bal.balances, FEE_WETH) || 0), usd: weth.usd}] : []),
+        ...(weth ? [{symbol: feeWeth(network), amount: Number(balanceOfSymbol(bal.balances, feeWeth(network)) || 0), usd: weth.usd}] : []),
       ],
       spending: spentSyms,
       floorUsd: feeFloor,
@@ -517,7 +518,7 @@ export function SendScreen() {
                       </Text>
                     ) : null}
                     <Text style={recipient.label ? styles.toAddrMuted : styles.toAddr}>
-                      {recipient.to}
+                      {displayAddress(network, recipient.to)}
                     </Text>
                   </View>
                 ) : (
@@ -626,7 +627,7 @@ export function SendScreen() {
                     <View style={styles.pickCol}>
                       <Text style={styles.pickLabel}>{o.source === 'free' ? sym : `${sym} ${sourceLabel(o.source)}`}</Text>
                       {/* A pasted token is known by its address, not its name: shown in full. */}
-                      {pasted ? <Text style={styles.pickAddr}>{pasted.address}</Text> : null}
+                      {pasted ? <Text style={styles.pickAddr}>{asShown(pasted.address)}</Text> : null}
                     </View>
                     <Text style={styles.pickSub}>
                       {fmtNum(Number(formatUnits(remaining(o.asset.symbol, o.source), o.asset.decimals)))}
@@ -729,7 +730,9 @@ function AddByAddress({onAdd}: {onAdd: (address: string) => Promise<void>}) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const ok = /^0x[0-9a-fA-F]{40}$/.test(text.trim());
+  const network = useNetwork((s) => s.network);
+  // 0x…, or on Tron the T… form Tronscan lists a token by.
+  const ok = parseAddress(network, text) != null;
   const add = async () => {
     setBusy(true);
     setErr(null);

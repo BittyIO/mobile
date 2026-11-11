@@ -3,6 +3,7 @@ import type {MobileTable} from './index';
 // Settings › Vaults: the vault list, the vaults found for this device's keys, and removing one.
 export const vaults: MobileTable = {
   en: {
+    arriving: 'Transferred to you. Yours from {{date}}.',
     show_safe: 'Show Safe multi-sig vaults',
     show_transferred: 'Show transferred vaults',
     show_owners: 'Show owners',
@@ -20,6 +21,7 @@ export const vaults: MobileTable = {
     add: 'Add',
   },
   zh: {
+    arriving: '已转给你，{{date}} 起归你所有。',
     show_safe: '显示 Safe 多签金库',
     show_transferred: '显示已转移的金库',
     show_owners: '显示所有者',
@@ -37,6 +39,7 @@ export const vaults: MobileTable = {
     add: '添加',
   },
   'zh-TW': {
+    arriving: '已轉給你，{{date}} 起歸你所有。',
     show_safe: '顯示 Safe 多簽金庫',
     show_transferred: '顯示已轉移的金庫',
     show_owners: '顯示擁有者',
@@ -54,6 +57,7 @@ export const vaults: MobileTable = {
     add: '新增',
   },
   ja: {
+    arriving: 'あなたに移転されました。{{date}} からあなたのものになります。',
     show_safe: 'Safe マルチシグのボールトを表示',
     show_transferred: '移転済みの Vault を表示',
     show_owners: 'オーナーを表示',
@@ -71,6 +75,7 @@ export const vaults: MobileTable = {
     add: '追加',
   },
   ko: {
+    arriving: '회원님에게 이전되었습니다. {{date}}부터 회원님의 금고입니다.',
     show_safe: 'Safe 멀티시그 볼트 표시',
     show_transferred: '이전된 볼트 표시',
     show_owners: '소유자 표시',
@@ -88,6 +93,7 @@ export const vaults: MobileTable = {
     add: '추가',
   },
   fr: {
+    arriving: 'Transféré à vous. À vous à partir du {{date}}.',
     show_safe: 'Afficher les coffres multisig Safe',
     show_transferred: 'Afficher les coffres transférés',
     show_owners: 'Afficher les propriétaires',
@@ -105,6 +111,7 @@ export const vaults: MobileTable = {
     add: 'Ajouter',
   },
   es: {
+    arriving: 'Transferida a ti. Será tuya desde el {{date}}.',
     show_safe: 'Mostrar bóvedas multifirma Safe',
     show_transferred: 'Mostrar bóvedas transferidas',
     show_owners: 'Mostrar propietarios',
@@ -122,6 +129,7 @@ export const vaults: MobileTable = {
     add: 'Añadir',
   },
   de: {
+    arriving: 'An dich übertragen. Ab {{date}} gehört er dir.',
     show_safe: 'Safe-Multisig-Tresore anzeigen',
     show_transferred: 'Übertragene Tresore anzeigen',
     show_owners: 'Eigentümer anzeigen',
@@ -139,6 +147,7 @@ export const vaults: MobileTable = {
     add: 'Hinzufügen',
   },
   'pt-BR': {
+    arriving: 'Transferido para você. Seu a partir de {{date}}.',
     show_safe: 'Mostrar cofres multisig Safe',
     show_transferred: 'Mostrar cofres transferidos',
     show_owners: 'Mostrar proprietários',
@@ -156,6 +165,7 @@ export const vaults: MobileTable = {
     add: 'Adicionar',
   },
   hi: {
+    arriving: 'आपको स्थानांतरित किया गया। {{date}} से आपका।',
     show_safe: 'Safe मल्टी-सिग वॉल्ट दिखाएँ',
     show_transferred: 'हस्तांतरित वॉल्ट दिखाएँ',
     show_owners: 'मालिक दिखाएँ',
@@ -173,6 +183,7 @@ export const vaults: MobileTable = {
     add: 'जोड़ें',
   },
   tr: {
+    arriving: 'Size devredildi. {{date}} tarihinden itibaren sizin.',
     show_safe: 'Safe çoklu imza kasalarını göster',
     show_transferred: 'Devredilen kasaları göster',
     show_owners: 'Sahipleri göster',
@@ -190,6 +201,7 @@ export const vaults: MobileTable = {
     add: 'Ekle',
   },
   ru: {
+    arriving: 'Передано вам. Станет вашим с {{date}}.',
     show_safe: 'Показывать мультиподписные хранилища Safe',
     show_transferred: 'Показать переданные хранилища',
     show_owners: 'Показать владельцев',
@@ -207,6 +219,7 @@ export const vaults: MobileTable = {
     add: 'Добавить',
   },
   id: {
+    arriving: 'Dialihkan kepada Anda. Milik Anda mulai {{date}}.',
     show_safe: 'Tampilkan brankas multisig Safe',
     show_transferred: 'Tampilkan vault yang dialihkan',
     show_owners: 'Tampilkan pemilik',
@@ -224,6 +237,7 @@ export const vaults: MobileTable = {
     add: 'Tambah',
   },
   vi: {
+    arriving: 'Đã chuyển cho bạn. Thuộc về bạn từ {{date}}.',
     show_safe: 'Hiện kho đa chữ ký Safe',
     show_transferred: 'Hiện vault đã chuyển',
     show_owners: 'Hiện chủ sở hữu',
@@ -241,6 +255,7 @@ export const vaults: MobileTable = {
     add: 'Thêm',
   },
   th: {
+    arriving: 'โอนให้คุณแล้ว เป็นของคุณตั้งแต่ {{date}}',
     show_safe: 'แสดงห้องนิรภัยมัลติซิก Safe',
     show_transferred: 'แสดงห้องนิรภัยที่โอนแล้ว',
     show_owners: 'แสดงเจ้าของ',

@@ -10,26 +10,75 @@
  * AWAY no longer answers to this device's key, and the list greys it out.
  */
 import {useEffect, useState} from 'react';
-import {getAddress, parseAbi, type Address} from 'viem';
+import {getAddress, parseAbi, type Address, type Hex} from 'viem';
 import {apiFetch, apiUrl, publicClientFor, type Network} from '@/core/chain';
 import {keyIndexOf, type VaultRef} from '@/core/vault-store';
 import {keyPathOf} from '@/wallet/rotation-store';
 import {vaultAddressOf} from '@/core/active-vault';
+import {vaultGuard} from '@/core/vault-contracts';
+import {VAULT_RISK_ABI} from '@/core/abi';
+import {vaultProxyRuntimeCode} from '@/core/predict-vault';
 
 const OWNER_ABI = parseAbi(['function owner() view returns (address)']);
+const GUARD_REGISTRY_ABI = parseAbi(['function isImplementationRegisteredFor(address implementation, uint8 category) view returns (bool)']);
+/** ERC-1967's implementation slot. */
+const IMPL_SLOT = '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc';
+const VAULT_CATEGORY = 1;
 
 /**
- * On `network`, the vaults `owner` owns, and those handed to it that it has yet to accept (the
- * two-step handover of the vaults deployed today), as the server knows them. Empty when it cannot say.
+ * Whether `vault` is a real Bitty vault that answers to `key` — checked on chain, because the list
+ * it came from is the server's. A tampered list could otherwise slip in a contract that only looks
+ * like a vault (or someone else's vault) for the user to fund. Real means: the factory's proxy code,
+ * pointing at an implementation the guard registers, and owned by `key` — or, for a handover still
+ * waiting, queued to `key`.
  */
-export async function fetchOwnedVaults(network: Network, owner: Address): Promise<{owned: Address[]; pending: Address[]}> {
+export async function isGenuineVaultFor(network: Network, vault: Address, key: Address, pending: boolean): Promise<boolean> {
+  try {
+    const client = publicClientFor(network);
+    const [code, slot] = await Promise.all([client.getCode({address: vault}), client.getStorageAt({address: vault, slot: IMPL_SLOT})]);
+    if (!code || code.toLowerCase() !== vaultProxyRuntimeCode(network).toLowerCase() || !slot) return false;
+    const impl = getAddress(`0x${slot.slice(-40)}` as Hex);
+    const registered = await client.readContract({
+      address: vaultGuard(network),
+      abi: GUARD_REGISTRY_ABI,
+      functionName: 'isImplementationRegisteredFor',
+      args: [impl, VAULT_CATEGORY],
+    });
+    if (!registered) return false;
+    if (!pending) {
+      const owner = await client.readContract({address: vault, abi: OWNER_ABI, functionName: 'owner'});
+      return owner.toLowerCase() === key.toLowerCase();
+    }
+    const p = await client.readContract({address: vault, abi: VAULT_RISK_ABI, functionName: 'pendingChanges'});
+    return p.newOwnerReadyAt > 0n && p.newOwner.toLowerCase() === key.toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * On `network`, the vaults `owner` owns, those handed to it that it has yet to accept (older
+ * vaults' two-step handover), and those transferred to it that are still waiting out the vault's
+ * timelock (`queued`, with when they become its), as the server knows them. Empty when it cannot say.
+ *
+ * `queued` was not read at all, so a vault transferred to this phone was missing from the list for
+ * the whole timelock — days — and appeared only once `owner()` had switched.
+ */
+export async function fetchOwnedVaults(
+  network: Network,
+  owner: Address,
+): Promise<{owned: Address[]; pending: Address[]; queued: {vault: Address; readyAt: number}[]}> {
   try {
     const res = await apiFetch(apiUrl(`/api/ethereum/vaults/owned-by/${owner}`, network));
-    if (!res.ok) return {owned: [], pending: []};
-    const json = (await res.json()) as {vaults?: string[]; pending?: string[]};
-    return {owned: (json.vaults ?? []).map((v) => getAddress(v)), pending: (json.pending ?? []).map((v) => getAddress(v))};
+    if (!res.ok) return {owned: [], pending: [], queued: []};
+    const json = (await res.json()) as {vaults?: string[]; pending?: string[]; queued?: {vault: string; readyAt: number}[]};
+    return {
+      owned: (json.vaults ?? []).map((v) => getAddress(v)),
+      pending: (json.pending ?? []).map((v) => getAddress(v)),
+      queued: (json.queued ?? []).map((q) => ({vault: getAddress(q.vault), readyAt: Number(q.readyAt)})),
+    };
   } catch {
-    return {owned: [], pending: []};
+    return {owned: [], pending: [], queued: []};
   }
 }
 
@@ -59,7 +108,7 @@ export function deviceKeys(vaults: VaultRef[]): DeviceKey[] {
 }
 
 /** A vault for one of this device's keys that is not on the list: owned, or waiting to be accepted. */
-export type FoundVault = {vault: Address; key: DeviceKey; pending: boolean};
+export type FoundVault = {vault: Address; key: DeviceKey; pending: boolean; /** Transferred, and this key's from then (unix seconds). */ readyAt?: number};
 
 /**
  * On `network`: the vaults this device's keys own that are not on the list yet, and the list's
@@ -84,13 +133,19 @@ export function useVaultDirectory(
       const lists = await Promise.all(keys.map((k) => fetchOwnedVaults(network, k.address)));
       const add: FoundVault[] = [];
       keys.forEach((k, i) => {
-        for (const [vaults_, pending] of [[lists[i].owned, false], [lists[i].pending, true]] as const) {
+        // A transfer still in its timelock is checked the way a handover waiting to be accepted is:
+        // queued to this key in the vault's pendingChanges.
+        const queued = lists[i].queued.map((q) => q.vault);
+        for (const [vaults_, pending] of [[lists[i].owned, false], [lists[i].pending, true], [queued, true]] as const) {
           for (const vault of vaults_) {
             if (listed.has(vault.toLowerCase()) || add.some((f) => f.vault.toLowerCase() === vault.toLowerCase())) continue;
             add.push({vault, key: k, pending});
           }
         }
       });
+      // Only what the chain confirms is shown: the server only suggested these.
+      const ok = await Promise.all(add.map((f) => isGenuineVaultFor(network, f.vault, f.key.address, f.pending)));
+      const confirmed = add.filter((_, i) => ok[i]);
       // Whose each listed vault is now. A Safe vault answers to the Safe, every other to its key.
       const gone = new Map<number, Address>();
       await Promise.all(
@@ -105,7 +160,7 @@ export function useVaultDirectory(
         }),
       );
       if (!live) return;
-      setFound(add);
+      setFound(confirmed);
       setTransferredTo(gone);
     })();
     return () => {

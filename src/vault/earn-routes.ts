@@ -45,7 +45,8 @@ export function stakeRoutes(network: Network, assets: Asset[]): EarnRoute[] {
 export function lendRoutes(network: Network, assets: Asset[]): EarnRoute[] {
   const aave = adapterByName(network, 'Aave V3');
   if (!aave) return [];
-  const supported = ['WETH', 'WBTC', 'cbBTC', 'USDC', 'USDT'];
+  // WBNB, BTCB and ETH (Binance-Peg) are the BNB market's.
+  const supported = ['WETH', 'WBTC', 'cbBTC', 'USDC', 'USDT', 'WBNB', 'BTCB', 'ETH'];
   return assets
     .filter((a) => supported.includes(a.symbol))
     .map((asset) => ({protocol: aave, name: 'Aave V3', asset, kind: 'lending' as const}));

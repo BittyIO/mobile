@@ -24,7 +24,7 @@ import type {Network} from '@/core/chain';
  * Defaults are the assets any vault is expected to hold: the dollars it is funded in and the two
  * crypto majors. They are a DEFAULT and not a floor — a list the user has emptied stays empty.
  */
-const DEFAULTS = ['USDC', 'USDT', 'USDG', 'WETH', 'cbBTC', 'WBTC'];
+const DEFAULTS = ['USDC', 'USDT', 'USDG', 'WETH', 'cbBTC', 'WBTC', 'WTRX', 'WBNB', 'BTCB'];
 
 export type WatchList = {
   id: string;

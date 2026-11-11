@@ -75,6 +75,10 @@ function tracked(a: LocalAccount): Signer & LocalAccount {
       markUsed(a.address);
       return a.signTransaction(tx, o);
     }) as LocalAccount['signTransaction'],
+    sign: ((p: Parameters<NonNullable<LocalAccount['sign']>>[0]) => {
+      markUsed(a.address);
+      return a.sign!(p);
+    }) as LocalAccount['sign'],
     signMessage: ((p: Parameters<LocalAccount['signMessage']>[0]) => {
       markUsed(a.address);
       return a.signMessage(p);
@@ -123,7 +127,7 @@ async function isFresh(address: Address, network: Network, vault: Address): Prom
     here.readContract({address: forwarder, abi: FORWARDER_ABI, functionName: 'nonceFor', args: [address, vault]}),
     fetchOwnedVaults(network, address),
   ]);
-  if (sent > 0 || (code && code !== '0x') || lane > 0n || owned.owned.length > 0 || owned.pending.length > 0) return false;
+  if (sent > 0 || (code && code !== '0x') || lane > 0n || owned.owned.length > 0 || owned.pending.length > 0 || owned.queued.length > 0) return false;
   const elsewhere = await Promise.all(
     NETWORKS.filter((n) => n !== network).map((n) =>
       publicClientFor(n)

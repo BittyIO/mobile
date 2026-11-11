@@ -9,7 +9,7 @@ import {SAFE_ENABLED} from '@/core/features';
 import {useVaults, vaultLabel, type VaultRef} from '@/core/vault-store';
 import {vaultAddressOf} from '@/core/active-vault';
 import {ownerVaultAddress} from '@/vault/read';
-import {useNetwork} from '@/core/network-store';
+import {NETWORKS, useNetwork} from '@/core/network-store';
 import type {Network} from '@/core/chain';
 import {useWallet} from '@/wallet/store';
 import * as keyring from '@/wallet/keyring';
@@ -25,7 +25,7 @@ import {getPref, setPref} from '@/core/prefs';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {SettingsGroup, makeSettingsStyles} from '@/components/SettingsRow';
 import {useT} from '@/i18n';
-import {wrappableAddress} from '@/core/format';
+import {wrappableAddress, asShown} from '@/core/format';
 import {useColors, useStyles, type Colors, MONO} from '@/theme';
 
 /**
@@ -72,7 +72,7 @@ function VaultsMenuButton({onPress}: {onPress: () => void}) {
 }
 
 export function VaultListScreen() {
-  const {t} = useT();
+  const {t, language} = useT();
   const c = useColors();
   const styles = useStyles(makeStyles);
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -146,7 +146,7 @@ export function VaultListScreen() {
    * unless that key's own entry for it already is — a vault the phone still lists under the key
    * that GAVE it away (greyed, no longer yours) must not hide it from the key that has it now.
    */
-  const [held, setHeld] = useState<Record<string, {owned: Address[]; pending: Address[]}>>({});
+  const [held, setHeld] = useState<Record<string, Awaited<ReturnType<typeof fetchOwnedVaults>>>>({});
   const keySig = owners.filter((o) => !o.safe && o.address).map((o) => o.key).join(',');
   useEffect(() => {
     let live = true;
@@ -175,9 +175,13 @@ export function VaultListScreen() {
       const h = held[o.key];
       const received: FoundVault[] = (h?.owned ?? []).filter((v) => !here.has(v.toLowerCase())).map((vault) => ({vault, key, pending: false}));
       const waiting: FoundVault[] = (h?.pending ?? []).filter((v) => !here.has(v.toLowerCase())).map((vault) => ({vault, key, pending: true}));
-      return {owner: o, listed, received, waiting};
+      // Transferred to this owner and still in the vault's timelock: listed now, with when it arrives.
+      const incoming: FoundVault[] = (h?.queued ?? [])
+        .filter((q) => !here.has(q.vault.toLowerCase()))
+        .map((q) => ({vault: q.vault, key, pending: true, readyAt: q.readyAt}));
+      return {owner: o, listed, received, waiting, incoming};
     })
-    .filter((g) => g.listed.length + g.received.length + g.waiting.length > 0);
+    .filter((g) => g.listed.length + g.received.length + g.waiting.length + g.incoming.length > 0);
   // The name a vault not on the phone yet will have once it is: the next free indexes, in order.
   const nextIndex = Math.max(...vaults.map((v) => v.index)) + 1;
   let pendingName = 0;
@@ -195,8 +199,8 @@ export function VaultListScreen() {
 
   const copyAddress = (address: string | null) => {
     if (!address) return;
-    Clipboard.setString(address);
-    showToast('success', t('common.copied'), address, 1500);
+    Clipboard.setString(asShown(address));
+    showToast('success', t('common.copied'), asShown(address), 1500);
   };
   const [busy, setBusy] = useState(false);
   const stable = useAssetCatalog(network).find((a) => a.kind === 'stable')?.address;
@@ -222,7 +226,8 @@ export function VaultListScreen() {
   const choose = (v: VaultRef) => {
     // Transferred away: it cannot be opened.
     if (!v.owner || notYours.has(v.index)) return;
-    if (v.vault && v.network && v.network !== network) setNetwork(v.network as Network);
+    // Never onto a network this build does not offer (Tron, in a store release).
+    if (v.vault && v.network && v.network !== network && NETWORKS.includes(v.network as Network)) setNetwork(v.network as Network);
     selectVault(v.index);
     nav.goBack();
   };
@@ -332,7 +337,7 @@ export function VaultListScreen() {
    * their own group or run on in one list.
    */
   const groupRows = (g: (typeof groups)[number], start: number, total: number) => {
-    const {listed, received, waiting} = g;
+    const {listed, received, waiting, incoming} = g;
     const last = (k: number) => start + k >= total - 1;
     return [
       ...listed.map((v, i) => row(v, start + i, total)),
@@ -369,6 +374,29 @@ export function VaultListScreen() {
             <Text style={styles.link}>{t('mobile.vaults.accept')}</Text>
           </Pressable>
         </View>
+      )),
+      // Transferred to this owner, still in the vault's timelock: nothing to do but wait, so no
+      // button — the vault becomes this key's by itself, and is then listed like any received one.
+      ...incoming.map((f, i) => (
+        <Pressable
+          key={f.vault}
+          style={[styles.vaultRow, !last(listed.length + received.length + waiting.length + i) && styles.rowDivider]}
+          onLongPress={() => copyAddress(f.vault)}>
+          <View style={styles.vaultText}>
+            <View style={styles.nameLine}>
+              <Text style={styles.name} numberOfLines={1}>
+                {label(nextIndex + pendingName++ + 1)}
+              </Text>
+              <Text style={styles.tag}>{t('mobile.vaults.tag_received')}</Text>
+            </View>
+            <Text style={styles.addr} numberOfLines={2}>
+              {wrappableAddress(f.vault)}
+            </Text>
+            <Text style={styles.goneText}>
+              {t('mobile.vaults.arriving', {date: new Date((f.readyAt ?? 0) * 1000).toLocaleString(language, {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})})}
+            </Text>
+          </View>
+        </Pressable>
       )),
     ];
   };
@@ -407,7 +435,7 @@ export function VaultListScreen() {
                   {o.address ? t('mobile.vaults.owner_header', {address: shortAddr(o.address)}) : t('mobile.vaults.owner_n', {n: o.keyIndex + 1})}
                 </Text>
               </Pressable>
-              <View style={styles.group}>{groupRows(g, 0, g.listed.length + g.received.length + g.waiting.length)}</View>
+              <View style={styles.group}>{groupRows(g, 0, g.listed.length + g.received.length + g.waiting.length + g.incoming.length)}</View>
             </View>
           );
         })
@@ -415,11 +443,11 @@ export function VaultListScreen() {
         <View style={styles.section}>
           <View style={styles.group}>
             {(() => {
-              const total = groups.reduce((n, g) => n + g.listed.length + g.received.length + g.waiting.length, 0);
+              const total = groups.reduce((n, g) => n + g.listed.length + g.received.length + g.waiting.length + g.incoming.length, 0);
               let at = 0;
               return groups.map((g) => {
                 const out = groupRows(g, at, total);
-                at += g.listed.length + g.received.length + g.waiting.length;
+                at += g.listed.length + g.received.length + g.waiting.length + g.incoming.length;
                 return <React.Fragment key={g.owner.key}>{out}</React.Fragment>;
               });
             })()}

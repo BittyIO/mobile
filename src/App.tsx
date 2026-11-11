@@ -1,3 +1,4 @@
+import {NETWORK_FEATURES} from '@/core/chain';
 import React, {useEffect} from 'react';
 import {ActivityIndicator, Platform, StatusBar, StyleSheet, View} from 'react-native';
 import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -13,8 +14,10 @@ import {useLaunchUpdateCheck} from '@/core/app-update';
 import {useGuardProtocols} from '@/core/guard-catalog';
 import {useAutoUpgradePlan} from '@/vault/auto-upgrade';
 import {useNetwork} from '@/core/network-store';
+import type {NodeChain} from '@/core/rpc-store';
 import {RISK_TITLE} from '@/components/riskFormat';
 import {ToastHost} from '@/components/Toast';
+import {FeeConfirmHost} from '@/components/FeeConfirm';
 import {resumePending} from '@/vault/pending';
 import {OnboardingScreen} from '@/screens/OnboardingScreen';
 import {LockScreen} from '@/screens/LockScreen';
@@ -149,7 +152,8 @@ export type RootStackParamList = {
   NetworkFeeOwner: undefined;
   /** Network fee › Pay from vault › Advanced settings: the relayer's per-operation and 24-hour caps. */
   NetworkFeeLimits: undefined;
-  /** Settings › RPC: the owner's own node for on-chain reads. */
+  /** Settings › RPC nodes: which nodes this phone reads the network in front from. See {RpcNetworkScreen}. */
+  RpcNetwork: {network: NodeChain};
   AutoYield: undefined;
   /**
    * The allow list. Without a section it is the two summary rows; with one it is that list.
@@ -231,9 +235,18 @@ function OverviewTab() {
   return <VaultHomeScreen />;
 }
 
-function EarnTab() {
+/**
+ * A vault network with no protocol on it (Tron Nile: none ships with the vault on Tron) has no Earn
+ * or Trade either — the same page as the Tron wallet's, for the same reason: nothing to offer here.
+ */
+const useNoDefi = () => {
   const tron = useNetwork((s) => s.tron);
-  if (tron) {
+  const network = useNetwork((s) => s.network);
+  return !!tron || !NETWORK_FEATURES[network].defi;
+};
+
+function EarnTab() {
+  if (useNoDefi()) {
     const {TronUnavailableScreen} = require('@/screens/TronUnavailableScreen');
     return <TronUnavailableScreen feature="earn" />;
   }
@@ -242,8 +255,7 @@ function EarnTab() {
 }
 
 function TradeTab() {
-  const tron = useNetwork((s) => s.tron);
-  if (tron) {
+  if (useNoDefi()) {
     const {TronUnavailableScreen} = require('@/screens/TronUnavailableScreen');
     return <TronUnavailableScreen feature="trade" />;
   }
@@ -360,6 +372,8 @@ export default function App() {
       <StatusBar barStyle={dark ? 'light-content' : 'dark-content'} backgroundColor={colors.bg} />
       <Root />
       {/* Above every screen: action confirmations land here, never in a dialog. */}
+      {/* The fee confirm sheet for steps outside a screen's own sheet (Tron activation). */}
+      <FeeConfirmHost />
       <ToastHost />
     </SafeAreaProvider>
   );
@@ -544,6 +558,11 @@ function Root() {
           name="AssetDetail"
           getComponent={() => require('@/screens/AssetDetailScreen').AssetDetailScreen}
           options={{title: t('mobile.trade.asset_details'), fullScreenGestureEnabled: true}}
+        />
+        <Stack.Screen
+          name="RpcNetwork"
+          getComponent={() => require('@/screens/RpcNodesScreen').RpcNetworkScreen}
+          options={{title: t('mobile.rpc.title')}}
         />
         <Stack.Screen
           name="NetworkFee"

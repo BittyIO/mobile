@@ -20,6 +20,7 @@ import {quantum} from './quantum';
 import {scan} from './scan';
 import {protocols} from './protocols';
 import {tron} from './tron';
+import {rpc} from './rpc';
 
 export const MOBILE_STRINGS: Record<string, MobileTable> = {
   settings,
@@ -37,4 +38,5 @@ export const MOBILE_STRINGS: Record<string, MobileTable> = {
   scan,
   protocols,
   tron,
+  rpc,
 };

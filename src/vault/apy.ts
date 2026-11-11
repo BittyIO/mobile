@@ -15,6 +15,7 @@ const AAVE_POOL_DATA_PROVIDER: Partial<Record<Network, Address>> = {
   sepolia: '0x3e9708d80f7B3e43118013075F7e95CE3AB31F31',
   base: '0x0F43731EB8d45A581f4a36DD74F5f358bc90C73A',
   arbitrum: '0x243Aa95cAC2a25651eda86e80bEe66114413c43b',
+  bsc: '0xc90Df74A7c16245c5F5C5870327Ceb38Fe5d5328',
 };
 
 const SKY_RATE_SOURCE: Partial<Record<Network, {address: Address; read: 'ssr' | 'susdsData'}>> = {

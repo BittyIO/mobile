@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {FaceIdIcon} from '@/components/FaceIdIcon';
-import {NetworkFee} from '@/components/NetworkFee';
+import {ActivationFee, NetworkFee, useActivationDue} from '@/components/NetworkFee';
 import {useT} from '@/i18n';
 import {LockIcon, useLockLevel} from '@/components/LockNotice';
 
@@ -119,6 +119,11 @@ type ConfirmProps = {
   free?: boolean;
   /** The lock refuses this operation: while the vault is locked, disabled behind a {LockIcon}. */
   locked?: boolean;
+  /**
+   * The activation fee shown at the top left, in dollars. Left out, it is shown whenever the vault
+   * in front is not activated yet (its first write activates it) and the vault pays.
+   */
+  activationFee?: number;
 };
 
 function PlainConfirmButton({
@@ -130,12 +135,15 @@ function PlainConfirmButton({
   gas,
   fee = true,
   free,
+  activationFee,
   lockLevel = 0,
 }: ConfirmProps & {lockLevel?: 0 | 1 | 2}) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
   const isDisabled = disabled || loading || lockLevel > 0;
+  const due = useActivationDue();
+  const activation = activationFee ?? (due ? undefined : null);
   const button = (
     <Pressable
       onPress={onPress}
@@ -153,12 +161,17 @@ function PlainConfirmButton({
       )}
     </Pressable>
   );
-  if (!fee && !free) return button;
+  const showFee = fee || free;
+  if (!showFee && activation === null) return button;
   // The cost sits with the control that incurs it, so every signing surface answers "what does this
-  // cost me" in the same place without each screen having to remember to say it.
+  // cost me" in the same place without each screen having to remember to say it. A vault's first
+  // write also activates it: that flat fee at the top left, the operation's own on the right.
   return (
     <View style={styles.confirmWrap}>
-      <NetworkFee gas={gas} free={free} />
+      <View style={styles.feeRow}>
+        {activation !== null ? <ActivationFee usd={activation} /> : <View />}
+        {showFee ? <NetworkFee gas={gas} free={free} /> : null}
+      </View>
       {button}
     </View>
   );
@@ -167,6 +180,7 @@ function PlainConfirmButton({
 const makeStyles = (c: Colors) => StyleSheet.create({
   confirmRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
   confirmWrap: {gap: 8},
+  feeRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 4},
   // A full pill, the iOS shape the Buy / Sell buttons already use, so every button in the app matches.
   base: {
     height: 52,

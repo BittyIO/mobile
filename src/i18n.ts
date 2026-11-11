@@ -61,6 +61,20 @@ function platformTerms(language: Language, text: string): string {
   return text.replace(FACE_ID, BIOMETRIC_WORD[language] ?? BIOMETRIC_WORD.en);
 }
 
+/**
+ * The fee strings (`mobile.fees.*`) name the coin network fees are paid in, and were written for the
+ * EVM chains, where it is ETH. On a Tron network it is TRX: said so here, in one place, rather than
+ * as a second copy of every fee string in every language. Only those strings, and only the whole
+ * word — WETH, and an ETH that is an asset rather than the fee coin, are left as they are.
+ */
+function feeCoin(key: string, text: string): string {
+  if (!key.startsWith('mobile.fees.')) return text;
+  const {useNetwork} = require('@/core/network-store') as typeof import('@/core/network-store');
+  const {NATIVE} = require('@/core/chain') as typeof import('@/core/chain');
+  const coin = NATIVE[useNetwork.getState().network]?.symbol ?? 'ETH';
+  return coin === 'ETH' ? text : text.replace(/\bETH\b/g, coin);
+}
+
 function resolve(language: Language, key: string): string | undefined {
   if (key.startsWith('mobile.')) {
     const [, ns, ...rest] = key.split('.');
@@ -79,7 +93,7 @@ export function translate(language: Language, key: string, params?: Record<strin
   // is a visible string instead of a white screen.
   if (typeof key !== 'string' || !key) return '';
   let out = resolve(language, key);
-  out = out === undefined ? key : platformTerms(language, out);
+  out = out === undefined ? key : feeCoin(key, platformTerms(language, out));
   if (params) {
     for (const [k, v] of Object.entries(params)) out = out.split(`{{${k}}}`).join(String(v));
   }

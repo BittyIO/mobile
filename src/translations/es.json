@@ -1457,7 +1457,7 @@
       "owner_only": "Solo el propietario de la bóveda puede hacer esto.",
       "no_permission": "Tus permisos de administrador de activos no incluyen esta acción.",
       "err_vault_locked": "Esta bóveda está bloqueada, así que esta acción no está disponible.",
-      "err_payment_not_stable": "Solo se pueden enviar stablecoins a una dirección nueva. Añádela a tu lista blanca para enviar otros activos.",
+      "err_payment_not_stable": "Solo se pueden enviar stablecoins a una dirección nueva. Añádela como beneficiario para enviar otros activos.",
       "err_send_limit": "Esto supera lo que queda de tu límite de envío diario.",
       "err_market_loss": "Esta operación superaría el límite de pérdida diaria del trading a mercado.",
       "err_market_price": "El precio se alejó demasiado del precio de mercado y la operación no se realizó. Inténtalo de nuevo.",
@@ -1467,7 +1467,7 @@
       "err_unauthorized": "Esta billetera no tiene permiso para hacer esto en esta bóveda.",
       "err_not_registered": "Este activo o protocolo no es compatible.",
       "err_recipient_waiting": "Este destinatario aún no puede recibir fondos. Podrá cuando termine su periodo de espera.",
-      "err_no_escape": "Elige un destinatario de la lista blanca que ya pueda recibir fondos.",
+      "err_no_escape": "Elige un beneficiario que ya pueda recibir fondos.",
       "err_gas_budget": "Se agotó el presupuesto de comisiones de red de hoy.",
       "err_price_unavailable": "Un feed de precios no está disponible ahora. Inténtalo de nuevo en breve."
     }

@@ -38,6 +38,7 @@ const LOGOS: Record<string, ImageSourcePropType> = {
   // Uniswap's intent venue (Robinhood Chain's limit orders) wears the same mark.
   UniswapX: require('@/assets/protocols/uniswap.png'),
   'CoW Swap': require('@/assets/protocols/cow.png'),
+  PancakeSwap: require('@/assets/protocols/pancakeswap.png'),
 };
 
 /**

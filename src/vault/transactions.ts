@@ -2,8 +2,13 @@
  * Transaction history — the durable, server-indexed transfers feed (`/transfers/{vault}`), grouped by
  * tx into operations. The heavy indexing lives on the server; the app just groups + renders.
  */
-import {apiUrl, type Network} from '@/core/chain';
+import {formatUnits} from 'viem';
+import {apiFetch, apiUrl, isTronNetwork, type Network} from '@/core/chain';
+import {knownAssets} from '@/core/assets';
+import {TRON_API} from '@/tron/config';
+import {evmToTron, tronToEvm} from '@/tron/address';
 import {fetchSettlements, type SettlementMeta} from './limit';
+import {vaultActionsFor} from './decode-actions';
 
 export type TransferRow = {
   txHash: string;
@@ -43,6 +48,7 @@ export async function fetchTransactions(
   vault: string,
   network: Network,
 ): Promise<Operation[]> {
+  if (isTronNetwork(network)) return fetchTronTransactions(vault, network);
   const [res, settlements] = await Promise.all([
     fetch(apiUrl(`/api/ethereum/vaults/transfers/${vault}`, network)),
     fetchSettlements(vault as `0x${string}`, network),
@@ -85,4 +91,59 @@ export async function fetchTransactions(
   }
   // Newest first across both: the legless ones arrive as their own list.
   return order.map((h) => map.get(h)!).sort((a, b) => b.blockNum - a.blockNum);
+}
+
+type V1Trc20 = {transaction_id: string; block_timestamp: number; from: string; to: string; value: string; token_info?: {address?: string}};
+
+/**
+ * The vault's history on Tron, which the Bitty server does not index: TronGrid's own index of the
+ * TRC-20 transfers in and out of the vault's address, one leg per transfer, grouped by transaction
+ * as the server's feed is.
+ *
+ * Only the tokens the guard lists (the app's assets for the network): anyone can send any TRC-20 to
+ * any address, and the junk airdropped to look like a payment is not the vault's history. What each
+ * transaction CALLED is decoded here from its calldata (see ./decode-actions), as the server does for
+ * the EVM chains — else the activation and an added payee, which move only the relay fee, read as a
+ * send. What it still cannot show: a change that moved no token at all (one the owner paid in TRX).
+ */
+async function fetchTronTransactions(vault: string, network: 'tron-nile'): Promise<Operation[]> {
+  const host = TRON_API[network];
+  const tokens = new Map(knownAssets(network).map((a) => [a.address.toLowerCase(), a]));
+  const res = await apiFetch(`${host}/v1/accounts/${evmToTron(vault)}/transactions/trc20?limit=50`);
+  if (!res.ok) throw new Error(`transfers ${res.status}`);
+  const json = (await res.json()) as {data?: V1Trc20[]};
+  const me = vault.toLowerCase();
+  const map = new Map<string, Operation>();
+  for (const x of json.data ?? []) {
+    const token = tronToEvm(x.token_info?.address ?? '');
+    const asset = token ? tokens.get(token.toLowerCase()) : undefined;
+    if (!asset) continue;
+    const from = tronToEvm(x.from)?.toLowerCase();
+    const to = tronToEvm(x.to)?.toLowerCase();
+    const out = from === me;
+    if (!out && to !== me) continue;
+    const hash = `0x${x.transaction_id}`;
+    let op = map.get(hash);
+    if (!op) {
+      // No block number in this feed; the timestamp orders the rows just as well.
+      op = {txHash: hash, timestamp: new Date(x.block_timestamp).toISOString(), blockNum: x.block_timestamp, legs: [], actions: []};
+      map.set(hash, op);
+    }
+    op.legs.push({
+      txHash: hash,
+      direction: out ? 'out' : 'in',
+      counterparty: (out ? to : from) ?? null,
+      amount: formatUnits(BigInt(x.value), asset.decimals),
+      assetSymbol: asset.symbol,
+      assetAddress: asset.address,
+      category: 'erc20',
+      blockNum: x.block_timestamp,
+      timestamp: op.timestamp,
+    });
+  }
+  const ops = [...map.values()];
+  // Best effort: a row whose calldata cannot be read yet is still shown by its transfers.
+  const actions = await vaultActionsFor(ops.map((o) => o.txHash), vault, network).catch(() => new Map<string, VaultAction[]>());
+  for (const op of ops) op.actions = actions.get(op.txHash) ?? [];
+  return ops.sort((a, b) => b.blockNum - a.blockNum);
 }

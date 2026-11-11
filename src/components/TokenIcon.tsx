@@ -25,6 +25,9 @@ import {useNetwork} from '@/core/network-store';
  */
 const ICONS: Record<string, number> = {
   ETH: require('@/assets/tokens/eth.png'),
+  BNB: require('@/assets/tokens/bnb.png'),
+  WBNB: require('@/assets/tokens/bnb.png'),
+  BTCB: require('@/assets/tokens/btcb.png'),
   WBTC: require('@/assets/tokens/wbtc.png'),
   cbBTC: require('@/assets/tokens/cbbtc.png'),
   USDC: require('@/assets/tokens/usdc.png'),
@@ -120,6 +123,12 @@ export function TokenIcon({
   // WETH shows as ETH, and a position's receipt token as the asset it stands for (see
   // displaySymbol): the same icon.
   const shown = displaySymbol(symbol);
+  // TRX (and WTRX, shown as TRX) is drawn, not bundled: the Tron mark the network picker uses, on
+  // its red disc. Required here rather than imported: NetworkSwitcher's picker imports this file.
+  if (!badgeOnly && shown.toUpperCase() === 'TRX') {
+    const {TronIcon} = require('@/components/NetworkSwitcher') as typeof import('@/components/NetworkSwitcher');
+    return <TronIcon size={size} />;
+  }
   const src = ICONS[symbol] ?? ICONS[shown] ?? (shown.toUpperCase() === 'ETH' ? ICONS.ETH : undefined);
   if (src && !badgeOnly) return <Image source={src} style={dim} resizeMode="contain" />;
   const remote = uri ?? catalogIcon(network, symbol);
