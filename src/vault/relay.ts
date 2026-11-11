@@ -12,7 +12,9 @@
 import {Alert} from 'react-native';
 import {decodeFunctionData, encodeFunctionData, type Abi, type Address, type Hex, type PublicClient} from 'viem';
 import type {Signer} from '@/wallet/signer';
-import {apiUrl, CHAIN_ID, publicClientFor, type Network} from '@/core/chain';
+import {apiUrl, CHAIN_ID, isTronNetwork, publicClientFor, type Network} from '@/core/chain';
+import {estimateRelayGas, quoteRelayFeeUsd, TYPICAL_RELAY_GAS} from './fee-quote';
+import {confirmSplitPart} from '@/components/SplitConfirm';
 import {FORWARDER_ABI, FORWARD_REQUEST_TYPES, VAULT_FWD_ABI, VAULT_MULTICALL_ABI, VAULT_OWNERSHIP_ABI, VAULT_RISK_ABI} from '@/core/abi';
 import {rotationOn} from '@/wallet/rotation-store';
 import {ActivationCallReverted, ActivationFeeTooHigh, ConnectionLost, RelayerUnfunded, isActivated, activateVault, activateVaultDirect, revertData} from './activate';
@@ -260,8 +262,11 @@ async function relayEncodedNow(given: EncodedWrite): Promise<RelayResult> {
     }
   }
   try {
+    const split = await splitOverCap(opts);
+    if (split) return split;
     return await viaRelayer(opts);
   } catch (e) {
+    if (e instanceof SplitStopped) throw e;
     if (
       !asked &&
       !rotating &&
@@ -278,6 +283,74 @@ async function relayEncodedNow(given: EncodedWrite): Promise<RelayResult> {
     }
     throw e;
   }
+}
+
+/** A split write the user stopped, or that failed part-way: nothing more to offer, just say so. */
+class SplitStopped extends Error {}
+
+
+/**
+ * On Tron, a batch whose network fee is over the vault's per-transaction limit is sent as one
+ * transaction per call, each confirmed and signed on its own. Null when this write is not one.
+ *
+ * Tron's energy makes a two-call batch (an upgrade in front of an operation, a setup in front of a
+ * trade) cost more than the $10 a vault pays for one operation by default. The relayer does not
+ * refuse it — it charges the vault the limit and pays the rest itself — so each call is sent on its
+ * own instead, and each stays under the limit the owner set.
+ *
+ * The calls go in their order, each after the one before is mined: a later call can depend on an
+ * earlier one (the setup a trade needs, the coins a withdrawal frees), and each is simulated and
+ * priced only once the chain shows the one before it. A call that fails or is declined part-way
+ * stops the rest, and the user is told how many were sent.
+ *
+ * Only a key's own signature: a Safe collects its co-owners' signatures for every transaction, and
+ * a vault not activated yet runs its calls inside the activation, which is priced on its own.
+ */
+async function splitOverCap(opts: EncodedWrite): Promise<RelayResult | null> {
+  const {account, network, vault} = opts;
+  if (!isTronNetwork(network) || account.isContract) return null;
+  let calls: readonly Hex[];
+  try {
+    const d = decodeFunctionData({abi: VAULT_MULTICALL_ABI, data: opts.data});
+    if (d.functionName !== 'multicall') return null;
+    calls = d.args[0];
+  } catch {
+    return null;
+  }
+  if (calls.length < 2 || !(await isActivated(vault, network))) return null;
+  // Lazy: stableCoinAsGas reaches back into this module through ./manage.
+  const {getStableCoinAsGasConfig} = require('./stableCoinAsGas') as typeof import('./stableCoinAsGas');
+  const cfg = await getStableCoinAsGasConfig(vault, network);
+  const cap = cfg ? Number(cfg.maxFeePerOp) : 0;
+  if (!cap) return null;
+  const feeOf = async (data: Hex) =>
+    quoteRelayFeeUsd(network, await estimateRelayGas(network, account.address, vault, data, TYPICAL_RELAY_GAS));
+  const total = await feeOf(opts.data);
+  if (total == null || total <= cap) return null;
+
+  const t = (key: string, params?: Record<string, string | number>) => translate(useLanguage.getState().language, key, params);
+  const client = publicClientFor(network);
+  let last: RelayResult | null = null;
+  for (let i = 0; i < calls.length; i++) {
+    const ok = await confirmSplitPart(i + 1, calls.length, await feeOf(calls[i]));
+    if (!ok) {
+      throw new SplitStopped(i === 0 ? t('mobile.fees.split_cancelled') : t('mobile.fees.split_stopped', {done: i, total: calls.length}));
+    }
+    try {
+      last = await viaRelayer({...opts, data: calls[i], activationCalls: [calls[i]]});
+    } catch (e) {
+      if (i === 0) throw e;
+      throw new SplitStopped(`${t('mobile.fees.split_stopped', {done: i, total: calls.length})}\n\n${(e as Error)?.message ?? e}`);
+    }
+    // The next call is simulated, priced and signed against the chain this one leaves behind.
+    if (i < calls.length - 1) {
+      const r = await client.waitForTransactionReceipt({hash: last.hash, timeout: SETTLE_TIMEOUT_MS});
+      if (r.status !== 'success') {
+        throw new SplitStopped(`${t('mobile.fees.split_stopped', {done: i + 1, total: calls.length})}\n\n${last.hash}`);
+      }
+    }
+  }
+  return last;
 }
 
 /**
