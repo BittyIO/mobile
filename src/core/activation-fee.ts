@@ -17,14 +17,13 @@ export const SIGNED_ACTIVATION_OVERHEAD_GAS = BigInt(70_000);
 const ACTIVATION_MARGIN_BPS = BigInt(2000);
 
 /**
- * The margin an activation is signed with on `tron`: none on Tron, 20% elsewhere.
+ * The margin an activation is signed with: 20% on every chain, Tron included.
  *
- * The margin is there for gas moving between the quote and the block. Tron has no fee market: one
- * energy price (100 sun), changed only by a network vote, and the node's estimate (218,933 for a
- * plain activation on Nile) sits within 3% of what it then burns (212,298). So the fee is the cost
- * and no more, and the relayer — which accepts down to 0.3x its own quote — takes it.
+ * Tron's energy price is fixed (100 sun), so there the margin is not cover for gas moving between
+ * quote and block — it is the charge, the same as on EVM. It never pushes an activation over the
+ * per-operation cap: {priceActivation} charges the cap instead whenever the cost itself is under it.
  */
-export const activationMarginBps = (tron: boolean): bigint => (tron ? BigInt(0) : ACTIVATION_MARGIN_BPS);
+export const activationMarginBps = (_tron: boolean): bigint => ACTIVATION_MARGIN_BPS;
 const BPS = BigInt(10000);
 const MICRO = BigInt(1_000_000);
 
@@ -49,7 +48,7 @@ export function relayFeeUnits(
   l1FeeWei: bigint = BigInt(0),
   /** Decimals of the coin gas is priced in: 18 for ETH, 6 for TRX (sun). */
   nativeDecimals = 18,
-  /** Over the gas cost, in basis points. 0 on Tron: see {activationMarginBps}. */
+  /** Over the gas cost, in basis points: see {activationMarginBps}. */
   marginBps: bigint = ACTIVATION_MARGIN_BPS,
 ): bigint {
   const weiCost = ((gasUnits * gasPriceWei + l1FeeWei) * (BPS + marginBps)) / BPS;

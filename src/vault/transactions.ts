@@ -8,6 +8,7 @@ import {knownAssets} from '@/core/assets';
 import {TRON_API} from '@/tron/config';
 import {evmToTron, tronToEvm} from '@/tron/address';
 import {fetchSettlements, type SettlementMeta} from './limit';
+import {vaultActionsFor} from './decode-actions';
 
 export type TransferRow = {
   txHash: string;
@@ -100,8 +101,10 @@ type V1Trc20 = {transaction_id: string; block_timestamp: number; from: string; t
  * as the server's feed is.
  *
  * Only the tokens the guard lists (the app's assets for the network): anyone can send any TRC-20 to
- * any address, and the junk airdropped to look like a payment is not the vault's history. What it
- * cannot show, with no server to decode calldata: a settings change that moved no token.
+ * any address, and the junk airdropped to look like a payment is not the vault's history. What each
+ * transaction CALLED is decoded here from its calldata (see ./decode-actions), as the server does for
+ * the EVM chains — else the activation and an added payee, which move only the relay fee, read as a
+ * send. What it still cannot show: a change that moved no token at all (one the owner paid in TRX).
  */
 async function fetchTronTransactions(vault: string, network: 'tron-nile'): Promise<Operation[]> {
   const host = TRON_API[network];
@@ -138,5 +141,9 @@ async function fetchTronTransactions(vault: string, network: 'tron-nile'): Promi
       timestamp: op.timestamp,
     });
   }
-  return [...map.values()].sort((a, b) => b.blockNum - a.blockNum);
+  const ops = [...map.values()];
+  // Best effort: a row whose calldata cannot be read yet is still shown by its transfers.
+  const actions = await vaultActionsFor(ops.map((o) => o.txHash), vault, network).catch(() => new Map<string, VaultAction[]>());
+  for (const op of ops) op.actions = actions.get(op.txHash) ?? [];
+  return ops.sort((a, b) => b.blockNum - a.blockNum);
 }

@@ -331,9 +331,16 @@ export async function priceActivation(o: {
         return ACTIVATION_GAS - SIGNED_ACTIVATION_OVERHEAD_GAS;
       }))) + SIGNED_ACTIVATION_OVERHEAD_GAS;
   // In WETH the fee is the gas cost itself, in wei, with no margin — as the server quotes it.
-  const feeAmount = weth
+  let feeAmount = weth
     ? gasUnits * gasPrice + l1FeeWei
     : relayFeeUnits(gasUnits, gasPrice, ethUsd, Number(decimals), l1FeeWei, NATIVE[o.network].decimals, activationMarginBps(isTronNetwork(o.network)));
+  // The margin never takes an activation over the cap: when the cost itself is under it, the cap is
+  // what is charged. Only a cost over the cap is refused (below).
+  const capUnits = BigInt(ACTIVATION_FEE_CAP_USD) * BigInt(10) ** BigInt(Number(decimals));
+  if (!weth && o.capped !== false && feeAmount > capUnits) {
+    const cost = relayFeeUnits(gasUnits, gasPrice, ethUsd, Number(decimals), l1FeeWei, NATIVE[o.network].decimals, BigInt(0));
+    if (cost <= capUnits) feeAmount = capUnits;
+  }
 
   // Over the vault's per-operation cap the activation cannot be paid, however the vault is funded:
   // said now, in dollars, before anything is signed — not as the relayer's refusal afterwards.

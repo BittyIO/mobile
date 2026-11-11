@@ -23,7 +23,7 @@ import {gateReasonKey, useCapability} from '@/vault/gate';
 
 /**
  * The Version row of Settings › Vault, as on the web's Security tab: the running release, an arrow to
- * the offered one when the guard has a newer build, and a status line. Tapping an offered upgrade
+ * the offered one when the server offers this app a newer build, and a status line. Tapping an offered upgrade
  * confirms, then signs the UUPS upgrade (relayed, gasless); tapping it with none on offer checks
  * the chain again for a newer release.
  */
@@ -77,7 +77,10 @@ export function useVaultVersionRow(): {
     checkVaultUpgrade(vault, network).then(async (u) => {
       if (!live) return;
       setUp(u);
-      const [current, latest] = await Promise.all([canRunVault(u.currentVersion, network), canRunVault(u.latestVersion, network)]);
+      const [current, latest] = await Promise.all([
+        canRunVault(u.currentVersion, network),
+        u.appUpdateRequired ? false : canRunVault(u.latestVersion, network),
+      ]);
       if (live) setRuns({current, latest});
       // The vault's own ABI, if it is a release this build does not ship: fetched now, so its
       // errors read by name.
@@ -90,8 +93,8 @@ export function useVaultVersionRow(): {
   useEffect(load, [load]);
 
   /**
-   * Check for a newer release now, from a tap on the row. Everything is read fresh — the guard's
-   * latest build, the vault's own, the release notes — and the vault's cached version is dropped,
+   * Check for a newer release now, from a tap on the row. Everything is read fresh — the upgrade the
+   * server offers this app, the vault's own build, the release notes — and the vault's cached version is dropped,
    * so a release that went out a minute ago is offered at once.
    */
   const [checking, setChecking] = useState(false);
@@ -104,7 +107,10 @@ export function useVaultVersionRow(): {
     forgetVaultVersion(vault, net);
     try {
       const [u, cat] = await Promise.all([checkVaultUpgrade(vault, net), fetchVaultVersions(net)]);
-      const [current, latest] = await Promise.all([canRunVault(u.currentVersion, net), canRunVault(u.latestVersion, net)]);
+      const [current, latest] = await Promise.all([
+        canRunVault(u.currentVersion, net),
+        u.appUpdateRequired ? false : canRunVault(u.latestVersion, net),
+      ]);
       if (netRef.current !== net) return;
       setUp(u);
       setCatalog(cat);

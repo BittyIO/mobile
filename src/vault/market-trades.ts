@@ -17,7 +17,13 @@ import type {TransferRow, VaultAction} from './transactions';
 const FEE_SAFE = '0x5837c8f4963f694c59e53445c070acb266187bf1';
 // The fee Safe's own vault: relay fees from vault v1.0.2, adapter fees from adapter v1.0.1.
 const FEE_VAULT = '0xf0e7f6998b362bd15cf819c7ebfcace8865feca0';
+// The relay fee's recipients. On Tron Nile the vault pays it to the guard's fee recipient
+// (0x12ee…9823, TBPx… in base58) rather than to the relayer — measured on Nile, 2026-11-11.
 export const BITTY_FEE_COLLECTORS = new Set([FEE_VAULT, FEE_SAFE, '0x76dc42c2e0ef4fb02600430cb0d3a68d015c30aa']);
+const TRON_FEE_COLLECTORS = new Set([...BITTY_FEE_COLLECTORS, '0x12ee2de7bf086388b1d560eb95e7191edfab9823']);
+/** Whether a transfer to `to` is the relay fee on `network`. */
+export const isRelayFeeCollector = (network: string, to: string | null | undefined): boolean =>
+  !!to && (network === 'tron-nile' ? TRON_FEE_COLLECTORS : BITTY_FEE_COLLECTORS).has(to.toLowerCase());
 export const ADAPTER_FEE_RECIPIENTS = new Set([FEE_VAULT, FEE_SAFE, '0x12ee2de7bf086388b1d560eb95e7191edfab9823']);
 
 // Yield receipt tokens a stake mints to the vault (Sky sUSDS, Lido stETH) — a tx moving one is a
