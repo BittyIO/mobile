@@ -29,6 +29,12 @@ type NetworkState = {
  */
 export const TRON_ENABLED = false;
 
+/** Sepolia, the Ethereum testnet: off for the store releases too, the same way. */
+export const SEPOLIA_ENABLED = false;
+
+/** Whether this build offers `n` (see {TRON_ENABLED}, {SEPOLIA_ENABLED}). */
+const offered = (n: Network): boolean => (n === 'tron-nile' ? TRON_ENABLED : n === 'sepolia' ? SEPOLIA_ENABLED : true);
+
 const storedTron = TRON_ENABLED ? store.getString(TRON_KEY) : undefined;
 const storedNetwork = store.getString(KEY) as Network | undefined;
 
@@ -39,7 +45,7 @@ export const useNetwork = create<NetworkState>((set) => ({
   network:
     storedTron === 'tron-nile'
       ? 'tron-nile'
-      : storedNetwork && (TRON_ENABLED || storedNetwork !== 'tron-nile')
+      : storedNetwork && offered(storedNetwork)
         ? storedNetwork
         : 'mainnet',
   tron: storedTron && isTronNet(storedTron) ? storedTron : null,
@@ -57,9 +63,7 @@ export const useNetwork = create<NetworkState>((set) => ({
 /** What the picker offers: the vault chains (Tron Nile among them), and Tron mainnet's wallet. */
 export type ChainChoice = Network | TronNet;
 
-export const NETWORKS: Network[] = (['mainnet', 'base', 'arbitrum', 'bsc', 'robinhood', 'sepolia', 'tron-nile'] as Network[]).filter(
-  (n) => TRON_ENABLED || n !== 'tron-nile',
-);
+export const NETWORKS: Network[] = (['mainnet', 'base', 'arbitrum', 'bsc', 'robinhood', 'sepolia', 'tron-nile'] as Network[]).filter(offered);
 /** The networks to offer. */
 export const useNetworks = (): Network[] => NETWORKS;
 
