@@ -9,7 +9,7 @@ import {SAFE_ENABLED} from '@/core/features';
 import {useVaults, vaultLabel, type VaultRef} from '@/core/vault-store';
 import {vaultAddressOf} from '@/core/active-vault';
 import {ownerVaultAddress} from '@/vault/read';
-import {useNetwork} from '@/core/network-store';
+import {NETWORKS, useNetwork} from '@/core/network-store';
 import type {Network} from '@/core/chain';
 import {useWallet} from '@/wallet/store';
 import * as keyring from '@/wallet/keyring';
@@ -226,7 +226,8 @@ export function VaultListScreen() {
   const choose = (v: VaultRef) => {
     // Transferred away: it cannot be opened.
     if (!v.owner || notYours.has(v.index)) return;
-    if (v.vault && v.network && v.network !== network) setNetwork(v.network as Network);
+    // Never onto a network this build does not offer (Tron, in a store release).
+    if (v.vault && v.network && v.network !== network && NETWORKS.includes(v.network as Network)) setNetwork(v.network as Network);
     selectVault(v.index);
     nav.goBack();
   };

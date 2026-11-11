@@ -971,7 +971,7 @@ export function VaultHomeScreen() {
             <GasIcon color={c.accent} size={20} />
           </View>
           <View style={styles.feeTipText}>
-            <Text style={styles.feeTipTitle}>{t('mobile.home.fee_tip_title')}</Text>
+            <Text style={styles.feeTipTitle}>{t('mobile.home.fee_tip_title', {coin: NATIVE[network].symbol})}</Text>
             <Text style={styles.feeTipBody}>{t('mobile.home.fee_tip_body')}</Text>
           </View>
           <Pressable onPress={closeFeeTip} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('common.close')} style={styles.feeTipClose}>

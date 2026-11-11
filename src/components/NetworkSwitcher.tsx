@@ -2,7 +2,7 @@ import React, {useState} from 'react';
 import {Image, Pressable, StyleSheet} from 'react-native';
 import {PickerSheet} from '@/components/AssetPicker';
 import {useT} from '@/i18n';
-import {useNetwork, useNetworks, networkLabel, type ChainChoice} from '@/core/network-store';
+import {useNetwork, useNetworks, networkLabel, TRON_ENABLED, type ChainChoice} from '@/core/network-store';
 import {isTronNet} from '@/tron/config';
 import Svg, {Circle, G, Path, Rect} from 'react-native-svg';
 import {useIsDark} from '@/theme';
@@ -91,7 +91,7 @@ export function NetworkSwitcher({stack = false}: {stack?: boolean} = {}) {
   // its testnet, Nile — a vault network, unlike Tron mainnet's wallet — is the last of the vault
   // networks, beside Sepolia, so the two testnets sit together.
   const vaultNets = useNetworks();
-  const networks: ChainChoice[] = [...vaultNets.slice(0, 1), 'tron', ...vaultNets.slice(1)];
+  const networks: ChainChoice[] = TRON_ENABLED ? [...vaultNets.slice(0, 1), 'tron', ...vaultNets.slice(1)] : vaultNets;
   const network: ChainChoice = tron ?? evm;
 
   return (
