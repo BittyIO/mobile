@@ -13,6 +13,7 @@ import {TokenIcon} from '@/components/TokenIcon';
 import {HoldingRow, MASK} from '@/components/HoldingRow';
 import {Amount} from '@/components/Amount';
 import {ReceiveDialog} from '@/components/ReceiveDialog';
+import {ActivateBanner} from '@/components/ActivateBanner';
 import {Sheet} from '@/components/Sheet';
 import type {PieSlice} from '@/components/PortfolioPie';
 import {useNetwork, networkLabel} from '@/core/network-store';
@@ -980,6 +981,8 @@ export function VaultHomeScreen() {
           </Pressable>
         </View>
       ) : null}
+      {/* A Tron vault not activated yet: activation is its own step, before anything else. */}
+      <ActivateBanner onActivated={onRefresh} />
       <View style={styles.heroCard}>
         <View style={styles.totalHeader}>
           {/* A testnet's figures are test money: said once, beside the total (Sepolia, Tron Nile). */}

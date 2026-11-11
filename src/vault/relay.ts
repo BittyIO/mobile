@@ -232,6 +232,11 @@ async function relayEncodedNow(given: EncodedWrite): Promise<RelayResult> {
   // Every vault write passes here, so this is where a vault on a release newer than this build is
   // stopped — before a signature is asked for.
   await assertCanWrite(vault, network);
+  // On Tron activation is its own step, from the Overview's banner (components/ActivateBanner):
+  // nothing else rides on it, so its fee is the deployment's alone. Refused before anything is signed.
+  if (isTronNetwork(network) && given.activationCalls.length > 0 && !(await isActivated(vault, network))) {
+    throw new Error(t('mobile.home.activate_first'));
+  }
   // A lock made since the screen last looked: say so before anything is signed or paid for.
   const lockLevel = await assertVaultAccepts(vault, network, given.activationCalls);
   // The vault's and its protocols' upgrades ride in front, when Auto upgrade is on. Once: a retry
@@ -670,6 +675,17 @@ function withCode(message: string, reason?: string, code?: string): string {
   // (shipped, or downloaded for a newer release) may know it.
   const tail = [reason, code ? nameRevert(code) : code].filter(Boolean).join(' · ');
   return tail ? `${message}\n\n${tail.slice(0, 140)}` : message;
+}
+
+/**
+ * Activate the vault and do nothing else: an empty `calls` batch, so the fee is the deployment's
+ * alone. Goes through the same queue, payer choice and fallbacks as every write — the relayer
+ * billing the vault, or the owner key paying with Pay from owner — and never rotates the key.
+ * On Tron the Overview offers this on its own (components/ActivateBanner).
+ */
+export async function activateVaultOnly(opts: {account: Signer; vault: Address; network: Network; stableCoin: Address}): Promise<RelayResult> {
+  if (await isActivated(opts.vault, opts.network)) throw new Error('This vault is already activated.');
+  return relayEncoded({...opts, data: '0x', activationCalls: [], noRotate: true});
 }
 
 export async function relayVaultWrite(opts: {
