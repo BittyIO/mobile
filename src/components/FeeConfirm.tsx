@@ -4,21 +4,19 @@ import {create} from 'zustand';
 import {Sheet} from '@/components/Sheet';
 import {ConfirmButton} from '@/components/Button';
 import {GasIcon} from '@/components/GasIcon';
-import {translate} from '@/i18n';
-import {useLanguage} from '@/core/language-store';
 import {useColors, useStyles, type Colors} from '@/theme';
 
 /**
- * The confirm sheet for each transaction of a write that is sent in parts (Tron, over the vault's
- * per-transaction fee limit — see vault/relay `splitOverCap`). The same sheet and Face ID button as
- * every other on-chain action, one per transaction: "Transaction 1 of 2", its fee, Confirm.
+ * A confirm sheet for an on-chain step started outside a screen's own confirm sheet (Tron's
+ * activation, components/ActivateBanner): a title, the network fee, and the same Face ID Confirm
+ * button as every other on-chain action.
  *
- * Asked for from the relay, which is not a component, so the request lives in a store and the
- * sheet is mounted once at the app's root ({SplitConfirmHost}).
+ * Asked for with a promise, so the request lives in a store and the sheet is mounted once at the
+ * app's root ({FeeConfirmHost}).
  */
 type Request = {title: string; feeUsd: number | null; resolve: (ok: boolean) => void};
 
-const useSplitConfirm = create<{req: Request | null}>(() => ({req: null}));
+const useFeeConfirm = create<{req: Request | null}>(() => ({req: null}));
 
 /**
  * Show the sheet: a title, the fee in dollars, and Confirm. Resolves true on Confirm, false when
@@ -27,23 +25,18 @@ const useSplitConfirm = create<{req: Request | null}>(() => ({req: null}));
 export function confirmWithFee(title: string, feeUsd: number | null): Promise<boolean> {
   return new Promise((resolve) => {
     // A request still open (it should not be) is declined, never left hanging.
-    useSplitConfirm.getState().req?.resolve(false);
-    useSplitConfirm.setState({req: {title, feeUsd, resolve}});
+    useFeeConfirm.getState().req?.resolve(false);
+    useFeeConfirm.setState({req: {title, feeUsd, resolve}});
   });
 }
 
-/** The sheet for transaction `n` of `total` of a write sent in parts. */
-export function confirmSplitPart(n: number, total: number, feeUsd: number | null): Promise<boolean> {
-  return confirmWithFee(translate(useLanguage.getState().language, 'mobile.fees.split_title', {n, total}), feeUsd);
-}
-
-export function SplitConfirmHost() {
+export function FeeConfirmHost() {
   const styles = useStyles(makeStyles);
   const c = useColors();
-  const req = useSplitConfirm((s) => s.req);
+  const req = useFeeConfirm((s) => s.req);
   const answer = useCallback((ok: boolean) => {
-    const r = useSplitConfirm.getState().req;
-    useSplitConfirm.setState({req: null});
+    const r = useFeeConfirm.getState().req;
+    useFeeConfirm.setState({req: null});
     r?.resolve(ok);
   }, []);
   const fee = req?.feeUsd;

@@ -5,9 +5,6 @@ import type {MobileTable} from './index';
 // write the other way when the chosen way cannot.
 export const fees: MobileTable = {
   en: {
-    split_title: 'Transaction {{n}} of {{total}}',
-    split_cancelled: 'Cancelled. Nothing was sent.',
-    split_stopped: 'Transaction {{done}} of {{total}} was sent; the rest were not.',
     advanced: 'Advanced settings',
     payer_vault: 'Pay from vault',
     payer_owner: 'Pay from owner',
@@ -30,9 +27,6 @@ export const fees: MobileTable = {
     owner_off_safe: 'This vault is owned by a Safe, which can\'t send transactions of its own, so network fees are always paid from the vault.',
   },
   zh: {
-    split_title: '第 {{n}} 笔，共 {{total}} 笔',
-    split_cancelled: '已取消，未发送任何交易。',
-    split_stopped: '已发送第 {{done}} 笔（共 {{total}} 笔），其余未发送。',
     advanced: '高级设置',
     payer_vault: '从金库支付',
     payer_owner: '从所有者支付',
@@ -54,9 +48,6 @@ export const fees: MobileTable = {
     owner_off_safe: '此金库由 Safe 持有，Safe 无法自行发送交易，所以网络费始终从金库支付。',
   },
   'zh-TW': {
-    split_title: '第 {{n}} 筆，共 {{total}} 筆',
-    split_cancelled: '已取消，未送出任何交易。',
-    split_stopped: '已送出第 {{done}} 筆（共 {{total}} 筆），其餘未送出。',
     advanced: '進階設定',
     payer_vault: '從金庫支付',
     payer_owner: '從擁有者支付',
@@ -78,9 +69,6 @@ export const fees: MobileTable = {
     owner_off_safe: '此金庫由 Safe 持有，Safe 無法自行發送交易，所以網路費始終從金庫支付。',
   },
   ja: {
-    split_title: '取引 {{n}} / {{total}}',
-    split_cancelled: 'キャンセルしました。何も送信されていません。',
-    split_stopped: '{{total}} 件中 {{done}} 件を送信しました。残りは送信されていません。',
     advanced: '詳細設定',
     payer_vault: 'ボールトから支払う',
     payer_owner: 'オーナーから支払う',
@@ -102,9 +90,6 @@ export const fees: MobileTable = {
     owner_off_safe: 'このボールトは Safe が所有しています。Safe は自分でトランザクションを送れないため、ネットワーク手数料は常にボールトから支払われます。',
   },
   ko: {
-    split_title: '거래 {{n}} / {{total}}',
-    split_cancelled: '취소했습니다. 아무것도 보내지 않았습니다.',
-    split_stopped: '{{total}}건 중 {{done}}건을 보냈고, 나머지는 보내지 않았습니다.',
     advanced: '고급 설정',
     payer_vault: '볼트에서 지불',
     payer_owner: '소유자에서 지불',
@@ -126,9 +111,6 @@ export const fees: MobileTable = {
     owner_off_safe: '이 볼트는 Safe가 소유하고 있습니다. Safe는 직접 트랜잭션을 보낼 수 없으므로 네트워크 수수료는 항상 볼트에서 지불됩니다.',
   },
   fr: {
-    split_title: 'Transaction {{n}} sur {{total}}',
-    split_cancelled: 'Annulé. Rien n\'a été envoyé.',
-    split_stopped: 'La transaction {{done}} sur {{total}} a été envoyée ; les autres non.',
     advanced: 'Paramètres avancés',
     payer_vault: 'Payer depuis le coffre',
     payer_owner: 'Payer par le propriétaire',
@@ -151,9 +133,6 @@ export const fees: MobileTable = {
     owner_off_safe: 'Ce coffre appartient à un Safe, qui ne peut pas envoyer de transactions lui-même, donc les frais de réseau sont toujours payés par le coffre.',
   },
   es: {
-    split_title: 'Transacción {{n}} de {{total}}',
-    split_cancelled: 'Cancelado. No se envió nada.',
-    split_stopped: 'Se envió la transacción {{done}} de {{total}}; las demás no.',
     advanced: 'Configuración avanzada',
     payer_vault: 'Pagar desde la bóveda',
     payer_owner: 'Pagar desde el propietario',
@@ -176,9 +155,6 @@ export const fees: MobileTable = {
     owner_off_safe: 'Esta bóveda pertenece a una Safe, que no puede enviar transacciones por sí misma, así que las comisiones de red siempre se pagan desde la bóveda.',
   },
   de: {
-    split_title: 'Transaktion {{n}} von {{total}}',
-    split_cancelled: 'Abgebrochen. Nichts wurde gesendet.',
-    split_stopped: 'Transaktion {{done}} von {{total}} wurde gesendet, die übrigen nicht.',
     advanced: 'Erweiterte Einstellungen',
     payer_vault: 'Aus dem Tresor zahlen',
     payer_owner: 'Vom Eigentümer zahlen',
@@ -201,9 +177,6 @@ export const fees: MobileTable = {
     owner_off_safe: 'Dieser Tresor gehört einem Safe, der keine eigenen Transaktionen senden kann, daher werden Netzwerkgebühren immer aus dem Tresor bezahlt.',
   },
   'pt-BR': {
-    split_title: 'Transação {{n}} de {{total}}',
-    split_cancelled: 'Cancelado. Nada foi enviado.',
-    split_stopped: 'A transação {{done}} de {{total}} foi enviada; as demais não.',
     advanced: 'Configurações avançadas',
     payer_vault: 'Pagar pelo cofre',
     payer_owner: 'Pagar pelo proprietário',
@@ -226,9 +199,6 @@ export const fees: MobileTable = {
     owner_off_safe: 'Este cofre pertence a um Safe, que não envia transações próprias, então as taxas de rede são sempre pagas pelo cofre.',
   },
   hi: {
-    split_title: 'लेनदेन {{n}} / {{total}}',
-    split_cancelled: 'रद्द किया गया। कुछ नहीं भेजा गया।',
-    split_stopped: '{{total}} में से {{done}} लेनदेन भेजे गए; बाकी नहीं भेजे गए।',
     advanced: 'उन्नत सेटिंग्स',
     payer_vault: 'वॉल्ट से भुगतान',
     payer_owner: 'ओनर से भुगतान',
@@ -250,9 +220,6 @@ export const fees: MobileTable = {
     owner_off_safe: 'यह वॉल्ट एक Safe के स्वामित्व में है, जो खुद लेनदेन नहीं भेज सकता, इसलिए नेटवर्क शुल्क हमेशा वॉल्ट से चुकाया जाता है।',
   },
   tr: {
-    split_title: 'İşlem {{n}} / {{total}}',
-    split_cancelled: 'İptal edildi. Hiçbir şey gönderilmedi.',
-    split_stopped: '{{total}} işlemden {{done}} tanesi gönderildi; diğerleri gönderilmedi.',
     advanced: 'Gelişmiş ayarlar',
     payer_vault: 'Kasadan öde',
     payer_owner: 'Sahipten öde',
@@ -274,9 +241,6 @@ export const fees: MobileTable = {
     owner_off_safe: 'Bu kasa bir Safe\'e ait; Safe kendi işlemlerini gönderemez, bu yüzden ağ ücretleri her zaman kasadan ödenir.',
   },
   ru: {
-    split_title: 'Транзакция {{n}} из {{total}}',
-    split_cancelled: 'Отменено. Ничего не отправлено.',
-    split_stopped: 'Отправлена транзакция {{done}} из {{total}}; остальные — нет.',
     advanced: 'Расширенные настройки',
     payer_vault: 'Платить из хранилища',
     payer_owner: 'Платит владелец',
@@ -298,9 +262,6 @@ export const fees: MobileTable = {
     owner_off_safe: 'Это хранилище принадлежит Safe, который не может сам отправлять транзакции, поэтому сетевые комиссии всегда оплачиваются из хранилища.',
   },
   id: {
-    split_title: 'Transaksi {{n}} dari {{total}}',
-    split_cancelled: 'Dibatalkan. Tidak ada yang dikirim.',
-    split_stopped: 'Transaksi {{done}} dari {{total}} terkirim; sisanya tidak.',
     advanced: 'Pengaturan lanjutan',
     payer_vault: 'Bayar dari brankas',
     payer_owner: 'Bayar dari pemilik',
@@ -322,9 +283,6 @@ export const fees: MobileTable = {
     owner_off_safe: 'Brankas ini dimiliki Safe, yang tidak bisa mengirim transaksi sendiri, jadi biaya jaringan selalu dibayar dari brankas.',
   },
   vi: {
-    split_title: 'Giao dịch {{n}}/{{total}}',
-    split_cancelled: 'Đã hủy. Không có gì được gửi.',
-    split_stopped: 'Đã gửi giao dịch {{done}}/{{total}}; các giao dịch còn lại chưa gửi.',
     advanced: 'Cài đặt nâng cao',
     payer_vault: 'Trả từ két',
     payer_owner: 'Trả từ chủ sở hữu',
@@ -346,9 +304,6 @@ export const fees: MobileTable = {
     owner_off_safe: 'Kho này thuộc sở hữu của một Safe, vốn không tự gửi giao dịch, nên phí mạng luôn được trả từ kho.',
   },
   th: {
-    split_title: 'ธุรกรรม {{n}} จาก {{total}}',
-    split_cancelled: 'ยกเลิกแล้ว ไม่มีการส่งใดๆ',
-    split_stopped: 'ส่งธุรกรรม {{done}} จาก {{total}} แล้ว ส่วนที่เหลือยังไม่ได้ส่ง',
     advanced: 'การตั้งค่าขั้นสูง',
     payer_vault: 'จ่ายจากวอลต์',
     payer_owner: 'จ่ายจากเจ้าของ',

@@ -7,7 +7,7 @@ import {isActivated, priceActivation} from '@/vault/activate';
 import {activateVaultOnly} from '@/vault/relay';
 import {useVaultWrite} from '@/components/useVaultWrite';
 import {showTx} from '@/components/Toast';
-import {confirmWithFee} from '@/components/SplitConfirm';
+import {confirmWithFee} from '@/components/FeeConfirm';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';

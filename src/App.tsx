@@ -17,7 +17,7 @@ import {useNetwork} from '@/core/network-store';
 import type {NodeChain} from '@/core/rpc-store';
 import {RISK_TITLE} from '@/components/riskFormat';
 import {ToastHost} from '@/components/Toast';
-import {SplitConfirmHost} from '@/components/SplitConfirm';
+import {FeeConfirmHost} from '@/components/FeeConfirm';
 import {resumePending} from '@/vault/pending';
 import {OnboardingScreen} from '@/screens/OnboardingScreen';
 import {LockScreen} from '@/screens/LockScreen';
@@ -372,8 +372,8 @@ export default function App() {
       <StatusBar barStyle={dark ? 'light-content' : 'dark-content'} backgroundColor={colors.bg} />
       <Root />
       {/* Above every screen: action confirmations land here, never in a dialog. */}
-      {/* The confirm sheet for each part of a write sent in parts (vault/relay). */}
-      <SplitConfirmHost />
+      {/* The fee confirm sheet for steps outside a screen's own sheet (Tron activation). */}
+      <FeeConfirmHost />
       <ToastHost />
     </SafeAreaProvider>
   );
