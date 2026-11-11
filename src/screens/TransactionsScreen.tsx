@@ -20,7 +20,7 @@ import {Sheet} from '@/components/Sheet';
 import {getAssetManager} from '@/vault/delegate';
 import {Amount} from '@/components/Amount';
 import {GasIcon} from '@/components/GasIcon';
-import {splitMarketSwap, netTrade, isReceiptToken, STAKE_TOKENS, SUPPLY_TOKENS, STAKE_COUNTERPARTY, SUPPLY_COUNTERPARTY, BITTY_FEE_COLLECTORS} from '@/vault/market-trades';
+import {splitMarketSwap, netTrade, isReceiptToken, STAKE_TOKENS, SUPPLY_TOKENS, STAKE_COUNTERPARTY, SUPPLY_COUNTERPARTY, isRelayFeeCollector} from '@/vault/market-trades';
 import {fmtNum, fmtShort, displaySymbol, shortAddress} from '@/core/format';
 import {EXPLORER_TX, NATIVE, type Network} from '@/core/chain';
 import {useColors, useStyles, type Colors} from '@/theme';
@@ -106,7 +106,7 @@ export function classify(
   // A market trade pays the same Safe twice: the adapter's 0.2% during the swap, then the relay fee
   // after it. The feed lists a transaction's legs newest log first, so the first match is the relay
   // fee — ponytail: relies on that order (the feed carries no logIndex); match by amount if it changes.
-  const fee = legs.find((l) => l.direction === 'out' && BITTY_FEE_COLLECTORS.has(lc(l.counterparty))) ?? null;
+  const fee = legs.find((l) => l.direction === 'out' && isRelayFeeCollector(network, l.counterparty)) ?? null;
   const core = legs.filter((l) => l !== fee);
 
   const swapLegs = splitMarketSwap(core);
