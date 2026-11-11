@@ -1,11 +1,13 @@
 import React, {useCallback, useState} from 'react';
 import {ActivityIndicator, Alert, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
-import {isTronNetwork} from '@/core/chain';
+import {erc20Abi, formatUnits} from 'viem';
+import {isTronNetwork, NATIVE, publicClientFor} from '@/core/chain';
 import {useWallet} from '@/wallet/store';
 import {isActivated, priceActivation} from '@/vault/activate';
 import {activateVaultOnly} from '@/vault/relay';
 import {useVaultWrite} from '@/components/useVaultWrite';
+import {useActiveFeePayer} from '@/vault/useFeePayer';
 import {showTx} from '@/components/Toast';
 import {confirmWithFee} from '@/components/FeeConfirm';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -38,6 +40,7 @@ export function ActivateBanner({onActivated}: {onActivated?: () => void}) {
   }, []);
 
   const {vault, network, stable, busy, ready} = useVaultWrite();
+  const {payer} = useActiveFeePayer(network);
 
   useFocusEffect(
     useCallback(() => {
@@ -59,8 +62,25 @@ export function ActivateBanner({onActivated}: {onActivated?: () => void}) {
     // The fee first, in the same confirm sheet every on-chain action uses: priced the way the
     // activation will be signed. Over the cap it cannot be paid, and says so here.
     let fee: number;
+    // Paid from the vault, the fee has to be there already: an empty vault cannot activate, so the
+    // sheet says what to send and Confirm stays off. From the owner key the gas is the owner's.
+    let blocked: string | null = null;
     try {
-      fee = (await priceActivation({owner: owner as `0x${string}`, network, stableCoin: stable.address, allowlistEnabled: false})).feeUsd;
+      const price = await priceActivation({owner: owner as `0x${string}`, network, stableCoin: stable.address, allowlistEnabled: false});
+      fee = price.feeUsd;
+      if (payer !== 'owner') {
+        const client = publicClientFor(network);
+        const [held, native] = await Promise.all([
+          client.readContract({address: price.coin, abi: erc20Abi, functionName: 'balanceOf', args: [vault]}),
+          price.weth ? client.getBalance({address: vault}) : Promise.resolve(BigInt(0)),
+        ]);
+        if (held + native < price.feeAmount) {
+          const amount = price.weth
+            ? `${formatUnits(price.feeAmount, NATIVE[network].decimals)} ${NATIVE[network].symbol}`
+            : `${price.feeUsd.toFixed(2)} ${stable.symbol}`;
+          blocked = t('mobile.home.activate_fund', {amount});
+        }
+      }
     } catch (e) {
       setActivating(false);
       const msg = String((e as Error)?.message ?? e);
@@ -70,7 +90,7 @@ export function ActivateBanner({onActivated}: {onActivated?: () => void}) {
       ]);
       return;
     }
-    if (!(await confirmWithFee(t('mobile.home.activate'), fee))) {
+    if (!(await confirmWithFee(t('mobile.home.activate'), fee, blocked))) {
       setActivating(false);
       return;
     }
