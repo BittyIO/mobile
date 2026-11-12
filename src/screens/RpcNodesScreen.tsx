@@ -1,11 +1,14 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View} from 'react-native';
-import {useRoute, type RouteProp} from '@react-navigation/native';
+import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
 import {CHAIN_ID} from '@/core/chain';
 import {BUILTIN_RPC, isRpcUrl, probeRpc, probeTron, rpcHost, useRpcNodes, type NodeChain, type RpcProbe} from '@/core/rpc-store';
 import {isTronNet, TRON_API} from '@/tron/config';
-import {SettingsGroup, makeSettingsStyles} from '@/components/SettingsRow';
+import {SettingsGroup, SettingsRow, makeSettingsStyles} from '@/components/SettingsRow';
+import {NetworkIcon} from '@/components/NetworkSwitcher';
+import {NETWORKS, TRON_ENABLED, networkLabel} from '@/core/network-store';
 import {Sheet} from '@/components/Sheet';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
@@ -55,7 +58,34 @@ function NodeRow({
 }
 
 /**
- * Settings › RPC nodes, for the network in front (the one the network switcher has picked; Tron's
+ * Settings › Network › RPC nodes: every network, each opening its own nodes (see {RpcNetworkScreen}).
+ * All of them, not only those the picker lists: a network's nodes can be set before it is shown.
+ */
+export function RpcNodesListScreen() {
+  const {t} = useT();
+  const styles = useStyles(makeStyles);
+  const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const chains: NodeChain[] = TRON_ENABLED ? [...NETWORKS.slice(0, 1), 'tron', ...NETWORKS.slice(1)] : NETWORKS;
+  return (
+    <ScrollView style={styles.container} contentContainerStyle={styles.body} contentInsetAdjustmentBehavior="automatic">
+      <SettingsGroup>
+        {chains.map((n, i) => (
+          <SettingsRow
+            key={n}
+            icon="network"
+            leading={<NetworkIcon network={n} size={29} />}
+            title={networkLabel(n, t)}
+            onPress={() => nav.navigate('RpcNetwork', {network: n})}
+            last={i === chains.length - 1}
+          />
+        ))}
+      </SettingsGroup>
+    </ScrollView>
+  );
+}
+
+/**
+ * Settings › Network › RPC nodes › a network, for the network in front (the one the network switcher has picked; Tron's
  * wallet when Tron is in front). In the app's section, not the vault's: which nodes this phone asks
  * is a setting of the phone — the same for every vault, no signature, applies at once, seen by no
  * one else. Another network's nodes are set by switching to it first.

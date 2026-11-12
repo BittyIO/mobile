@@ -65,7 +65,6 @@ export function SettingsScreen() {
   const {language, setLanguage} = useLanguage();
   const isSafeVault = useVaults((st) => !!st.vaults.find((v) => v.index === st.activeIndex)?.safe);
   const tron = useNetwork((s) => s.tron);
-  const network = useNetwork((s) => s.network);
   const headerHeight = useTransparentHeaderInset();
   const tabBarHeight = useBottomTabBarHeight();
   const styles = useStyles(makeStyles);
@@ -143,9 +142,10 @@ export function SettingsScreen() {
         <Row icon="language" title={t('mobile.settings.language')} value={languageLabel(language)} onPress={pickLanguage} />
         <Row icon="currency" title={t('mobile.settings.currency')} value={currency} onPress={() => setPicker('currency')} />
         <Row icon="appearance" title={t('mobile.settings.appearance')} value={t(`mobile.settings.appearance_${appearance}`)} onPress={pickAppearance} />
-        {/* Which nodes this phone reads the chain from. With the app's settings, not the vault's:
-            it is this phone's, the same for every vault, and needs no signature. */}
-        <Row icon="network" title={t('mobile.rpc.title')} onPress={() => nav.navigate('RpcNetwork', {network: tron ?? network})} />
+        {/* Which nodes this phone reads the chain from, and which networks the picker lists. With the
+            app's settings, not the vault's: it is this phone's, the same for every vault, and needs
+            no signature. */}
+        <Row icon="network" title={t('mobile.settings.network')} onPress={() => nav.navigate('NetworkSettings')} />
         {/* Which build this is — the first thing asked when something looks wrong — and a tap to ask
             whether a newer one is out (see {fetchUpdateInfo}). */}
         <Row icon="settings" title={t('mobile.settings.app_version')} value={APP_VERSION} onPress={checkForUpdate} last />
