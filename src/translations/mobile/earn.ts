@@ -4,6 +4,7 @@ import type {MobileTable} from './index';
 // range pills come from the web keys).
 export const earn: MobileTable = {
   en: {
+    unstake_wait_label: 'Waiting period',
     daily_title: "Daily earnings",
     daily_calendar: "Calendar",
     daily_list: "List",
@@ -20,6 +21,12 @@ export const earn: MobileTable = {
     auto_needs_vault_fee: 'Off while your wallet pays the network fee: the automatic deposits are paid for by the vault. Set Network fee to the vault to use it.',
     auto_supply: 'Auto-Supply',
     apy_rate: '{{rate}}% APY',
+    energy_rate: '{{rate}} energy / TRX / day',
+    energy_yours: 'Vault energy',
+    energy_from_stake: 'From this stake, per day',
+    energy_what: "Staked TRX earns energy, and the energy works for your vault: its Tron transactions use it instead of burning TRX. It refills over 24 hours.",
+    unstake_wait_one: '1 day',
+    unstake_wait: '{{n}} days',
     auto_yield: 'Auto-Yield',
     no_yield_markets: 'No yield markets on this network.',
     no_lend_markets: 'No lending markets on this network.',
@@ -29,6 +36,7 @@ export const earn: MobileTable = {
     supply_cap_reached: "This lending pool's supply cap for this asset is reached, so it can't accept more right now. Try a different asset or protocol.",
   },
   zh: {
+    unstake_wait_label: '等待期',
     daily_title: "每日收益",
     daily_calendar: "日历",
     daily_list: "列表",
@@ -45,6 +53,12 @@ export const earn: MobileTable = {
     auto_needs_vault_fee: '由你的钱包支付网络费时不可用：自动存入的费用由金库支付。将网络费改为由金库支付即可使用。',
     auto_supply: '自动供应',
     apy_rate: '年化 {{rate}}%',
+    energy_rate: '每 TRX 每天 {{rate}} 能量',
+    energy_yours: '金库能量',
+    energy_from_stake: '本质押每天产生',
+    energy_what: '质押的 TRX 产生能量，能量为你的金库所用：金库的 Tron 交易会先用它，而不是燃烧 TRX。能量在 24 小时内恢复。',
+    unstake_wait_one: '1 天',
+    unstake_wait: '{{n}} 天',
     auto_yield: '自动收益',
     no_yield_markets: '此网络上没有收益市场。',
     no_lend_markets: '此网络上没有借贷市场。',
@@ -54,6 +68,7 @@ export const earn: MobileTable = {
     supply_cap_reached: "该借贷池中此资产的供应上限已达到，暂时无法再存入。请尝试其他资产或协议。",
   },
   'zh-TW': {
+    unstake_wait_label: '等待期',
     daily_title: "每日收益",
     daily_calendar: "日曆",
     daily_list: "列表",
@@ -70,6 +85,12 @@ export const earn: MobileTable = {
     auto_needs_vault_fee: '由你的錢包支付網路費時無法使用：自動存入的費用由金庫支付。將網路費改為由金庫支付即可使用。',
     auto_supply: '自動供應',
     apy_rate: '年化 {{rate}}%',
+    energy_rate: '每 TRX 每天 {{rate}} 能量',
+    energy_yours: '金庫能量',
+    energy_from_stake: '本質押每天產生',
+    energy_what: '質押的 TRX 產生能量，能量為你的金庫所用：金庫的 Tron 交易會先用它，而不是燃燒 TRX。能量在 24 小時內恢復。',
+    unstake_wait_one: '1 天',
+    unstake_wait: '{{n}} 天',
     auto_yield: '自動收益',
     no_yield_markets: '此網路上沒有收益市場。',
     no_lend_markets: '此網路上沒有借貸市場。',
@@ -79,6 +100,7 @@ export const earn: MobileTable = {
     supply_cap_reached: "該借貸池中此資產的供應上限已達到，暫時無法再存入。請嘗試其他資產或協議。",
   },
   ja: {
+    unstake_wait_label: '待機期間',
     daily_title: "日次収益",
     daily_calendar: "カレンダー",
     daily_list: "リスト",
@@ -104,6 +126,7 @@ export const earn: MobileTable = {
     supply_cap_reached: "このレンディングプールの当資産の供給上限に達しているため、現在は追加できません。別の資産またはプロトコルをお試しください。",
   },
   ko: {
+    unstake_wait_label: '대기 기간',
     daily_title: "일별 수익",
     daily_calendar: "캘린더",
     daily_list: "목록",
@@ -129,6 +152,7 @@ export const earn: MobileTable = {
     supply_cap_reached: "이 대출 풀의 해당 자산 공급 한도에 도달하여 지금은 더 받을 수 없습니다. 다른 자산이나 프로토콜을 사용해 보세요.",
   },
   fr: {
+    unstake_wait_label: 'Période d\'attente',
     daily_title: "Gains quotidiens",
     daily_calendar: "Calendrier",
     daily_list: "Liste",
@@ -154,6 +178,7 @@ export const earn: MobileTable = {
     supply_cap_reached: "Le plafond de dépôt de ce pool de prêt pour cet actif est atteint, il ne peut plus en accepter pour le moment. Essayez un autre actif ou protocole.",
   },
   es: {
+    unstake_wait_label: 'Periodo de espera',
     daily_title: "Ganancias diarias",
     daily_calendar: "Calendario",
     daily_list: "Lista",
@@ -179,6 +204,7 @@ export const earn: MobileTable = {
     supply_cap_reached: "El límite de suministro de este pool de préstamos para este activo se ha alcanzado, así que no puede aceptar más por ahora. Prueba con otro activo o protocolo.",
   },
   de: {
+    unstake_wait_label: 'Wartezeit',
     daily_title: "Tägliche Erträge",
     daily_calendar: "Kalender",
     daily_list: "Liste",
@@ -204,6 +230,7 @@ export const earn: MobileTable = {
     supply_cap_reached: "Die Angebotsobergrenze dieses Lending-Pools für diesen Vermögenswert ist erreicht und nimmt derzeit nichts mehr an. Versuchen Sie einen anderen Vermögenswert oder ein anderes Protokoll.",
   },
   'pt-BR': {
+    unstake_wait_label: 'Período de espera',
     daily_title: "Ganhos diários",
     daily_calendar: "Calendário",
     daily_list: "Lista",
@@ -229,6 +256,7 @@ export const earn: MobileTable = {
     supply_cap_reached: "Este pool de empréstimo atingiu o limite de fornecimento deste ativo e não aceita mais no momento. Tente outro ativo ou protocolo.",
   },
   hi: {
+    unstake_wait_label: 'प्रतीक्षा अवधि',
     daily_title: "दैनिक कमाई",
     daily_calendar: "कैलेंडर",
     daily_list: "सूची",
@@ -254,6 +282,7 @@ export const earn: MobileTable = {
     supply_cap_reached: "इस लेंडिंग पूल में इस एसेट की सप्लाई सीमा पूरी हो चुकी है, इसलिए अभी यह और नहीं ले सकता। कोई दूसरा एसेट या प्रोटोकॉल आज़माएं।",
   },
   tr: {
+    unstake_wait_label: 'Bekleme süresi',
     daily_title: "Günlük kazanç",
     daily_calendar: "Takvim",
     daily_list: "Liste",
@@ -279,6 +308,7 @@ export const earn: MobileTable = {
     supply_cap_reached: "Bu kredi havuzunda bu varlığın sağlama limiti doldu, şu anda daha fazlası kabul edilemiyor. Başka bir varlık veya protokol deneyin.",
   },
   ru: {
+    unstake_wait_label: 'Период ожидания',
     daily_title: "Ежедневный доход",
     daily_calendar: "Календарь",
     daily_list: "Список",
@@ -304,6 +334,7 @@ export const earn: MobileTable = {
     supply_cap_reached: "Лимит предоставления этого актива в кредитном пуле исчерпан, поэтому сейчас он не принимает больше. Попробуйте другой актив или протокол.",
   },
   id: {
+    unstake_wait_label: 'Masa tunggu',
     daily_title: "Pendapatan harian",
     daily_calendar: "Kalender",
     daily_list: "Daftar",
@@ -329,6 +360,7 @@ export const earn: MobileTable = {
     supply_cap_reached: "Batas pasokan pool pinjaman untuk aset ini sudah tercapai, jadi saat ini tidak bisa menerima lagi. Coba aset atau protokol lain.",
   },
   vi: {
+    unstake_wait_label: 'Thời gian chờ',
     daily_title: "Thu nhập hằng ngày",
     daily_calendar: "Lịch",
     daily_list: "Danh sách",
@@ -354,6 +386,7 @@ export const earn: MobileTable = {
     supply_cap_reached: "Pool cho vay này đã đạt hạn mức cung cấp cho tài sản này nên tạm thời không nhận thêm. Hãy thử tài sản hoặc giao thức khác.",
   },
   th: {
+    unstake_wait_label: 'ระยะเวลารอ',
     daily_title: "รายได้รายวัน",
     daily_calendar: "ปฏิทิน",
     daily_list: "รายการ",

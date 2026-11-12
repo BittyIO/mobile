@@ -1,7 +1,8 @@
 import type {Address} from 'viem';
 import type {Asset} from '@/core/assets';
 import {adapterByName} from '@/core/protocols';
-import type {Network} from '@/core/chain';
+import {NATIVE, type Network} from '@/core/chain';
+import {TRON_STAKE} from './tron-stake';
 
 /**
  * Which Earn adapter accepts which asset — the menu of deposits the vault can make.
@@ -38,6 +39,12 @@ export function stakeRoutes(network: Network, assets: Asset[]): EarnRoute[] {
     assets
       .filter((a) => a.symbol === 'USDC')
       .forEach((asset) => out.push({protocol: sky, name: 'Sky', asset, kind: 'staking'}));
+  // TRON Stake takes WTRX: frozen for energy, not yield. See vault/tron-stake.
+  const tron = adapterByName(network, TRON_STAKE);
+  if (tron)
+    assets
+      .filter((a) => a.symbol === NATIVE[network].wrapped)
+      .forEach((asset) => out.push({protocol: tron, name: TRON_STAKE, asset, kind: 'staking'}));
   return out;
 }
 

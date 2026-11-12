@@ -12,6 +12,8 @@ export const protocols: MobileTable = {
     uniswap: 'Uniswap is the largest decentralized exchange, trading tokens against on-chain liquidity pools. Bitty sends your market trades through it.',
     uniswapx: 'UniswapX is Uniswap\'s order system: fillers compete to fill an order at the best price. Bitty uses it for your limit orders.',
     cow: 'CoW Swap is a decentralized exchange where solvers compete to fill orders at the best price, which also protects them from front-running. Bitty uses it for your limit orders and TWAP orders.',
+    tronstake: 'TRON Stake is Tron\'s own staking: TRX staked on the network earns energy, which pays for transactions instead of burning TRX. Bitty uses it to stake your vault\'s TRX, and the energy works for your vault, so its Tron transactions cost less.',
+    sunswap: 'SunSwap is the largest decentralized exchange on Tron, trading tokens against on-chain liquidity pools. Bitty sends your market trades on Tron through it.',
   },
   zh: {
     pancakeswap: 'PancakeSwap 是 BNB Chain 上最大的去中心化交易所，通过链上流动性池交易代币。Bitty 通过它执行你在 BNB Chain 上的市价交易。',
@@ -22,6 +24,8 @@ export const protocols: MobileTable = {
     uniswap: 'Uniswap 是最大的去中心化交易所，通过链上流动性池交易代币。Bitty 通过它执行你的市价交易。',
     uniswapx: 'UniswapX 是 Uniswap 的订单系统：成交方竞相以最优价格成交订单。Bitty 用它执行你的限价单。',
     cow: 'CoW Swap 是一个去中心化交易所，求解者竞相以最优价格成交订单，同时保护订单免受抢跑。Bitty 用它执行你的限价单和 TWAP 订单。',
+    tronstake: 'TRON Stake 是 Tron 网络自身的质押：在网络上质押的 TRX 获得能量，用来支付交易，而不必燃烧 TRX。Bitty 用它质押你金库中的 TRX，能量为你的金库所用，让金库的 Tron 交易更便宜。',
+    sunswap: 'SunSwap 是 Tron 上最大的去中心化交易所，通过链上流动性池交易代币。Bitty 通过它执行你在 Tron 上的市价交易。',
   },
   'zh-TW': {
     pancakeswap: 'PancakeSwap 是 BNB Chain 上最大的去中心化交易所，透過鏈上流動性池交易代幣。Bitty 透過它執行你在 BNB Chain 上的市價交易。',
@@ -32,6 +36,8 @@ export const protocols: MobileTable = {
     uniswap: 'Uniswap 是最大的去中心化交易所，透過鏈上流動性池交易代幣。Bitty 透過它執行你的市價交易。',
     uniswapx: 'UniswapX 是 Uniswap 的訂單系統：成交方競相以最佳價格成交訂單。Bitty 用它執行你的限價單。',
     cow: 'CoW Swap 是一個去中心化交易所，求解者競相以最佳價格成交訂單，同時保護訂單免受搶跑。Bitty 用它執行你的限價單和 TWAP 訂單。',
+    tronstake: 'TRON Stake 是 Tron 網路本身的質押：在網路上質押的 TRX 獲得能量，用來支付交易，而不必燃燒 TRX。Bitty 用它質押你金庫中的 TRX，能量為你的金庫所用，讓金庫的 Tron 交易更便宜。',
+    sunswap: 'SunSwap 是 Tron 上最大的去中心化交易所，透過鏈上流動性池交易代幣。Bitty 透過它執行你在 Tron 上的市價交易。',
   },
   ja: {
     pancakeswap: 'PancakeSwap は BNB Chain 最大の分散型取引所で、オンチェーンの流動性プールでトークンを取引します。Bitty は BNB Chain での成行取引をこれを通じて行います。',
@@ -42,6 +48,8 @@ export const protocols: MobileTable = {
     uniswap: 'Uniswap は最大の分散型取引所で、オンチェーンの流動性プールでトークンを取引します。Bitty は成行取引に使います。',
     uniswapx: 'UniswapX は Uniswap の注文システムで、約定者が最良価格での約定を競います。Bitty は指値注文に使います。',
     cow: 'CoW Swap は分散型取引所で、ソルバーが最良価格での約定を競い、フロントランニングからも注文を守ります。Bitty は指値注文と TWAP 注文に使います。',
+    tronstake: 'TRON Stake は Tron ネットワーク自体のステーキングです。ステークした TRX はエネルギーを生み、TRX を燃やす代わりにトランザクション手数料に使われます。Bitty はこれで金庫の TRX をステークし、そのエネルギーは金庫のために使われるので、金庫の Tron トランザクションが安くなります。',
+    sunswap: 'SunSwap は Tron 最大の分散型取引所で、オンチェーンの流動性プールでトークンを取引します。Bitty は Tron での成行取引をこれを通じて行います。',
   },
   ko: {
     pancakeswap: 'PancakeSwap은 BNB Chain 최대의 탈중앙화 거래소로, 온체인 유동성 풀에서 토큰을 거래합니다. Bitty는 BNB Chain에서의 시장가 거래를 이를 통해 실행합니다.',
@@ -52,6 +60,8 @@ export const protocols: MobileTable = {
     uniswap: 'Uniswap은 최대의 탈중앙화 거래소로, 온체인 유동성 풀에서 토큰을 거래합니다. Bitty는 시장가 거래에 사용합니다.',
     uniswapx: 'UniswapX는 Uniswap의 주문 시스템으로, 체결자들이 최적 가격으로 주문을 체결하려고 경쟁합니다. Bitty는 지정가 주문에 사용합니다.',
     cow: 'CoW Swap은 솔버들이 최적 가격으로 주문을 체결하려고 경쟁하는 탈중앙화 거래소로, 프런트러닝으로부터 주문을 보호합니다. Bitty는 지정가 주문과 TWAP 주문에 사용합니다.',
+    tronstake: 'TRON Stake는 Tron 네트워크 자체의 스테이킹입니다. 스테이킹한 TRX는 에너지를 얻고, 이 에너지가 TRX를 소각하는 대신 거래 비용을 냅니다. Bitty는 이를 사용해 금고의 TRX를 스테이킹하며, 에너지는 금고를 위해 쓰여 금고의 Tron 거래 비용을 줄입니다.',
+    sunswap: 'SunSwap은 Tron 최대의 탈중앙화 거래소로, 온체인 유동성 풀에서 토큰을 거래합니다. Bitty는 Tron에서의 시장가 거래를 이를 통해 실행합니다.',
   },
   fr: {
     pancakeswap: 'PancakeSwap est le plus grand échange décentralisé de BNB Chain : il échange des jetons contre des pools de liquidité on-chain. Bitty y fait passer vos ordres au marché sur BNB Chain.',
@@ -62,6 +72,8 @@ export const protocols: MobileTable = {
     uniswap: 'Uniswap est le plus grand échange décentralisé, qui échange des jetons contre des pools de liquidité on-chain. Bitty y fait passer vos échanges au marché.',
     uniswapx: 'UniswapX est le système d’ordres d’Uniswap : des exécutants rivalisent pour exécuter un ordre au meilleur prix. Bitty l’utilise pour vos ordres à cours limité.',
     cow: 'CoW Swap est un échange décentralisé où des solveurs rivalisent pour exécuter les ordres au meilleur prix, ce qui les protège aussi du front-running. Bitty l’utilise pour vos ordres à cours limité et TWAP.',
+    tronstake: 'TRON Stake est le staking natif de Tron : les TRX stakés sur le réseau produisent de l\'énergie, qui paie les transactions au lieu de brûler des TRX. Bitty l\'utilise pour staker les TRX de votre coffre, et l\'énergie travaille pour votre coffre : ses transactions Tron coûtent moins cher.',
+    sunswap: 'SunSwap est le plus grand échange décentralisé sur Tron, qui échange des jetons contre des pools de liquidité on-chain. Bitty y fait passer vos ordres au marché sur Tron.',
   },
   es: {
     pancakeswap: 'PancakeSwap es el mayor exchange descentralizado de BNB Chain: intercambia tokens contra pools de liquidez on-chain. Bitty envía por él tus operaciones a mercado en BNB Chain.',
@@ -72,6 +84,8 @@ export const protocols: MobileTable = {
     uniswap: 'Uniswap es el mayor exchange descentralizado y opera tokens contra pools de liquidez on-chain. Bitty envía tus operaciones a mercado a través de él.',
     uniswapx: 'UniswapX es el sistema de órdenes de Uniswap: los ejecutores compiten por llenar una orden al mejor precio. Bitty lo usa para tus órdenes límite.',
     cow: 'CoW Swap es un exchange descentralizado donde los solvers compiten por llenar las órdenes al mejor precio, lo que también las protege del front-running. Bitty lo usa para tus órdenes límite y TWAP.',
+    tronstake: 'TRON Stake es el staking propio de Tron: los TRX en staking en la red generan energía, que paga las transacciones en lugar de quemar TRX. Bitty lo usa para hacer staking de los TRX de tu bóveda, y la energía trabaja para tu bóveda: sus transacciones en Tron cuestan menos.',
+    sunswap: 'SunSwap es el mayor exchange descentralizado de Tron, que intercambia tokens contra pools de liquidez en cadena. Bitty envía por él tus operaciones a mercado en Tron.',
   },
   de: {
     pancakeswap: 'PancakeSwap ist die größte dezentrale Börse auf BNB Chain und handelt Token gegen On-Chain-Liquiditätspools. Bitty führt deine Markt-Trades auf BNB Chain darüber aus.',
@@ -82,6 +96,8 @@ export const protocols: MobileTable = {
     uniswap: 'Uniswap ist die größte dezentrale Börse und handelt Token gegen On-Chain-Liquiditätspools. Bitty führt deine Markt-Trades darüber aus.',
     uniswapx: 'UniswapX ist das Ordersystem von Uniswap: Filler konkurrieren darum, eine Order zum besten Preis auszuführen. Bitty nutzt es für deine Limit-Orders.',
     cow: 'CoW Swap ist eine dezentrale Börse, bei der Solver darum konkurrieren, Orders zum besten Preis auszuführen, was sie auch vor Front-Running schützt. Bitty nutzt es für deine Limit- und TWAP-Orders.',
+    tronstake: 'TRON Stake ist Trons eigenes Staking: Auf dem Netzwerk gestakte TRX erzeugen Energie, die Transaktionen bezahlt, statt TRX zu verbrennen. Bitty stakt damit die TRX deines Tresors, und die Energie arbeitet für deinen Tresor: Seine Tron-Transaktionen kosten weniger.',
+    sunswap: 'SunSwap ist die größte dezentrale Börse auf Tron und handelt Token gegen On-Chain-Liquiditätspools. Bitty führt deine Markt-Trades auf Tron darüber aus.',
   },
   'pt-BR': {
     pancakeswap: 'PancakeSwap é a maior exchange descentralizada da BNB Chain, negociando tokens contra pools de liquidez on-chain. A Bitty envia suas negociações a mercado na BNB Chain por ela.',
@@ -92,6 +108,8 @@ export const protocols: MobileTable = {
     uniswap: 'Uniswap é a maior exchange descentralizada e negocia tokens contra pools de liquidez on-chain. Bitty envia suas negociações a mercado por ela.',
     uniswapx: 'UniswapX é o sistema de ordens da Uniswap: executores competem para preencher uma ordem pelo melhor preço. Bitty o usa para suas ordens limitadas.',
     cow: 'CoW Swap é uma exchange descentralizada em que solvers competem para executar ordens pelo melhor preço, o que também as protege de front-running. Bitty a usa para suas ordens limitadas e TWAP.',
+    tronstake: 'TRON Stake é o staking nativo da Tron: TRX em staking na rede gera energia, que paga as transações em vez de queimar TRX. A Bitty o usa para fazer staking do TRX do seu cofre, e a energia trabalha para o seu cofre: as transações dele na Tron custam menos.',
+    sunswap: 'SunSwap é a maior exchange descentralizada da Tron, negociando tokens contra pools de liquidez on-chain. A Bitty envia suas negociações a mercado na Tron por ela.',
   },
   tr: {
     pancakeswap: 'PancakeSwap, BNB Chain\'deki en büyük merkeziyetsiz borsadır; tokenları zincir üstü likidite havuzlarına karşı takas eder. Bitty, BNB Chain\'deki piyasa işlemlerinizi onun üzerinden yapar.',
@@ -102,6 +120,8 @@ export const protocols: MobileTable = {
     uniswap: 'Uniswap, zincir üstü likidite havuzlarına karşı token takası yapan en büyük merkeziyetsiz borsadır. Bitty, piyasa işlemlerinizi onun üzerinden yapar.',
     uniswapx: 'UniswapX, Uniswap\'ın emir sistemidir: doldurucular bir emri en iyi fiyattan doldurmak için yarışır. Bitty, limit emirleriniz için kullanır.',
     cow: 'CoW Swap, çözücülerin emirleri en iyi fiyattan doldurmak için yarıştığı merkeziyetsiz bir borsadır; bu, emirleri front-running\'e karşı da korur. Bitty, limit ve TWAP emirleriniz için kullanır.',
+    tronstake: 'TRON Stake, Tron ağının kendi staking\'idir: ağda stake edilen TRX enerji kazanır ve bu enerji TRX yakmak yerine işlem ücretlerini öder. Bitty bunu kasanızdaki TRX\'i stake etmek için kullanır; enerji kasanız için çalışır ve kasanın Tron işlemleri daha ucuza gelir.',
+    sunswap: 'SunSwap, Tron\'daki en büyük merkeziyetsiz borsadır ve token\'ları zincir üstü likidite havuzlarına karşı takas eder. Bitty, Tron\'daki piyasa işlemlerinizi onun üzerinden yapar.',
   },
   ru: {
     pancakeswap: 'PancakeSwap — крупнейшая децентрализованная биржа в BNB Chain: обменивает токены через ончейн-пулы ликвидности. Bitty проводит через неё ваши рыночные сделки в BNB Chain.',
@@ -112,6 +132,8 @@ export const protocols: MobileTable = {
     uniswap: 'Uniswap — крупнейшая децентрализованная биржа, обменивающая токены через ончейн-пулы ликвидности. Bitty проводит через неё ваши рыночные сделки.',
     uniswapx: 'UniswapX — система ордеров Uniswap: исполнители соревнуются, чтобы исполнить ордер по лучшей цене. Bitty использует её для ваших лимитных ордеров.',
     cow: 'CoW Swap — децентрализованная биржа, где решатели соревнуются за исполнение ордеров по лучшей цене, что также защищает их от фронтраннинга. Bitty использует её для ваших лимитных и TWAP-ордеров.',
+    tronstake: 'TRON Stake — собственный стейкинг сети Tron: застейканные TRX приносят энергию, которая оплачивает транзакции вместо сжигания TRX. Bitty стейкает через него TRX вашего хранилища, и энергия работает на хранилище: его транзакции в Tron стоят меньше.',
+    sunswap: 'SunSwap — крупнейшая децентрализованная биржа в Tron, обменивающая токены через ончейн-пулы ликвидности. Bitty проводит через неё ваши рыночные сделки в Tron.',
   },
   id: {
     pancakeswap: 'PancakeSwap adalah bursa terdesentralisasi terbesar di BNB Chain, memperdagangkan token melalui pool likuiditas on-chain. Bitty menjalankan trading pasar Anda di BNB Chain lewat PancakeSwap.',
@@ -122,6 +144,8 @@ export const protocols: MobileTable = {
     uniswap: 'Uniswap adalah bursa terdesentralisasi terbesar yang memperdagangkan token melalui pool likuiditas on-chain. Bitty menjalankan perdagangan pasar Anda lewat Uniswap.',
     uniswapx: 'UniswapX adalah sistem order Uniswap: para filler bersaing mengisi order di harga terbaik. Bitty memakainya untuk order limit Anda.',
     cow: 'CoW Swap adalah bursa terdesentralisasi tempat para solver bersaing mengisi order di harga terbaik, yang juga melindunginya dari front-running. Bitty memakainya untuk order limit dan TWAP Anda.',
+    tronstake: 'TRON Stake adalah staking bawaan jaringan Tron: TRX yang di-stake di jaringan menghasilkan energi, yang membayar transaksi alih-alih membakar TRX. Bitty memakainya untuk men-stake TRX brankas Anda, dan energinya bekerja untuk brankas Anda, sehingga transaksi Tron-nya lebih murah.',
+    sunswap: 'SunSwap adalah bursa terdesentralisasi terbesar di Tron, memperdagangkan token melalui pool likuiditas on-chain. Bitty menjalankan trading pasar Anda di Tron melaluinya.',
   },
   vi: {
     pancakeswap: 'PancakeSwap là sàn giao dịch phi tập trung lớn nhất trên BNB Chain, giao dịch token qua các pool thanh khoản on-chain. Bitty thực hiện các lệnh thị trường của bạn trên BNB Chain qua đó.',
@@ -132,6 +156,8 @@ export const protocols: MobileTable = {
     uniswap: 'Uniswap là sàn giao dịch phi tập trung lớn nhất, giao dịch token qua các pool thanh khoản trên chuỗi. Bitty thực hiện giao dịch thị trường của bạn qua Uniswap.',
     uniswapx: 'UniswapX là hệ thống lệnh của Uniswap: các bên khớp lệnh cạnh tranh để khớp lệnh ở giá tốt nhất. Bitty dùng nó cho lệnh giới hạn của bạn.',
     cow: 'CoW Swap là sàn giao dịch phi tập trung nơi các solver cạnh tranh khớp lệnh ở giá tốt nhất, đồng thời bảo vệ lệnh khỏi front-running. Bitty dùng nó cho lệnh giới hạn và lệnh TWAP của bạn.',
+    tronstake: 'TRON Stake là cơ chế staking của chính mạng Tron: TRX được stake trên mạng tạo ra năng lượng, dùng để trả phí giao dịch thay vì đốt TRX. Bitty dùng nó để stake TRX trong kho của bạn, và năng lượng phục vụ cho kho của bạn, giúp giao dịch Tron của kho rẻ hơn.',
+    sunswap: 'SunSwap là sàn giao dịch phi tập trung lớn nhất trên Tron, giao dịch token qua các pool thanh khoản trên chuỗi. Bitty thực hiện các giao dịch thị trường của bạn trên Tron qua nó.',
   },
   th: {
     pancakeswap: 'PancakeSwap คือกระดานเทรดแบบกระจายศูนย์ที่ใหญ่ที่สุดบน BNB Chain ซื้อขายโทเคนผ่านพูลสภาพคล่องบนเชน Bitty ส่งคำสั่งซื้อขายแบบตลาดของคุณบน BNB Chain ผ่าน PancakeSwap',
@@ -142,6 +168,8 @@ export const protocols: MobileTable = {
     uniswap: 'Uniswap เป็นกระดานเทรดแบบกระจายศูนย์ที่ใหญ่ที่สุด ซื้อขายโทเค็นกับพูลสภาพคล่องบนเชน Bitty ส่งการเทรดราคาตลาดของคุณผ่าน Uniswap',
     uniswapx: 'UniswapX คือระบบคำสั่งของ Uniswap ผู้จับคู่จะแข่งกันจับคู่คำสั่งในราคาที่ดีที่สุด Bitty ใช้สำหรับคำสั่งจำกัดราคาของคุณ',
     cow: 'CoW Swap เป็นกระดานเทรดแบบกระจายศูนย์ที่ solver แข่งกันจับคู่คำสั่งในราคาที่ดีที่สุด ซึ่งยังช่วยป้องกันการ front-running ด้วย Bitty ใช้สำหรับคำสั่งจำกัดราคาและคำสั่ง TWAP ของคุณ',
+    tronstake: 'TRON Stake คือการสเตกของเครือข่าย Tron เอง: TRX ที่สเตกบนเครือข่ายจะได้พลังงาน ซึ่งใช้จ่ายค่าธุรกรรมแทนการเผา TRX Bitty ใช้มันสเตก TRX ในห้องนิรภัยของคุณ และพลังงานจะทำงานให้ห้องนิรภัยของคุณ ทำให้ธุรกรรม Tron ของห้องนิรภัยถูกลง',
+    sunswap: 'SunSwap คือกระดานแลกเปลี่ยนแบบกระจายศูนย์ที่ใหญ่ที่สุดบน Tron ซื้อขายโทเคนผ่านพูลสภาพคล่องบนเชน Bitty ส่งคำสั่งซื้อขายตามราคาตลาดของคุณบน Tron ผ่านมัน',
   },
   hi: {
     pancakeswap: 'PancakeSwap, BNB Chain का सबसे बड़ा विकेंद्रीकृत एक्सचेंज है, जो ऑन-चेन लिक्विडिटी पूल से टोकन का व्यापार करता है। Bitty BNB Chain पर आपके मार्केट ट्रेड इसी से करता है।',
@@ -152,5 +180,7 @@ export const protocols: MobileTable = {
     uniswap: 'Uniswap सबसे बड़ा विकेंद्रीकृत एक्सचेंज है, जो ऑन-चेन लिक्विडिटी पूल से टोकन का व्यापार करता है। Bitty आपके मार्केट ट्रेड इसके ज़रिए करता है।',
     uniswapx: 'UniswapX, Uniswap का ऑर्डर सिस्टम है: फ़िलर किसी ऑर्डर को सबसे अच्छी कीमत पर भरने के लिए प्रतिस्पर्धा करते हैं। Bitty इसका उपयोग आपके लिमिट ऑर्डर के लिए करता है।',
     cow: 'CoW Swap एक विकेंद्रीकृत एक्सचेंज है जहाँ सॉल्वर ऑर्डर को सबसे अच्छी कीमत पर भरने के लिए प्रतिस्पर्धा करते हैं, जिससे वे फ्रंट-रनिंग से भी सुरक्षित रहते हैं। Bitty इसका उपयोग आपके लिमिट और TWAP ऑर्डर के लिए करता है।',
+    tronstake: 'TRON Stake, Tron नेटवर्क की अपनी स्टेकिंग है: नेटवर्क पर स्टेक किया गया TRX ऊर्जा कमाता है, जो TRX जलाने के बजाय लेनदेन का भुगतान करती है। Bitty इससे आपके वॉल्ट का TRX स्टेक करता है, और ऊर्जा आपके वॉल्ट के काम आती है, ताकि उसके Tron लेनदेन सस्ते हों।',
+    sunswap: 'SunSwap, Tron पर सबसे बड़ा विकेंद्रीकृत एक्सचेंज है, जो ऑन-चेन लिक्विडिटी पूल के ज़रिए टोकन का व्यापार करता है। Bitty Tron पर आपके मार्केट ट्रेड इसी के ज़रिए भेजता है।',
   },
 };

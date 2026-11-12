@@ -17,8 +17,9 @@ import {earnedRaw} from '@/vault/flows';
 import {usePrices} from '@/vault/usePrices';
 import {usdValue} from '@/core/prices';
 import {balanceOfSymbol} from '@/vault/read';
-import {adapterByName} from '@/core/protocols';
-import {getLidoUnstake, NO_UNSTAKE, type LidoUnstake} from '@/vault/lido';
+import {getLidoUnstake, NO_UNSTAKE, queuedStakeAdapter, queueUnits, type LidoUnstake} from '@/vault/lido';
+import {TRON_STAKE} from '@/vault/tron-stake';
+import {useOwnerEnergy} from '@/vault/useOwnerEnergy';
 import type {Address} from 'viem';
 import {fetchProtocolApy, EMPTY_APY, type ProtocolApy} from '@/vault/apy';
 import {stakeRoutes as buildStakeRoutes, lendRoutes as buildLendRoutes, type EarnRoute} from '@/vault/earn-routes';
@@ -43,6 +44,7 @@ function EarnRow({
   dust,
   queue,
   apy,
+  energyRate,
   protocolName,
   first,
   last,
@@ -65,6 +67,8 @@ function EarnRow({
    */
   queue: {unstaking: string; claimable: string} | null;
   apy: number | null;
+  /** TRON Stake pays energy, not yield: today's energy a day per staked TRX, shown where the APY is. */
+  energyRate?: number | null;
   /** Shown as a small logo after the APY when the section mixes protocols (Sky / Lido). */
   protocolName?: string;
   /** Opens this position's own page, where the actions and the explanations live. */
@@ -89,6 +93,11 @@ function EarnRow({
               {apy != null ? (
                 <View style={styles.apyPill}>
                   <Text style={styles.apyText}>{t('mobile.earn.apy_rate', {rate: apy.toFixed(2)})}</Text>
+                </View>
+              ) : null}
+              {energyRate != null && energyRate > 0 ? (
+                <View style={styles.apyPill}>
+                  <Text style={styles.apyText}>{t('mobile.earn.energy_rate', {rate: energyRate.toFixed(1)})}</Text>
                 </View>
               ) : null}
               {protocolName ? <ProtocolChip name={protocolName} size={14} /> : null}
@@ -159,9 +168,10 @@ export function EarnScreen() {
   const assets = useAssetCatalog(network);
   const bal = useVaultBalances(network);
   const pos = useVaultPositions(bal.vault, network);
-  // Lido's withdrawal queue, read from the chain as the Overview and the detail page do. Re-read
-  // whenever the positions do, so an unstake or a claim shows here without a second pull.
-  const lidoAdapter = adapterByName(network, 'Lido');
+  // The staking queue (Lido's, or TRON Stake's unstake), read from the chain as the Overview and the
+  // detail page do. Re-read whenever the positions do, so an unstake or a claim shows here without a
+  // second pull.
+  const lidoAdapter = queuedStakeAdapter(network)?.protocol ?? null;
   const [lidoQueue, setLidoQueue] = useState<{key: string; v: LidoUnstake} | null>(null);
   const queueKey = bal.vault && lidoAdapter ? `${network}:${bal.vault.toLowerCase()}` : '';
   useEffect(() => {
@@ -178,8 +188,11 @@ export function EarnScreen() {
   const queueFor = (route: Route): {unstaking: string; claimable: string} | null => {
     if (!lidoAdapter || route.protocol.toLowerCase() !== lidoAdapter.toLowerCase()) return null;
     if (!lidoQueue || lidoQueue.key !== queueKey) return null;
-    return {unstaking: formatUnits(lidoQueue.v.unstaking, 18), claimable: formatUnits(lidoQueue.v.claimable, 18)};
+    const units = queueUnits(network);
+    return {unstaking: formatUnits(lidoQueue.v.unstaking, units), claimable: formatUnits(lidoQueue.v.claimable, units)};
   };
+  // TRON Stake's rate: energy, read with the positions so a pull refreshes it too.
+  const energy = useOwnerEnergy(network, pos.positions);
   const flows = useFlows(bal.vault, network);
   const prices = usePrices(network, 0, useMemo(() => assets.map((a) => a.symbol), [assets]));
   // Auto-Yield routes: lowercased asset address → configured protocol (zero = off).
@@ -331,6 +344,7 @@ export function EarnScreen() {
         dust={isDust(row)}
         queue={queueFor(row.route)}
         apy={apyFor(row.route)}
+        energyRate={row.route.name === TRON_STAKE ? energy?.perTrxPerDay ?? null : undefined}
         protocolName={showProtocol ? row.route.name : undefined}
         onOpen={() =>
           nav.navigate('EarnDetail', {

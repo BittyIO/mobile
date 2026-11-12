@@ -1,5 +1,7 @@
 import {parseAbi, type Address, type Hex} from 'viem';
-import {publicClientFor, type Network} from '@/core/chain';
+import {isTronNetwork, NATIVE, publicClientFor, type Network} from '@/core/chain';
+import {adapterByName} from '@/core/protocols';
+import {getTronUnstake, TRON_STAKE} from './tron-stake';
 import {relayVaultWrite} from './relay';
 import type {VaultWriteBase} from '@/components/useVaultWrite';
 
@@ -37,12 +39,35 @@ export type LidoUnstake = {
   claimableIds: bigint[];
   /** The ids still in the queue, which {fetchLidoEta} estimates. */
   pendingIds: bigint[];
+  /** When the queue already knows its own timing (Tron's unlocks), so no estimate is fetched. */
+  eta?: {start: number; end: number} | null;
 };
 
 export const NO_UNSTAKE: LidoUnstake = {unstaking: 0n, claimable: 0n, claimableIds: [], pendingIds: []};
 
+/**
+ * The staking adapter on this network whose withdrawals QUEUE and then have to be claimed: Lido on
+ * Ethereum, TRON Stake on Tron. Its queue pays back the chain's wrapped coin (WETH, WTRX), in that
+ * coin's decimals — what {queueUnits} and {queueSymbol} give the screens.
+ */
+export function queuedStakeAdapter(network: Network): {protocol: Address; name: string} | null {
+  const name = isTronNetwork(network) ? TRON_STAKE : 'Lido';
+  const protocol = adapterByName(network, name);
+  return protocol ? {protocol, name} : null;
+}
+
+/** Is this registry name one whose withdrawals queue? */
+export const isQueuedStake = (name: string) => name === 'Lido' || name === TRON_STAKE;
+
+/** The decimals the queue's amounts are in: the native coin's (ETH 18, TRX 6). */
+export const queueUnits = (network: Network) => NATIVE[network].decimals;
+
+/** What the queue's amounts are called: the native coin (ETH, TRX). */
+export const queueSymbol = (network: Network) => NATIVE[network].symbol;
+
 /** The vault's open requests with one Lido adapter, split into still-queued and claimable. */
 export async function getLidoUnstake(vault: Address, protocol: Address, network: Network): Promise<LidoUnstake> {
+  if (isTronNetwork(network)) return getTronUnstake(vault, protocol, network);
   const unsteth = UNSTETH_ADDRESS[network];
   if (!unsteth) return NO_UNSTAKE;
   const client = publicClientFor(network);

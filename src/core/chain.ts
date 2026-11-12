@@ -62,8 +62,8 @@ export const NATIVE: Record<Network, {symbol: string; decimals: number; wrapped:
 };
 
 /**
- * What the network can do beyond holding, sending and paying. Nile has no protocol deployed (none
- * ships with the vault on Tron), so Earn and Trade have nothing to offer there.
+ * What the network can do beyond holding, sending and paying. Nile runs TRX staking (energy for the
+ * owner, no yield) and SunSwap market trades; there is no lending and no limit order on Tron.
  */
 export const NETWORK_FEATURES: Record<Network, {defi: boolean}> = {
   mainnet: {defi: true},
@@ -72,7 +72,7 @@ export const NETWORK_FEATURES: Record<Network, {defi: boolean}> = {
   robinhood: {defi: true},
   arbitrum: {defi: true},
   bsc: {defi: true},
-  'tron-nile': {defi: false},
+  'tron-nile': {defi: true},
 };
 
 /** The test networks, which hold no real money. */

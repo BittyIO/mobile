@@ -48,7 +48,8 @@ const NAMES: Partial<Record<string, Partial<Record<Language, string>>>> = {
  * name answers for a stock.
  *
  * The fallback is English; CRYPTO_NAMES below carries the Chinese. WETH is listed as plain Ether
- * because the app shows it as ETH (see displaySymbol) and never mentions wrapping.
+ * because the app shows it as ETH (see displaySymbol) and never mentions wrapping; WTRX likewise as
+ * TRON, shown as TRX.
  */
 const UNNAMED: Record<string, string> = {
   USDC: 'USD by Circle Internet Group',
@@ -57,6 +58,7 @@ const UNNAMED: Record<string, string> = {
   WBTC: 'Wrapped Bitcoin by BitGo',
   CBBTC: 'Wrapped Bitcoin by Coinbase',
   WETH: 'Ether',
+  WTRX: 'TRON',
   XAUT: 'Gold by Tether',
   UNI: 'Token of Uniswap',
   AAVE: 'Token of Aave',
@@ -80,6 +82,7 @@ const CRYPTO_NAMES: Record<string, {zh: string; 'zh-TW': string}> = {
   WBTC: {zh: 'BitGo 封装比特币', 'zh-TW': 'BitGo 封裝比特幣'},
   CBBTC: {zh: 'Coinbase 封装比特币', 'zh-TW': 'Coinbase 封裝比特幣'},
   WETH: {zh: '以太币', 'zh-TW': '以太幣'},
+  WTRX: {zh: '波场币', 'zh-TW': '波場幣'},
   XAUT: {zh: '泰达黄金', 'zh-TW': '泰達黃金'},
   UNI: {zh: 'Uniswap 代币', 'zh-TW': 'Uniswap 代幣'},
   AAVE: {zh: 'Aave 代币', 'zh-TW': 'Aave 代幣'},

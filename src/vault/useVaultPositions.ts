@@ -1,8 +1,18 @@
 import {useCallback, useEffect, useState} from 'react';
 import {create} from 'zustand';
 import type {Address} from 'viem';
-import type {Network} from '@/core/chain';
+import {isTronNetwork, type Network} from '@/core/chain';
 import {fetchPositions, fetchSkyPosition, type Position} from './positions';
+import {fetchTronStakePosition} from './tron-stake';
+
+/**
+ * The served positions, or on Tron the chain's: the server indexes no Tron vault, so there the one
+ * position there can be (TRON Stake) is read from the vault's clone directly.
+ */
+const readPositions = (vault: Address, network: Network, fresh: boolean): Promise<Position[]> =>
+  isTronNetwork(network)
+    ? fetchTronStakePosition(vault, network).then((p) => (p ? [p] : []))
+    : fetchPositions(vault, network, fresh);
 import {usePending} from './pending';
 
 type State = {
@@ -100,11 +110,11 @@ export function useVaultPositions(vault: Address | null, network: Network): Stat
 
     let apiError: string | null = null;
     Promise.all([
-      fetchPositions(vault, network, false).catch((e) => {
+      readPositions(vault, network, false).catch((e) => {
         apiError = String((e as Error)?.message ?? e);
         return [] as Position[];
       }),
-      fetchSkyPosition(vault, network).catch(() => undefined),
+      isTronNetwork(network) ? Promise.resolve(null) : fetchSkyPosition(vault, network).catch(() => undefined),
     ])
       .then(([served, live_sky]) => {
         if (!live) return;
@@ -132,7 +142,7 @@ export function useVaultPositions(vault: Address | null, network: Network): Stat
 
     // After a write, ask the server for a chain re-read too, and take it if it answers in time.
     if (nonce > 0) {
-      fetchPositions(vault, network, true)
+      readPositions(vault, network, true)
         .then((fresh) => live && setPositions(merge(fresh)))
         .catch(() => {});
     }

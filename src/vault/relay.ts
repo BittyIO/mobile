@@ -615,6 +615,27 @@ export async function activateVaultOnly(opts: {account: Signer; vault: Address; 
   return relayEncoded({...opts, data: '0x', activationCalls: [], noRotate: true});
 }
 
+/**
+ * On Tron, the vault's plain TRX wrapped first, in the same transaction.
+ *
+ * On an EVM chain the vault wraps ETH the moment it arrives (its receive()), so it never holds any.
+ * A plain TRX transfer on Tron runs no contract code, so TRX sent to the vault stays unwrapped, while
+ * the balance counts it as WTRX (see {readVaultBalances}) and every action spends WTRX: a stake of
+ * more than the WTRX actually held was refused. `wrapNative()` (open to anyone, a no-op at zero)
+ * goes in front whenever there is TRX to wrap, so the TRX is the WTRX the balance already shows.
+ */
+async function wrapNativeFirst(network: Network, vault: Address, datas: Hex[]): Promise<Hex[]> {
+  if (!isTronNetwork(network)) return datas;
+  const native = await publicClientFor(network)
+    .getBalance({address: vault})
+    .catch(() => 0n);
+  return native > 0n ? [encodeCall({abi: VAULT_RISK_ABI, functionName: 'wrapNative'}), ...datas] : datas;
+}
+
+/** One call, or a multicall of several. */
+const asOneCall = (datas: Hex[]): Hex =>
+  datas.length === 1 ? datas[0] : encodeCall({abi: VAULT_MULTICALL_ABI, functionName: 'multicall', args: [datas]});
+
 export async function relayVaultWrite(opts: {
   account: Signer;
   vault: Address;
@@ -650,13 +671,13 @@ export async function relayVaultWrite(opts: {
    */
   uses?: readonly Address[];
 }): Promise<RelayResult> {
-  const data = encodeCall({abi: opts.abi, functionName: opts.functionName, args: opts.args});
+  const datas = await wrapNativeFirst(opts.network, opts.vault, [encodeCall({abi: opts.abi, functionName: opts.functionName, args: opts.args})]);
   return relayEncoded({
     account: opts.account,
     vault: opts.vault,
     network: opts.network,
-    data,
-    activationCalls: [data],
+    data: asOneCall(datas),
+    activationCalls: datas,
     stableCoin: opts.stableCoin,
     pinFee: opts.pinFee,
     noRotate: opts.noRotate,
@@ -682,13 +703,12 @@ export async function relayVaultMulticall(opts: {
   /** See {relayVaultWrite}. */
   uses?: readonly Address[];
 }): Promise<RelayResult> {
-  const datas = opts.calls.map(encodeCall);
-  const data = encodeCall({abi: VAULT_MULTICALL_ABI, functionName: 'multicall', args: [datas]});
+  const datas = await wrapNativeFirst(opts.network, opts.vault, opts.calls.map(encodeCall));
   return relayEncoded({
     account: opts.account,
     vault: opts.vault,
     network: opts.network,
-    data,
+    data: asOneCall(datas),
     activationCalls: datas,
     stableCoin: opts.stableCoin,
     pinFee: opts.pinFee,
