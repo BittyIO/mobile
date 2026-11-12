@@ -36,7 +36,7 @@ export function SettingsRow({
   chevron?: boolean;
   last?: boolean;
   /** A row that flips a local setting in place, rather than pushing or opening a sheet. */
-  toggle?: {value: boolean; onValueChange: (v: boolean) => void};
+  toggle?: {value: boolean; onValueChange: (v: boolean) => void; disabled?: boolean};
   /** Where a row's current answer is a set of things rather than a word — icons, marks. */
   right?: React.ReactNode;
   /** In place of the icon square, where the row names something with a mark of its own (a protocol). */
@@ -64,7 +64,7 @@ export function SettingsRow({
       </View>
       <View style={styles.rowRight}>
         {toggle ? (
-          <Switch value={toggle.value} onValueChange={toggle.onValueChange} style={styles.rowSwitch} />
+          <Switch value={toggle.value} onValueChange={toggle.onValueChange} disabled={toggle.disabled} style={styles.rowSwitch} />
         ) : (
           <>
             {right ?? null}

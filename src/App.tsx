@@ -152,6 +152,8 @@ export type RootStackParamList = {
   NetworkFeeOwner: undefined;
   /** Network fee › Pay from vault › Advanced settings: the relayer's per-operation and 24-hour caps. */
   NetworkFeeLimits: undefined;
+  /** Settings › Network: RPC nodes, and which networks the picker lists. See {NetworkSettingsScreen}. */
+  NetworkSettings: undefined;
   /** Settings › Network › RPC nodes: every network, each opening its nodes. See {RpcNodesListScreen}. */
   RpcNodes: undefined;
   /** One network's RPC nodes: which nodes this phone reads it from. See {RpcNetworkScreen}. */
@@ -560,6 +562,11 @@ function Root() {
           name="AssetDetail"
           getComponent={() => require('@/screens/AssetDetailScreen').AssetDetailScreen}
           options={{title: t('mobile.trade.asset_details'), fullScreenGestureEnabled: true}}
+        />
+        <Stack.Screen
+          name="NetworkSettings"
+          getComponent={() => require('@/screens/NetworkSettingsScreen').NetworkSettingsScreen}
+          options={{title: t('mobile.settings.network')}}
         />
         <Stack.Screen
           name="RpcNodes"
