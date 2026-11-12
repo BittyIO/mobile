@@ -13,7 +13,7 @@ import {TronWalletLabel, VaultSwitcher} from '@/components/VaultSwitcher';
 import {useLaunchUpdateCheck} from '@/core/app-update';
 import {useGuardProtocols} from '@/core/guard-catalog';
 import {useAutoUpgradePlan} from '@/vault/auto-upgrade';
-import {useNetwork} from '@/core/network-store';
+import {networkLabel, useNetwork} from '@/core/network-store';
 import type {NodeChain} from '@/core/rpc-store';
 import {RISK_TITLE} from '@/components/riskFormat';
 import {ToastHost} from '@/components/Toast';
@@ -152,7 +152,9 @@ export type RootStackParamList = {
   NetworkFeeOwner: undefined;
   /** Network fee › Pay from vault › Advanced settings: the relayer's per-operation and 24-hour caps. */
   NetworkFeeLimits: undefined;
-  /** Settings › RPC nodes: which nodes this phone reads the network in front from. See {RpcNetworkScreen}. */
+  /** Settings › Network › RPC nodes: every network, each opening its nodes. See {RpcNodesListScreen}. */
+  RpcNodes: undefined;
+  /** One network's RPC nodes: which nodes this phone reads it from. See {RpcNetworkScreen}. */
   RpcNetwork: {network: NodeChain};
   AutoYield: undefined;
   /**
@@ -560,9 +562,15 @@ function Root() {
           options={{title: t('mobile.trade.asset_details'), fullScreenGestureEnabled: true}}
         />
         <Stack.Screen
+          name="RpcNodes"
+          getComponent={() => require('@/screens/RpcNodesScreen').RpcNodesListScreen}
+          options={{title: t('mobile.rpc.title')}}
+        />
+        {/* Titled by its network: the list it is opened from is of networks. */}
+        <Stack.Screen
           name="RpcNetwork"
           getComponent={() => require('@/screens/RpcNodesScreen').RpcNetworkScreen}
-          options={{title: t('mobile.rpc.title')}}
+          options={({route}) => ({title: networkLabel(route.params.network, t)})}
         />
         <Stack.Screen
           name="NetworkFee"
