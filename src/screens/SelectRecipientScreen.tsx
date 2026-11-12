@@ -294,25 +294,26 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
   const [pageW, setPageW] = useState(0);
   const pagerRef = useRef<ScrollView>(null);
 
-  // New recipient in the header: always in reach, however long the book grows.
+  // New recipient: the + in the header when managing the book (always in reach, however long it
+  // grows), and after the Payees title when choosing whom to pay — as on web.
   const newOff = !addGate.allowed && (manage || !sendGate.allowed);
+  const newButton = (style: object) => (
+    <Pressable
+      onPress={() => nav.navigate(manage ? 'VaultWhitelistAdd' : 'NewRecipient')}
+      // A new address can be paid or saved; locked, the vault does neither.
+      disabled={newOff}
+      hitSlop={10}
+      style={[style, newOff && styles.pressed]}
+      accessibilityRole="button"
+      accessibilityLabel={t('mobile.payments.new_recipient')}>
+      <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+        <Path d="M12 5v14M5 12h14" stroke={c.accent} strokeWidth={2.2} strokeLinecap="round" />
+      </Svg>
+    </Pressable>
+  );
   useLayoutEffect(() => {
-    nav.setOptions({
-      headerRight: () => (
-        <Pressable
-          onPress={() => nav.navigate(manage ? 'VaultWhitelistAdd' : 'NewRecipient')}
-          // A new address can be paid or saved; locked, the vault does neither.
-          disabled={newOff}
-          hitSlop={10}
-          style={[styles.headerBtn, newOff && styles.pressed]}
-          accessibilityRole="button"
-          accessibilityLabel={t('mobile.payments.new_recipient')}>
-          <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-            <Path d="M12 5v14M5 12h14" stroke={c.accent} strokeWidth={2.2} strokeLinecap="round" />
-          </Svg>
-        </Pressable>
-      ),
-    });
+    nav.setOptions({headerRight: manage ? () => newButton(styles.headerBtn) : undefined});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nav, t, c, styles, manage, newOff]);
 
   /**
@@ -381,6 +382,7 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
       {/* Each group's title on the left and what a payment to it may be on the right. */}
       <View style={styles.sectionRow}>
         <Text style={styles.sectionTitle}>{t('mobile.payments.whitelisted_book')}</Text>
+        {newButton(styles.sectionAdd)}
         <Text style={styles.sectionLimit}>{t('mobile.payments.max_send_none')}</Text>
       </View>
       {group(live, t('mobile.payments.book_empty_title'))}
@@ -396,6 +398,40 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
           <View style={styles.card}>{waiting.map((b, i) => entryRow(b, i, waiting))}</View>
         </>
       ) : null}
+
+      {/* Typing an address: its own category, held to Send to new, which the title says. With it
+          off (or the vault locked) the row says so, greyed, instead of opening a form whose payment
+          would only be refused; Off is a setting, so it links to it. A lock is not. As on web. */}
+      <View style={styles.sectionRow}>
+        <Text style={styles.sectionTitle}>{t('mobile.payments.enter_address')}</Text>
+        {allowance && !lockedSends ? <Text style={styles.sectionLimit}>{allowance}</Text> : null}
+      </View>
+      <View style={styles.card}>
+        {sendsToNewOff || lockedSends ? (
+          <View style={[styles.row, styles.rowFirst, styles.rowLast]}>
+            <View style={styles.entryCol}>
+              <Text style={[styles.entryName, styles.entryNameOff]}>{t('mobile.payments.enter_address')}</Text>
+              {/* Locked, the reason is the lock, which no setting here changes. */}
+              {lockedSends ? <Text style={styles.sub}>{t('mobile.vault.lock_send_book_only')}</Text> : null}
+            </View>
+            {!lockedSends ? (
+              <Pressable hitSlop={10} onPress={() => nav.navigate('VaultRiskValue', {field: 'sendDailyAllowance'})} accessibilityRole="link">
+                <Text style={styles.link}>{t('mobile.payments.cant_pay_settings')}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : (
+          <Pressable
+            style={({pressed}) => [styles.row, styles.rowFirst, styles.rowLast, pressed && styles.pressed]}
+            onPress={() => nav.navigate('NewRecipient')}
+            accessibilityRole="button">
+            <Text style={[styles.entryName, styles.flexText]}>{t('mobile.payments.enter_address')}</Text>
+            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+              <Path d="M9 6l6 6-6 6" stroke={c.subtext} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+            </Svg>
+          </Pressable>
+        )}
+      </View>
 
       {/* Off when send to new is off: a vault of your own that is not whitelisted then cannot be
           paid, and one that is already shows in the whitelist above. */}
@@ -472,6 +508,10 @@ const makeStyles = (c: Colors) =>
     entryNameOff: {color: c.subtext},
     // Sized to the bar's 44, as the Pending page's lock: the native bar anchors a custom view by its bottom.
     headerBtn: {width: 44, height: 44, alignItems: 'center', justifyContent: 'center'},
+    // The + after the Payees title: the title's line, not the header's 44.
+    sectionAdd: {alignSelf: 'center', marginVertical: -4},
+    flexText: {flex: 1},
+    link: {color: c.accent, fontSize: 15, fontWeight: '600'},
     addrMuted: {color: c.subtext, fontSize: 13, fontVariant: ['tabular-nums']},
     sub: {color: c.subtext, fontSize: 12, fontVariant: ['tabular-nums']},
     subWarn: {color: c.danger},
