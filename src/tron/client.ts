@@ -118,7 +118,37 @@ export async function balances(net: TronNet, address: string): Promise<TronBalan
   );
 }
 
-type Resources = {freeNetLimit?: number; freeNetUsed?: number; NetLimit?: number; NetUsed?: number; EnergyLimit?: number; EnergyUsed?: number};
+type Resources = {
+  freeNetLimit?: number;
+  freeNetUsed?: number;
+  NetLimit?: number;
+  NetUsed?: number;
+  EnergyLimit?: number;
+  EnergyUsed?: number;
+  /** The whole network's daily energy, and the TRX staked for it: their ratio is energy per TRX. */
+  TotalEnergyLimit?: number;
+  TotalEnergyWeight?: number;
+};
+
+export type TronEnergy = {
+  /** The account's energy per day: what it has staked plus what is delegated to it. */
+  limit: number;
+  /** Spent in the last 24 hours; it recovers over a day. */
+  used: number;
+  /** Energy a day for each TRX staked, network-wide right now. Moves as others stake. */
+  perTrxPerDay: number;
+};
+
+/** An account's energy, and what one staked TRX earns in energy today. */
+export async function accountEnergy(net: TronChain, address: string): Promise<TronEnergy> {
+  const r = await post<Resources>(net, '/wallet/getaccountresource', {address: tronHex(address)});
+  const weight = r.TotalEnergyWeight ?? 0;
+  return {
+    limit: r.EnergyLimit ?? 0,
+    used: r.EnergyUsed ?? 0,
+    perTrxPerDay: weight > 0 ? (r.TotalEnergyLimit ?? 0) / weight : 0,
+  };
+}
 type ChainParams = {chainParameter: {key: string; value?: number}[]};
 
 let paramsCache: {net: TronChain; at: number; p: Record<string, number>} | null = null;

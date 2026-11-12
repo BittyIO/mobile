@@ -24,8 +24,8 @@ import {useVaultPositions} from '@/vault/useVaultPositions';
 import {useFlows} from '@/vault/useFlows';
 import {earnedRaw} from '@/vault/flows';
 import {usePriceFeed} from '@/vault/usePrices';
-import {getLidoUnstake, NO_UNSTAKE, type LidoUnstake} from '@/vault/lido';
-import {adapterByName, protocolDisplayName} from '@/core/protocols';
+import {getLidoUnstake, NO_UNSTAKE, queuedStakeAdapter, queueUnits, type LidoUnstake} from '@/vault/lido';
+import {protocolDisplayName} from '@/core/protocols';
 import {useMarketStats, type MarketStat, type MarketStatMap} from '@/vault/useMarketStats';
 
 import {usdValue, fmtValue} from '@/core/prices';
@@ -452,7 +452,10 @@ export function VaultHomeScreen() {
    * back on the claim. Read from the chain, as the web does, and counted into WETH, which is what
    * the claim pays back. `unstakeFor` says which vault the figure is for, so a switch waits again.
    */
-  const lidoAdapter = adapterByName(network, 'Lido');
+  // Lido's queue, or on Tron TRON Stake's unstake: the same shape, paid back in the wrapped coin.
+  const queued = queuedStakeAdapter(network);
+  const lidoAdapter = queued?.protocol ?? null;
+  const queuedName = queued?.name ?? 'Lido';
   const [unstake, setUnstake] = useState<{key: string; v: LidoUnstake} | null>(null);
   React.useEffect(() => {
     const key = bal.vault ? `${network}:${bal.vault.toLowerCase()}` : '';
@@ -565,18 +568,18 @@ export function VaultHomeScreen() {
         }))
         // Yielding above lending, always, rather than whatever order the positions arrived in.
         .sort((x, y) => Number(x.kind === 'supplied') - Number(y.kind === 'supplied'));
-      // Lido's queue pays back in WETH: count it there, as a leg of its own.
+      // The queue pays back in the wrapped coin (WETH, WTRX): count it there, as a leg of its own.
       const queued =
-        a.symbol === 'WETH' && unstake && unstake.key === unstakeKey
-          ? Number(formatUnits(unstake.v.unstaking + unstake.v.claimable, 18))
+        a.symbol === NATIVE[network].wrapped && unstake && unstake.key === unstakeKey
+          ? Number(formatUnits(unstake.v.unstaking + unstake.v.claimable, queueUnits(network)))
           : 0;
-      if (queued > 0) legs.push({protocol: 'Lido', kind: 'unstaking', amount: queued, earned: 0});
+      if (queued > 0) legs.push({protocol: queuedName, kind: 'unstaking', amount: queued, earned: 0});
       // Earnings accrued on this asset's yield/lend positions: what its legs show, summed.
       const earned = legs.reduce((s, l) => s + l.earned, 0);
       const total = free + yielding + lending + queued;
       return {legs, symbol: a.symbol, icon: a.icon, address: a.address, free, yielding, lending, earned, total, usd: usdValue(total, a.symbol, prices), price: usdValue(1, a.symbol, prices), stable: a.kind === 'stable', category: assetCategory(a.category)};
     });
-  }, [catalog, bal.balances, pos.positions, flows.flows, network, prices, unstake, unstakeKey]);
+  }, [catalog, bal.balances, pos.positions, flows.flows, network, prices, unstake, unstakeKey, queuedName]);
 
   /**
    * The last complete Overview of this vault, shown at once while the fresh one loads.

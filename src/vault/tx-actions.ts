@@ -4,7 +4,7 @@
  * already told by the transfer legs, so they yield nothing here; configuration actions, which move
  * nothing but their gas fee, are the point.
  */
-import type {Network} from '@/core/chain';
+import {NATIVE, type Network} from '@/core/chain';
 import {assetMeta, underlyingOf} from '@/core/assets';
 import {protocolDisplayName, protocolMeta} from '@/core/protocols';
 import {displaySymbol, fmtNum, shortAddress} from '@/core/format';
@@ -542,7 +542,7 @@ export function describeActions(
         out.push(k('trade_paused'));
         break;
       case 'wrapNative':
-        out.push(k('wrap'));
+        out.push(k('wrap', {coin: NATIVE[network].symbol}));
         break;
       case 'addScheduledPayment':
         out.push(k('scheduled_added'));

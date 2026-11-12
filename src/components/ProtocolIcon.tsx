@@ -39,6 +39,10 @@ const LOGOS: Record<string, ImageSourcePropType> = {
   UniswapX: require('@/assets/protocols/uniswap.png'),
   'CoW Swap': require('@/assets/protocols/cow.png'),
   PancakeSwap: require('@/assets/protocols/pancakeswap.png'),
+  // Tron Nile: SunSwap's market trades (the Uniswap trade adapter on SunSwap's router), and Tron's own
+  // staking, which wears the TRON mark.
+  SunSwap: require('@/assets/protocols/sunswap.png'),
+  'TRON Stake': require('@/assets/protocols/tron.png'),
 };
 
 /**

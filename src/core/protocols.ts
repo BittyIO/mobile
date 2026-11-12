@@ -64,8 +64,13 @@ const PROTOCOLS: Record<Network, Record<string, ProtocolInfo>> = {
     '0x67bd4c240d513e7eb35bf8d871cbed314856b125': {name: 'Uniswap Universal', category: 'amm'},
     '0x236b4b260bd29dca1df29360fa09c084e37fb100': {name: 'CoW Swap', category: 'intent'},
   },
-  // The Nile guard lists no protocol: none ships with the vault on Tron.
-  'tron-nile': {},
+  // Registered on the Nile guard 2026-11-12 (protocol-store deployments/tron-nile.json). TRON Stake
+  // freezes WTRX for energy delegated to the owner; SunSwap is the Uniswap trade adapter pointed at
+  // SunSwap's Universal Router, its routes from the server like Uniswap's elsewhere.
+  'tron-nile': {
+    '0xdcc359a255b04b1cb115fdc4dd3c273926407905': {name: 'TRON Stake', category: 'staking'},
+    '0x7f96acb3d964e505f77e3b3121f15f502f3a3217': {name: 'SunSwap', category: 'amm'},
+  },
 };
 
 /**

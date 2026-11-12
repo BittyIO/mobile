@@ -13,6 +13,7 @@ import {useConfirmAction} from '@/components/ConfirmAction';
 import {showTx} from '@/components/Toast';
 import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
+import {isTronNetwork} from '@/core/chain';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {useVaultPositions} from '@/vault/useVaultPositions';
 import {useFlows} from '@/vault/useFlows';
@@ -22,7 +23,18 @@ import {getAutoYields, setAutoYield} from '@/vault/autoyield';
 import {fetchProtocolApy, EMPTY_APY, type ProtocolApy} from '@/vault/apy';
 import {relayGasFor} from '@/vault/fee-quote';
 import {useActiveFeePayer} from '@/vault/useFeePayer';
-import {claimLido, fetchLidoEta, getLidoUnstake, NO_UNSTAKE, type LidoUnstake} from '@/vault/lido';
+import {
+  claimLido,
+  fetchLidoEta,
+  getLidoUnstake,
+  isQueuedStake,
+  NO_UNSTAKE,
+  queueSymbol,
+  queueUnits,
+  type LidoUnstake,
+} from '@/vault/lido';
+import {TRON_STAKE, tronUnstakeDays} from '@/vault/tron-stake';
+import {useOwnerEnergy} from '@/vault/useOwnerEnergy';
 import {ProgressRing, leftUnit} from '@/components/ProgressRing';
 import {useVaultWrite} from '@/components/useVaultWrite';
 
@@ -98,11 +110,14 @@ export function EarnDetailScreen() {
   );
   const free = bal.balances ? balanceOfSymbol(bal.balances, symbol) : null;
 
-  // The calendar in the header opens what the position made each UTC day.
+  // The calendar in the header opens what the position made each UTC day. Not on Tron: the server
+  // keeps no Tron history, and TRON Stake makes energy, not a daily amount.
   const decimals = position?.decimals ?? meta?.decimals;
+  const noDaily = isTronNetwork(network);
   useLayoutEffect(() => {
     nav.setOptions({
-      headerRight: () => (
+      headerRight: () =>
+        noDaily ? null : (
         <Pressable
           onPress={() => nav.navigate('DailyEarnings', {protocol, asset, symbol: sym, decimals})}
           hitSlop={10}
@@ -116,7 +131,7 @@ export function EarnDetailScreen() {
         </Pressable>
       ),
     });
-  }, [nav, t, c, styles, protocol, asset, sym, decimals]);
+  }, [nav, t, c, styles, protocol, asset, sym, decimals, noDaily]);
   const held = Number(position?.formatted ?? '0');
   /**
    * Anything at all in the vault opens the deposit form — the relayer's float is NOT subtracted
@@ -232,13 +247,22 @@ export function EarnDetailScreen() {
 
   const autoLabel = t(lend ? 'mobile.earn.auto_supply' : 'mobile.earn.auto_yield');
 
-  // ── Lido's withdrawal queue ───────────────────────────────────────────
+  // ── the staking queue (Lido's, or TRON Stake's unstake) ───────────────
   /**
    * A Lido withdraw files a request that finalizes days later and then has to be claimed, as WETH,
    * back into the vault. Until then the ETH is in neither the position nor the balance above, so
-   * it is shown here — still unstaking, then claimable with the button to claim it.
+   * it is shown here — still unstaking, then claimable with the button to claim it. TRON Stake's
+   * unstake is the same shape: Tron unlocks the TRX after its delay, and a claim brings it back as
+   * WTRX.
    */
-  const isLido = name === 'Lido';
+  const isLido = isQueuedStake(name);
+  // TRON Stake pays energy to the owner rather than yield; its keeper-run Auto-Yield does not run
+  // on Tron (the server indexes no Tron vault), so that card is not offered for it.
+  const isTronStake = name === TRON_STAKE;
+  // Only this network's wait: 14 days on mainnet, 1 on Nile.
+  const unstakeDays = tronUnstakeDays(network);
+  const unstakeWait = unstakeDays === 1 ? t('mobile.earn.unstake_wait_one') : t('mobile.earn.unstake_wait', {n: unstakeDays});
+  const energy = useOwnerEnergy(network, pos.positions);
   const [unstake, setUnstake] = useState<LidoUnstake>(NO_UNSTAKE);
   const loadUnstake = useCallback(() => {
     if (!isLido || !bal.vault) return;
@@ -255,6 +279,11 @@ export function EarnDetailScreen() {
   useEffect(() => {
     let live = true;
     setEta(null);
+    // A queue that knows its own unlocks (Tron's) needs no estimate from anywhere else.
+    if (unstake.eta !== undefined) {
+      setEta(unstake.eta);
+      return;
+    }
     fetchLidoEta(network, unstake.pendingIds)
       .then((e) => live && setEta(e))
       .catch(() => {});
@@ -273,7 +302,9 @@ export function EarnDetailScreen() {
     loadUnstake();
     bal.refresh();
   });
-  const fmtEth = (wei: bigint) => fmtNum(Number(formatUnits(wei, 18)));
+  // The queue pays back the native coin: ETH for Lido, TRX for TRON Stake.
+  const fmtEth = (wei: bigint) => fmtNum(Number(formatUnits(wei, queueUnits(network))));
+  const queueSym = queueSymbol(network);
 
   return (
     <ScrollView
@@ -307,7 +338,27 @@ export function EarnDetailScreen() {
             <Text style={styles.apyText}>{t('mobile.earn.apy_rate', {rate: rate.toFixed(2)})}</Text>
           </View>
         ) : null}
+        {isTronStake && energy && energy.perTrxPerDay > 0 ? (
+          <View style={styles.apyPill}>
+            <Text style={styles.apyText}>{t('mobile.earn.energy_rate', {rate: energy.perTrxPerDay.toFixed(1)})}</Text>
+          </View>
+        ) : null}
       </View>
+
+      {/* What staking TRX buys: energy for the owner's own Tron transactions, not yield. */}
+      {isTronStake ? (
+        <View style={styles.card}>
+          <Row
+            label={t('mobile.earn.energy_yours')}
+            value={energy ? `${fmtNum(Math.max(0, energy.limit - energy.used))} / ${fmtNum(energy.limit)}` : '—'}
+          />
+          <Row
+            label={t('mobile.earn.energy_from_stake')}
+            value={energy ? `≈ ${fmtNum(Math.floor(held * energy.perTrxPerDay))}` : '—'}
+          />
+          <Text style={styles.explain}>{t('mobile.earn.energy_what')}</Text>
+        </View>
+      ) : null}
 
       <View style={styles.card}>
         <Row label={t('mobile.earn.detail_position')} value={`${fmtNum(held)} ${sym}`} />
@@ -328,6 +379,8 @@ export function EarnDetailScreen() {
           on the web, so the place to look exists before there is anything in it. */}
       {isLido ? (
         <View style={styles.card}>
+          {/* Tron's own unstake delay on this network, before the amounts it applies to. */}
+          {isTronStake ? <Row label={t('mobile.earn.unstake_wait_label')} value={unstakeWait} /> : null}
           <View style={styles.row}>
             <Text style={styles.rowLabel}>{t('vault.unstaking')}</Text>
             <View style={styles.claimRight}>
@@ -345,7 +398,7 @@ export function EarnDetailScreen() {
                 </View>
               ) : null}
               <Text style={styles.rowValue}>
-                <Amount v={`${fmtEth(unstake.unstaking)} ETH`} size={15} />
+                <Amount v={`${fmtEth(unstake.unstaking)} ${queueSym}`} size={15} />
               </Text>
             </View>
           </View>
@@ -353,14 +406,14 @@ export function EarnDetailScreen() {
             <Text style={styles.rowLabel}>{t('vault.claimable')}</Text>
             <View style={styles.claimRight}>
               <Text style={[styles.rowValue, unstake.claimable > 0n && styles.rowValueGood]}>
-                <Amount v={`${fmtEth(unstake.claimable)} ETH`} size={15} color={unstake.claimable > 0n ? c.success : undefined} />
+                <Amount v={`${fmtEth(unstake.claimable)} ${queueSym}`} size={15} color={unstake.claimable > 0n ? c.success : undefined} />
               </Text>
               <Pressable
                 style={({pressed}) => [styles.claimBtn, (!claim.ready || unstake.claimableIds.length === 0) && styles.btnFaded, pressed && styles.pressed]}
                 disabled={!claim.ready || unstake.claimableIds.length === 0}
                 hitSlop={6}
                 onPress={() =>
-                  claim.run('claim', `${t('vault.claim')} · ${fmtEth(unstake.claimable)} ETH`, (b) =>
+                  claim.run('claim', `${t('vault.claim')} · ${fmtEth(unstake.claimable)} ${queueSym}`, (b) =>
                     claimLido({...b, protocol: protocol as Address, ids: unstake.claimableIds}),
                   )
                 }>
@@ -371,6 +424,7 @@ export function EarnDetailScreen() {
         </View>
       ) : null}
 
+      {isTronStake ? null : (
       <View style={styles.card}>
         <View style={styles.autoRow}>
           <Text style={styles.autoLabel}>{autoLabel}</Text>
@@ -399,6 +453,7 @@ export function EarnDetailScreen() {
             sentence explaining what the switch does a logo read as part of the explanation —
             as if the paragraph were about the protocol rather than about the switch. */}
       </View>
+      )}
 
       {/* Side by side, the same pills the pair screen's Buy / Sell bar uses — and in the same
           order it puts them: the quiet one left, the one that commits money right. */}

@@ -4,7 +4,7 @@
  * or net-withdrawn position hasn't earned yet). Ported from web use-stake-flows / use-supply-flows.
  */
 import {create} from 'zustand';
-import {apiFetch, apiUrl, publicClientFor, type Network} from '@/core/chain';
+import {apiFetch, apiUrl, isTronNetwork, publicClientFor, type Network} from '@/core/chain';
 import type {Position} from './positions';
 
 type Totals = {staked: bigint; unstaked: bigint};
@@ -58,6 +58,9 @@ async function fetchOne(path: string, vault: string, network: Network): Promise<
 }
 
 export async function fetchFlows(vault: string, network: Network): Promise<Flows> {
+  // The server keeps no Tron ledger (it indexes no Tron vault), and TRON Stake earns no yield to
+  // measure against one.
+  if (isTronNetwork(network)) return {stake: new Map(), supply: new Map()};
   const [stake, supply] = await Promise.all([
     fetchOne('/api/ethereum/vaults/stake-flows', vault, network),
     fetchOne('/api/ethereum/vaults/supply-flows', vault, network),
@@ -187,7 +190,7 @@ export async function recordFlow(o: {
   amount: bigint;
   txHash: string;
 }): Promise<void> {
-  if (o.amount <= BigInt(0)) return;
+  if (o.amount <= BigInt(0) || isTronNetwork(o.network)) return;
   const txHash = o.txHash.toLowerCase();
   const row: PendingFlow = {
     network: o.network,
