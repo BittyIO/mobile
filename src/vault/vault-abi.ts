@@ -5,7 +5,7 @@ import {GUARD_IMPL_ABI, IMPLEMENTATION_VAULT} from '@/core/abi';
 import {vaultGuard} from '@/core/vault-contracts';
 import {translate} from '@/i18n';
 import {useLanguage} from '@/core/language-store';
-import {APP_BUILD, SUPPORTED_VAULT_MAJOR} from '@/core/app-version';
+import {APP_BUILD, vaultNeedsNewerApp} from '@/core/app-version';
 import v1_0_4 from '@/abis/vault-releases/vault-1.0.4.json';
 import {REVERT_SIGNATURES} from './capabilities';
 
@@ -19,8 +19,9 @@ import {REVERT_SIGNATURES} from './capabilities';
  *  - a vault on a release whose fingerprint this build already ships needs nothing;
  *  - one on a release it does not ship has that ABI downloaded once, checked against the
  *    fingerprint, and kept — so its new errors and events can be read;
- *  - one on a release whose `minAppBuild` is above this build is not written to, and is not offered
- *    as an upgrade: the app says to update instead.
+ *  - one on a release whose major or minor is above this app's version (see vaultNeedsNewerApp), or
+ *    whose `minAppBuild` is above this build, is not written to, and is not offered as an upgrade:
+ *    the app says to update instead.
  *
  * A downloaded ABI is only ever READ from — never used to choose or encode a call. A write still goes
  * by the function the app's own code names, so a tampered ABI cannot redirect one.
@@ -88,19 +89,18 @@ export function loadAbiIndex(network: Network): Promise<Release[] | null> {
   return indexLoad;
 }
 
-const major = (version: string) => Number(version.split('.')[0]);
-
 /**
- * Whether this build can drive a vault on `version` ("1.0.4"). The server's `minAppBuild` decides;
- * a release it has not listed, or no answer at all, falls back to the major version this build was
- * written for. Null version (not read yet, or not activated): yes — nothing is known against it.
+ * Whether this build can drive a vault on `version` ("1.0.4"). First the version rule: a vault whose
+ * major or minor is above the app's needs a newer app, whatever the server says. Then, for a release
+ * the server lists, its `minAppBuild`. Null version (not read yet, or not activated): yes — nothing
+ * is known against it.
  */
 export async function canRunVault(version: string | null, network: Network): Promise<boolean> {
   if (!version) return true;
+  if (vaultNeedsNewerApp(version)) return false;
   const releases = await loadAbiIndex(network);
   const r = releases?.find((x) => x.version === version);
-  if (r) return r.minAppBuild <= APP_BUILD;
-  return major(version) <= SUPPORTED_VAULT_MAJOR;
+  return r ? r.minAppBuild <= APP_BUILD : true;
 }
 
 const cacheKey = (hash: string) => `abi:${hash.toLowerCase()}`;
