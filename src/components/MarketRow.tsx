@@ -1,4 +1,5 @@
 import React from 'react';
+import {FIT} from '@/core/text-scale';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {TokenIcon} from '@/components/TokenIcon';
 import {displaySymbol} from '@/core/format';
@@ -63,7 +64,7 @@ export function MarketRow({
             <Text style={styles.sym}>{displaySymbol(symbol)}</Text>
             {/* The price and what it did today, as one line — the same line the Overview's
                 holdings row prints, down to the brackets and the colour. */}
-            <Text style={styles.sub}>
+            <Text {...FIT} style={styles.sub}>
               {price != null ? fmtUsd(price) : '—'}
               {change ? (
                 <Text style={{color: (change24h ?? 0) >= 0 ? c.success : c.danger}}> ({change})</Text>
@@ -71,7 +72,7 @@ export function MarketRow({
             </Text>
           </View>
         </View>
-        {cap && cap !== '—' ? <Text style={styles.cap}>{cap}</Text> : null}
+        {cap && cap !== '—' ? <Text {...FIT} style={styles.cap}>{cap}</Text> : null}
       </Pressable>
     </View>
   );
@@ -95,5 +96,5 @@ const makeStyles = (c: Colors) =>
      * that the row is listed under. At the weight of an amount a column of them read as the thing
      * the list was about, which is the price.
      */
-    cap: {color: c.subtext, fontSize: 15, fontVariant: ['tabular-nums']},
+    cap: {color: c.subtext, fontSize: 15, fontVariant: ['tabular-nums'], flexShrink: 1, maxWidth: '45%'},
   });

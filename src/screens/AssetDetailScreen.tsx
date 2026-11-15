@@ -1,4 +1,5 @@
 import React, {useMemo} from 'react';
+import {FIT} from '@/core/text-scale';
 import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useRoute, type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '@/App';
@@ -92,7 +93,7 @@ export function AssetDetailScreen() {
         ) : null}
         {/* A tokenized stock is one issuer's claim on the share: which one, under the company. */}
         {asset.issuer ? <Text style={styles.issuer}>{t('mobile.trade.issued_by', {issuer: asset.issuer})}</Text> : null}
-        <Text style={styles.price}>{price != null ? fmtUsd(price) : '—'}</Text>
+        <Text {...FIT} style={styles.price}>{price != null ? fmtUsd(price) : '—'}</Text>
         {/* The day's move under the figure it moved: a price with nothing beside it says what to
             pay and not whether it is a good moment, which is the question the number invites. */}
         {change(detail?.change.h24) ? <Text style={styles.heroChange}>{change(detail?.change.h24)}</Text> : null}

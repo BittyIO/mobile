@@ -1,4 +1,5 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
+import {FIT} from '@/core/text-scale';
 import {ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
@@ -150,13 +151,13 @@ export function TronWalletScreen() {
             </Pressable>
           </View>
           {hidden ? (
-            <Text style={styles.totalValue}>••••••</Text>
+            <Text {...FIT} style={styles.totalValue}>••••••</Text>
           ) : held === undefined ? (
             <View style={styles.totalLoading}>
               <ActivityIndicator color={c.subtext} />
             </View>
           ) : (
-            <Text style={styles.totalValue}>{total != null ? fmtValue(total) : '—'}</Text>
+            <Text {...FIT} style={styles.totalValue}>{total != null ? fmtValue(total) : '—'}</Text>
           )}
           <View style={styles.actions}>
             {(
