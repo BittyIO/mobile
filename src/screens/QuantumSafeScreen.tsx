@@ -21,10 +21,10 @@ import {setRotationOn, useRotationOn, useRotationStore} from '@/wallet/rotation-
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 
-type Note = 'elsewhere' | 'timelock' | 'fee' | 'orders' | 'phrase';
-const NOTES: Note[] = ['elsewhere', 'timelock', 'fee', 'orders', 'phrase'];
+type Note = 'elsewhere' | 'networks' | 'timelock' | 'fee' | 'orders' | 'phrase';
+const NOTES: Note[] = ['elsewhere', 'networks', 'timelock', 'fee', 'orders', 'phrase'];
 
-/** One line-drawn mark per note (lucide Ban, Clock, Fuel, ListOrdered, KeyRound). */
+/** One line-drawn mark per note (lucide Ban, Globe, Clock, Fuel, ListOrdered, KeyRound). */
 function NoteIcon({name, color}: {name: Note; color: string}) {
   const st = {stroke: color, strokeWidth: 2, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const};
   return (
@@ -33,6 +33,11 @@ function NoteIcon({name, color}: {name: Note; color: string}) {
         <>
           <Circle cx={12} cy={12} r={10} {...st} />
           <Path d="M4.9 4.9l14.2 14.2" {...st} />
+        </>
+      ) : name === 'networks' ? (
+        <>
+          <Circle cx={12} cy={12} r={10} {...st} />
+          <Path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20" {...st} />
         </>
       ) : name === 'timelock' ? (
         <>
@@ -176,7 +181,7 @@ export function QuantumSafeScreen() {
       contentContainerStyle={styles.body}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} tintColor={c.text} colors={[c.accent]} />}>
       <SettingsGroup footer={t('mobile.quantum.about')}>
-        <SettingsRow icon="quantum" title={t('mobile.quantum.title')} toggle={{value: on, onValueChange: toggle}} chevron={false} last />
+        <SettingsRow icon="newKey" title={t('mobile.quantum.title')} toggle={{value: on, onValueChange: toggle}} chevron={false} last />
       </SettingsGroup>
 
       {on && status ? (
@@ -233,8 +238,8 @@ export function QuantumSafeScreen() {
         <View style={styles.notes}>
           {NOTES.map((n) => (
             <View key={n} style={styles.note}>
-              <NoteIcon name={n} color={n === 'elsewhere' ? c.danger : c.accent} />
-              <Text style={[styles.noteText, n === 'elsewhere' && styles.noteWarn]}>
+              <NoteIcon name={n} color={n === 'elsewhere' || n === 'networks' ? c.danger : c.accent} />
+              <Text style={[styles.noteText, (n === 'elsewhere' || n === 'networks') && styles.noteWarn]}>
                 {t(`mobile.quantum.note_${n}`, {
                   time: status?.timelock != null ? fmtRiskValue('timelock', status.timelock, t) : '—',
                 })}
