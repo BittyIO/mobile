@@ -1,4 +1,5 @@
 import React from 'react';
+import {FIT} from '@/core/text-scale';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {Amount} from '@/components/Amount';
 import {TokenIcon} from '@/components/TokenIcon';
@@ -85,7 +86,7 @@ export function HoldingRow({
                 choosing between assets; here you already know what you hold. */}
             <Text style={styles.sym}>{displaySymbol(symbol)}</Text>
             {price != null ? (
-              <Text style={styles.sub}>
+              <Text {...FIT} style={styles.sub}>
                 {fmtUsd(price)}
                 {change ? (
                   <Text style={{color: (change24h ?? 0) >= 0 ? c.success : c.danger}}> ({change})</Text>
@@ -95,7 +96,7 @@ export function HoldingRow({
           </View>
         </View>
         <Pressable style={styles.amtCol} hitSlop={8} disabled={!onAmountPress} onPress={onAmountPress}>
-          <Text style={styles.amt}>
+          <Text {...FIT} style={styles.amt}>
             {hidden ? (
               MASK
             ) : earned > 0 ? (
@@ -107,7 +108,7 @@ export function HoldingRow({
               <Amount v={fmtHolding(total)} size={15} weight="600" />
             )}
           </Text>
-          {hidden ? <Text style={styles.sub}>{MASK}</Text> : usd != null ? <Text style={styles.sub}>{fmtValue(usd)}</Text> : null}
+          {hidden ? <Text style={styles.sub}>{MASK}</Text> : usd != null ? <Text {...FIT} style={styles.sub}>{fmtValue(usd)}</Text> : null}
         </Pressable>
       </Pressable>
     </View>
@@ -121,7 +122,9 @@ const makeStyles = (c: Colors) =>
     assetCell: {flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1},
     assetText: {flexShrink: 1, minWidth: 0},
     sym: {color: c.text, fontSize: 15, fontWeight: '600'},
-    amtCol: {alignItems: 'flex-end'},
+    // Shrinks with the asset cell rather than pushing it off the row: at a large text size both
+    // halves fit their figures to the space they get (see FIT).
+    amtCol: {alignItems: 'flex-end', flexShrink: 1, maxWidth: '60%'},
     amt: {color: c.text, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums']},
     sub: {color: c.subtext, fontSize: 12, marginTop: 2},
     amtEarned: {color: c.success, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums']},

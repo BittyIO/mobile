@@ -1,4 +1,5 @@
 import {isTestnet, isTronNetwork, NATIVE, NETWORK_FEATURES} from '@/core/chain';
+import {FIT} from '@/core/text-scale';
 import {useTransparentHeaderInset} from '@/components/header-inset';
 import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
@@ -999,14 +1000,14 @@ export function VaultHomeScreen() {
         </View>
         <View style={styles.totalRow}>
           {hidden ? (
-            <Text style={styles.totalValue}>{MASK_TOTAL}</Text>
+            <Text {...FIT} style={styles.totalValue}>{MASK_TOTAL}</Text>
           ) : !ready && !showingSnapshot ? (
             // The figure's own line height, so the card does not jump when it lands.
             <View style={styles.totalLoading}>
               <ActivityIndicator color={c.subtext} />
             </View>
           ) : (
-            <Text style={styles.totalValue}>{totalUsd != null ? fmtValue(totalUsd) : '—'}</Text>
+            <Text {...FIT} style={styles.totalValue}>{totalUsd != null ? fmtValue(totalUsd) : '—'}</Text>
           )}
           {/* Holdings distribution, right after the figure it breaks down. Disabled while balances
               are hidden: the page would show the very values the eye toggle is masking. */}

@@ -1,4 +1,5 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
+import {FIT} from '@/core/text-scale';
 import {ActivityIndicator, Pressable, StyleSheet, Text, View} from 'react-native';
 import Svg, {Defs, LinearGradient, Path, Stop} from 'react-native-svg';
 import {fmtUsd} from '@/core/prices';
@@ -207,7 +208,7 @@ export function PriceChart({
       <View style={styles.head}>
         {title}
         <View style={styles.headPrice}>
-          <Text style={styles.price} numberOfLines={1} ellipsizeMode="tail">{g ? fmt(g.last) : '—'}</Text>
+          <Text {...FIT} style={styles.price}>{g ? fmt(g.last) : '—'}</Text>
           {g ? (
             <Text style={[styles.change, {color: g.changePct >= 0 ? c.success : c.danger}]}>
               {g.changePct >= 0 ? '+' : ''}
