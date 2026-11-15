@@ -11,6 +11,7 @@ import {TabIcon, type TabName} from '@/components/TabIcon';
 import {NetworkSwitcher} from '@/components/NetworkSwitcher';
 import {TronWalletLabel, VaultSwitcher} from '@/components/VaultSwitcher';
 import {useLaunchUpdateCheck} from '@/core/app-update';
+import {useVaultAppCheck} from '@/vault/useVaultAppCheck';
 import {useGuardProtocols} from '@/core/guard-catalog';
 import {useAutoUpgradePlan} from '@/vault/auto-upgrade';
 import {networkLabel, useNetwork} from '@/core/network-store';
@@ -272,6 +273,8 @@ function MainTabs() {
   const {t} = useT();
   // Once a session reaches the vault: is a newer build out? See {useLaunchUpdateCheck}.
   useLaunchUpdateCheck(t);
+  // The vault in front runs a release this app is too old for: ask for the app update first.
+  useVaultAppCheck(t);
   const colors = useColors();
   // Setting an explicit height opts out of the navigator's own safe-area handling, so the home
   // indicator's space has to be added back by hand or the bar sits under it.
