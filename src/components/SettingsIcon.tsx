@@ -31,7 +31,7 @@ export type SettingsIconName =
   | 'follow'
   | 'terms'
   | 'privacy'
-  | 'quantum'
+  | 'newKey'
   | 'wallet'
   | 'upgrade';
 
@@ -71,7 +71,7 @@ const TINT: Record<SettingsIconName, string> = {
   follow: '#0E85FF',
   terms: '#8E8E93',
   privacy: '#5856D6',
-  quantum: '#32ADE6',
+  newKey: '#32ADE6',
   // The owner's own wallet paying the fee, beside the Bitty logo of the vault paying it.
   wallet: '#FF9500',
   // The vault's contract moving to a newer release: blue, an arrow up.
@@ -206,12 +206,14 @@ export function SettingsIcon({name, size = 29, round = false}: {name: SettingsIc
             <Path d="M17 7V5.5a1.5 1.5 0 0 0-1.9-1.45L6 6.5" {...c} />
             <Path d="M21 11h-4a2 2 0 0 0 0 4h4" {...c} />
           </>
-        ) : name === 'quantum' ? (
+        ) : name === 'newKey' ? (
           <>
-            {/* lucide Atom: quantum-safe keys. */}
-            <Circle cx={12} cy={12} r={1} {...c} />
-            <Path d="M20.2 20.2c2-2 0-7.4-4.5-11.9S5.8 1.8 3.8 3.8s0 7.4 4.5 11.9 9.9 6.5 11.9 4.5z" {...c} />
-            <Path d="M15.7 15.7c4.5-4.5 6.5-9.9 4.5-11.9s-7.4 0-11.9 4.5-6.5 9.9-4.5 11.9 7.4 0 11.9-4.5z" {...c} />
+            {/* lucide RotateCcwKey: new key after signing — the vault turning to a fresh key. */}
+            <Path d="m14.5 9.5 1 1" {...c} />
+            <Path d="m15.5 8.5-4 4" {...c} />
+            <Path d="M3 12a9 9 0 1 0 9-9 9.74 9.74 0 0 0-6.74 2.74L3 8" {...c} />
+            <Path d="M3 3v5h5" {...c} />
+            <Circle cx={10} cy={14} r={2} {...c} />
           </>
         ) : name === 'privacy' ? (
           <>

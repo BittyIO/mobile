@@ -93,7 +93,7 @@ export function SecurityScreen() {
         {/* A Safe's keys are its owners' to manage: there is no one key here to retire. */}
         {isSafe ? null : (
           <SettingsRow
-            icon="quantum"
+            icon="newKey"
             title={t('mobile.quantum.title')}
             value={t(quantumOn ? 'mobile.quantum.on' : 'mobile.quantum.off')}
             onPress={() => nav.navigate('QuantumSafe')}
