@@ -83,6 +83,18 @@ export function availableVaultUpgrade(vault: Address, network: Network): string 
   return plans.get(planKey(network, vault))?.vault?.version ?? null;
 }
 
+/**
+ * The build an adapter's next call would upgrade the vault's clone to, riding in front: null when
+ * none is due, the plan has not been read, or Auto upgrade is off for that adapter. Lets a screen
+ * show what the position will run on — a 1.1.0 build's yield fee — rather than the clone's old rate.
+ */
+export function plannedProtocolUpgrade(vault: Address, network: Network, protocol: string): Address | null {
+  const p = protocol.toLowerCase();
+  const s = plans.get(planKey(network, vault))?.protocols.find((x) => x.addresses.some((a) => a.toLowerCase() === p));
+  if (!s?.upgrade || !autoUpgradeProtocol(network, vault, s.lineage)) return null;
+  return s.upgrade.newImpl as Address;
+}
+
 /** Keeps the vault in front's upgrade plan read: on open, on returning to the app, on a switch. */
 export function useAutoUpgradePlan(network: Network): void {
   const vault = useActiveVaultAddress(network);

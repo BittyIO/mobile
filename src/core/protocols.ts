@@ -26,16 +26,17 @@ const PROTOCOLS: Record<Network, Record<string, ProtocolInfo>> = {
   // Read off the mainnet guard 2026-10-19. The catalog API wins once it answers; this is the
   // first frame and offline — without it Earn has no adapter to name and shows nothing.
   mainnet: {
-    '0xbb51e4d055f213d0e38a103b9ba5943de2e83287': {name: 'Aave V3', category: 'lending'},
+    '0x393802ac334bbda1759144257a7cf3706a0d5c9c': {name: 'Aave V3', category: 'lending'},
     '0x8b2b9ae6dea163a382b02ff921fb3c3559769d10': {name: 'Uniswap Universal', category: 'amm'},
     '0x350f13cdc7311713ee6dac05dd3b9fd624536b02': {name: 'CoW Swap', category: 'intent'},
-    '0x355b273974111508328155ccf65a7af434f24243': {name: 'Lido', category: 'staking'},
-    '0x093cedc958bf07eb0063e6299e5b547292cf9ad4': {name: 'Sky', category: 'staking'},
+    '0x76370182b73cd99189629d59a020f61416405020': {name: 'Lido', category: 'staking'},
+    '0x86a67ff3ac7598b3df5ed3ea0ecf1d1cf6bfb1f4': {name: 'Sky', category: 'staking'},
   },
   // Registered on the Base guard 2026-10-18, with fees to the Safe.
+  // Aave and Sky: the 1.1.0 yield-fee builds, registered 2026-11-16 (the 1.0.0 ones are in RETIRED).
   base: {
-    '0x8e14e91f29066ccdd9e9e2db6bafe6fef7c14ac6': {name: 'Sky', category: 'staking'},
-    '0xb3ff9df07f2901d97c07146d18093de914141ad3': {name: 'Aave V3', category: 'lending'},
+    '0x9c512965bda7fa93d2a91824e06d28b81872db63': {name: 'Sky', category: 'staking'},
+    '0xb1a6f3410337dc3a7f7dcb6983e85abd2bf1fba4': {name: 'Aave V3', category: 'lending'},
     '0xb5b4313d88b4aa68d03bd6467eb1460ffaf136e5': {name: 'Uniswap Universal', category: 'amm'},
     '0x646248f1ad34a4ef927726bd818c19107231322b': {name: 'CoW Swap', category: 'intent'},
   },
@@ -46,15 +47,15 @@ const PROTOCOLS: Record<Network, Record<string, ProtocolInfo>> = {
   },
   // Registered on the Arbitrum guard 2026-10-19. Names only; routing reads the guard.
   arbitrum: {
-    '0x7e97befd060124ed648d77901398f4051a1cf1ed': {name: 'Sky', category: 'staking'},
-    '0x5786f0ef83c4fc08ae372207707bb577e413c227': {name: 'Aave V3', category: 'lending'},
+    '0x940e7be76d98c403fd85227174d377e94a32bb90': {name: 'Sky', category: 'staking'},
+    '0x91496bb140a8899cf6f02429261d3e8cc46281e3': {name: 'Aave V3', category: 'lending'},
     '0x2576d292401c03985e41737a09bce9f1214fb7f3': {name: 'Uniswap Universal', category: 'amm'},
     '0x0936b90022eb22ae3329751573d22da26f1b1ad3': {name: 'CoW Swap', category: 'intent'},
   },
   // Registered on the BSC guard 2026-11-10. PancakeSwap is the Uniswap trade adapter pointed at
   // PancakeSwap's Universal Router; its routes come from the server, like Uniswap's elsewhere.
   bsc: {
-    '0x30fb7e82ddd6f0fb6fb94ce117fc2dc33b90a615': {name: 'Aave V3', category: 'lending'},
+    '0x6cc0ead62a10cd1444873b25314be1597e4dffdd': {name: 'Aave V3', category: 'lending'},
     '0x5eda2893c932074bdc2e05b96c81f0bfcb1209c7': {name: 'PancakeSwap', category: 'amm'},
     '0x1e99b0f8f4c99070e9bee6a160a80a02b74207d6': {name: 'CoW Swap', category: 'intent'},
   },
@@ -85,6 +86,26 @@ const RETIRED: Partial<Record<Network, Record<string, ProtocolInfo>>> = {
   // UniswapX: deprecated on the Robinhood guard with vault 1.0.6, which takes no UniswapX order.
   robinhood: {
     '0x2db440cf6215d68d44736a287b253f4461399aa0': {name: 'UniswapX', category: 'intent'},
+  },
+  // Aave, Lido and Sky 1.0.0: deprecated 2026-11-16 by the 1.1.0 yield-fee builds. A vault's clone of
+  // one is upgraded in place, so its history still names these.
+  mainnet: {
+    '0xbb51e4d055f213d0e38a103b9ba5943de2e83287': {name: 'Aave V3', category: 'lending'},
+    '0x355b273974111508328155ccf65a7af434f24243': {name: 'Lido', category: 'staking'},
+    '0x093cedc958bf07eb0063e6299e5b547292cf9ad4': {name: 'Sky', category: 'staking'},
+  },
+  arbitrum: {
+    '0x7e97befd060124ed648d77901398f4051a1cf1ed': {name: 'Sky', category: 'staking'},
+    '0x5786f0ef83c4fc08ae372207707bb577e413c227': {name: 'Aave V3', category: 'lending'},
+  },
+  bsc: {
+    '0x30fb7e82ddd6f0fb6fb94ce117fc2dc33b90a615': {name: 'Aave V3', category: 'lending'},
+  },
+  // Aave and Sky 1.0.0: deprecated on the Base guard 2026-11-16 by the 1.1.0 yield-fee builds. A
+  // vault's clone of either is upgraded in place, so its history still names these.
+  base: {
+    '0x8e14e91f29066ccdd9e9e2db6bafe6fef7c14ac6': {name: 'Sky', category: 'staking'},
+    '0xb3ff9df07f2901d97c07146d18093de914141ad3': {name: 'Aave V3', category: 'lending'},
   },
 };
 
@@ -252,11 +273,30 @@ export function adapterByName(network: Network, name: string): Address | null {
   if (!hit) return null;
   const [address, info] = hit;
   const live = currentGuardProtocols(network);
+  // A table saved before the guard swapped this adapter (the served catalog is cached on the phone)
+  // can still name one the guard has retired, and every call naming it reverts — Base's Aave 1.0.0
+  // after the 1.1.0 yield-fee build replaced it. Until the guard is read, the build's own table,
+  // which knows it is retired, answers instead.
+  if (!live && RETIRED[network]?.[address]) {
+    const current = Object.entries(PROTOCOLS[network]).find(([, i]) => i.name.toLowerCase() === name.toLowerCase());
+    if (current) return current[0] as Address;
+  }
   if (!live || live.some((p) => p.address.toLowerCase() === address)) return address as Address;
   // ponytail: assumes one unnamed live adapter per category; two replaced at once in one category
   // (Sky AND Lido) would be ambiguous — read lineages if that ever happens.
   const replacement = live.find((p) => p.category === info.category && !t[p.address.toLowerCase()]);
   return replacement?.address ?? (address as Address);
+}
+
+/**
+ * The adapter to call for `address`: itself, or — when the guard has retired it — the adapter that
+ * replaced it under the same name. A screen opened from a route or a position read before the swap
+ * still carries the old address, and the vault refuses every call naming a retired adapter.
+ */
+export function currentAdapter(network: Network, address: Address): Address {
+  const retired = RETIRED[network]?.[address.toLowerCase()];
+  if (!retired) return address;
+  return adapterByName(network, retired.name) ?? address;
 }
 
 export type {Address};

@@ -22,6 +22,10 @@ import {balanceOfSymbol} from '@/vault/read';
 import {getAutoYields, setAutoYield} from '@/vault/autoyield';
 import {fetchProtocolApy, EMPTY_APY, type ProtocolApy} from '@/vault/apy';
 import {relayGasFor} from '@/vault/fee-quote';
+import {fetchFeeOwed, fetchYieldFees} from '@/vault/yield-fee';
+import {plannedProtocolUpgrade} from '@/vault/auto-upgrade';
+import {InfoIcon} from '@/components/TradeMenu';
+import {Sheet} from '@/components/Sheet';
 import {useActiveFeePayer} from '@/vault/useFeePayer';
 import {
   claimLido,
@@ -188,6 +192,33 @@ export function EarnDetailScreen() {
     () => apy.protocolApy.get(protocol.toLowerCase()) ?? apy.assetApy.get(asset.toLowerCase()) ?? null,
     [apy, protocol, asset],
   );
+
+  // ── Bitty's fee on what this earns ─────────────────────────────────────
+  /**
+   * The rate the vault's own adapter clone charges (none on a clone older than the fee, until the
+   * owner upgrades it) and what the position owes now, paid at its next withdrawal. Read again with
+   * every pull and after a deposit or withdrawal, which is when what is owed changes.
+   */
+  const [feeBps, setFeeBps] = useState(0);
+  const [feeOwed, setFeeOwed] = useState<bigint | null>(null);
+  useEffect(() => {
+    let live = true;
+    // With Auto upgrade on, the next call upgrades an old clone first, so the rate is the new build's.
+    const next = bal.vault ? plannedProtocolUpgrade(bal.vault, network, protocol) : null;
+    (next ? fetchYieldFees(null, network, [next]).then((m) => m.get(next.toLowerCase()) ?? 0) : fetchYieldFees(bal.vault, network, [protocol as Address]).then((m) => m.get(protocol.toLowerCase()) ?? 0))
+      .then((bps) => live && setFeeBps(bps))
+      .catch(() => live && setFeeBps(0));
+    if (bal.vault) {
+      fetchFeeOwed(bal.vault, network, protocol as Address, asset as Address)
+        .then((o) => live && setFeeOwed(o))
+        .catch(() => live && setFeeOwed(null));
+    }
+    return () => {
+      live = false;
+    };
+  }, [bal.vault, network, protocol, asset, pos.positions, apyNonce]);
+  const feePct = feeBps / 100;
+  const [feeInfo, setFeeInfo] = useState(false);
 
   // ── auto-yield ────────────────────────────────────────────────────────
   const [autoOn, setAutoOn] = useState(false);
@@ -370,8 +401,25 @@ export function EarnDetailScreen() {
             float the answer is none of it — so calling the figure available was the one thing it
             could not be called. */}
         <Row label={t('vault.balance')} value={free != null ? `${fmtNum(Number(free))} ${sym}` : '—'} />
-        {/* Said, not left out: Bitty takes nothing from what this earns. Only the network fee applies. */}
-        <Row label={t('mobile.trade.bitty_fee')} value="0%" />
+        {/* Said, not left out: Bitty's share of what this earns - 0% on an adapter older than the
+            fee - and, once there is one, what the position owes, paid when it is withdrawn. */}
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>{t('mobile.trade.bitty_fee')}</Text>
+          <View style={styles.feeValue}>
+            <Text style={styles.rowValue}>
+              <Amount v={feeBps > 0 ? t('mobile.earn.fee_of_earnings', {pct: feePct}) : '0%'} size={15} />
+            </Text>
+            {/* What the fee is, in a sheet: the line under the card said it, and crowded it. */}
+            {feeBps > 0 ? (
+              <Pressable onPress={() => setFeeInfo(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('mobile.trade.bitty_fee')}>
+                <InfoIcon color={c.subtext} size={16} />
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+        {feeOwed != null && feeOwed > 0n && decimals != null ? (
+          <Row label={t('mobile.earn.fee_owed')} value={`${fmtNum(Number(formatUnits(feeOwed, decimals)))} ${sym}`} />
+        ) : null}
       </View>
 
       {/* Lido's withdrawal queue, a card of its own: what is still unstaking, and what is ready —
@@ -486,6 +534,9 @@ export function EarnDetailScreen() {
       {depositLocked ? null : <GateHint gate={depositGate} />}
       {sheet}
       {claim.sheet}
+      <Sheet visible={feeInfo} title={t('mobile.trade.bitty_fee')} onClose={() => setFeeInfo(false)}>
+        <Text style={styles.feeSheetText}>{t('mobile.earn.fee_what', {pct: feePct})}</Text>
+      </Sheet>
     </ScrollView>
   );
 }
@@ -516,6 +567,8 @@ const makeStyles = (c: Colors) =>
     apyText: {color: c.success, fontSize: 13, fontWeight: '700'},
     card: {backgroundColor: c.card, borderRadius: 20, borderCurve: 'continuous', padding: 16, gap: 10},
     row: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12},
+    feeValue: {flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1},
+    feeSheetText: {color: c.text, fontSize: 15, lineHeight: 22, paddingHorizontal: 20, paddingBottom: 24},
     rowLabel: {color: c.subtext, fontSize: 14, flexShrink: 1},
     rowValue: {color: c.text, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums']},
     rowValueGood: {color: c.success},
