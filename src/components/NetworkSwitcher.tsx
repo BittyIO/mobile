@@ -71,7 +71,29 @@ export function TronIcon({size, testnet}: {size: number; testnet?: boolean}) {
   );
 }
 
+/**
+ * Sepolia: Ethereum's diamond in white on the testnet grey, as Nile is Tron's mark and Base Sepolia
+ * Base's square, so the three testnets read alike and plainly not as the networks with real money.
+ * The diamond is ethereum.org's (256 x 417), its facets told apart by opacity as in the brand mark.
+ */
+function SepoliaIcon({size}: {size: number}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 32 32">
+      <Circle cx={16} cy={16} r={16} fill="#8E8E93" />
+      <G transform="translate(10 6.25) scale(0.0468)" fill="#FFFFFF">
+        <Path fillOpacity={0.6} d="M127.96 0 125.17 9.5V285.17L127.96 287.96 255.92 212.32Z" />
+        <Path d="M127.96 0 0 212.32 127.96 287.96V154.16Z" />
+        <Path fillOpacity={0.6} d="M127.96 312.19 126.39 314.11V412.31L127.96 416.91 256 236.59Z" />
+        <Path d="M127.96 416.91V312.19L0 236.59Z" />
+        <Path fillOpacity={0.2} d="M127.96 287.96 255.92 212.32 127.96 154.16Z" />
+        <Path fillOpacity={0.6} d="M0 212.32 127.96 287.96V154.16Z" />
+      </G>
+    </Svg>
+  );
+}
+
 export function NetworkIcon({network, size}: {network: ChainChoice; size: number}) {
+  if (network === 'sepolia') return <SepoliaIcon size={size} />;
   if (network === 'tron-nile') return <TronIcon size={size} testnet />;
   if (isTronNet(network)) return <TronIcon size={size} />;
   if (network === 'base') return <BaseIcon size={size} />;
