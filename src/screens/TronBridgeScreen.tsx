@@ -259,7 +259,6 @@ export function TronBridgeScreen() {
         {!recipient ? <Text style={styles.err}>{t('mobile.tron.bridge_no_vault', {network: NETWORK_LABEL[to]})}</Text> : null}
         {err ? <Text style={styles.err}>{err}</Text> : null}
         {noTrx ? <Text style={styles.err}>{t('mobile.tron.bridge_no_trx', {amount: fmt6(trxNeeded)})}</Text> : null}
-        {cost?.needsApproval ? <Text style={styles.hint}>{t('mobile.tron.bridge_approve_note')}</Text> : null}
 
         <View style={styles.footer}>
           <View style={styles.feeLine}>
