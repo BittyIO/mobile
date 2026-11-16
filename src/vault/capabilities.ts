@@ -52,6 +52,11 @@ export type VaultAction =
   | 'autoYield'
   | 'setAutoYielding'
   | 'marketTrade'
+  // Vault 1.1.0: the owner's alone, never an asset manager's, and not under a lock — except that
+  // turning the bridge OFF applies at once, locked or not.
+  | 'bridge'
+  | 'enableBridge'
+  | 'disableBridge'
   | 'placeIntentOrder'
   | 'approveIntentSpender'
   | 'cancelIntentOrder'
@@ -169,6 +174,7 @@ const OPEN_WHILE_LOCKED = new Set<VaultAction>([
   'claimWithdrawal',
   'approveIntentSpender',
   'sendToWhitelistedRecipient',
+  'disableBridge',
   // Up to 1.0.5 only (back to Bitty's list; leaving it is updateAllowList). From 1.0.6 the switch is
   // frozen under a lock in both directions.
   'useBittyAllowList',
@@ -232,7 +238,8 @@ export function capability(
 
   if (action === 'send' && state.sendAllowanceOff)
     return refuse('send_allowance_off');
-  if (action === 'marketTrade' && state.marketTradeOff)
+  // The daily loss allowance at 0 turns off what it bounds: market trades and, from 1.1.0, bridges.
+  if ((action === 'marketTrade' || action === 'bridge') && state.marketTradeOff)
     return refuse('market_trade_off');
   return ALLOWED;
 }
@@ -323,6 +330,19 @@ export const REVERT_REASON: Record<string, string> = {
   PriceStale: 'err_price_unavailable',
   PriceFeedMissing: 'err_price_unavailable',
   SequencerDown: 'err_price_unavailable',
+  // Vault 1.1.0, which renamed the market-trade loss error: it now bounds bridges too.
+  DailyLossAllowanceExceeded: 'err_daily_loss',
+  BridgeNotEnabled: 'err_bridge_off',
+  InvalidBridgeProtocol: 'err_bridge_route',
+  AssetNotBridgeable: 'err_bridge_route',
+  BridgeAmountMismatch: 'err_bridge_route',
+  // Raised by the Across adapter, under the vault's call.
+  BridgeRouteUnknown: 'err_bridge_route',
+  BridgeDestinationUnsupported: 'err_bridge_route',
+  BridgeValueMismatch: 'err_bridge_route',
+  BridgeOutputTooLow: 'err_bridge_cost',
+  BridgeFeeTooHigh: 'err_bridge_cost',
+  BridgeAmountZero: 'err_bridge_cost',
 };
 
 /** The error names in REVERT_REASON with their argument types, for selector matching. */

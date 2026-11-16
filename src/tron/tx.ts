@@ -37,12 +37,24 @@ const fString = (field: number, s: string) => fBytes(field, Array.from(s, (ch) =
 
 const TRANSFER = 1; // ContractType.TransferContract
 const TRIGGER = 31; // ContractType.TriggerSmartContract
+// Stake 2.0 (core/contract/balance_contract.proto): freeze, start unfreezing, take back what has unlocked.
+const FREEZE_V2 = 54; // ContractType.FreezeBalanceV2Contract
+const UNFREEZE_V2 = 55; // ContractType.UnfreezeBalanceV2Contract
+const WITHDRAW_UNFROZEN = 56; // ContractType.WithdrawExpireUnfreezeContract
+/** ResourceCode.ENERGY: what a stake earns here, so the wallet's own contract calls burn less TRX. */
+const ENERGY = 1n;
 
 export type TronCall =
   | {kind: 'trx'; from: string; to: string; amountSun: bigint}
   | {kind: 'trc20'; from: string; token: string; to: string; amount: bigint}
   /** Any contract call: the ABI calldata as it is, and TRX sent with it (call_value, in sun). A vault write. */
-  | {kind: 'call'; from: string; contract: string; data: Uint8Array; callValueSun?: bigint};
+  | {kind: 'call'; from: string; contract: string; data: Uint8Array; callValueSun?: bigint}
+  /** Stake 2.0: freeze TRX for energy. */
+  | {kind: 'freeze'; from: string; amountSun: bigint}
+  /** Stake 2.0: start unfreezing; the TRX unlocks after the network's delay (14 days on mainnet). */
+  | {kind: 'unfreeze'; from: string; amountSun: bigint}
+  /** Stake 2.0: move every unfreeze whose delay has passed back into the balance. */
+  | {kind: 'withdrawUnfrozen'; from: string};
 
 const addr = (a: string) => {
   const b = decodeTronAddress(a);
@@ -60,7 +72,16 @@ export function trc20TransferData(to: string, amount: bigint): Uint8Array {
   return out;
 }
 
+const wrap = (type: number, name: string, value: number[]) => [
+  ...fInt(1, BigInt(type)),
+  ...fBytes(2, [...fString(1, `type.googleapis.com/protocol.${name}`), ...fBytes(2, value)]),
+];
+
 function contractOf(call: TronCall): number[] {
+  // owner_address = 1, frozen_balance / unfreeze_balance = 2, resource = 3.
+  if (call.kind === 'freeze') return wrap(FREEZE_V2, 'FreezeBalanceV2Contract', [...fBytes(1, addr(call.from)), ...fInt(2, call.amountSun), ...fInt(3, ENERGY)]);
+  if (call.kind === 'unfreeze') return wrap(UNFREEZE_V2, 'UnfreezeBalanceV2Contract', [...fBytes(1, addr(call.from)), ...fInt(2, call.amountSun), ...fInt(3, ENERGY)]);
+  if (call.kind === 'withdrawUnfrozen') return wrap(WITHDRAW_UNFROZEN, 'WithdrawExpireUnfreezeContract', [...fBytes(1, addr(call.from))]);
   if (call.kind === 'trx') {
     const value = [...fBytes(1, addr(call.from)), ...fBytes(2, addr(call.to)), ...fInt(3, call.amountSun)];
     const any = [...fString(1, 'type.googleapis.com/protocol.TransferContract'), ...fBytes(2, value)];

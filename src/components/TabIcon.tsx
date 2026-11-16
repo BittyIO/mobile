@@ -1,7 +1,7 @@
 import React from 'react';
 import Svg, {Circle, Line, Path, Rect} from 'react-native-svg';
 
-export type TabName = 'Overview' | 'Earn' | 'Market' | 'Settings';
+export type TabName = 'Overview' | 'Earn' | 'Market' | 'Bridge' | 'Settings';
 
 /** The cog body. Only its centre fills when selected, so the gear keeps its teeth readable. */
 const COG =
@@ -76,6 +76,20 @@ export function TabIcon({name, color, size = 24, focused}: {name: TabName; color
           <Path d="M3.6 10.8a8.6 8.6 0 0 1 13.9-5.1" {...common} strokeWidth={sw + 0.1} />
           <Path d="M20.8 8.4 15.9 7.7 19.1 3.7Z" {...solid} strokeWidth={sw - 0.2} />
           <Path d="M3.2 15.6 8.1 16.3 4.9 20.3Z" {...solid} strokeWidth={sw - 0.2} />
+        </>
+      ) : name === 'Bridge' ? (
+        /**
+         * Tabler "affiliate": one big node linked out to three smaller ones, money leaving one
+         * network for others. The four nodes are the closed shapes and carry the fill; the links
+         * stay strokes.
+         */
+        <>
+          <Path d="M5.931 6.936l1.275 4.249m5.607 5.609l4.251 1.275" {...common} />
+          <Path d="M11.683 12.317l5.759 -5.759" {...common} />
+          <Circle cx={5.5} cy={5.5} r={1.5} {...solid} />
+          <Circle cx={18.5} cy={5.5} r={1.5} {...solid} />
+          <Circle cx={18.5} cy={18.5} r={1.5} {...solid} />
+          <Circle cx={8.5} cy={15.5} r={4.5} {...solid} />
         </>
       ) : (
         /**

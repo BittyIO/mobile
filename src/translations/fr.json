@@ -1469,7 +1469,11 @@
       "err_recipient_waiting": "Ce destinataire ne peut pas encore recevoir de fonds. Il le pourra à la fin de sa période d'attente.",
       "err_no_escape": "Choisissez un bénéficiaire qui peut déjà recevoir des fonds.",
       "err_gas_budget": "Le budget de frais réseau du jour est épuisé.",
-      "err_price_unavailable": "Un flux de prix est indisponible pour le moment. Réessayez dans un instant."
+      "err_price_unavailable": "Un flux de prix est indisponible pour le moment. Réessayez dans un instant.",
+      "err_bridge_off": "Le pont est désactivé pour ce coffre, ou attend encore la fin du délai.",
+      "err_bridge_route": "Cet actif ne peut pas passer par ce trajet.",
+      "err_bridge_cost": "Le devis a dépassé ce que ce trajet permet. Demandez un nouveau devis et réessayez.",
+      "err_daily_loss": "Cela dépasserait la limite de perte du jour."
     }
   },
   "matrica": {

@@ -3,14 +3,18 @@ import {Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-na
 import {useFocusEffect, useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '@/App';
 import {getRiskConfig, RISK_BOUNDS, updateRiskSettings, useAllowsZeroAllowance, type RiskConfig} from '@/vault/risk';
-import {useCapability} from '@/vault/gate';
+import {useCapability, useVaultGate} from '@/vault/gate';
+import {versionAtLeast} from '@/vault/capabilities';
+import {BRIDGE_SINCE} from '@/vault/bridge';
 import {LockNotice} from '@/components/LockNotice';
 import {OptionRow, SettingsGroup} from '@/components/SettingsRow';
 import {Button} from '@/components/Button';
 import {Sheet} from '@/components/Sheet';
 import {InfoIcon} from '@/components/TradeMenu';
 import {useVaultWrite} from '@/components/useVaultWrite';
-import {RISK_TITLE, fmtCountdown, fmtRiskValue, fmtPending, riskHintKey, riskZeroHintKey} from '@/components/riskFormat';
+import {RISK_TITLE, fmtCountdown, fmtRiskValue, riskHintKey, riskWhyKey, riskZeroHintKey} from '@/components/riskFormat';
+import {PendingRow} from '@/components/PendingRow';
+import {pendingValue} from '@/screens/PendingChangesScreen';
 import {isLoosening, valuesInForce} from '@/core/safety-levels';
 import {useNetwork} from '@/core/network-store';
 import {useActiveVaultAddress} from '@/core/active-vault';
@@ -93,7 +97,9 @@ export function RiskValueScreen() {
   const zeroOk = (useAllowsZeroAllowance(vault, network) || (risk != null && !risk.read)) && !isTimelock;
   const presets: readonly bigint[] = zeroOk ? [0n, ...PRESETS[field]] : PRESETS[field];
   const bounds = {min: zeroOk ? 0n : RISK_BOUNDS[field].min, max: RISK_BOUNDS[field].max};
-  const zeroHint = zeroOk ? riskZeroHintKey(field) : null;
+  // A 1.1.0 vault's loss limit also covers bridges, and its explanations say so.
+  const bridges = versionAtLeast(useVaultGate().vaultVersion, BRIDGE_SINCE);
+  const zeroHint = zeroOk ? riskZeroHintKey(field, bridges) : null;
   const isCustom = current != null && !presets.includes(current);
   // A lock freezes these too, so nothing can be picked rather than signed and refused on chain.
   const gate = useCapability('updateRisk');
@@ -133,6 +139,16 @@ export function RiskValueScreen() {
       ? t('mobile.vault.safety_applies_later', {date: new Date(effectAt * 1000).toLocaleString(), time: fmtCountdown(effectAt - now, t) ?? ''})
       : t('mobile.vault.safety_applies_now');
 
+  // A change to this number already waiting out the timelock: first on the page, as the Pending page
+  // draws it, with Cancel (writing the value in force back, which is how the vault cancels one).
+  const waiting = risk?.pending[field];
+  const cancel = () =>
+    run('cancel', t('mobile.vault.cancel_change'), async (b) => {
+      const r = await getRiskConfig(b.vault, b.network);
+      if (!r.read) throw new Error(t('mobile.vault.cancel_change_unread'));
+      return updateRiskSettings({...b, changes: {[field]: r[field]}});
+    });
+
   const save = () =>
     chosen != null && run('save', t(RISK_TITLE[field]), (b) => updateRiskSettings({...b, changes: {[field]: chosen}}));
 
@@ -146,7 +162,23 @@ export function RiskValueScreen() {
         style={styles.container}
         contentContainerStyle={styles.body}>
         <LockNotice blocked={locked} />
-        <SettingsGroup footer={fmtPending(field, risk, t)}>
+        {waiting && risk ? (
+          <SettingsGroup label={t('mobile.vault.pending_timelock')}>
+            <PendingRow
+              at={Number(waiting.at)}
+              now={now}
+              timelock={Number(risk.timelock)}
+              title={t(RISK_TITLE[field])}
+              value={pendingValue({kind: field, value: waiting.value, at: waiting.at, from: inForce ?? undefined}, t)}
+              onCancel={locked ? undefined : cancel}
+              cancelling={busy === 'cancel'}
+              cancelDisabled={!ready || busy !== null}
+              onMatured={load}
+              last
+            />
+          </SettingsGroup>
+        ) : null}
+        <SettingsGroup>
           {presets.map((v) => (
             <OptionRow
               key={String(v)}
@@ -204,8 +236,8 @@ export function RiskValueScreen() {
             does: opened from the ⓘ in the header. */}
         <Sheet visible={explainOpen} title={t(RISK_TITLE[field])} onClose={() => setExplainOpen(false)}>
           <View style={styles.explain}>
-            <Text style={styles.explainText}>{t(`${RISK_TITLE[field]}_why`)}</Text>
-            <Text style={styles.explainSub}>{t(riskHintKey(field))}</Text>
+            <Text style={styles.explainText}>{t(riskWhyKey(field, bridges))}</Text>
+            <Text style={styles.explainSub}>{t(riskHintKey(field, bridges))}</Text>
             {zeroHint ? <Text style={styles.explainSub}>{t(zeroHint)}</Text> : null}
           </View>
         </Sheet>

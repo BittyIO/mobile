@@ -2,14 +2,14 @@ import React, {useState} from 'react';
 import {Image, Pressable, StyleSheet} from 'react-native';
 import {PickerSheet} from '@/components/AssetPicker';
 import {useT} from '@/i18n';
-import {useNetwork, useNetworks, networkLabel, TRON_ENABLED, type ChainChoice} from '@/core/network-store';
+import {useNetwork, usePickerChains, networkLabel, type ChainChoice} from '@/core/network-store';
 import {isTronNet} from '@/tron/config';
 import Svg, {Circle, G, Path, Rect} from 'react-native-svg';
 import {useIsDark} from '@/theme';
 import type {Network} from '@/core/chain';
 
 // Static requires (Metro can't resolve dynamic paths). Icons vendored from the web repo (public/icons).
-const ICONS: Record<Exclude<Network, 'base' | 'robinhood' | 'tron-nile'>, number> = {
+const ICONS: Record<Exclude<Network, 'base' | 'base-sepolia' | 'robinhood' | 'tron-nile'>, number> = {
   mainnet: require('@/assets/networks/ethereum.png'),
   sepolia: require('@/assets/networks/sepolia.png'),
   arbitrum: require('@/assets/networks/arbitrum.png'),
@@ -21,10 +21,12 @@ const BASE_BLUE = '#0052FF';
 // Base's mark is a blue square on a white disc. On the light theme the white disc vanishes into the
 // header and the square floats alone, so there the disc goes Base blue and the square white: the same
 // shape, inverted, and it reads in both themes.
-function BaseIcon({size}: {size: number}) {
+// Base Sepolia has no mark of its own: Base's square on grey, as Nile is Tron's on grey, so it reads
+// as Base and plainly not the one with real money on it.
+function BaseIcon({size, testnet}: {size: number; testnet?: boolean}) {
   const dark = useIsDark();
-  const disc = dark ? '#FFFFFF' : BASE_BLUE;
-  const square = dark ? BASE_BLUE : '#FFFFFF';
+  const disc = testnet ? '#8E8E93' : dark ? '#FFFFFF' : BASE_BLUE;
+  const square = testnet ? '#FFFFFF' : dark ? BASE_BLUE : '#FFFFFF';
   return (
     <Svg width={size} height={size} viewBox="0 0 256 256">
       <Circle cx={128} cy={128} r={128} fill={disc} />
@@ -75,6 +77,7 @@ export function NetworkIcon({network, size}: {network: ChainChoice; size: number
   if (network === 'tron-nile') return <TronIcon size={size} testnet />;
   if (isTronNet(network)) return <TronIcon size={size} />;
   if (network === 'base') return <BaseIcon size={size} />;
+  if (network === 'base-sepolia') return <BaseIcon size={size} testnet />;
   if (network === 'robinhood') return <RobinhoodIcon size={size} />;
   return <Image source={ICONS[network]} style={{width: size, height: size}} resizeMode="contain" />;
 }
@@ -87,11 +90,8 @@ export function NetworkSwitcher({stack = false}: {stack?: boolean} = {}) {
   const setNetwork = useNetwork((s) => s.setNetwork);
   const setTron = useNetwork((s) => s.setTron);
   const [open, setOpen] = useState(false);
-  // Tron second, straight after Ethereum, as the other chain people most often hold dollars on;
-  // its testnet, Nile — a vault network, unlike Tron mainnet's wallet — is the last of the vault
-  // networks, beside Sepolia, so the two testnets sit together.
-  const vaultNets = useNetworks();
-  const networks: ChainChoice[] = TRON_ENABLED ? [...vaultNets.slice(0, 1), 'tron', ...vaultNets.slice(1)] : vaultNets;
+  // Tron second, straight after Ethereum; Nile's wallet last, with the other testnets (see {PICKER_CHAINS}).
+  const networks = usePickerChains();
   const network: ChainChoice = tron ?? evm;
 
   return (

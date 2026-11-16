@@ -36,6 +36,8 @@ import {useFeeFloor} from '@/vault/useFeeFloor';
 import {feeWeth, feeCoinForSpend, reserveHeld, resolveFeeReserve, useWethFeeCoin} from '@/vault/stableCoinAsGas';
 
 import {useAssetCatalog} from '@/core/asset-catalog';
+import {worthShowing} from '@/core/prices';
+import {usePrices} from '@/vault/usePrices';
 import {useCapability} from '@/vault/gate';
 
 /**
@@ -256,6 +258,11 @@ export function SendScreen() {
           ? t('mobile.payments.source_reserve')
           : t('mobile.payments.from_vault');
 
+  // A balance under a cent (0.000074 USDT, ETH dust a withdrawal left) gets no line and no row.
+  const prices = usePrices(network, 0, useMemo(() => assets.map((a) => a.symbol), [assets]));
+  const worth = (o: {asset: {symbol: string; kind: string}; balance: string}) =>
+    worthShowing(Number(o.balance), o.asset.symbol, prices, o.asset.kind === 'stable');
+
   // Every asset/source the vault can actually pay from — the picker's rows.
   type SourceOption = {asset: {symbol: string; address: Address; decimals: number; kind: string}; source: Source; balance: string; protocol: Address | null};
   const sourceOptions = useMemo<SourceOption[]>(
@@ -263,7 +270,7 @@ export function SendScreen() {
       assets.flatMap((a): SourceOption[] =>
         (['free', 'reserve', 'yield', 'lend'] as Source[])
           .map((source) => ({asset: a, source, ...sourceOf(a.symbol, source)}))
-          .filter((o) => o.source === 'free' || Number(o.balance) > 0),
+          .filter((o) => o.source === 'free' || worth(o)),
       ).concat(
         custom.tokens.map((x) => ({
           asset: {symbol: x.address, address: x.address, decimals: x.decimals, kind: 'custom'},
@@ -272,7 +279,7 @@ export function SendScreen() {
           protocol: null,
         })),
       ),
-    [assets, bal.balances, pos.positions, custom.tokens],
+    [assets, bal.balances, pos.positions, custom.tokens, prices],
   );
 
   // What the recipient starts with: EVERY funded source of one token — a stablecoin the vault holds,
@@ -280,7 +287,7 @@ export function SendScreen() {
   // three lines ready and nothing to add by hand. Falls back to any funded token, then to a blank
   // line on the first asset.
   const defaultLines = useMemo<Line[]>(() => {
-    const funded = sourceOptions.filter((o) => Number(o.balance) > 0);
+    const funded = sourceOptions.filter(worth);
     const pick = funded.find((o) => o.asset.kind === 'stable') ?? funded[0];
     if (!pick) return [newLine(first)];
     return funded.filter((o) => o.asset.symbol === pick.asset.symbol).map((o) => newLine(o.asset.symbol, o.source));
@@ -323,7 +330,7 @@ export function SendScreen() {
    * different coin. `k` is the line being changed, or null when the row is being added.
    */
   const [picker, setPicker] = useState<{k: number | null} | null>(null);
-  const fundRows = useMemo(() => sourceOptions.filter((o) => Number(o.balance) > 0), [sourceOptions]);
+  const fundRows = useMemo(() => sourceOptions.filter(worth), [sourceOptions, prices]);
 
   // The fee for sending what the card holds: one transfer per line, one withdrawal per position,
   // counted whether or not a line has an amount yet — so filling one with Max does not move the
@@ -562,7 +569,7 @@ export function SendScreen() {
                     />
                     {hasAmount ? (
                       <ClearBtn onPress={() => patchLine(k, {amount: '0'})} />
-                    ) : Number(max) > 0 ? (
+                    ) : worthShowing(Number(max), nameOf(l.sym), prices, meta(l.sym)?.kind === 'stable') ? (
                       <Pressable style={styles.maxBtn} onPress={() => patchLine(k, {amount: max})} hitSlop={8}>
                         <Text style={styles.balInline} numberOfLines={1}>{fmtNum(Number(max))}</Text>
                         {/* `common.max` and NOT `vault.max`: the latter is the literal "Max" in

@@ -36,7 +36,7 @@ import {useActiveVaultAddress} from '@/core/active-vault';
  * signature. An upgrade released while the app is open rides on the first write after its next
  * opening instead.
  */
-type Plan = {vault: {latest: Address} | null; protocols: AdapterStatus[]};
+type Plan = {vault: {latest: Address; version: string | null} | null; protocols: AdapterStatus[]};
 const plans = new Map<string, Plan>();
 const planKey = (network: Network, vault: Address) => `${network}:${vault.toLowerCase()}`;
 
@@ -63,9 +63,24 @@ export async function refreshUpgradePlan(vault: Address, network: Network): Prom
   ]);
   const runnable = up?.available && up.latest && up.latestVersion ? await canRunVault(up.latestVersion, network) : false;
   plans.set(planKey(network, vault), {
-    vault: runnable && up?.latest ? {latest: up.latest} : null,
+    vault: runnable && up?.latest ? {latest: up.latest, version: up.latestVersion} : null,
     protocols: statuses.filter((s) => s.upgrade),
   });
+}
+
+/**
+ * The release the vault's next write would upgrade it to, riding in front: null when none is due,
+ * the plan has not been read, or Auto upgrade is off for the vault. Lets a screen offer a feature
+ * the running release lacks, knowing the write that uses it brings the release along.
+ */
+export function plannedVaultUpgrade(vault: Address, network: Network): string | null {
+  if (!autoUpgradeVault(network, vault)) return null;
+  return availableVaultUpgrade(vault, network);
+}
+
+/** The release on offer for the vault, whether or not Auto upgrade would take it: null when none. */
+export function availableVaultUpgrade(vault: Address, network: Network): string | null {
+  return plans.get(planKey(network, vault))?.vault?.version ?? null;
 }
 
 /** Keeps the vault in front's upgrade plan read: on open, on returning to the app, on a switch. */
@@ -112,6 +127,8 @@ export async function withAutoUpgrades(o: {
   lockLevel: number | null;
   /** Adapters the operation runs on without a call naming them: a CoW order's setup. */
   uses?: readonly Address[];
+  /** The vault's upgrade rides whatever its Auto upgrade switch says: the user said yes to it for this write. */
+  upgradeVault?: boolean;
 }): Promise<{data: Hex; upgraded: boolean}> {
   const {vault, network} = o;
   const unchanged = {data: o.data, upgraded: false};
@@ -121,7 +138,7 @@ export async function withAutoUpgrades(o: {
   const uses = (address: string) => named.has(address.toLowerCase()) || mentions(calls, address);
   if (calls.some((c) => UPGRADE_FUNCTIONS.has(vaultFunctionName(c) ?? ''))) return unchanged;
 
-  const vaultOn = autoUpgradeVault(network, vault);
+  const vaultOn = !!o.upgradeVault || autoUpgradeVault(network, vault);
   // Only what was read at opening; nothing is asked of the chain here. Not read yet, no upgrades.
   const plan = plans.get(planKey(network, vault));
   if (!plan) return unchanged;

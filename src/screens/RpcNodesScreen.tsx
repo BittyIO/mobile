@@ -8,7 +8,7 @@ import {BUILTIN_RPC, isRpcUrl, probeRpc, probeTron, rpcHost, useRpcNodes, type N
 import {isTronNet, TRON_API} from '@/tron/config';
 import {SettingsGroup, SettingsRow, makeSettingsStyles} from '@/components/SettingsRow';
 import {NetworkIcon} from '@/components/NetworkSwitcher';
-import {NETWORKS, TRON_ENABLED, networkLabel} from '@/core/network-store';
+import {PICKER_CHAINS, networkLabel} from '@/core/network-store';
 import {Sheet} from '@/components/Sheet';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
@@ -65,7 +65,7 @@ export function RpcNodesListScreen() {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const chains: NodeChain[] = TRON_ENABLED ? [...NETWORKS.slice(0, 1), 'tron', ...NETWORKS.slice(1)] : NETWORKS;
+  const chains: NodeChain[] = PICKER_CHAINS as NodeChain[];
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.body} contentInsetAdjustmentBehavior="automatic">
       <SettingsGroup>

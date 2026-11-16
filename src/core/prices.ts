@@ -99,6 +99,20 @@ export function usdValue(amount: number, symbol: string, prices: PriceMap): numb
   return p != null ? amount * p : null;
 }
 
+/** Below this a balance is dust: 0.000074 USDT, a few wei of ETH left by a withdrawal. */
+export const DUST_USD = 0.01;
+
+/**
+ * Whether a balance is worth a line of its own on Send or Bridge: more than nothing, and at least a
+ * cent where its price is known (a stablecoin is a dollar). Unpriced, it is shown — better a line
+ * too many than a balance that cannot be reached.
+ */
+export function worthShowing(amount: number, symbol: string, prices: PriceMap, stable = false): boolean {
+  if (!(amount > 0)) return false;
+  const v = stable || USD_PEGGED.has(symbol) ? amount : usdValue(amount, symbol, prices);
+  return v == null || v >= DUST_USD;
+}
+
 /**
  * A dollar figure, with enough of it to be worth reading.
  *

@@ -1445,7 +1445,11 @@
       "err_recipient_waiting": "This recipient can't receive funds yet. It becomes payable when its waiting period ends.",
       "err_no_escape": "Choose a payee that can already receive funds.",
       "err_gas_budget": "Today's network fee budget is used up.",
-      "err_price_unavailable": "A price feed isn't available right now. Try again shortly."
+      "err_price_unavailable": "A price feed isn't available right now. Try again shortly.",
+      "err_bridge_off": "The bridge is off for this vault, or still waiting out its timelock.",
+      "err_bridge_route": "This asset can't be bridged on this route.",
+      "err_bridge_cost": "The bridge quote moved past what this route allows. Get a new quote and try again.",
+      "err_daily_loss": "This would go over your daily loss limit."
     }
   },
   "matrica": {

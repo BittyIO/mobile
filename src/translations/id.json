@@ -131,7 +131,11 @@
       "err_recipient_waiting": "Penerima ini belum bisa menerima dana. Bisa setelah masa tunggunya berakhir.",
       "err_no_escape": "Pilih penerima yang sudah bisa menerima dana.",
       "err_gas_budget": "Anggaran biaya jaringan hari ini sudah habis.",
-      "err_price_unavailable": "Feed harga sedang tidak tersedia. Coba lagi sebentar lagi."
+      "err_price_unavailable": "Feed harga sedang tidak tersedia. Coba lagi sebentar lagi.",
+      "err_bridge_off": "Bridge untuk brankas ini nonaktif, atau masih menunggu timelock.",
+      "err_bridge_route": "Aset ini tidak bisa di-bridge lewat rute ini.",
+      "err_bridge_cost": "Penawaran bridge melewati batas rute ini. Ambil penawaran baru lalu coba lagi.",
+      "err_daily_loss": "Ini akan melewati batas kerugian hari ini."
     }
   }
 }

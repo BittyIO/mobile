@@ -1469,7 +1469,11 @@
       "err_recipient_waiting": "該收款人暫時無法收款，等待期結束後即可收款。",
       "err_no_escape": "請選擇一個已可收款的地址簿收款人。",
       "err_gas_budget": "今日的網路費用預算已用完。",
-      "err_price_unavailable": "價格資料暫時無法取得，請稍後重試。"
+      "err_price_unavailable": "價格資料暫時無法取得，請稍後重試。",
+      "err_bridge_off": "此金庫的跨鏈未開啟，或仍在等待時間鎖。",
+      "err_bridge_route": "此資產無法透過這條路線跨鏈。",
+      "err_bridge_cost": "跨鏈報價超出了此路線允許的範圍。請重新取得報價後再試。",
+      "err_daily_loss": "這會超出今天的損失額度。"
     }
   },
   "matrica": {

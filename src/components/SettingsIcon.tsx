@@ -24,6 +24,7 @@ export type SettingsIconName =
   | 'ownership'
   | 'stableCoinAsGas'
   | 'dailyLimit'
+  | 'sendNew'
   | 'perTx'
   | 'settings'
   | 'allowlist'
@@ -64,6 +65,7 @@ const TINT: Record<SettingsIconName, string> = {
   ownership: '#FF2D55',
   stableCoinAsGas: '#AF52DE',
   dailyLimit: '#FF9500',
+  sendNew: '#5AC8FA',
   perTx: '#5856D6',
   settings: '#8E8E93',
   allowlist: '#30B0C7',
@@ -228,6 +230,12 @@ export function SettingsIcon({name, size = 29, round = false}: {name: SettingsIc
             <Rect x={3} y={5} width={18} height={16} rx={2} {...c} />
             <Path d="M3 10h18M8 3v4M16 3v4" {...c} />
             <Path d="M12 13v3l2 1.2" {...c} />
+          </>
+        ) : name === 'sendNew' ? (
+          <>
+            {/* lucide Send, a paper plane: what may go out to an address that is not a payee. */}
+            <Path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z" {...c} />
+            <Path d="m21.854 2.147-10.94 10.939" {...c} />
           </>
         ) : name === 'perTx' ? (
           <>

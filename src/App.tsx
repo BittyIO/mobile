@@ -66,6 +66,8 @@ export type TabParamList = {
   Earn: undefined;
   /** The market directory. The pushed TradePair screen is where a pair is actually traded. */
   Market: TradeParams;
+  /** Moving an asset to the owner's vault on another network. */
+  Bridge: undefined;
   Settings: undefined;
 };
 
@@ -101,6 +103,9 @@ export type RootStackParamList = {
     symbol: string;
     decimals?: number;
   };
+  /** TRON Stake on the Tron wallet: the vault's TRON Stake page and form, for the wallet. */
+  TronStakeDetail: undefined;
+  TronStakeAction: {mode: 'deposit' | 'withdraw'};
   EarnAction: {
     mode: 'deposit' | 'withdraw';
     protocol?: string;
@@ -251,7 +256,14 @@ const useNoDefi = () => {
 };
 
 function EarnTab() {
-  if (useNoDefi()) {
+  // The Tron wallet stakes TRX itself (Stake 2.0): no vault needed for that.
+  const tron = useNetwork((s) => s.tron);
+  const noDefi = useNoDefi();
+  if (tron) {
+    const {TronStakeScreen} = require('@/screens/TronStakeScreen');
+    return <TronStakeScreen />;
+  }
+  if (noDefi) {
     const {TronUnavailableScreen} = require('@/screens/TronUnavailableScreen');
     return <TronUnavailableScreen feature="earn" />;
   }
@@ -260,12 +272,37 @@ function EarnTab() {
 }
 
 function TradeTab() {
-  if (useNoDefi()) {
+  // The Tron wallet trades TRX and USDT on SunSwap directly; Bridge stays a vault feature.
+  const tron = useNetwork((s) => s.tron);
+  const noDefi = useNoDefi();
+  // SunSwap is on mainnet and Nile alike.
+  if (tron) {
+    const {TronTradeScreen} = require('@/screens/TronTradeScreen');
+    return <TronTradeScreen />;
+  }
+  if (noDefi) {
     const {TronUnavailableScreen} = require('@/screens/TronUnavailableScreen');
     return <TronUnavailableScreen feature="trade" />;
   }
   const {TradeScreen} = require('@/screens/TradeScreen');
   return <TradeScreen />;
+}
+
+/** Bridge: the vault in front to the owner's vault on another network (see vault/bridge). */
+function BridgeTab() {
+  const tron = useNetwork((s) => s.tron);
+  // The Tron wallet bridges its USDT out to the owner's vaults, by Across (see tron/bridge).
+  // Mainnet only: Across does not serve Nile.
+  if (tron === 'tron') {
+    const {TronBridgeScreen} = require('@/screens/TronBridgeScreen');
+    return <TronBridgeScreen />;
+  }
+  if (tron) {
+    const {TronUnavailableScreen} = require('@/screens/TronUnavailableScreen');
+    return <TronUnavailableScreen feature="bridge" />;
+  }
+  const {BridgeScreen} = require('@/screens/BridgeScreen');
+  return <BridgeScreen />;
 }
 
 function MainTabs() {
@@ -361,6 +398,7 @@ function MainTabs() {
             nearest navigator that has it, and a tab called Trade once swallowed every push to the
             pair screen. The title is what the user reads; the name is what routing matches. */}
         <Tab.Screen name="Market" options={{title: t('mobile.app.trade')}} component={TradeTab} />
+      <Tab.Screen name="Bridge" options={{title: t('mobile.bridge.tab')}} component={BridgeTab} />
       {/* Settings, label and route the same — which is also what `navigate` and the tab icon key
           off. It was labelled "Me" for a while, on the grounds that the tab holds the vault, the
           key on this device and the app's own preferences, and "Settings" named only the last of
@@ -509,6 +547,16 @@ function Root() {
           * the sheet's own — and a backdrop that slides in from below instead of fading. The sheet
           * rises, follows a drag and slides out under {useSheetAnim}, as the order sheet's does.
           */}
+        <Stack.Screen
+          name="TronStakeDetail"
+          getComponent={() => require('@/screens/TronStakeDetailScreen').TronStakeDetailScreen}
+          options={{title: t('vault.flexible_yield'), fullScreenGestureEnabled: true}}
+        />
+        <Stack.Screen
+          name="TronStakeAction"
+          getComponent={() => require('@/screens/TronStakeActionScreen').TronStakeActionScreen}
+          options={{headerShown: false, presentation: 'transparentModal', animation: 'none', contentStyle: {backgroundColor: 'transparent'}}}
+        />
         <Stack.Screen
           name="EarnAction"
           getComponent={() => require('@/screens/EarnActionScreen').EarnActionScreen}

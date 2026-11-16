@@ -131,7 +131,11 @@
       "err_recipient_waiting": "Este destinatário ainda não pode receber fundos. Poderá quando o período de espera terminar.",
       "err_no_escape": "Escolha um beneficiário que já possa receber fundos.",
       "err_gas_budget": "O orçamento de taxas de rede de hoje acabou.",
-      "err_price_unavailable": "Um feed de preços está indisponível no momento. Tente novamente em instantes."
+      "err_price_unavailable": "Um feed de preços está indisponível no momento. Tente novamente em instantes.",
+      "err_bridge_off": "A ponte está desativada neste cofre ou ainda espera o bloqueio de tempo.",
+      "err_bridge_route": "Este ativo não pode passar por esta rota.",
+      "err_bridge_cost": "A cotação passou do que esta rota permite. Peça uma nova cotação e tente de novo.",
+      "err_daily_loss": "Isso passaria do limite de perda de hoje."
     }
   }
 }

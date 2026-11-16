@@ -7,7 +7,7 @@
  * becomes a thin re-export. Keep the addresses in sync with the web config until then.
  */
 import {createPublicClient, http, fallback, type PublicClient} from 'viem';
-import {mainnet, base, sepolia, arbitrum, bsc} from 'viem/chains';
+import {mainnet, base, sepolia, baseSepolia, arbitrum, bsc} from 'viem/chains';
 import {defineChain} from 'viem';
 import {API_VERSION} from '@/core/vault-contracts';
 import {rpcUrlsFor} from '@/core/rpc-store';
@@ -15,7 +15,7 @@ import {evmToTron} from '@/tron/address';
 
 // Sepolia is the testnet — included so the app can be exercised end to end (activate, deposit, trade)
 // without real funds. "Ethereum" in the UI means Sepolia on a testnet build, mainnet on production.
-export type Network = 'mainnet' | 'base' | 'sepolia' | 'robinhood' | 'arbitrum' | 'bsc' | 'tron-nile';
+export type Network = 'mainnet' | 'base' | 'sepolia' | 'base-sepolia' | 'robinhood' | 'arbitrum' | 'bsc' | 'tron-nile';
 
 /**
  * Tron's testnet, Nile, as a VAULT network: the vault stack is deployed there (vault repo
@@ -55,6 +55,7 @@ export const NATIVE: Record<Network, {symbol: string; decimals: number; wrapped:
   mainnet: {symbol: 'ETH', decimals: 18, wrapped: 'WETH'},
   base: {symbol: 'ETH', decimals: 18, wrapped: 'WETH'},
   sepolia: {symbol: 'ETH', decimals: 18, wrapped: 'WETH'},
+  'base-sepolia': {symbol: 'ETH', decimals: 18, wrapped: 'WETH'},
   robinhood: {symbol: 'ETH', decimals: 18, wrapped: 'WETH'},
   arbitrum: {symbol: 'ETH', decimals: 18, wrapped: 'WETH'},
   bsc: {symbol: 'BNB', decimals: 18, wrapped: 'WBNB'},
@@ -69,6 +70,8 @@ export const NETWORK_FEATURES: Record<Network, {defi: boolean}> = {
   mainnet: {defi: true},
   base: {defi: true},
   sepolia: {defi: true},
+  // Only the bridge so far: no trade, lending or staking protocol is registered on its guard.
+  'base-sepolia': {defi: true},
   robinhood: {defi: true},
   arbitrum: {defi: true},
   bsc: {defi: true},
@@ -76,7 +79,7 @@ export const NETWORK_FEATURES: Record<Network, {defi: boolean}> = {
 };
 
 /** The test networks, which hold no real money. */
-export const isTestnet = (n: Network): boolean => n === 'sepolia' || n === 'tron-nile';
+export const isTestnet = (n: Network): boolean => n === 'sepolia' || n === 'base-sepolia' || n === 'tron-nile';
 
 // Robinhood Chain: an Arbitrum Orbit L2 (id 4663) with ETH as gas, built for tokenized stocks. Not in
 // viem's chain list, so defined here (mirrors web `lib/chains.ts`).
@@ -94,13 +97,14 @@ export const robinhood = defineChain({
 // The nodes each chain is read from — the built-in public list, less any the owner switched off, plus
 // their own — live in `core/rpc-store` (Settings › RPC nodes).
 
-const VIEM_CHAIN = {mainnet, base, sepolia, robinhood, arbitrum, bsc, 'tron-nile': tronNile} as const;
+const VIEM_CHAIN = {mainnet, base, sepolia, 'base-sepolia': baseSepolia, robinhood, arbitrum, bsc, 'tron-nile': tronNile} as const;
 
 // EIP-712 domain chainId per network — the ForwardRequest is signed against this (see vault/relay.ts).
 export const CHAIN_ID: Record<Network, number> = {
   mainnet: mainnet.id,
   base: base.id,
   sepolia: sepolia.id,
+  'base-sepolia': baseSepolia.id,
   robinhood: robinhood.id,
   arbitrum: arbitrum.id,
   bsc: bsc.id,
@@ -183,6 +187,7 @@ export const EXPLORER_TX: Record<Network, string> = {
   mainnet: 'https://etherscan.io/tx/',
   base: 'https://basescan.org/tx/',
   sepolia: 'https://sepolia.etherscan.io/tx/',
+  'base-sepolia': 'https://sepolia.basescan.org/tx/',
   robinhood: 'https://robinhoodchain.blockscout.com/tx/',
   arbitrum: 'https://arbiscan.io/tx/',
   bsc: 'https://bscscan.com/tx/',

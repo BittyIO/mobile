@@ -72,7 +72,7 @@ export function SecurityScreen() {
         {/* The timelock: the wait every loosening, new recipient, delegate and owner sits out. */}
         <SettingsRow icon="timelock" title={t(RISK_TITLE.timelock)} value={riskValue('timelock')} onPress={() => nav.navigate('VaultRiskValue', {field: 'timelock'})} />
         <SettingsRow
-          icon="dailyLimit"
+          icon="sendNew"
           title={t(RISK_TITLE.sendDailyAllowance)}
           value={riskValue('sendDailyAllowance')}
           onPress={() => nav.navigate('VaultRiskValue', {field: 'sendDailyAllowance'})}

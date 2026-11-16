@@ -131,7 +131,11 @@
       "err_recipient_waiting": "Người nhận này chưa thể nhận tiền. Sẽ nhận được khi hết thời gian chờ.",
       "err_no_escape": "Hãy chọn một người nhận đã có thể nhận tiền.",
       "err_gas_budget": "Ngân sách phí mạng hôm nay đã hết.",
-      "err_price_unavailable": "Nguồn giá hiện không khả dụng. Hãy thử lại sau ít phút."
+      "err_price_unavailable": "Nguồn giá hiện không khả dụng. Hãy thử lại sau ít phút.",
+      "err_bridge_off": "Cầu nối của kho này đang tắt hoặc vẫn chờ khóa thời gian.",
+      "err_bridge_route": "Không thể chuyển tài sản này qua tuyến này.",
+      "err_bridge_cost": "Báo giá đã vượt mức tuyến này cho phép. Hãy lấy báo giá mới rồi thử lại.",
+      "err_daily_loss": "Việc này sẽ vượt hạn mức lỗ hôm nay."
     }
   }
 }

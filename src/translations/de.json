@@ -1469,7 +1469,11 @@
       "err_recipient_waiting": "Dieser Empfänger kann noch keine Mittel erhalten. Das ist möglich, sobald seine Wartezeit endet.",
       "err_no_escape": "Wähle einen Zahlungsempfänger, der bereits Mittel erhalten kann.",
       "err_gas_budget": "Das heutige Netzwerkgebühren-Budget ist aufgebraucht.",
-      "err_price_unavailable": "Ein Preis-Feed ist gerade nicht verfügbar. Versuche es gleich noch einmal."
+      "err_price_unavailable": "Ein Preis-Feed ist gerade nicht verfügbar. Versuche es gleich noch einmal.",
+      "err_bridge_off": "Die Bridge ist für diesen Tresor aus oder wartet noch die Zeitsperre ab.",
+      "err_bridge_route": "Dieses Asset kann auf dieser Route nicht gebridgt werden.",
+      "err_bridge_cost": "Das Bridge-Angebot liegt außerhalb dessen, was diese Route erlaubt. Hole ein neues Angebot und versuche es erneut.",
+      "err_daily_loss": "Das würde das heutige Verlustlimit überschreiten."
     }
   },
   "matrica": {

@@ -36,7 +36,7 @@ type Route = EarnRoute;
 type Row = {route: Route; pos: Position | null};
 
 /** A catalog row: asset + protocol, its position amount, and inline Deposit/Withdraw. */
-function EarnRow({
+export function EarnRow({
   row,
   free,
   amountKnown,
@@ -127,7 +127,7 @@ function EarnRow({
 /** The card the rows sit in, the same one as the Overview asset list. No column header: the section
  *  title already says what the amount is, and the first row draws no line above itself. */
 /** A section card with its title inside as the header row (the Overview's Assets card pattern). */
-function EarnTable({
+export function EarnTable({
   title,
   afterTitle,
   right,

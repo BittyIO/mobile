@@ -3,7 +3,7 @@ export type TermsBlock = {type: 'p'; text: string} | {type: 'ul' | 'ol'; items: 
 export type TermsSection = {title: string; blocks: TermsBlock[]};
 
 /** When these Terms last changed. Shown at the top; change it with the text. */
-export const TERMS_UPDATED = '2026-10-25';
+export const TERMS_UPDATED = '2026-11-16';
 
 /**
  * Bitty's Terms of Use, as structured text: a section per heading, its paragraphs and lists in
@@ -37,7 +37,7 @@ export const TERMS: TermsSection[] = [
     "blocks": [
       {
         "type": "p",
-        "text": "Bitty is software for holding, sending, trading and earning with digital assets through a smart-contract vault that you own."
+        "text": "Bitty is software for holding, sending, trading, bridging and earning with digital assets through a smart-contract vault that you own."
       },
       {
         "type": "ul",
@@ -46,7 +46,7 @@ export const TERMS: TermsSection[] = [
           "**The apps.** The Bitty mobile app and website, which create or import your keys on your device, show your vault, and let you prepare and sign instructions to it.",
           "**The relayer.** An optional service that submits your signed instructions to the blockchain and pays the network fee, which your vault then repays (section 7).",
           "**Supporting services.** Price, balance, history and ownership data we index and serve to the apps, the address book and version information. These are conveniences; the blockchain is the record.",
-          "**Third-party services.** exchanges, order networks, yield and staking protocols, price oracles and wallets that the apps connect your vault to (section 8). We do not operate them."
+          "**Third-party services.** exchanges, bridges, order networks, yield and staking protocols, price oracles and wallets that the apps connect your vault to (section 8). We do not operate them."
         ]
       },
       {
@@ -150,7 +150,7 @@ export const TERMS: TermsSection[] = [
         "items": [
           "**Timelock.** 1 to 30 days that any loosening must wait out: higher limits, a new whitelisted address, a new asset manager, a new owner. You may have to wait to reach your own money in a new way; tightening applies at once.",
           "**Send to new in 24 hours.** The most stablecoin value plain sends may move in a rolling 24 hours, $0 to $10,000; $0 turns them off. Anything above it, or any other asset, can only go to a whitelisted address.",
-          "**Market trade slippage in 24 hours.** The most market trades may lose against oracle prices in a rolling 24 hours, $0 to $10,000; $0 turns market trading off. Each trade must also come within 5% of oracle value, and only assets with a price feed can be traded at market.",
+          "**Daily loss limit.** The most market trades and bridges together may lose in a rolling 24 hours, $0 to $10,000; $0 turns market trading and bridging off. A market trade counts what it comes out short against oracle prices and must come within 5% of oracle value, and only assets with a price feed can be traded at market. A bridge counts what does not arrive on the other side, including the bridge's cost and Bitty's fee. On vaults before version 1.1.0 the limit covers market trades only.",
           "**Whitelisted addresses.** Addresses the vault may pay without those limits, once their timelock has passed. Payments to them are not capped; choose them carefully.",
           "**Temporary lock.** Freezes the vault's settings at once; money can then go only to existing whitelisted addresses; reversible by the owner. Pending changes are cancelled.",
           "**Forever lock.** The same freeze, permanently, for anyone, ever. It cannot be undone by you, us or anyone; money can only ever leave to whitelisted addresses.",
@@ -178,7 +178,7 @@ export const TERMS: TermsSection[] = [
           "**Estimates only.** Fees, quotes, prices and amounts shown before you sign are estimates. The final fee depends on the network at the time and may be higher.",
           "**Paid by you.** You may pay gas from your own wallet instead. That transaction is between you and the network.",
           "**No guarantee of service.** The relayer may decline, delay or stop serving any transaction, network or vault, for example if your vault cannot pay or its fee limit is reached. It never sends from your wallet without your choice.",
-          "**Bitty fees.** We charge 0.2% of each market trade, limit order and TWAP order, taken in the trade and shown before you sign. We charge nothing else beyond the network fee repayment above. We may change our fees with notice in the apps; a change never applies to a transaction you already signed.",
+          "**Bitty fees.** We charge 0.2% of each market trade, limit order, TWAP order and bridge, taken in the transaction and shown before you sign. We charge nothing else beyond the network fee repayment above. We may change our fees with notice in the apps; a change never applies to a transaction you already signed.",
           "**Third-party fees.** Exchanges, order networks and protocols charge their own fees. We are not responsible for them.",
           "**Taxes.** You are responsible for any taxes on your use of the Services."
         ]
@@ -224,6 +224,7 @@ export const TERMS: TermsSection[] = [
           "**Fake tokens.** Anyone can create a token, including copies of real ones. Check any token you add by contract address.",
           "**Network fees.** Gas can rise sharply and suddenly, and a transaction can fail and still cost a fee.",
           "**Oracles and prices.** Price feeds can be wrong, stale or manipulated; trades and limits that rely on them inherit that.",
+          "**Bridges.** A bridge relies on its own contracts and relayers on both networks. A transfer can be delayed, or refunded on the network it left if it is not filled in time. It arrives at your vault on the other network; if you use a new key after signing, that vault can have a different address, which the app shows before you sign.",
           "**Timelocks work both ways.** The delays that protect you also delay you, including from your own funds.",
           "**Networks.** A blockchain can halt, fork, congest or change its rules. An L2 can stop its sequencer.",
           "**Regulation.** Laws may change and may restrict or end the Services or particular assets where you are.",

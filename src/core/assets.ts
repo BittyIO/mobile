@@ -131,6 +131,12 @@ export const ASSETS: Record<Network, Asset[]> = {
     {symbol: 'USDC', address: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', decimals: 6, kind: 'stable'},
     {symbol: 'USDT', address: '0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0', decimals: 6, kind: 'stable'},
   ],
+  // Base Sepolia: what its guard registers (contracts guard/deployments/base-sepolia.toml). The
+  // bridge is the only protocol there so far.
+  'base-sepolia': [
+    {symbol: 'WETH', address: '0x4200000000000000000000000000000000000006', decimals: 18, kind: 'crypto'},
+    {symbol: 'USDC', address: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', decimals: 6, kind: 'stable'},
+  ],
   // Arbitrum One: what the v1.0.0 guard registers (contracts guard/deployments/arbitrum.toml).
   // USDC is Circle's native one, USDT is USDT0.
   arbitrum: [
@@ -216,6 +222,7 @@ export const RECEIPT_TOKENS: Record<Network, Record<string, {symbol: string; dec
     '0xaf0f6e8b0dc5c913bbf4d14c22b4e78dd14310b6': {symbol: 'aUSDT', decimals: 6, underlying: 'USDT'},
     '0x1804bf30507dc2eb3bdebbbdd859991eaef6eeff': {symbol: 'aWBTC', decimals: 8, underlying: 'WBTC'},
   },
+  'base-sepolia': {},
   robinhood: {},
   arbitrum: {
     '0xddb46999f8891663a8f2828d25298f70416d7610': {symbol: 'sUSDS', decimals: 18, underlying: 'USDC'},

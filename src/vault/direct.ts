@@ -86,10 +86,10 @@ export async function planOwnerTx(o: {network: Network; from: Address; to: Addre
   if (isTronNetwork(o.network)) return planTronTx(client, tx);
   const [used, fees] = await Promise.all([client.estimateGas(tx), client.estimateFeesPerGas()]);
   const gas = (used * BigInt(4)) / BigInt(3);
-  // Base charges the sender for posting the transaction to L1 as well. Arbitrum and Robinhood Chain
+  // Base (and its testnet) charges the sender for posting the transaction to L1 as well. Arbitrum and Robinhood Chain
   // fold theirs into the gas estimate; Ethereum has none.
   const l1Fee =
-    o.network === 'base'
+    o.network === 'base' || o.network === 'base-sepolia'
       ? await client
           .extend(publicActionsL2())
           .estimateL1Fee({...tx, chain: undefined})
