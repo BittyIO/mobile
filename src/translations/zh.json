@@ -1469,7 +1469,11 @@
       "err_recipient_waiting": "该收款人暂时无法收款，等待期结束后即可收款。",
       "err_no_escape": "请选择一个已可收款的地址簿收款人。",
       "err_gas_budget": "今日的网络费用预算已用完。",
-      "err_price_unavailable": "价格数据暂时不可用，请稍后重试。"
+      "err_price_unavailable": "价格数据暂时不可用，请稍后重试。",
+      "err_bridge_off": "此金库的跨链未开启，或仍在等待时间锁。",
+      "err_bridge_route": "此资产无法通过这条路线跨链。",
+      "err_bridge_cost": "跨链报价超出了此路线允许的范围。请重新获取报价后再试。",
+      "err_daily_loss": "这会超出今天的损失额度。"
     }
   },
   "matrica": {

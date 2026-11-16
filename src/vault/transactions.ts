@@ -9,6 +9,7 @@ import {TRON_API} from '@/tron/config';
 import {evmToTron, tronToEvm} from '@/tron/address';
 import {fetchSettlements, type SettlementMeta} from './limit';
 import {vaultActionsFor} from './decode-actions';
+import {bridgeHistory} from './bridge';
 
 export type TransferRow = {
   txHash: string;
@@ -41,6 +42,10 @@ export type Operation = {
   ownerFee?: bigint;
   /** Who signed it: the relay request's signer, or a direct sender. From the server; lowercase. */
   signer?: string;
+  /** An Across delivery into the vault: the network it was bridged from. See vault/bridge. */
+  bridgedFrom?: Network;
+  /** An Across deposit the vault made: the network it went to. See vault/bridge. */
+  bridgedTo?: Network;
 };
 
 /** Fetch the vault's history, grouped by tx (rows arrive newest-first). */
@@ -49,9 +54,10 @@ export async function fetchTransactions(
   network: Network,
 ): Promise<Operation[]> {
   if (isTronNetwork(network)) return fetchTronTransactions(vault, network);
-  const [res, settlements] = await Promise.all([
+  const [res, settlements, arrivals] = await Promise.all([
     fetch(apiUrl(`/api/ethereum/vaults/transfers/${vault}`, network)),
     fetchSettlements(vault as `0x${string}`, network),
+    bridgeHistory(vault, network),
   ]);
   if (!res.ok) throw new Error(`transfers ${res.status}`);
   const json = (await res.json()) as {
@@ -88,6 +94,36 @@ export async function fetchTransactions(
     if (map.has(x.txHash)) continue;
     map.set(x.txHash, {txHash: x.txHash, timestamp: x.timestamp, blockNum: x.blockNum, legs: [], actions: actions[x.txHash.toLowerCase()] ?? actions[x.txHash] ?? [], ownerFee: fee(x.txHash), signer: signer(x.txHash)});
     order.push(x.txHash);
+  }
+  /**
+   * An Across delivery Bitty's server has not indexed yet (its feed can trail the chain by hours on
+   * a busy network): drawn from Across's own record of it — the coin and amount it paid the vault —
+   * so a bridge in shows on arrival. Only coins the app lists; the server's row replaces it once in.
+   */
+  const listed = new Map(knownAssets(network).map((a) => [a.address.toLowerCase(), a]));
+  const have = new Set([...map.keys()].map((h) => h.toLowerCase()));
+  for (const a of arrivals.arrivalRows) {
+    const asset = listed.get(a.token.toLowerCase());
+    if (!asset || have.has(a.txHash.toLowerCase())) continue;
+    const leg: TransferRow = {
+      txHash: a.txHash,
+      direction: 'in',
+      counterparty: null,
+      amount: formatUnits(BigInt(a.amount), asset.decimals),
+      assetSymbol: asset.symbol,
+      assetAddress: asset.address,
+      category: 'erc20',
+      blockNum: a.blockNum,
+      timestamp: a.timestamp,
+    };
+    map.set(a.txHash, {txHash: a.txHash, timestamp: a.timestamp, blockNum: a.blockNum, legs: [leg], actions: []});
+    order.push(a.txHash);
+    have.add(a.txHash.toLowerCase());
+  }
+  // Across's deliveries into the vault are named as bridges, not as payments received.
+  for (const op of map.values()) {
+    op.bridgedFrom = arrivals.arrivals.get(op.txHash.toLowerCase());
+    op.bridgedTo = arrivals.departures.get(op.txHash.toLowerCase());
   }
   // Newest first across both: the legless ones arrive as their own list.
   return order.map((h) => map.get(h)!).sort((a, b) => b.blockNum - a.blockNum);

@@ -5,7 +5,7 @@ import {useT} from '@/i18n';
 import {useStyles, type Colors} from '@/theme';
 import {useTransparentHeaderInset} from '@/components/header-inset';
 import {NetworkIcon} from '@/components/NetworkSwitcher';
-import {useNetwork} from '@/core/network-store';
+import {networkLabel, useNetwork} from '@/core/network-store';
 
 /**
  * Earn and Trade with Tron picked: both run through the vault, and there is no vault on Tron mainnet
@@ -13,7 +13,7 @@ import {useNetwork} from '@/core/network-store';
  * The tabs stay where they are so the bar does not change shape with the
  * chain; the page says why there is nothing here, and where the vault's chains are.
  */
-export function TronUnavailableScreen({feature}: {feature: 'earn' | 'trade'}) {
+export function TronUnavailableScreen({feature}: {feature: 'earn' | 'trade' | 'bridge'}) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const headerHeight = useTransparentHeaderInset();
@@ -25,7 +25,11 @@ export function TronUnavailableScreen({feature}: {feature: 'earn' | 'trade'}) {
   return (
     <View style={[styles.container, {paddingTop: headerHeight, paddingBottom: tabBarHeight}]}>
       <NetworkIcon network={net} size={56} />
-      <Text style={styles.title}>{t(feature === 'earn' ? 'mobile.tron.earn_unavailable' : 'mobile.tron.trade_unavailable')}</Text>
+      <Text style={styles.title}>
+        {feature === 'bridge'
+          ? t('mobile.bridge.unavailable_network', {network: networkLabel(net, t)})
+          : t(feature === 'earn' ? 'mobile.tron.earn_unavailable' : 'mobile.tron.trade_unavailable')}
+      </Text>
     </View>
   );
 }

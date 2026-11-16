@@ -6,7 +6,7 @@
  * user, and the catalog's versioned names ("Sky V1") would otherwise each need a line. UniswapX keeps
  * its own entry: it is not the pools, and the sheet says what it is used for.
  */
-export type ProtocolBrand = 'sky' | 'lido' | 'aave' | 'uniswap' | 'uniswapx' | 'cow' | 'pancakeswap' | 'tronstake' | 'sunswap';
+export type ProtocolBrand = 'sky' | 'lido' | 'aave' | 'uniswap' | 'uniswapx' | 'cow' | 'pancakeswap' | 'tronstake' | 'sunswap' | 'across';
 
 const APP_URL: Record<ProtocolBrand, string> = {
   sky: 'https://app.sky.money',
@@ -19,6 +19,7 @@ const APP_URL: Record<ProtocolBrand, string> = {
   // Tron's own staking (Stake 2.0), not a protocol with an app: its page on the network's site.
   tronstake: 'https://tron.network',
   sunswap: 'https://sun.io',
+  across: 'https://app.across.to',
 };
 
 /** The brand behind an adapter name, or null for one there is nothing to say about yet. */
@@ -36,6 +37,8 @@ export function protocolBrand(name: string): ProtocolBrand | null {
   if (n.startsWith('tron stake')) return 'tronstake';
   // Tron's market trades: the same trade adapter as Uniswap's, pointed at SunSwap's router.
   if (n.startsWith('sunswap')) return 'sunswap';
+  // The Bridge tab's adapter.
+  if (n.startsWith('across')) return 'across';
   return null;
 }
 

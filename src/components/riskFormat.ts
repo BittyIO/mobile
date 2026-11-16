@@ -9,16 +9,28 @@ export const RISK_TITLE = {
   marketTradeDailyLossAllowance: 'mobile.vault.market_trade_loss_allowance',
 } as const satisfies Record<RiskField, string>;
 
+/**
+ * From vault 1.1.0 the loss limit covers bridges as well as market trades, and its explanations say
+ * so; `bridges` is whether the vault in front is on that release.
+ */
+const LOSS_1_1 = 'mobile.vault.daily_loss_allowance';
+
+/** Why a risk field matters, opened from the info button beside its title. */
+export function riskWhyKey(field: RiskField, bridges = false): string {
+  if (field === 'marketTradeDailyLossAllowance' && bridges) return `${LOSS_1_1}_why`;
+  return `${RISK_TITLE[field]}_why`;
+}
+
 /** The explanation under a risk field. Every number is bounded; an allowance's 0 is {riskZeroHintKey}. */
-export function riskHintKey(field: RiskField): string {
-  if (field === 'marketTradeDailyLossAllowance') return `${RISK_TITLE[field]}_hint`;
+export function riskHintKey(field: RiskField, bridges = false): string {
+  if (field === 'marketTradeDailyLossAllowance') return bridges ? `${LOSS_1_1}_hint` : `${RISK_TITLE[field]}_hint`;
   return field === 'timelock' ? 'mobile.vault.change_timelock_bounded_hint' : 'mobile.vault.send_daily_allowance_bounded_hint';
 }
 
 /** What 0 does to an allowance, shown where the vault accepts 0. */
-export function riskZeroHintKey(field: RiskField): string | null {
+export function riskZeroHintKey(field: RiskField, bridges = false): string | null {
   if (field === 'sendDailyAllowance') return 'mobile.vault.send_allowance_zero_hint';
-  if (field === 'marketTradeDailyLossAllowance') return 'mobile.vault.market_trade_allowance_zero_hint';
+  if (field === 'marketTradeDailyLossAllowance') return bridges ? `${LOSS_1_1}_zero_hint` : 'mobile.vault.market_trade_allowance_zero_hint';
   return null;
 }
 
@@ -38,7 +50,7 @@ export function fmtAllowance(v: bigint, t: T): string {
   return v === 0n ? t('mobile.vault.protection_off') : `$${Number(v).toLocaleString()}`;
 }
 
-/** The market-trade loss cap, whole USD. 0 turns market trading off. */
+/** The daily loss cap, whole USD. 0 turns market trading (and, from 1.1.0, bridging) off. */
 export function fmtLossAllowance(v: bigint, t: T): string {
   return fmtAllowance(v, t);
 }

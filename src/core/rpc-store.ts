@@ -26,6 +26,8 @@ export const BUILTIN_RPC: Record<NodeChain, string[]> = {
   mainnet: ['https://ethereum-rpc.publicnode.com', 'https://gateway.tenderly.co/public/mainnet', 'https://rpc.flashbots.net', 'https://eth.drpc.org'],
   base: ['https://mainnet.base.org', 'https://base-rpc.publicnode.com', 'https://base.gateway.tenderly.co', 'https://base.drpc.org'],
   sepolia: ['https://ethereum-sepolia-rpc.publicnode.com', 'https://sepolia.gateway.tenderly.co'],
+  // Each answered chain id 84532 when added (Nov 2026).
+  'base-sepolia': ['https://sepolia.base.org', 'https://base-sepolia-rpc.publicnode.com', 'https://base-sepolia.gateway.tenderly.co', 'https://base-sepolia.api.onfinality.io/public'],
   // The chain's own endpoint is the only public one; it rate-limits bursts. An owner's own node is
   // the way to a second one.
   robinhood: ['https://rpc.mainnet.chain.robinhood.com'],
@@ -38,11 +40,9 @@ export const BUILTIN_RPC: Record<NodeChain, string[]> = {
   // only free source of the account history (/v1/…), which goes nowhere else. Not added: Tatum (5
   // requests a minute), dRPC / Ankr / 1rpc (paid only or no Tron).
   tron: ['https://tron-rpc.publicnode.com', 'https://api.tronstack.io', 'https://api.trongrid.io'],
-  // Tron Nile is a vault network, so its nodes are what every vault read goes to: the node's
-  // Ethereum-compatible JSON-RPC, at /jsonrpc. The same host serves java-tron's own API, which is
-  // where a vault transaction is broadcast ({tronApiHost}). TronGrid is the only public Nile node
-  // with JSON-RPC on (api.nileex.io answers /jsonrpc with 404, checked Nov 2026).
-  'tron-nile': ['https://nile.trongrid.io/jsonrpc'],
+  // Tron Nile's wallet: java-tron's own API, as mainnet's. Both answered Nile's genesis block (Nov
+  // 2026). TronGrid is also the account history's only source (/v1/…), as on mainnet.
+  'tron-nile': ['https://api.nileex.io', 'https://nile.trongrid.io'],
 };
 
 /**
@@ -57,6 +57,7 @@ export const tronApiHost = (jsonRpcUrl: string): string => jsonRpcUrl.replace(/\
  */
 export const TRON_GENESIS: Record<TronNet, string> = {
   tron: '00000000000000001ebf88508a03865c71d452e25f4d51194196a1d22b6653dc',
+  'tron-nile': '0000000000000000d698d4192c56cb6be724a558448e2684802de4d6cd8690dc',
 };
 
 type Nodes = {

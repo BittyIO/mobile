@@ -26,14 +26,15 @@ type NetworkState = {
 };
 
 /**
- * Tron mainnet's wallet in this build. Off for the store releases — the picker does not offer it, and
- * a phone left on it opens on Ethereum. The code stays; only the way in is closed. Tron Nile's vault
- * is not behind this: it is a testnet like Sepolia, hidden until turned on in Settings › Network.
+ * Tron mainnet's wallet in this build: the phrase's own Tron address, which sends, stakes (Stake
+ * 2.0) and trades on SunSwap itself. No vault there; Tron's vault is Nile's only, a testnet like
+ * Sepolia, hidden until turned on in Settings › Network. Off, the picker does not offer mainnet and
+ * a phone left on it opens on Ethereum.
  */
-export const TRON_ENABLED = false;
+export const TRON_ENABLED = true;
 
 /** Testnets: offered, but hidden from the network picker until the user turns them on. */
-export const TESTNETS: ReadonlySet<Network> = new Set<Network>(['sepolia', 'tron-nile']);
+export const TESTNETS: ReadonlySet<Network> = new Set<Network>(['sepolia', 'base-sepolia', 'tron-nile']);
 
 /**
  * Settings › Network › Show networks: which networks the picker lists, one stored switch each.
@@ -50,15 +51,14 @@ const readShown = (): Shown => {
 };
 const isShown = (shown: Shown, n: Network): boolean => shown[n] ?? !TESTNETS.has(n);
 
-// Tron mainnet only when this build has it; Nile, stored here once, is a vault network either way.
+// The Tron wallets only when this build has them.
 const storedTronRaw = store.getString(TRON_KEY);
-const storedTron = TRON_ENABLED || storedTronRaw === 'tron-nile' ? storedTronRaw : undefined;
-const storedNetwork = store.getString(KEY) as Network | undefined;
+const storedNetworkRaw = store.getString(KEY) as Network | undefined;
+// Nile was a vault network for a while, stored under KEY: a phone left on it opens on Nile's wallet.
+const storedTron = TRON_ENABLED ? (storedNetworkRaw === 'tron-nile' ? 'tron-nile' : storedTronRaw) : undefined;
+const storedNetwork = storedNetworkRaw === 'tron-nile' ? undefined : storedNetworkRaw;
 
-// Nile used to be a Tron wallet chain, stored under TRON_KEY; it is a vault network now, so a phone
-// left on it opens on Nile's vault rather than falling back to the last EVM chain.
-const initialNetwork: Network =
-  storedTron === 'tron-nile' ? 'tron-nile' : (storedNetwork ?? 'mainnet');
+const initialNetwork: Network = storedNetwork ?? 'mainnet';
 
 /** `shown` with `n` on: the network in front is always one the picker lists. */
 const withShown = (shown: Shown, n: Network): Shown => {
@@ -71,7 +71,7 @@ const withShown = (shown: Shown, n: Network): Shown => {
 /** The active network (mainnet / base / …, or Tron), shared by every screen. */
 export const useNetwork = create<NetworkState>((set, get) => ({
   network: initialNetwork,
-  tron: storedTron && storedTron !== 'tron-nile' && isTronNet(storedTron) ? storedTron : null,
+  tron: storedTron && isTronNet(storedTron) ? storedTron : null,
   // A phone already on a testnet keeps it listed, rather than opening on a network it can't pick.
   shown: withShown(readShown(), initialNetwork),
   setNetwork: (network) => {
@@ -89,15 +89,30 @@ export const useNetwork = create<NetworkState>((set, get) => ({
   },
   setTron: (tron) => {
     store.set(TRON_KEY, tron);
-    set({tron});
+    // Nile's wallet, a testnet, stays listed while it is in front, as a vault testnet does.
+    set({tron, shown: tron === 'tron-nile' ? withShown(get().shown, 'tron-nile') : get().shown});
   },
 }));
 
-/** What the picker offers: the vault chains (Tron Nile among them), and Tron mainnet's wallet. */
+/** What the picker offers: the vault chains, and the Tron wallets (mainnet and Nile). */
 export type ChainChoice = Network | TronNet;
 
-/** Every vault network, listed in the picker or not (see {useNetworks}). */
-export const NETWORKS: Network[] = ['mainnet', 'base', 'arbitrum', 'bsc', 'robinhood', 'sepolia', 'tron-nile'];
+/** Every vault network, listed in the picker or not (see {useNetworks}). Tron Nile is a wallet now, not here. */
+export const NETWORKS: Network[] = ['mainnet', 'base', 'arbitrum', 'bsc', 'robinhood', 'sepolia', 'base-sepolia'];
+
+/**
+ * Everything the picker can list, in its order: Tron's wallet straight after Ethereum, as the other
+ * chain people most often hold dollars on, and Nile's wallet last, beside the other testnets.
+ * Settings › Network lists the same, each with its switch ('tron-nile' keeps its stored one).
+ */
+export const PICKER_CHAINS: ChainChoice[] = TRON_ENABLED ? [NETWORKS[0], 'tron', ...NETWORKS.slice(1), 'tron-nile'] : NETWORKS;
+/** Whether `n` is listed in the picker. Tron mainnet always is; the rest by their switch. */
+const listedIn = (shown: Shown, n: ChainChoice) => n === 'tron' || isShown(shown, n as Network);
+/** The picker's list, as switched on in Settings › Network. */
+export const usePickerChains = (): ChainChoice[] => {
+  const shown = useNetwork((s) => s.shown);
+  return PICKER_CHAINS.filter((n) => listedIn(shown, n));
+};
 /** The networks the picker lists: those switched on in Settings › Network. */
 export const useNetworks = (): Network[] => {
   const shown = useNetwork((s) => s.shown);
@@ -110,6 +125,7 @@ export const NETWORK_LABEL: Record<Network, string> = {
   mainnet: 'Ethereum',
   base: 'Base',
   sepolia: 'Ethereum Sepolia',
+  'base-sepolia': 'Base Sepolia',
   robinhood: 'Robinhood',
   arbitrum: 'Arbitrum',
   bsc: 'BNB Chain',

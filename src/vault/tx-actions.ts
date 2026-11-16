@@ -4,7 +4,8 @@
  * already told by the transfer legs, so they yield nothing here; configuration actions, which move
  * nothing but their gas fee, are the point.
  */
-import {NATIVE, type Network} from '@/core/chain';
+import {CHAIN_ID, NATIVE, type Network} from '@/core/chain';
+import {NETWORK_LABEL} from '@/core/network-store';
 import {assetMeta, underlyingOf} from '@/core/assets';
 import {protocolDisplayName, protocolMeta} from '@/core/protocols';
 import {displaySymbol, fmtNum, shortAddress} from '@/core/format';
@@ -544,6 +545,14 @@ export function describeActions(
       case 'wrapNative':
         out.push(k('wrap', {coin: NATIVE[network].symbol}));
         break;
+      case 'bridge': {
+        const to = bridgeDestination(g);
+        out.push(k('bridge', {network: to ? NETWORK_LABEL[to] : '?'}));
+        break;
+      }
+      case 'setBridgeEnabled':
+        out.push(k(String(g.enabled) === 'true' ? 'bridge_on' : 'bridge_off'));
+        break;
       case 'addScheduledPayment':
         out.push(k('scheduled_added'));
         break;
@@ -579,4 +588,14 @@ export function describeActions(
     }
   }
   return [...new Set(out)];
+}
+
+/**
+ * Where a `bridge` call sent the money: the first word of its Across request
+ * (`AcrossQuote.destinationChainId`). Null when it is not one this app knows.
+ */
+export function bridgeDestination(args: Record<string, string | string[]>): Network | null {
+  const word = String(args.data ?? '').slice(2, 66);
+  const chainId = word ? parseInt(word, 16) : NaN;
+  return (Object.keys(CHAIN_ID) as Network[]).find((n) => CHAIN_ID[n] === chainId) ?? null;
 }

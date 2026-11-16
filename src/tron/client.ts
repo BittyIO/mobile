@@ -41,7 +41,8 @@ function paced<T>(host: string, run: () => Promise<T>): Promise<T> {
  * whose node list is JSON-RPC (what every vault read goes to), so its API is the same hosts without
  * the `/jsonrpc` path — one list in Settings › RPC nodes, for reads and broadcasts alike.
  */
-const walletHosts = (net: TronChain): string[] => (net === 'tron-nile' ? rpcUrlsFor(net).map(tronApiHost) : rpcUrlsFor(net));
+// A Nile node saved while Nile was a vault network may still carry its JSON-RPC path; the API is the host.
+const walletHosts = (net: TronChain): string[] => rpcUrlsFor(net).map(tronApiHost);
 
 /** One request, retried on a rate limit or a node error, across the nodes for its path. */
 async function request<T>(net: TronChain, path: string, init?: RequestInit): Promise<T> {
@@ -87,14 +88,43 @@ export async function account(net: TronChain, address: string): Promise<Account 
 }
 
 /** A constant (read-only) contract call, returning the first result word, or null when it reverted. */
-export async function constantCall(net: TronChain, owner: string, contract: string, selector: string, parameter: string) {
+export async function constantCall(net: TronChain, owner: string, contract: string, selector: string, parameter: string, callValueSun?: bigint) {
   const r = await post<{constant_result?: string[]; energy_used?: number; result?: {result?: boolean; message?: string}}>(net, '/wallet/triggerconstantcontract', {
     owner_address: tronHex(owner),
     contract_address: tronHex(contract),
     function_selector: selector,
     parameter,
+    // TRX sent with the call (a swap that spends TRX); the node simulates it as if paid.
+    ...(callValueSun ? {call_value: Number(callValueSun)} : {}),
   });
   return r;
+}
+
+/** The account's Stake 2.0 state, as `/wallet/getaccount` lists it. */
+export type TronStakeAccount = {
+  balanceSun: bigint;
+  /** TRX frozen for energy. */
+  stakedSun: bigint;
+  /** Unfreezes started, each with when its TRX unlocks (ms). */
+  unstaking: {amountSun: bigint; unlockAt: number}[];
+};
+
+type StakeAccountRaw = {
+  balance?: number;
+  frozenV2?: {type?: string; amount?: number}[];
+  unfrozenV2?: {type?: string; unfreeze_amount?: number; unfreeze_expire_time?: number}[];
+};
+
+export async function stakeAccount(net: TronChain, address: string): Promise<TronStakeAccount> {
+  const a = await post<StakeAccountRaw>(net, '/wallet/getaccount', {address: tronHex(address)});
+  return {
+    balanceSun: BigInt(a?.balance ?? 0),
+    // Only the energy stake: bandwidth stakes (no `type` is BANDWIDTH) are not this app's.
+    stakedSun: BigInt((a?.frozenV2 ?? []).filter((f) => f.type === 'ENERGY').reduce((n, f) => n + (f.amount ?? 0), 0)),
+    unstaking: (a?.unfrozenV2 ?? [])
+      .filter((u) => u.type === 'ENERGY' && (u.unfreeze_amount ?? 0) > 0)
+      .map((u) => ({amountSun: BigInt(u.unfreeze_amount ?? 0), unlockAt: u.unfreeze_expire_time ?? 0})),
+  };
 }
 
 const word = (hexAddr20: string) => hexAddr20.padStart(64, '0');

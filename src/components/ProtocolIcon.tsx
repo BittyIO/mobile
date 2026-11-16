@@ -43,6 +43,8 @@ const LOGOS: Record<string, ImageSourcePropType> = {
   // staking, which wears the TRON mark.
   SunSwap: require('@/assets/protocols/sunswap.png'),
   'TRON Stake': require('@/assets/protocols/tron.png'),
+  // The bridge adapter (Bridge tab): Across's own round mark, from its docs.
+  Across: require('@/assets/protocols/across.png'),
 };
 
 /**

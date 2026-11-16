@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import {useWallet} from '@/wallet/store';
-import {useNetwork} from '@/core/network-store';
+import {NETWORK_LABEL, useNetwork} from '@/core/network-store';
 import {useActiveVaultAddress} from '@/core/active-vault';
 import {useVaultTransactions} from '@/vault/useVaultTransactions';
 import type {Operation, TransferRow} from '@/vault/transactions';
@@ -25,7 +25,7 @@ import {fmtNum, fmtShort, displaySymbol, shortAddress} from '@/core/format';
 import {EXPLORER_TX, NATIVE, type Network} from '@/core/chain';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
-import {asUnderlying, categoryForActions, defiMoveFromActions, defiMovesFromActions, describeActions, earnProtocolName, ordersBySetup, stakeClaimFromActions, orderTrade, swapFromActions} from '@/vault/tx-actions';
+import {asUnderlying, bridgeDestination, categoryForActions, defiMoveFromActions, defiMovesFromActions, describeActions, earnProtocolName, ordersBySetup, stakeClaimFromActions, orderTrade, swapFromActions} from '@/vault/tx-actions';
 import {GPV2_SETTLEMENT, fetchRecentOrders, type CowOrder} from '@/vault/limit';
 
 import {currentCatalog} from '@/core/asset-catalog';
@@ -70,8 +70,8 @@ type Part = {
   via?: string;
 };
 /** The web's own grouping of an operation, in its order. */
-type Category = 'trade' | 'stake' | 'send' | 'receive' | 'settings' | 'gas';
-const CATEGORY_ORDER: Category[] = ['trade', 'stake', 'send', 'receive', 'settings', 'gas'];
+type Category = 'trade' | 'stake' | 'bridge' | 'send' | 'receive' | 'settings' | 'gas';
+const CATEGORY_ORDER: Category[] = ['trade', 'stake', 'bridge', 'send', 'receive', 'settings', 'gas'];
 
 type OpView = {
   parts: Part[];
@@ -113,6 +113,24 @@ export function classify(
   const swapSet = new Set(swapLegs);
   let swap = swapLegs.length ? netTrade(swapLegs) : null;
   let rest = core.filter((l) => !swapSet.has(l));
+
+  /**
+   * A bridge is neither a payment sent nor one received, on either side. Leaving, the vault's own
+   * `bridge` call names it, toward the network in its Across request. Arriving, the feed sees only
+   * the relayer handing the vault the tokens; Across's record of the vault's deposits (see
+   * vault/bridge) is what says that transaction was the other half of a bridge.
+   */
+  const bridgeCall = op.actions?.find((a) => a.name === 'bridge');
+  if (bridgeCall || op.bridgedTo || op.bridgedFrom) {
+    const leaving = !!bridgeCall || !!op.bridgedTo;
+    const dest = (bridgeCall && bridgeDestination(bridgeCall.args)) || op.bridgedTo || null;
+    const title = leaving
+      ? t('mobile.actions.bridge', {network: dest ? NETWORK_LABEL[dest] : '?'})
+      : t('mobile.actions.bridge_from', {network: NETWORK_LABEL[op.bridgedFrom!]});
+    const shown = core.filter((l) => l.direction === (leaving ? 'out' : 'in'));
+    const all = describeActions(op.actions, network, t, orders, opDetails, true);
+    return {parts: [{title, swap: null, legs: shown}], fee, details: all.filter((d) => d !== title), category: 'bridge'};
+  }
 
   // The feed can miss a market swap's legs — on Sepolia the bought WETH leg is not indexed, leaving
   // only the sold-token out-legs, which the heuristic below would read as a plain send. The decoded
@@ -665,6 +683,8 @@ export function TransactionsScreen() {
       label: t(
         cat === 'trade'
           ? 'vault.trade'
+          : cat === 'bridge'
+            ? 'mobile.bridge.tab'
           : cat === 'stake'
             ? 'vault.earn'
             : cat === 'send'

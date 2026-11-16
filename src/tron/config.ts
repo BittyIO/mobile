@@ -5,16 +5,16 @@
 export type TronChain = 'tron' | 'tron-nile';
 
 /**
- * Tron mainnet, as this app uses it today: a plain wallet on the same recovery phrase, for paying
- * out of. No vault is deployed there yet — no timelock, no allowance, no relayer — so nothing in
- * `src/vault` applies, and it is deliberately NOT a member of the vault `Network` type.
+ * The Tron chains as this app uses them: plain wallets on the same recovery phrase, which send,
+ * stake (Stake 2.0) and, on mainnet, trade on SunSwap and bridge out by Across. No vault — no
+ * timelock, no allowance, no relayer — so nothing in `src/vault` applies to them.
  *
- * Nile is different: the vault IS deployed there, so Nile is a vault `Network` ('tron-nile', see
- * core/chain) and not a wallet. When the vault reaches mainnet, 'tron' moves the same way.
+ * Nile was a vault network for a while ('tron-nile' is still a member of the vault `Network` type,
+ * and its vault code is still there), but the app reaches it only as a wallet now.
  */
-export type TronNet = 'tron';
+export type TronNet = 'tron' | 'tron-nile';
 
-export const TRON_NETS: TronNet[] = ['tron'];
+export const TRON_NETS: TronNet[] = ['tron', 'tron-nile'];
 
 export const isTronNet = (n: string): n is TronNet => (TRON_NETS as string[]).includes(n);
 
@@ -26,6 +26,7 @@ export const TRON_API: Record<TronChain, string> = {
 
 export const TRON_LABEL: Record<TronNet, string> = {
   tron: 'Tron',
+  'tron-nile': 'Tron Nile',
 };
 
 /** Transaction pages on Tronscan. */
@@ -47,6 +48,8 @@ export const TRX: TronAsset = {symbol: 'TRX', name: 'Tron', decimals: 6};
 /** What the wallet shows and can send: TRX, and USDT — the token most payments on Tron are made in. */
 export const TRON_ASSETS: Record<TronNet, TronAsset[]> = {
   tron: [TRX, {symbol: 'USDT', name: 'Tether USD', decimals: 6, contract: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'}],
+  // Nile's test USDT: the one the Nile vault listed (0xECa9bC…), so test money held there shows here.
+  'tron-nile': [TRX, {symbol: 'USDT', name: 'Tether USD', decimals: 6, contract: 'TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf'}],
 };
 
 /** 1 TRX = 1,000,000 sun. */

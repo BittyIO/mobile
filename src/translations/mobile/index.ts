@@ -21,6 +21,7 @@ import {scan} from './scan';
 import {protocols} from './protocols';
 import {tron} from './tron';
 import {rpc} from './rpc';
+import {bridge} from './bridge';
 
 export const MOBILE_STRINGS: Record<string, MobileTable> = {
   settings,
@@ -39,4 +40,5 @@ export const MOBILE_STRINGS: Record<string, MobileTable> = {
   protocols,
   tron,
   rpc,
+  bridge,
 };

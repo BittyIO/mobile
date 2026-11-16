@@ -131,7 +131,11 @@
       "err_recipient_waiting": "Bu alıcı henüz fon alamaz. Bekleme süresi bitince alabilecek.",
       "err_no_escape": "Halihazırda fon alabilen bir alıcı seçin.",
       "err_gas_budget": "Bugünkü ağ ücreti bütçesi tükendi.",
-      "err_price_unavailable": "Şu anda bir fiyat beslemesi kullanılamıyor. Birazdan tekrar deneyin."
+      "err_price_unavailable": "Şu anda bir fiyat beslemesi kullanılamıyor. Birazdan tekrar deneyin.",
+      "err_bridge_off": "Bu kasada köprü kapalı ya da hâlâ zaman kilidini bekliyor.",
+      "err_bridge_route": "Bu varlık bu yoldan köprülenemez.",
+      "err_bridge_cost": "Köprü teklifi bu yolun izin verdiğini aştı. Yeni teklif alıp tekrar deneyin.",
+      "err_daily_loss": "Bu, bugünkü kayıp limitini aşar."
     }
   }
 }

@@ -3836,7 +3836,7 @@ export function TradeScreen() {
 const makeStyles = (c: Colors) => StyleSheet.create({
   container: {flex: 1, backgroundColor: c.bg},
   // paddingBottom is set inline from the tab bar's height; see the ScrollView.
-  body: {flexGrow: 1, padding: 16, gap: 14},
+  body: {flexGrow: 1, padding: 16, gap: 20},
   /**
    * Inset to the cards' own content, not to the page.
    *

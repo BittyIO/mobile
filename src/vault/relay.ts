@@ -152,6 +152,8 @@ type EncodedWrite = {
   noRotate?: boolean;
   /** Adapters this write serves without naming them: see {relayVaultWrite}'s `uses`. */
   uses?: readonly Address[];
+  /** See {relayVaultWrite}'s `upgradeVault`. */
+  upgradeVault?: boolean;
 };
 
 /**
@@ -239,7 +241,7 @@ async function relayEncodedNow(given: EncodedWrite): Promise<RelayResult> {
   const lockLevel = await assertVaultAccepts(vault, network, given.activationCalls);
   // The vault's and its protocols' upgrades ride in front, when Auto upgrade is on. Once: a retry
   // with the other payer passes here again with them already in, and finds the batch an upgrade.
-  const auto = await withAutoUpgrades({vault, network, from: account.address, data: given.data, lockLevel, uses: given.uses});
+  const auto = await withAutoUpgrades({vault, network, from: account.address, data: given.data, lockLevel, uses: given.uses, upgradeVault: given.upgradeVault});
   if (auto.upgraded) {
     given = {...given, data: auto.data};
     upgradeSent(vault, network);
@@ -670,6 +672,11 @@ export async function relayVaultWrite(opts: {
    * the order went out on the old build. Named here, the upgrade rides in front (see vault/auto-upgrade).
    */
   uses?: readonly Address[];
+  /**
+   * The vault's own upgrade rides in front even with Auto upgrade off: the user has just said yes
+   * to it for this write (the Bridge screen asks when the running release has no bridge).
+   */
+  upgradeVault?: boolean;
 }): Promise<RelayResult> {
   const datas = await wrapNativeFirst(opts.network, opts.vault, [encodeCall({abi: opts.abi, functionName: opts.functionName, args: opts.args})]);
   return relayEncoded({
@@ -682,6 +689,7 @@ export async function relayVaultWrite(opts: {
     pinFee: opts.pinFee,
     noRotate: opts.noRotate,
     uses: opts.uses,
+    upgradeVault: opts.upgradeVault,
   });
 }
 
@@ -702,6 +710,8 @@ export async function relayVaultMulticall(opts: {
   noRotate?: boolean;
   /** See {relayVaultWrite}. */
   uses?: readonly Address[];
+  /** See {relayVaultWrite}. */
+  upgradeVault?: boolean;
 }): Promise<RelayResult> {
   const datas = await wrapNativeFirst(opts.network, opts.vault, opts.calls.map(encodeCall));
   return relayEncoded({
@@ -714,5 +724,6 @@ export async function relayVaultMulticall(opts: {
     pinFee: opts.pinFee,
     noRotate: opts.noRotate,
     uses: opts.uses,
+    upgradeVault: opts.upgradeVault,
   });
 }
