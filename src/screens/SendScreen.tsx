@@ -746,8 +746,12 @@ function AddByAddress({onAdd}: {onAdd: (address: string) => Promise<void>}) {
     try {
       await onAdd(text);
       setText('');
-    } catch {
-      setErr(t('mobile.payments.token_not_found'));
+    } catch (e) {
+      setErr(
+        e instanceof Error && e.message === 'receipt-token'
+          ? t('mobile.payments.token_is_position')
+          : t('mobile.payments.token_not_found'),
+      );
     } finally {
       setBusy(false);
     }

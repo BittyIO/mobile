@@ -26,7 +26,7 @@ import {useVaultPositions} from '@/vault/useVaultPositions';
 import Svg, {Path} from 'react-native-svg';
 import {TokenIcon} from '@/components/TokenIcon';
 import {PickerSheet, type PickerItem} from '@/components/AssetPicker';
-import {adapterByName, protocolMeta} from '@/core/protocols';
+import {currentAdapter, adapterByName, protocolMeta} from '@/core/protocols';
 import {recordFlow} from '@/vault/flows';
 import {feeWeth, feeCoinForSpend, resolveFeeReserve, reserveHeld, useWethFeeCoin} from '@/vault/stableCoinAsGas';
 import type {RootStackParamList} from '@/App';
@@ -90,8 +90,9 @@ export function EarnActionScreen() {
   });
 
   const selected = stablecoins.find((s) => s.symbol === coin) ?? stablecoins[0];
+  // Never a retired adapter: a route read before the guard swapped it would be refused (see currentAdapter).
   const protocol = specific
-    ? (params.protocol as `0x${string}`)
+    ? currentAdapter(network, params.protocol as `0x${string}`)
     : adapterByName(network, 'Sky');
   // A fixed route deposits or withdraws exactly the asset it was opened for. See {source}.
   const targetAsset = specific ? (params.asset as `0x${string}`) : selected?.address;
