@@ -7,6 +7,7 @@
  */
 import {unlockRoot} from '@/wallet/keyring';
 import {tronAccountAt} from './address';
+import {tronIndexOf} from './store';
 import {encodeRaw, encodeSigned, signRaw, type TronCall} from './tx';
 import {broadcast, refBlock, type TronFee} from './client';
 import type {TronAsset, TronNet} from './config';
@@ -22,7 +23,8 @@ export async function sendTron(opts: {net: TronNet; from: string; to: string; as
   const {net, from, to, asset, amount, fee} = opts;
   const root = await unlockRoot();
   if (!root) throw new UnlockCancelled();
-  const account = tronAccountAt(root);
+  // The account the address was derived at: the wallet in front, of however many there are.
+  const account = tronAccountAt(root, tronIndexOf(from));
   try {
     // The address the user was shown — and checked the balance of — must be the key that signs.
     if (account.address !== from) throw new Error('This phone\'s Tron key does not match the address shown. Unlock the app again and retry.');
