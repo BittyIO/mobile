@@ -265,6 +265,9 @@ function SearchIcon({open, color, size = 20}: {open: boolean; color: string; siz
   );
 }
 
+/** A market order filling more than this far under the market price is refused. See {marketImpact}. */
+const MAX_MARKET_IMPACT = 0.05;
+
 export function TradeScreen() {
   const headerHeight = useTransparentHeaderInset();
   // Read through the context, not the hook: this screen is also PUSHED from the Overview, and
@@ -1751,10 +1754,28 @@ export function TradeScreen() {
   const orderLocked = mode === 'Market' ? marketLocked : !intentGate.allowed;
 
   // The same checks onSubmit makes, so the button is disabled rather than erroring on tap.
+  /**
+   * How much worse than the market the route fills this order, as a fraction: the dollars that
+   * arrive against the dollars paid, both at the market price. Null without both prices.
+   *
+   * The guard flags a token AMM-liquid once, and depth moves. cbHYPE is flagged, but its depth is
+   * on Aerodrome, which the Universal Router cannot reach: Uniswap's one 1% pool gave 0.396 cbHYPE
+   * for $217 — about $28 of HYPE at $70. The route quotes such a pool faithfully, and the
+   * slippage floor is set off that quote, so nothing else stops the trade.
+   */
+  const marketImpact = useMemo(() => {
+    if (mode !== 'Market' || !mktQuote || mktQuoting) return null;
+    const pay = Number(amount) * (prices.get(spendSym) ?? NaN);
+    const got = Number(mktQuote.est) * (prices.get(recvSym) ?? NaN);
+    return isFinite(pay) && isFinite(got) && pay > 0 && got > 0 ? 1 - got / pay : null;
+  }, [mode, mktQuote, mktQuoting, amount, prices, spendSym, recvSym]);
+  // Well past what fees and an honest pool cost (cbZEC's $10k buy: ~1%), well short of a dust pool.
+  const thinLiquidity = marketImpact != null && marketImpact > MAX_MARKET_IMPACT;
+
   const canConfirm =
     !!sheetSide && unlocked && !!owner && !!base && !!quoteAsset &&
     Number(amount) > 0 &&
-    (mode === 'Market' ? !marketOff && !marketLocked : Number(price) > 0 && intentGate.allowed) &&
+    (mode === 'Market' ? !marketOff && !marketLocked && !thinLiquidity : Number(price) > 0 && intentGate.allowed) &&
     (mode !== 'TWAP' || Number(parts) >= 2) &&
     !overBalance;
 
@@ -3721,6 +3742,9 @@ export function TradeScreen() {
                   </Text>
                 ) : null}
               </View>
+            ) : null}
+            {mode === 'Market' && thinLiquidity ? (
+              <Text style={styles.err}>{t('mobile.trade.thin_liquidity', {pct: Math.round(marketImpact! * 100)})}</Text>
             ) : null}
 
             {/* Validity: the usual answers as chips, and a field for anything else. A preset is one
