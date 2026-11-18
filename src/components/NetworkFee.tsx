@@ -33,9 +33,11 @@ const ownerCache = new Map<string, {wei: bigint | null; at: number}>();
  * When the owner pays (see core/fee-payer-store) the figure is in ETH, because that is what leaves
  * the owner wallet — no dollar conversion, and no relayer margin, since no relayer is paid.
  */
-export function NetworkFee({gas = TYPICAL_RELAY_GAS, free}: {gas?: bigint; free?: boolean}) {
+export function NetworkFee({gas = TYPICAL_RELAY_GAS, free, usd}: {gas?: bigint; free?: boolean; usd?: number}) {
   const network = useNetwork((s) => s.network);
   const {payer} = useActiveFeePayer(network);
+  // Already priced by the caller (an activation's own network fee): shown as it is.
+  if (usd != null && !free) return <KnownFee usd={usd} />;
   if (payer === 'owner' && !free) return <OwnerFee gas={gas} />;
   return <VaultFee gas={gas} free={free} />;
 }
@@ -113,6 +115,13 @@ function VaultFee({gas, free}: {gas: bigint; free?: boolean}) {
     );
   }
   if (usd == null) return null;
+  return <KnownFee usd={usd} />;
+}
+
+/** A fee in dollars, beside the gas mark. */
+function KnownFee({usd}: {usd: number}) {
+  const styles = useStyles(makeStyles);
+  const c = useColors();
   // Sub-cent fees are the norm on an L2, so cents would print "$0.01" for everything and hide the
   // difference between a plain swap and one that unwinds two positions first. The switch to cents
   // waits until a dime, well clear of where L2 fees sit, so a heavier operation crossing one cent

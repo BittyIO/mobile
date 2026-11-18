@@ -268,6 +268,8 @@ export type ActivationPrice = {
   feeUsd: number;
   /** The fee in the chain's native coin (ETH, TRX), for showing beside the dollars. */
   feeNative: number;
+  /** The native coin's dollar price the fee was worked out at. */
+  nativeUsd: number;
   calls: Hex[];
 };
 
@@ -353,6 +355,7 @@ export async function priceActivation(o: {
     feeAmount,
     feeUsd,
     feeNative: Number(feeNative) / 10 ** NATIVE[o.network].decimals,
+    nativeUsd: ethUsd,
     calls,
   };
 }

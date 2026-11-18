@@ -124,6 +124,8 @@ type ConfirmProps = {
    * in front is not activated yet (its first write activates it) and the vault pays.
    */
   activationFee?: number;
+  /** The network fee at the top right, in dollars, when the caller has already priced it. */
+  networkFeeUsd?: number;
 };
 
 function PlainConfirmButton({
@@ -136,6 +138,7 @@ function PlainConfirmButton({
   fee = true,
   free,
   activationFee,
+  networkFeeUsd,
   lockLevel = 0,
 }: ConfirmProps & {lockLevel?: 0 | 1 | 2}) {
   const {t} = useT();
@@ -161,7 +164,7 @@ function PlainConfirmButton({
       )}
     </Pressable>
   );
-  const showFee = fee || free;
+  const showFee = fee || free || networkFeeUsd != null;
   if (!showFee && activation === null) return button;
   // The cost sits with the control that incurs it, so every signing surface answers "what does this
   // cost me" in the same place without each screen having to remember to say it. A vault's first
@@ -170,7 +173,7 @@ function PlainConfirmButton({
     <View style={styles.confirmWrap}>
       <View style={styles.feeRow}>
         {activation !== null ? <ActivationFee usd={activation} /> : <View />}
-        {showFee ? <NetworkFee gas={gas} free={free} /> : null}
+        {showFee ? <NetworkFee gas={gas} free={free} usd={networkFeeUsd} /> : null}
       </View>
       {button}
     </View>
