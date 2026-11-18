@@ -6,13 +6,13 @@ import {NativeEventEmitter, NativeModules, Platform} from 'react-native';
  *
  * The private key is used in software (the mnemonic enters JS memory at sign time), so a jailbroken
  * or debugged device — or a screen being recorded while the recovery phrase is on screen — can lift
- * it. These guards shrink that window: refuse to unlock on a compromised device, warn on an out-of-
- * date iOS missing an actively-exploited fix, and hide the phrase while the screen is captured.
+ * it. These guards shrink that window: refuse to unlock on a compromised device and hide the phrase
+ * while the screen is captured.
  *
  * The jailbreak/debugger and screen-capture checks need the native module in
  * `ios/Bitty/DeviceSecurity.{swift,m}` — add both files to the Bitty target in Xcode and rebuild.
  * Until then every native call DEGRADES SAFELY (compromise → false, capture → false), so the JS runs
- * unchanged; only the iOS-version check (pure JS) is live before the native module is wired in.
+ * unchanged.
  *
  * Android: the same module lives in `android/app/src/main/java/com/bitty/DeviceSecurityModule.kt`
  * (root/debugger checks, Android 14+ screenshot and 15+ recording events) and adds `setSecure`, which
@@ -31,33 +31,6 @@ const Native = (NativeModules as {DeviceSecurity?: DeviceSecurityNative})
 
 /** True once the native module is built into the app (jailbreak + capture detection are live). */
 export const deviceSecurityNativeReady = !!Native;
-
-/**
- * iOS floor: the first build carrying the fix for the actively-exploited CoreGraphics RCE
- * (CVE-2026-86950, used in targeted spyware chains), patched in iOS 26.7.1 and iOS 27. Below this a
- * device may be missing it. Bump this as new actively-exploited fixes ship. This drives a WARNING,
- * not a block — blocking an old-iOS user out of their vault could strand funds.
- */
-export const MIN_SAFE_IOS = '26.7.1';
-
-function cmpVersion(a: string, b: string): number {
-  const pa = a.split('.').map((n) => parseInt(n, 10) || 0);
-  const pb = b.split('.').map((n) => parseInt(n, 10) || 0);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
-    if (d !== 0) return d < 0 ? -1 : 1;
-  }
-  return 0;
-}
-
-export type IosVersionRisk = {ok: boolean; version: string; floor: string};
-
-/** Whether the running iOS is at or above {@link MIN_SAFE_IOS}. Pure JS — live without the native module. */
-export function iosVersionRisk(): IosVersionRisk {
-  const version = String(Platform.Version);
-  if (Platform.OS !== 'ios') return {ok: true, version, floor: MIN_SAFE_IOS};
-  return {ok: cmpVersion(version, MIN_SAFE_IOS) >= 0, version, floor: MIN_SAFE_IOS};
-}
 
 /**
  * Whether this device looks jailbroken or a debugger/instrumentation is attached — either means the
