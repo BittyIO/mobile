@@ -32,7 +32,7 @@ export type Network = 'mainnet' | 'base' | 'sepolia' | 'base-sepolia' | 'robinho
  *   core/address `displayAddress` / `parseAddress`.
  * - The native coin is TRX at 6 decimals, and fees are energy and bandwidth, priced in sun.
  *
- * Tron MAINNET is not here: no vault is deployed there yet, so it stays the plain wallet in `tron/`.
+ * Tron MAINNET is not here: no vault is deployed there yet.
  */
 export const isTronNetwork = (n: Network): n is 'tron-nile' => n === 'tron-nile';
 

@@ -45,7 +45,7 @@ export function QrScanner<A extends string = `0x${string}`>({
   visible: boolean;
   onScan: (address: A) => void;
   onClose: () => void;
-  /** What counts as an address in a code; an EVM address unless told otherwise (Tron's wallet passes its own). */
+  /** What counts as an address in a code; an EVM address unless told otherwise. */
   parse?: (text: string) => A | null;
 }) {
   const read = parse ?? (addressInQr as unknown as (text: string) => A | null);

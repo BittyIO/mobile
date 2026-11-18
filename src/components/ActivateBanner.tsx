@@ -1,7 +1,7 @@
 import React, {useCallback, useState} from 'react';
 import {ActivityIndicator, Alert, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
-import {erc20Abi, formatUnits} from 'viem';
+import {erc20Abi} from 'viem';
 import {isTronNetwork, NATIVE, publicClientFor} from '@/core/chain';
 import {useWallet} from '@/wallet/store';
 import {isActivated, priceActivation} from '@/vault/activate';
@@ -9,7 +9,8 @@ import {activateVaultOnly} from '@/vault/relay';
 import {useVaultWrite} from '@/components/useVaultWrite';
 import {useActiveFeePayer} from '@/vault/useFeePayer';
 import {showTx} from '@/components/Toast';
-import {confirmWithFee} from '@/components/FeeConfirm';
+import {confirmWithFee, type FeeQuote} from '@/components/FeeConfirm';
+import {ACTIVATION_FEE_USD} from '@/core/activation-fee';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
@@ -28,7 +29,10 @@ export function ActivateBanner({onActivated}: {onActivated?: () => void}) {
   const styles = useStyles(makeStyles);
   const c = useColors();
   const [activated, setActivated] = useState<boolean | null>(null);
+  // Pricing the fee and waiting on the confirm sheet: the button is off, with no spinner.
   const [activating, setActivating] = useState(false);
+  // Confirmed and on its way: the spinner, from Confirm until the transaction is in.
+  const [sending, setSending] = useState(false);
   const getSigner = useWallet((s) => s.signer);
   const owner = useWallet((s) => s.address);
 
@@ -59,15 +63,14 @@ export function ActivateBanner({onActivated}: {onActivated?: () => void}) {
   const activate = async () => {
     if (!vault || !stable || !owner) return;
     setActivating(true);
-    // The fee first, in the same confirm sheet every on-chain action uses: priced the way the
-    // activation will be signed. Over the cap it cannot be paid, and says so here.
-    let fee: number;
-    // Paid from the vault, the fee has to be there already: an empty vault cannot activate, so the
-    // sheet says what to send and Confirm stays off. From the owner key the gas is the owner's.
-    let blocked: string | null = null;
-    try {
+    // The fee, priced the way the activation will be signed, while the sheet is already open (see
+    // confirmWithFee). Over the cap it cannot be paid, and says so here. Paid from the vault, the fee
+    // has to be there already: an empty vault cannot activate, so the sheet says what to send and
+    // Confirm stays off. From the owner key the gas is the owner's.
+    const quote = async (): Promise<FeeQuote> => {
       const price = await priceActivation({owner: owner as `0x${string}`, network, stableCoin: stable.address, allowlistEnabled: false});
-      fee = price.feeUsd;
+      const networkFeeUsd = price.feeNative * price.nativeUsd;
+      let blocked: string | null = null;
       if (payer !== 'owner') {
         const client = publicClientFor(network);
         const [held, native] = await Promise.all([
@@ -75,12 +78,19 @@ export function ActivateBanner({onActivated}: {onActivated?: () => void}) {
           price.weth ? client.getBalance({address: vault}) : Promise.resolve(BigInt(0)),
         ]);
         if (held + native < price.feeAmount) {
-          const amount = price.weth
-            ? `${formatUnits(price.feeAmount, NATIVE[network].decimals)} ${NATIVE[network].symbol}`
-            : `${price.feeUsd.toFixed(2)} ${stable.symbol}`;
+          // What to send: the activation's network fee plus the $1, in either coin it can be paid
+          // with. Rounded up, so sending the figure shown is always enough.
+          const up = (x: number) => (Math.ceil(x * 100) / 100).toFixed(2);
+          const usd = ACTIVATION_FEE_USD + networkFeeUsd;
+          const amount = `${up(usd)} ${stable.symbol} / ${up(price.nativeUsd > 0 ? usd / price.nativeUsd : 0)} ${NATIVE[network].symbol}`;
           blocked = t('mobile.home.activate_fund', {amount});
         }
       }
+      return {feeUsd: price.feeUsd, blocked, networkFeeUsd};
+    };
+    let ok: boolean;
+    try {
+      ok = await confirmWithFee(t('mobile.home.activate'), quote());
     } catch (e) {
       setActivating(false);
       const msg = String((e as Error)?.message ?? e);
@@ -90,10 +100,11 @@ export function ActivateBanner({onActivated}: {onActivated?: () => void}) {
       ]);
       return;
     }
-    if (!(await confirmWithFee(t('mobile.home.activate'), fee, blocked))) {
+    if (!ok) {
       setActivating(false);
       return;
     }
+    setSending(true);
     const tx = showTx(t('mobile.home.activate_title'), network);
     try {
       const account = await getSigner();
@@ -109,11 +120,13 @@ export function ActivateBanner({onActivated}: {onActivated?: () => void}) {
         {text: t('common.ok')},
       ]);
     } finally {
+      setSending(false);
       setActivating(false);
     }
   };
 
-  const working = activating || busy !== null;
+  const spinning = sending || busy !== null;
+  const off = activating || spinning || !ready;
   return (
     <View style={styles.card}>
       <View style={styles.text}>
@@ -122,11 +135,11 @@ export function ActivateBanner({onActivated}: {onActivated?: () => void}) {
       </View>
       <Pressable
         onPress={() => void activate()}
-        disabled={working || !ready}
-        style={[styles.button, (working || !ready) && styles.buttonOff]}
+        disabled={off}
+        style={[styles.button, off && styles.buttonOff]}
         accessibilityRole="button"
         accessibilityLabel={t('mobile.home.activate')}>
-        {working ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{t('mobile.home.activate')}</Text>}
+        {spinning ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{t('mobile.home.activate')}</Text>}
       </Pressable>
     </View>
   );

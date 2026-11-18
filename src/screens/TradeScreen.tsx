@@ -532,6 +532,19 @@ export function TradeScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wantBase, wantQuote]);
 
+  /**
+   * An asset against a stablecoin always reads asset/stable: ETH/USDC, never USDC/ETH. Whichever way
+   * the pair arrived — a leg picked in the sheet, a pair handed over, the one last traded — a stable
+   * base with a non-stable quote is turned around, so the price is always the asset's, in dollars.
+   * Two stables, or two assets, stay as they were picked.
+   */
+  useEffect(() => {
+    const isStable = (sym: string) => stables.some((a) => a.symbol === sym);
+    if (!isStable(baseSym) || isStable(quoteSym)) return;
+    setBaseSym(quoteSym);
+    setQuoteSym(baseSym);
+  }, [baseSym, quoteSym, stables]);
+
   // Written whenever the pair settles, so the tab reopens on it next launch.
   useEffect(() => {
     if (baseSym && quoteSym) setPref(LAST_PAIR, `${baseSym}/${quoteSym}`);

@@ -20,9 +20,10 @@ import {fetchSafe, safeSigner} from '@/vault/safe';
 import {translate} from '@/i18n';
 import {useLanguage} from '@/core/language-store';
 import {forgetPhraseVerified} from './phrase-backup';
-import {forgetTronAddress, rememberTronAddress} from '@/tron/store';
 
 const cache = new MMKV();
+// The Tron wallet's cached addresses, from builds that had one: public, but nothing reads them now.
+new MMKV({id: 'bitty.tron'}).clearAll();
 const ADDRESS_KEY = 'address';
 
 export type WalletStatus = 'unknown' | 'no-wallet' | 'locked' | 'unlocked';
@@ -125,7 +126,6 @@ export const useWallet = create<WalletState>((set) => ({
   createWallet: async (mnemonic: string) => {
     const account = await keyring.createWallet(mnemonic);
     remember(account);
-    rememberTronAddress(keyring.rootFromPhrase(mnemonic));
     set({account, address: account.address, status: 'unlocked', unlocked: true});
   },
 
@@ -134,7 +134,6 @@ export const useWallet = create<WalletState>((set) => ({
     if (!root) return;
     const account = keyring.accountAt(root, active());
     remember(account);
-    rememberTronAddress(root);
     set({account, address: ownerFor(account), status: 'unlocked', unlocked: true});
     // So a vault already handed to one of this phrase's one-time keys reads as this phone's own.
     learnKeys(root, useVaults.getState().vaults.filter((v) => !v.safe).map(keyIndexOf));
@@ -145,7 +144,6 @@ export const useWallet = create<WalletState>((set) => ({
   wipe: async () => {
     await keyring.wipe();
     cache.delete(ADDRESS_KEY);
-    forgetTronAddress();
     forgetPhraseVerified();
     set({account: null, unlocked: false, address: null, status: 'no-wallet'});
   },

@@ -615,8 +615,8 @@ export function VaultHomeScreen() {
    * Tapping an asset's name opens Trade on a pair for it.
    *
    * The quote is a stable coin the vault actually HOLDS, because a pair the user cannot fund is a
-   * dead end: with USDT and no USDC, the pair is ASSET/USDT. Dollars are interchangeable enough
-   * that USDC wins when both are funded, and it is the fallback when neither is.
+   * dead end. USDT wins whenever the vault holds it, then USDC; USDC is the fallback when the
+   * vault holds no stable coin.
    *
    * A stable coin trades against another stable coin, so USDC opens as USDC/USDT. On a network
    * with only one, there is no second side and the name does nothing rather than opening a pair
@@ -632,6 +632,7 @@ export function VaultHomeScreen() {
       const held = (sym: string) => (rows.find((r) => r.symbol === sym)?.total ?? 0) > 0;
       const options = catalog.filter((a) => a.kind === 'stable').map((a) => a.symbol).filter((s) => s !== row.symbol);
       const quote =
+        options.find((s) => s === 'USDT' && held(s)) ??
         options.find((s) => s === 'USDC' && held(s)) ??
         options.find(held) ??
         options.find((s) => s === 'USDC') ??

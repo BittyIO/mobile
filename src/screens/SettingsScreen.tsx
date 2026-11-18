@@ -7,7 +7,6 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
 
 import {SAFE_ENABLED} from '@/core/features';
-import {useNetwork} from '@/core/network-store';
 
 import {useLanguage, LANGUAGES, languageLabel} from '@/core/language-store';
 import {useCurrency, useDisplayCurrency, CURRENCIES, currencyLabel, type Currency} from '@/core/currency-store';
@@ -64,7 +63,6 @@ export function SettingsScreen() {
   const {t} = useT();
   const {language, setLanguage} = useLanguage();
   const isSafeVault = useVaults((st) => !!st.vaults.find((v) => v.index === st.activeIndex)?.safe);
-  const tron = useNetwork((s) => s.tron);
   const headerHeight = useTransparentHeaderInset();
   const tabBarHeight = useBottomTabBarHeight();
   const styles = useStyles(makeStyles);
@@ -116,8 +114,7 @@ export function SettingsScreen() {
       contentOffset={{x: 0, y: -headerHeight}}
       scrollIndicatorInsets={{top: headerHeight}}
       automaticallyAdjustContentInsets={false}>
-      {/* The vault's own settings. Tron has no vault — only the phrase's wallet — so nothing here applies. */}
-      {tron ? null : (
+      {/* The vault's own settings. */}
       <View style={styles.group}>
         {/* Only for a vault owned by a Safe: where its owners co-sign what one of them started. */}
         {SAFE_ENABLED && isSafeVault ? (
@@ -136,7 +133,6 @@ export function SettingsScreen() {
             current. */}
         <Row icon="security" title={t('mobile.app.security')} onPress={() => nav.navigate('VaultSecurity')} last />
       </View>
-      )}
 
       <View style={styles.group}>
         <Row icon="language" title={t('mobile.settings.language')} value={languageLabel(language)} onPress={pickLanguage} />

@@ -5,12 +5,11 @@
  * The call itself is the vault's ordinary calldata — the same bytes the EVM path signs — carried in
  * a Tron `TriggerSmartContract` from the owner's address. It is encoded here (./tx), from the fields
  * the app built, and signed here; the node is asked only for the block to anchor it to (TaPoS) and
- * to broadcast it, exactly as the Tron wallet's own payments are (./send).
+ * to broadcast it.
  *
  * The key is the vault owner's: the same secp256k1 key, and the same 20 bytes, as on every EVM
  * chain — Tron only writes them as T… — so the owner signs Tron's transaction id with the key the
- * vault already answers to. (Not the Tron wallet's key, which the phrase derives on Tron's own coin
- * type, m/44'/195'.)
+ * vault already answers to.
  *
  * The id it returns is the transaction id as a 0x hash: Tron's JSON-RPC answers
  * `eth_getTransactionReceipt` for it, so the toasts and receipt waits that follow an EVM hash
