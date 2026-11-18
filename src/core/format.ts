@@ -150,7 +150,7 @@ export function shortAddress(address: string): string {
  * A 0x… address as the network in front writes it: unchanged on the EVM chains, base58 T… on Tron
  * (core/address `displayAddress`). Every address these formatters are handed belongs to the network
  * in front, so it is decided here, once, for every row that shows one. Anything that is not a
- * 20-byte hex address — a Tron wallet's own T… address, a name — is left as it is.
+ * 20-byte hex address — a T… address already, a name — is left as it is.
  */
 export function asShown(address: string): string {
   if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return address;

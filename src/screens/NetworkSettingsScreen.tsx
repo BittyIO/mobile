@@ -3,7 +3,7 @@ import {ScrollView, StyleSheet} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
-import {PICKER_CHAINS, networkLabel, useNetwork, usePickerChains} from '@/core/network-store';
+import {NETWORKS, networkLabel, useNetwork, useNetworks} from '@/core/network-store';
 import {NetworkIcon} from '@/components/NetworkSwitcher';
 import {SettingsGroup, SettingsRow} from '@/components/SettingsRow';
 import {useT} from '@/i18n';
@@ -20,14 +20,12 @@ export function NetworkSettingsScreen() {
   const styles = useStyles(makeStyles);
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const network = useNetwork((s) => s.network);
-  const tron = useNetwork((s) => s.tron);
   const setShown = useNetwork((s) => s.setShown);
   // What the picker lists, by the store's own rule (unset = on, except a testnet): each switch shows it.
-  // Tron Nile's wallet has its switch too; Tron mainnet's wallet is always listed, so it has none.
-  const listed = new Set<string>(usePickerChains());
-  const rows = PICKER_CHAINS.filter((n): n is Network => n !== 'tron');
+  const listed = new Set<string>(useNetworks());
+  const rows = NETWORKS;
   // The chain in front stays listed: turning it off would leave the picker without it.
-  const inFront = (n: Network) => (tron ? n === tron : n === network);
+  const inFront = (n: Network) => n === network;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.body} contentInsetAdjustmentBehavior="automatic">

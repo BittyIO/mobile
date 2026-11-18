@@ -4,20 +4,18 @@ import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native'
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
 import {CHAIN_ID} from '@/core/chain';
-import {BUILTIN_RPC, isRpcUrl, probeRpc, probeTron, rpcHost, useRpcNodes, type NodeChain, type RpcProbe} from '@/core/rpc-store';
-import {isTronNet, TRON_API} from '@/tron/config';
+import {BUILTIN_RPC, isRpcUrl, probeRpc, rpcHost, useRpcNodes, type NodeChain, type RpcProbe} from '@/core/rpc-store';
 import {SettingsGroup, SettingsRow, makeSettingsStyles} from '@/components/SettingsRow';
 import {NetworkIcon} from '@/components/NetworkSwitcher';
-import {PICKER_CHAINS, networkLabel} from '@/core/network-store';
+import {NETWORKS, networkLabel} from '@/core/network-store';
 import {Sheet} from '@/components/Sheet';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 
 const NONE: string[] = [];
 
-/** Ask a node which chain it serves and its latest block, the EVM way or the Tron way. */
-const probeNode = (url: string, network: NodeChain): Promise<RpcProbe> =>
-  isTronNet(network) ? probeTron(url, network) : probeRpc(url, CHAIN_ID[network]);
+/** Ask a node which chain it serves and its latest block — over JSON-RPC, Tron Nile's included. */
+const probeNode = (url: string, network: NodeChain): Promise<RpcProbe> => probeRpc(url, CHAIN_ID[network]);
 
 /** One node: its host, how far it has got (or that it can't be reached), and its control. */
 function NodeRow({
@@ -65,7 +63,7 @@ export function RpcNodesListScreen() {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const chains: NodeChain[] = PICKER_CHAINS as NodeChain[];
+  const chains: NodeChain[] = NETWORKS;
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.body} contentInsetAdjustmentBehavior="automatic">
       <SettingsGroup>
@@ -85,8 +83,7 @@ export function RpcNodesListScreen() {
 }
 
 /**
- * Settings › Network › RPC nodes › a network, for the network in front (the one the network switcher has picked; Tron's
- * wallet when Tron is in front). In the app's section, not the vault's: which nodes this phone asks
+ * Settings › Network › RPC nodes › a network, for the network in front (the one the network switcher has picked). In the app's section, not the vault's: which nodes this phone asks
  * is a setting of the phone — the same for every vault, no signature, applies at once, seen by no
  * one else. Another network's nodes are set by switching to it first.
  *
@@ -175,8 +172,7 @@ export function RpcNetworkScreen() {
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled">
       <SettingsGroup
-        label={t('mobile.rpc.builtin')}
-        footer={isTronNet(network) && off.includes(TRON_API[network]) ? t('mobile.rpc.tron_history_off') : undefined}>
+        label={t('mobile.rpc.builtin')}>
         {builtin.map((u, i) => {
           const on = !off.includes(u);
           return (
@@ -248,7 +244,7 @@ export function RpcNetworkScreen() {
       <Sheet visible={infoOpen} title={t('mobile.rpc.custom')} onClose={() => setInfoOpen(false)}>
         <View style={styles.info}>
           <Text style={styles.infoText}>{t('mobile.rpc.custom_warning')}</Text>
-          <Text style={styles.infoText}>{t(isTronNet(network) ? 'mobile.rpc.local_only_tron' : 'mobile.rpc.local_only')}</Text>
+          <Text style={styles.infoText}>{t('mobile.rpc.local_only')}</Text>
         </View>
       </Sheet>
 

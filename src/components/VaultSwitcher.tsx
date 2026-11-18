@@ -4,7 +4,6 @@ import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
 import {useVaults, vaultLabel} from '@/core/vault-store';
-import {tronWalletLabel, useTronWallet} from '@/tron/store';
 import {useT} from '@/i18n';
 import {useColors} from '@/theme';
 
@@ -31,32 +30,6 @@ export function VaultSwitcher({stack = false}: {stack?: boolean} = {}) {
       hitSlop={12}
       accessibilityRole="button"
       accessibilityLabel={`${t('mobile.settings.choose_vault')}: ${label}`}>
-      <Text style={[styles.name, {color: c.text}]} numberOfLines={1}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
-/**
- * Top left with Tron picked: the Tron wallet in front, opening the Tron wallets page — the vault
- * corner's twin, since the phrase holds several Tron wallets as it holds several vaults.
- */
-export function TronWalletLabel({stack = false}: {stack?: boolean} = {}) {
-  const {t} = useT();
-  const c = useColors();
-  const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const current = useTronWallet((s) => s.wallets.find((w) => w.index === s.activeIndex));
-  // Before the first unlock has derived an address there is nothing to list yet.
-  const label = current ? tronWalletLabel(current, (n) => t('mobile.tron.wallet_n', {n})) : t('mobile.tron.wallet_title');
-  return (
-    <Pressable
-      onPress={() => nav.navigate('TronWalletList')}
-      disabled={!current}
-      style={stack ? styles.stack : styles.pill}
-      hitSlop={12}
-      accessibilityRole="button"
-      accessibilityLabel={`${t('mobile.tron.wallets_title')}: ${label}`}>
       <Text style={[styles.name, {color: c.text}]} numberOfLines={1}>
         {label}
       </Text>

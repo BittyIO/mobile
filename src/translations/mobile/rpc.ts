@@ -19,8 +19,6 @@ export const rpc: MobileTable = {
     reset_confirm: 'Turn every built-in node back on and remove your own nodes for this network?',
     local_only: 'Saved on this phone only, never sent to the Bitty server. Transactions the Bitty relayer sends for the vault don\'t use these nodes.',
     wrong_network: 'This node is for another network',
-    local_only_tron: 'Saved on this phone only, never sent to the Bitty server. Tron has no relayer: these nodes also send your Tron transactions.',
-    tron_history_off: 'TronGrid is off, so Tron history is unavailable. It is the only free source of it.',
   },
   zh: {
     title: 'RPC 节点',
@@ -39,8 +37,6 @@ export const rpc: MobileTable = {
     reset_confirm: '重新开启所有内置节点，并移除你为此网络添加的节点？',
     local_only: '仅保存在本机，不会发送到 Bitty 服务器。Bitty 中继为金库发送的交易不使用这些节点。',
     wrong_network: '该节点属于其他网络',
-    local_only_tron: '仅保存在本机，不会发送到 Bitty 服务器。Tron 没有中继：这些节点也会发送你的 Tron 交易。',
-    tron_history_off: 'TronGrid 已关闭，因此无法显示 Tron 交易记录。它是唯一的免费记录来源。',
   },
   'zh-TW': {
     title: 'RPC 節點',
@@ -59,8 +55,6 @@ export const rpc: MobileTable = {
     reset_confirm: '重新開啟所有內建節點，並移除你為此網路新增的節點？',
     local_only: '僅儲存在本機，不會傳送到 Bitty 伺服器。Bitty 中繼為金庫送出的交易不使用這些節點。',
     wrong_network: '此節點屬於其他網路',
-    local_only_tron: '僅儲存在本機，不會傳送到 Bitty 伺服器。Tron 沒有中繼：這些節點也會送出你的 Tron 交易。',
-    tron_history_off: 'TronGrid 已關閉，因此無法顯示 Tron 交易紀錄。它是唯一的免費紀錄來源。',
   },
   ja: {
     title: 'RPCノード',
@@ -79,8 +73,6 @@ export const rpc: MobileTable = {
     reset_confirm: 'このネットワークの組み込みノードをすべてオンに戻し、自分のノードを削除しますか？',
     local_only: 'この端末にのみ保存され、Bitty サーバーには送信されません。Bitty リレーが金庫のために送信する取引はこれらのノードを使いません。',
     wrong_network: 'このノードは別のネットワーク用です',
-    local_only_tron: 'この端末にのみ保存され、Bitty サーバーには送信されません。Tron にはリレーがないため、これらのノードが Tron の取引の送信も行います。',
-    tron_history_off: 'TronGrid がオフのため、Tron の履歴は表示できません。履歴の無料の取得元は TronGrid だけです。',
   },
   ko: {
     title: 'RPC 노드',
@@ -99,8 +91,6 @@ export const rpc: MobileTable = {
     reset_confirm: '이 네트워크의 기본 노드를 모두 다시 켜고 내 노드를 삭제할까요?',
     local_only: '이 휴대폰에만 저장되며 Bitty 서버로 전송되지 않습니다. Bitty 릴레이어가 금고를 위해 보내는 거래는 이 노드를 사용하지 않습니다.',
     wrong_network: '다른 네트워크의 노드입니다',
-    local_only_tron: '이 휴대폰에만 저장되며 Bitty 서버로 전송되지 않습니다. Tron에는 릴레이어가 없어 이 노드가 Tron 거래 전송도 맡습니다.',
-    tron_history_off: 'TronGrid가 꺼져 있어 Tron 내역을 볼 수 없습니다. 내역을 무료로 제공하는 곳은 TronGrid뿐입니다.',
   },
   fr: {
     title: 'Nœuds RPC',
@@ -119,8 +109,6 @@ export const rpc: MobileTable = {
     reset_confirm: 'Réactiver tous les nœuds intégrés et retirer vos nœuds pour ce réseau ?',
     local_only: 'Enregistré sur ce téléphone uniquement, jamais envoyé au serveur Bitty. Les transactions que le relais Bitty envoie pour le coffre n\'utilisent pas ces nœuds.',
     wrong_network: 'Ce nœud est pour un autre réseau',
-    local_only_tron: 'Enregistré sur ce téléphone uniquement, jamais envoyé au serveur Bitty. Tron n\'a pas de relais : ces nœuds envoient aussi vos transactions Tron.',
-    tron_history_off: 'TronGrid est désactivé, l\'historique Tron est donc indisponible. C\'en est la seule source gratuite.',
   },
   es: {
     title: 'Nodos RPC',
@@ -139,8 +127,6 @@ export const rpc: MobileTable = {
     reset_confirm: '¿Volver a activar todos los nodos integrados y quitar tus nodos de esta red?',
     local_only: 'Se guarda solo en este teléfono y nunca se envía al servidor de Bitty. Las transacciones que el relayer de Bitty envía para la bóveda no usan estos nodos.',
     wrong_network: 'Este nodo es de otra red',
-    local_only_tron: 'Se guarda solo en este teléfono y nunca se envía al servidor de Bitty. Tron no tiene relayer: estos nodos también envían tus transacciones de Tron.',
-    tron_history_off: 'TronGrid está desactivado, así que el historial de Tron no está disponible. Es su única fuente gratuita.',
   },
   de: {
     title: 'RPC-Knoten',
@@ -159,8 +145,6 @@ export const rpc: MobileTable = {
     reset_confirm: 'Alle integrierten Knoten wieder einschalten und deine eigenen Knoten für dieses Netzwerk entfernen?',
     local_only: 'Nur auf diesem Telefon gespeichert, nie an den Bitty-Server gesendet. Transaktionen, die der Bitty-Relayer für den Tresor sendet, nutzen diese Knoten nicht.',
     wrong_network: 'Dieser Knoten gehört zu einem anderen Netzwerk',
-    local_only_tron: 'Nur auf diesem Telefon gespeichert, nie an den Bitty-Server gesendet. Tron hat keinen Relayer: Diese Knoten senden auch deine Tron-Transaktionen.',
-    tron_history_off: 'TronGrid ist aus, daher ist der Tron-Verlauf nicht verfügbar. Es ist die einzige kostenlose Quelle dafür.',
   },
   'pt-BR': {
     title: 'Nós RPC',
@@ -179,8 +163,6 @@ export const rpc: MobileTable = {
     reset_confirm: 'Reativar todos os nós integrados e remover seus nós desta rede?',
     local_only: 'Salvo apenas neste celular, nunca enviado ao servidor da Bitty. As transações que o relayer da Bitty envia para o cofre não usam esses nós.',
     wrong_network: 'Este nó é de outra rede',
-    local_only_tron: 'Salvo apenas neste celular, nunca enviado ao servidor da Bitty. A Tron não tem relayer: esses nós também enviam suas transações Tron.',
-    tron_history_off: 'O TronGrid está desativado, então o histórico da Tron não está disponível. Ele é a única fonte gratuita.',
   },
   hi: {
     title: 'RPC नोड',
@@ -199,8 +181,6 @@ export const rpc: MobileTable = {
     reset_confirm: 'इस नेटवर्क के सभी बिल्ट-इन नोड फिर से चालू करें और अपने नोड हटाएँ?',
     local_only: 'सिर्फ़ इसी फ़ोन पर सहेजा जाता है, Bitty सर्वर पर कभी नहीं भेजा जाता। Bitty रिलेयर वॉल्ट के लिए जो लेन-देन भेजता है, वे इन नोड का उपयोग नहीं करते।',
     wrong_network: 'यह नोड किसी दूसरे नेटवर्क का है',
-    local_only_tron: 'सिर्फ़ इसी फ़ोन पर सहेजा जाता है, Bitty सर्वर पर कभी नहीं भेजा जाता। Tron में रिलेयर नहीं है: ये नोड आपके Tron लेन-देन भी भेजते हैं।',
-    tron_history_off: 'TronGrid बंद है, इसलिए Tron इतिहास उपलब्ध नहीं है। इसका यही एकमात्र मुफ़्त स्रोत है।',
   },
   tr: {
     title: 'RPC düğümleri',
@@ -219,8 +199,6 @@ export const rpc: MobileTable = {
     reset_confirm: 'Bu ağdaki tüm yerleşik düğümler yeniden açılsın ve kendi düğümleriniz kaldırılsın mı?',
     local_only: 'Yalnızca bu telefonda saklanır, Bitty sunucusuna asla gönderilmez. Bitty aktarıcısının kasa için gönderdiği işlemler bu düğümleri kullanmaz.',
     wrong_network: 'Bu düğüm başka bir ağa ait',
-    local_only_tron: 'Yalnızca bu telefonda saklanır, Bitty sunucusuna asla gönderilmez. Tron\'da aktarıcı yoktur: bu düğümler Tron işlemlerinizi de gönderir.',
-    tron_history_off: 'TronGrid kapalı, bu yüzden Tron geçmişi gösterilemiyor. Geçmişin tek ücretsiz kaynağı odur.',
   },
   ru: {
     title: 'RPC-узлы',
@@ -239,8 +217,6 @@ export const rpc: MobileTable = {
     reset_confirm: 'Снова включить все встроенные узлы и удалить ваши узлы для этой сети?',
     local_only: 'Хранится только на этом телефоне и никогда не отправляется на сервер Bitty. Транзакции, которые ретранслятор Bitty отправляет для хранилища, эти узлы не используют.',
     wrong_network: 'Этот узел для другой сети',
-    local_only_tron: 'Хранится только на этом телефоне и никогда не отправляется на сервер Bitty. В Tron нет ретранслятора: эти узлы также отправляют ваши транзакции Tron.',
-    tron_history_off: 'TronGrid отключён, поэтому история Tron недоступна. Это её единственный бесплатный источник.',
   },
   id: {
     title: 'Node RPC',
@@ -259,8 +235,6 @@ export const rpc: MobileTable = {
     reset_confirm: 'Aktifkan kembali semua node bawaan dan hapus node Anda untuk jaringan ini?',
     local_only: 'Disimpan hanya di ponsel ini, tidak pernah dikirim ke server Bitty. Transaksi yang dikirim relayer Bitty untuk brankas tidak memakai node ini.',
     wrong_network: 'Node ini untuk jaringan lain',
-    local_only_tron: 'Disimpan hanya di ponsel ini, tidak pernah dikirim ke server Bitty. Tron tidak punya relayer: node ini juga mengirim transaksi Tron Anda.',
-    tron_history_off: 'TronGrid nonaktif, jadi riwayat Tron tidak tersedia. Hanya TronGrid sumber gratisnya.',
   },
   vi: {
     title: 'Nút RPC',
@@ -279,8 +253,6 @@ export const rpc: MobileTable = {
     reset_confirm: 'Bật lại tất cả nút có sẵn và xóa các nút của bạn cho mạng này?',
     local_only: 'Chỉ lưu trên điện thoại này, không bao giờ gửi lên máy chủ Bitty. Giao dịch mà relayer của Bitty gửi cho kho không dùng các nút này.',
     wrong_network: 'Nút này thuộc mạng khác',
-    local_only_tron: 'Chỉ lưu trên điện thoại này, không bao giờ gửi lên máy chủ Bitty. Tron không có relayer: các nút này cũng gửi giao dịch Tron của bạn.',
-    tron_history_off: 'TronGrid đang tắt nên không xem được lịch sử Tron. Đây là nguồn miễn phí duy nhất.',
   },
   th: {
     title: 'โหนด RPC',
@@ -299,7 +271,5 @@ export const rpc: MobileTable = {
     reset_confirm: 'เปิดโหนดในตัวทั้งหมดอีกครั้งและลบโหนดของคุณสำหรับเครือข่ายนี้?',
     local_only: 'บันทึกไว้ในโทรศัพท์เครื่องนี้เท่านั้น ไม่ถูกส่งไปยังเซิร์ฟเวอร์ Bitty ธุรกรรมที่รีเลย์ของ Bitty ส่งให้ห้องนิรภัยไม่ได้ใช้โหนดเหล่านี้',
     wrong_network: 'โหนดนี้เป็นของเครือข่ายอื่น',
-    local_only_tron: 'บันทึกไว้ในโทรศัพท์เครื่องนี้เท่านั้น ไม่ถูกส่งไปยังเซิร์ฟเวอร์ Bitty Tron ไม่มีรีเลย์ โหนดเหล่านี้จึงส่งธุรกรรม Tron ของคุณด้วย',
-    tron_history_off: 'TronGrid ปิดอยู่ จึงดูประวัติ Tron ไม่ได้ เพราะเป็นแหล่งข้อมูลฟรีเพียงแห่งเดียว',
   },
 };

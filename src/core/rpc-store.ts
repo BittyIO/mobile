@@ -1,10 +1,9 @@
 import {create} from 'zustand';
 import {MMKV} from 'react-native-mmkv';
 import type {Network} from '@/core/chain';
-import type {TronNet} from '@/tron/config';
 
-/** A chain with a node list: the vault networks (Tron Nile among them), and Tron mainnet's wallet. */
-export type NodeChain = Network | TronNet;
+/** A chain with a node list: every vault network, Tron Nile among them. */
+export type NodeChain = Network;
 
 /**
  * The RPC nodes the app reads each chain from: Settings › RPC nodes.
@@ -35,14 +34,11 @@ export const BUILTIN_RPC: Record<NodeChain, string[]> = {
   // Measured Nov 2026 with 60 parallel batches: PublicNode answered all of them; BNB Chain's own
   // dataseed nodes, defibit and 1rpc a few each (rate limits). dRPC's free plan refused batches.
   bsc: ['https://bsc-rpc.publicnode.com', 'https://bsc-dataseed.bnbchain.org', 'https://bsc-dataseed1.defibit.io', 'https://1rpc.io/bnb'],
-  // Tron's own node API (java-tron's /wallet/…), not JSON-RPC. These read AND broadcast: Tron has no
-  // relayer. TronGrid last: unkeyed it refuses a request that overlaps another (429). It is also the
-  // only free source of the account history (/v1/…), which goes nowhere else. Not added: Tatum (5
-  // requests a minute), dRPC / Ankr / 1rpc (paid only or no Tron).
-  tron: ['https://tron-rpc.publicnode.com', 'https://api.tronstack.io', 'https://api.trongrid.io'],
-  // Tron Nile's wallet: java-tron's own API, as mainnet's. Both answered Nile's genesis block (Nov
-  // 2026). TronGrid is also the account history's only source (/v1/…), as on mainnet.
-  'tron-nile': ['https://api.nileex.io', 'https://nile.trongrid.io'],
+  // Tron Nile is a vault network, so its nodes are what every vault read goes to: the node's
+  // Ethereum-compatible JSON-RPC, at /jsonrpc. The same host serves java-tron's own API, which is
+  // where a vault transaction is broadcast ({tronApiHost}). TronGrid is the only public Nile node
+  // with JSON-RPC on (api.nileex.io answers /jsonrpc with 404, checked Nov 2026).
+  'tron-nile': ['https://nile.trongrid.io/jsonrpc'],
 };
 
 /**
@@ -50,15 +46,6 @@ export const BUILTIN_RPC: Record<NodeChain, string[]> = {
  * `/jsonrpc` path. TronGrid, and any java-tron node behind a gateway, serves both on one host.
  */
 export const tronApiHost = (jsonRpcUrl: string): string => jsonRpcUrl.replace(/\/jsonrpc\/?$/i, '');
-
-/**
- * Tron has no chain id; its genesis block is how a node says which chain it serves. A node for
- * another chain is refused before it is saved, as an EVM node with the wrong chain id is.
- */
-export const TRON_GENESIS: Record<TronNet, string> = {
-  tron: '00000000000000001ebf88508a03865c71d452e25f4d51194196a1d22b6653dc',
-  'tron-nile': '0000000000000000d698d4192c56cb6be724a558448e2684802de4d6cd8690dc',
-};
 
 type Nodes = {
   /** Built-in nodes switched off, per network. */
@@ -188,37 +175,6 @@ export async function probeRpc(url: string, chainId: number, timeoutMs = 5_000):
     const id = Number(BigInt(await rpcCall(url, 'eth_chainId', timeoutMs)));
     if (id !== chainId) return {ok: false, reason: 'wrong_chain', chainId: id};
     return {ok: true, block: BigInt(await rpcCall(url, 'eth_blockNumber', timeoutMs))};
-  } catch {
-    return {ok: false, reason: 'unreachable'};
-  }
-}
-
-async function tronPost(url: string, path: string, body: unknown, timeoutMs: number): Promise<any> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const res = await fetch(url + path, {
-      method: 'POST',
-      headers: {'content-type': 'application/json'},
-      body: JSON.stringify(body),
-      signal: ctrl.signal,
-    });
-    return await res.json();
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/** The Tron counterpart of {probeRpc}: the genesis block says which chain, the latest how far along. */
-export async function probeTron(url: string, net: TronNet, timeoutMs = 5_000): Promise<RpcProbe> {
-  try {
-    const genesis = await tronPost(url, '/wallet/getblockbynum', {num: 0}, timeoutMs);
-    if (typeof genesis?.blockID !== 'string') throw new Error('no block');
-    if (genesis.blockID !== TRON_GENESIS[net]) return {ok: false, reason: 'wrong_chain'};
-    const now = await tronPost(url, '/wallet/getnowblock', {}, timeoutMs);
-    const n = now?.block_header?.raw_data?.number;
-    if (typeof n !== 'number') throw new Error('no block');
-    return {ok: true, block: BigInt(n)};
   } catch {
     return {ok: false, reason: 'unreachable'};
   }

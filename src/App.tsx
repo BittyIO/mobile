@@ -1,4 +1,4 @@
-import {NETWORK_FEATURES} from '@/core/chain';
+import {isTronNetwork, NETWORK_FEATURES, type Network} from '@/core/chain';
 import React, {useEffect} from 'react';
 import {ActivityIndicator, Platform, StatusBar, StyleSheet, View} from 'react-native';
 import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -9,7 +9,7 @@ import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {useWallet} from '@/wallet/store';
 import {TabIcon, type TabName} from '@/components/TabIcon';
 import {NetworkSwitcher} from '@/components/NetworkSwitcher';
-import {TronWalletLabel, VaultSwitcher} from '@/components/VaultSwitcher';
+import {VaultSwitcher} from '@/components/VaultSwitcher';
 import {useLaunchUpdateCheck} from '@/core/app-update';
 import {useVaultAppCheck} from '@/vault/useVaultAppCheck';
 import {useGuardProtocols} from '@/core/guard-catalog';
@@ -47,12 +47,12 @@ const HEADER_TRANSPARENT = Platform.OS === 'ios';
  * is opaque and does not have this transition.
  */
 const MAIN_NATIVE_BAR = Platform.OS === 'ios';
-function mainBarOptions(tron: unknown) {
+function mainBarOptions() {
   return {
     headerShown: true,
     title: '',
     unstable_headerLeftItems: () => [
-      {type: 'custom' as const, hidesSharedBackground: true, element: tron ? <TronWalletLabel stack /> : <VaultSwitcher stack />},
+      {type: 'custom' as const, hidesSharedBackground: true, element: <VaultSwitcher stack />},
     ],
     unstable_headerRightItems: () => [{type: 'custom' as const, hidesSharedBackground: true, element: <NetworkSwitcher stack />}],
   };
@@ -73,10 +73,6 @@ export type TabParamList = {
 
 export type RootStackParamList = {
   Main: undefined;
-  /** Pay out of the Tron wallet; `symbol` opens on that asset (a tapped balance row). */
-  TronSend: {symbol?: string} | undefined;
-  /** Every transfer in and out of the Tron wallet. */
-  TronHistory: undefined;
   Payments: undefined;
   SelectRecipient: undefined;
   NewRecipient: undefined;
@@ -103,9 +99,6 @@ export type RootStackParamList = {
     symbol: string;
     decimals?: number;
   };
-  /** TRON Stake on the Tron wallet: the vault's TRON Stake page and form, for the wallet. */
-  TronStakeDetail: undefined;
-  TronStakeAction: {mode: 'deposit' | 'withdraw'};
   EarnAction: {
     mode: 'deposit' | 'withdraw';
     protocol?: string;
@@ -188,7 +181,6 @@ export type RootStackParamList = {
   VaultLock: undefined;
   /** Settings › Vaults: every vault on this phone, and the ones its keys own that are not yet. */
   VaultList: undefined;
-  TronWalletList: undefined;
   AddSafeVault: undefined;
   VaultLockAction: {action: 'emergency' | 'unlock' | 'forever'};
   /** Overview › Pending: changes the vault has queued and not applied yet. */
@@ -232,39 +224,21 @@ function navThemeFor(c: Colors, dark: boolean) {
 const TAB_BAR_HEIGHT = 62;
 const TAB_BAR_PADDING_TOP = 12;
 
-/**
- * The tabs with Tron picked are the same tabs: the bar keeps its shape whatever the chain. The
- * Overview becomes the phrase's Tron wallet, and Earn and Trade — which only a vault can do — say
- * so instead of drawing a vault that does not exist on Tron. Settings drops its vault section.
- */
 function OverviewTab() {
-  const tron = useNetwork((s) => s.tron);
-  if (tron) {
-    const {TronWalletScreen} = require('@/screens/TronWalletScreen');
-    return <TronWalletScreen />;
-  }
   return <VaultHomeScreen />;
 }
 
 /**
- * A vault network with no protocol on it (Tron Nile: none ships with the vault on Tron) has no Earn
- * or Trade either — the same page as the Tron wallet's, for the same reason: nothing to offer here.
+ * A vault network with no protocol on it has no Earn or Trade: the page says so, for the same
+ * reason on both — nothing to offer here.
  */
 const useNoDefi = () => {
-  const tron = useNetwork((s) => s.tron);
   const network = useNetwork((s) => s.network);
-  return !!tron || !NETWORK_FEATURES[network].defi;
+  return !NETWORK_FEATURES[network].defi;
 };
 
 function EarnTab() {
-  // The Tron wallet stakes TRX itself (Stake 2.0): no vault needed for that.
-  const tron = useNetwork((s) => s.tron);
-  const noDefi = useNoDefi();
-  if (tron) {
-    const {TronStakeScreen} = require('@/screens/TronStakeScreen');
-    return <TronStakeScreen />;
-  }
-  if (noDefi) {
+  if (useNoDefi()) {
     const {TronUnavailableScreen} = require('@/screens/TronUnavailableScreen');
     return <TronUnavailableScreen feature="earn" />;
   }
@@ -273,15 +247,7 @@ function EarnTab() {
 }
 
 function TradeTab() {
-  // The Tron wallet trades TRX and USDT on SunSwap directly; Bridge stays a vault feature.
-  const tron = useNetwork((s) => s.tron);
-  const noDefi = useNoDefi();
-  // SunSwap is on mainnet and Nile alike.
-  if (tron) {
-    const {TronTradeScreen} = require('@/screens/TronTradeScreen');
-    return <TronTradeScreen />;
-  }
-  if (noDefi) {
+  if (useNoDefi()) {
     const {TronUnavailableScreen} = require('@/screens/TronUnavailableScreen');
     return <TronUnavailableScreen feature="trade" />;
   }
@@ -291,23 +257,15 @@ function TradeTab() {
 
 /** Bridge: the vault in front to the owner's vault on another network (see vault/bridge). */
 function BridgeTab() {
-  const tron = useNetwork((s) => s.tron);
-  // The Tron wallet bridges its USDT out to the owner's vaults, by Across (see tron/bridge).
-  // Mainnet only: Across does not serve Nile.
-  if (tron === 'tron') {
-    const {TronBridgeScreen} = require('@/screens/TronBridgeScreen');
-    return <TronBridgeScreen />;
-  }
-  if (tron) {
-    const {TronUnavailableScreen} = require('@/screens/TronUnavailableScreen');
-    return <TronUnavailableScreen feature="bridge" />;
-  }
   const {BridgeScreen} = require('@/screens/BridgeScreen');
   return <BridgeScreen />;
 }
 
+/** Whether the Bridge tab is in the bar. Not on Tron Nile: Across does not serve it. */
+const hasBridge = (network: Network) => !isTronNetwork(network);
+
 function MainTabs() {
-  const tron = useNetwork((s) => s.tron);
+  const network = useNetwork((s) => s.network);
   const {t} = useT();
   // Once a session reaches the vault: is a newer build out? See {useLaunchUpdateCheck}.
   useLaunchUpdateCheck(t);
@@ -363,7 +321,7 @@ function MainTabs() {
          */
         headerRight: () => <NetworkSwitcher />,
         // The vault, opposite the chain, on every tab.
-        headerLeft: () => (tron ? <TronWalletLabel /> : <VaultSwitcher />),
+        headerLeft: () => <VaultSwitcher />,
         // iOS: the bar is the stack's native one, on the Main screen below — see {MAIN_NATIVE_BAR}.
         headerShown: !MAIN_NATIVE_BAR,
         /**
@@ -399,7 +357,8 @@ function MainTabs() {
             nearest navigator that has it, and a tab called Trade once swallowed every push to the
             pair screen. The title is what the user reads; the name is what routing matches. */}
         <Tab.Screen name="Market" options={{title: t('mobile.app.trade')}} component={TradeTab} />
-      <Tab.Screen name="Bridge" options={{title: t('mobile.bridge.tab')}} component={BridgeTab} />
+      {/* Left out of the bar where there is nothing to bridge with (see {hasBridge}). */}
+      {hasBridge(network) ? <Tab.Screen name="Bridge" options={{title: t('mobile.bridge.tab')}} component={BridgeTab} /> : null}
       {/* Settings, label and route the same — which is also what `navigate` and the tab icon key
           off. It was labelled "Me" for a while, on the grounds that the tab holds the vault, the
           key on this device and the app's own preferences, and "Settings" named only the last of
@@ -436,7 +395,6 @@ function Root() {
   const status = useWallet((s) => s.status);
   const init = useWallet((s) => s.init);
   const network = useNetwork((s) => s.network);
-  const tron = useNetwork((s) => s.tron);
   /**
    * The guard's protocol catalog, read before anything needs it.
    *
@@ -485,9 +443,7 @@ function Root() {
           // As above: a pushed screen covers the tabs, and the tabs keep measuring underneath it.
           freezeOnBlur: true,
         }}>
-        <Stack.Screen name="Main" component={MainTabs} options={MAIN_NATIVE_BAR ? mainBarOptions(tron) : {headerShown: false}} />
-        <Stack.Screen name="TronSend" getComponent={() => require('@/screens/TronSendScreen').TronSendScreen} options={{title: t('mobile.tron.send_title')}} />
-        <Stack.Screen name="TronHistory" getComponent={() => require('@/screens/TronHistoryScreen').TronHistoryScreen} options={{title: t('mobile.app.history')}} />
+        <Stack.Screen name="Main" component={MainTabs} options={MAIN_NATIVE_BAR ? mainBarOptions() : {headerShown: false}} />
         <Stack.Screen name="Payments" getComponent={() => require('@/screens/PaymentsScreen').PaymentsScreen} options={{title: t('vault.send')}} />
         <Stack.Screen
           name="SelectRecipient"
@@ -548,16 +504,6 @@ function Root() {
           * the sheet's own — and a backdrop that slides in from below instead of fading. The sheet
           * rises, follows a drag and slides out under {useSheetAnim}, as the order sheet's does.
           */}
-        <Stack.Screen
-          name="TronStakeDetail"
-          getComponent={() => require('@/screens/TronStakeDetailScreen').TronStakeDetailScreen}
-          options={{title: t('vault.flexible_yield'), fullScreenGestureEnabled: true}}
-        />
-        <Stack.Screen
-          name="TronStakeAction"
-          getComponent={() => require('@/screens/TronStakeActionScreen').TronStakeActionScreen}
-          options={{headerShown: false, presentation: 'transparentModal', animation: 'none', contentStyle: {backgroundColor: 'transparent'}}}
-        />
         <Stack.Screen
           name="EarnAction"
           getComponent={() => require('@/screens/EarnActionScreen').EarnActionScreen}
@@ -677,7 +623,6 @@ function Root() {
           options={({route}) => ({title: t(RISK_TITLE[route.params.field])})}
         />
         <Stack.Screen name="VaultList" getComponent={() => require('@/screens/VaultListScreen').VaultListScreen} options={{title: t('mobile.settings.choose_vault')}} />
-        <Stack.Screen name="TronWalletList" getComponent={() => require('@/screens/TronWalletListScreen').TronWalletListScreen} options={{title: t('mobile.tron.wallets_title')}} />
         <Stack.Screen name="AddSafeVault" getComponent={() => require('@/screens/AddSafeVaultScreen').AddSafeVaultScreen} options={{title: t('mobile.safe.add_safe_title')}} />
         <Stack.Screen name="VaultLock" getComponent={() => require('@/screens/VaultLockScreen').VaultLockScreen} options={{title: t('mobile.vault.vault_lock')}} />
         <Stack.Screen

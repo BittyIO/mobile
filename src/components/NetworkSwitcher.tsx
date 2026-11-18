@@ -2,8 +2,7 @@ import React, {useState} from 'react';
 import {Image, Pressable, StyleSheet} from 'react-native';
 import {PickerSheet} from '@/components/AssetPicker';
 import {useT} from '@/i18n';
-import {useNetwork, usePickerChains, networkLabel, type ChainChoice} from '@/core/network-store';
-import {isTronNet} from '@/tron/config';
+import {useNetwork, useNetworks, networkLabel} from '@/core/network-store';
 import Svg, {Circle, G, Path, Rect} from 'react-native-svg';
 import {useIsDark} from '@/theme';
 import type {Network} from '@/core/chain';
@@ -94,10 +93,9 @@ function SepoliaIcon({size}: {size: number}) {
   );
 }
 
-export function NetworkIcon({network, size}: {network: ChainChoice; size: number}) {
+export function NetworkIcon({network, size}: {network: Network; size: number}) {
   if (network === 'sepolia') return <SepoliaIcon size={size} />;
   if (network === 'tron-nile') return <TronIcon size={size} testnet />;
-  if (isTronNet(network)) return <TronIcon size={size} />;
   if (network === 'base') return <BaseIcon size={size} />;
   if (network === 'base-sepolia') return <BaseIcon size={size} testnet />;
   if (network === 'robinhood') return <RobinhoodIcon size={size} />;
@@ -107,14 +105,11 @@ export function NetworkIcon({network, size}: {network: ChainChoice; size: number
 /** Network selector for the nav header — the current chain's icon, opening the same picker sheet as the asset selectors. */
 export function NetworkSwitcher({stack = false}: {stack?: boolean} = {}) {
   const {t} = useT();
-  const evm = useNetwork((s) => s.network);
-  const tron = useNetwork((s) => s.tron);
+  const network = useNetwork((s) => s.network);
   const setNetwork = useNetwork((s) => s.setNetwork);
-  const setTron = useNetwork((s) => s.setTron);
   const [open, setOpen] = useState(false);
-  // Tron second, straight after Ethereum; Nile's wallet last, with the other testnets (see {PICKER_CHAINS}).
-  const networks = usePickerChains();
-  const network: ChainChoice = tron ?? evm;
+  // Nile last, beside the other testnets (see {NETWORKS}).
+  const networks = useNetworks();
 
   return (
     <>
@@ -129,7 +124,7 @@ export function NetworkSwitcher({stack = false}: {stack?: boolean} = {}) {
         title={t('mobile.settings.choose_network')}
         items={networks.map((n) => ({key: n, label: networkLabel(n, t), icon: <NetworkIcon network={n} size={30} />}))}
         selected={network}
-        onSelect={(n) => (isTronNet(n) ? setTron(n) : setNetwork(n as Network))}
+        onSelect={(n) => setNetwork(n as Network)}
         onClose={() => setOpen(false)}
       />
     </>
