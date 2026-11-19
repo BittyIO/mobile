@@ -2,6 +2,8 @@ import {useTransparentHeaderInset} from '@/components/header-inset';
 import React from 'react';
 import {StyleSheet, View} from 'react-native';
 import {SendScreen} from '@/screens/SendScreen';
+import {useRoute, type RouteProp} from '@react-navigation/native';
+import type {RootStackParamList} from '@/App';
 import {useStyles, type Colors} from '@/theme';
 
 /**
@@ -11,9 +13,10 @@ import {useStyles, type Colors} from '@/theme';
 export function PaymentsScreen() {
   const headerHeight = useTransparentHeaderInset();
   const styles = useStyles(makeStyles);
+  const anyone = !!useRoute<RouteProp<RootStackParamList, 'Payments'>>().params?.anyone;
   return (
     <View style={[styles.container, {paddingTop: headerHeight}]}>
-      <SendScreen />
+      <SendScreen anyone={anyone} />
     </View>
   );
 }

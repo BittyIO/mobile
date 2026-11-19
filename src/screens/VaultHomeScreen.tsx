@@ -13,11 +13,10 @@ import {ProtocolIcon} from '@/components/ProtocolIcon';
 import {TokenIcon} from '@/components/TokenIcon';
 import {HoldingRow, MASK} from '@/components/HoldingRow';
 import {Amount} from '@/components/Amount';
-import {ReceiveDialog} from '@/components/ReceiveDialog';
 import {ActivateBanner} from '@/components/ActivateBanner';
 import {Sheet} from '@/components/Sheet';
 import type {PieSlice} from '@/components/PortfolioPie';
-import {useNetwork, networkLabel} from '@/core/network-store';
+import {useNetwork} from '@/core/network-store';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {useSyncFeeReserve} from '@/vault/stableCoinAsGas';
 import {useReorder} from '@/components/useReorder';
@@ -37,6 +36,9 @@ import {assetCategory, type AssetCategory} from '@/core/assets';
 import {isAssetsList, unnamedListLabel, useFavorites, useWatchLists, watchListLabel} from '@/core/favorites-store';
 import {getFlag, setFlag, getPref, setPref, HIDE_BALANCES, FEE_TIP_DISMISSED, feeTipSeenKey} from '@/core/prefs';
 import {GasIcon} from '@/components/GasIcon';
+import {useHasPayees} from '@/vault/payees';
+import {useVaults} from '@/core/vault-store';
+import {useMultisigToSign} from '@/components/MultisigWaiting';
 import {useWatchDraft} from '@/core/watch-draft';
 import {balanceOfSymbol} from '@/vault/read';
 import {getPendingChanges} from '@/vault/risk';
@@ -65,12 +67,29 @@ export function EyeIcon({off, color, size = 20}: {off: boolean; color: string; s
   );
 }
 
-/** Send (arrow out, up-right) / Receive (arrow in, down-left) / History (clock) / Pending (hourglass) action icons. */
-function ActionIcon({name, color, size = 22}: {name: 'send' | 'receive' | 'history' | 'pending'; color: string; size?: number}) {
+/** Payees (address book) / Bridge / Send / Receive / History (clock) / Pending (hourglass) action icons. */
+function ActionIcon({name, color, size = 22}: {name: 'payees' | 'bridge' | 'send' | 'receive' | 'history' | 'pending'; color: string; size?: number}) {
   const c = {stroke: color, strokeWidth: 2.2, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const};
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
-      {name === 'send' ? (
+      {name === 'payees' ? (
+        // The address book the vault pays from (lucide book-user).
+        <>
+          <Path d="M15 13a3 3 0 1 0-6 0" {...c} />
+          <Path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20" {...c} />
+          <Circle cx={12} cy={8} r={2} {...c} />
+        </>
+      ) : name === 'bridge' ? (
+        // The mark the Bridge tab wore: one node linked out to others, money leaving for another network.
+        <>
+          <Path d="M5.931 6.936l1.275 4.249m5.607 5.609l4.251 1.275" {...c} />
+          <Path d="M11.683 12.317l5.759 -5.759" {...c} />
+          <Circle cx={5.5} cy={5.5} r={1.5} {...c} />
+          <Circle cx={18.5} cy={5.5} r={1.5} {...c} />
+          <Circle cx={18.5} cy={18.5} r={1.5} {...c} />
+          <Circle cx={8.5} cy={15.5} r={4.5} {...c} />
+        </>
+      ) : name === 'send' ? (
         // Out and away: the diagonal arrow wallets use for Send (lucide arrow-up-right).
         <>
           <Path d="M7 17L17 7" {...c} />
@@ -413,6 +432,12 @@ export function VaultHomeScreen() {
   // Queued changes, counted on the Pending action. Re-read on focus: one call, and a change queued
   // elsewhere (or by someone else holding the key) is exactly what this badge is for.
   const [pendingCount, setPendingCount] = useState(0);
+  // Bumped by a pull: the badges below read again with it.
+  const [badgeNonce, setBadgeNonce] = useState(0);
+  const hasPayees = useHasPayees(bal.vault, network, badgeNonce);
+  // A multisig vault: requests waiting on this phone's signature, counted on Transactions.
+  const activeRef = useVaults((s) => s.vaults.find((v) => v.index === s.activeIndex));
+  const toSign = useMultisigToSign(activeRef, network, badgeNonce);
   useFocusEffect(
     useCallback(() => {
       if (bal.vault) getPendingChanges(bal.vault, network).then((p) => setPendingCount(p.length));
@@ -434,7 +459,6 @@ export function VaultHomeScreen() {
     setFlag(HIDE_BALANCES, next);
     setHidden(next);
   };
-  const [receiveOpen, setReceiveOpen] = useState(false);
 
   const catalog = useAssetCatalog(network);
   // The keeper sweeps auto-yield around this vault's fee float; this tab is up whenever the app is.
@@ -859,10 +883,14 @@ export function VaultHomeScreen() {
     bal.refresh();
     pos.refresh();
     flows.refresh();
+    // The action badges too: Timelock's count, Transactions' to-sign count and Send's payee dot
+    // were read only when the page came into view, so a pull left them stale.
+    getPendingChanges(bal.vault, network).then((p) => setPendingCount(p.length));
+    setBadgeNonce((n) => n + 1);
     // Prices too: a pull that refreshed the balances but left last minute's prices behind moved
     // the amounts and not the values, which reads as a bug.
     setPriceNonce((n) => n + 1);
-  }, [bal, pos, flows]);
+  }, [bal, pos, flows, network]);
   React.useEffect(() => {
     if (!anyLoading) setPulled(false);
   }, [anyLoading]);
@@ -1028,10 +1056,12 @@ export function VaultHomeScreen() {
           </Pressable>
         </View>
         <View style={styles.actions}>
+          {/* Payees first: sending starts from whom to pay. Bridge after it, where the network has one
+              (Across does not serve Tron). */}
           {([
-            {label: t('vault.send'), icon: 'send', onPress: () => nav.navigate('Payments')},
-            {label: t('vault.receive'), icon: 'receive', onPress: () => setReceiveOpen(true)},
-            {label: t('mobile.app.history'), icon: 'history', onPress: () => nav.navigate('Transactions')},
+            {label: t('vault.send'), icon: 'payees', onPress: () => nav.navigate('Payees')},
+            ...(isTronNetwork(network) ? [] : [{label: t('mobile.bridge.tab'), icon: 'bridge' as const, onPress: () => nav.navigate('Bridge')}]),
+            {label: t('mobile.app.transactions'), icon: 'history', onPress: () => nav.navigate('Transactions')},
             {label: t('mobile.vault.timelock_page'), icon: 'pending', onPress: () => nav.navigate('PendingChanges')},
           ] as const).map((a) => (
             <Pressable key={a.icon} style={styles.action} onPress={a.onPress}>
@@ -1042,8 +1072,18 @@ export function VaultHomeScreen() {
                     <Text style={styles.actionBadgeText}>{pendingCount}</Text>
                   </View>
                 ) : null}
+                {a.icon === 'history' && toSign > 0 ? (
+                  <View style={styles.actionBadge}>
+                    <Text style={styles.actionBadgeText}>{toSign}</Text>
+                  </View>
+                ) : null}
+                {/* No payee yet, added or on its way: a dot until there is one, since a new payee
+                    takes the vault's waiting period before it can be paid freely. */}
+                {a.icon === 'payees' && hasPayees === false ? <View style={styles.actionDot} /> : null}
               </View>
-              <Text style={styles.actionLabel}>{a.label}</Text>
+              <Text style={styles.actionLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+                {a.label}
+              </Text>
             </Pressable>
           ))}
         </View>
@@ -1154,12 +1194,6 @@ export function VaultHomeScreen() {
         ) : null}
       </View>
 
-      <ReceiveDialog
-        visible={receiveOpen}
-        onClose={() => setReceiveOpen(false)}
-        vault={bal.vault}
-        networkLabel={networkLabel(network, t)}
-      />
 
     </ScrollView>
   );
@@ -1188,10 +1222,12 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   totalValue: {color: c.text, fontSize: 34, fontWeight: '800'},
   totalLoading: {height: 41, justifyContent: 'center'},
   actions: {flexDirection: 'row', justifyContent: 'space-around', marginTop: 16, paddingTop: 18, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border},
-  action: {alignItems: 'center', gap: 8},
+  // An equal share each, so a long label shrinks rather than pushing the row apart.
+  action: {flex: 1, alignItems: 'center', gap: 8, minWidth: 0},
   actionCircle: {width: 54, height: 54, borderRadius: 27, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center'},
   actionLabel: {color: c.text, fontSize: 13, fontWeight: '600'},
   actionBadge: {position: 'absolute', top: -2, right: -2, minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 5, backgroundColor: c.danger, alignItems: 'center', justifyContent: 'center'},
+  actionDot: {position: 'absolute', top: 2, right: 2, width: 12, height: 12, borderRadius: 6, backgroundColor: c.danger, borderWidth: 2, borderColor: c.card},
   actionBadgeText: {color: '#fff', fontSize: 12, fontWeight: '700'},
   note: {color: c.subtext, fontSize: 13, paddingVertical: 8},
   err: {color: c.danger, fontSize: 13, paddingVertical: 8},

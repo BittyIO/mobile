@@ -13,6 +13,7 @@ import {getRiskConfig, type RiskConfig} from '@/vault/risk';
 import {fmtAllowance, fmtDuration} from '@/components/riskFormat';
 import {useRecipientNames} from '@/core/recipient-names';
 import {useRecipientPick} from '@/core/recipient-pick';
+import {usePayeeAdding} from '@/vault/payees';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 import {useVaultWrite} from '@/components/useVaultWrite';
@@ -89,7 +90,12 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
         : t('mobile.payments.max_send_daily', {value: fmtAllowance(risk.sendDailyAllowance, t)})
       : '…';
 
-  const write = useVaultWrite(() => nav.goBack());
+  const markAdding = usePayeeAdding((st) => st.mark);
+  // Accepted by the relayer: the payee is on its way, so the Overview's "no payees" dot can go now.
+  const write = useVaultWrite(() => {
+    if (vault) markAdding(vault);
+    nav.goBack();
+  });
   const confirm = () => {
     // What was typed, as the 0x… the vault takes: on Tron the T… form is what people paste.
     const to = parseAddress(network, draft);
@@ -116,7 +122,9 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
       return;
     }
     setPicked({address: to, label: given || undefined, addToBook: addToBook && addGate.allowed});
-    nav.pop(2);
+    // Back past the picker to the Send card; from the Overview's Payees there is none, so open one.
+    if (nav.getState().routes.some((r) => r.name === 'Payments')) nav.pop(2);
+    else nav.replace('Payments');
   };
   const canConfirm = valid && (!addsOnChain || (write.ready && addGate.allowed));
 
@@ -155,6 +163,7 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
           />
         </View>
         {isToken ? <Text style={styles.warn}>{t('mobile.payments.token_address_warning')}</Text> : null}
+        {/* Adding a payee: one this device does not hold the key to is the safer choice. */}
 
         <View style={[styles.card, styles.gap]}>
           {/* Managing the book there is no payment: no switch, and no cap to show. */}

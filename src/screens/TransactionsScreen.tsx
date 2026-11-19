@@ -12,6 +12,8 @@ import {
 import {useWallet} from '@/wallet/store';
 import {NETWORK_LABEL, useNetwork} from '@/core/network-store';
 import {useActiveVaultAddress} from '@/core/active-vault';
+import {useVaults} from '@/core/vault-store';
+import {MultisigWaiting} from '@/components/MultisigWaiting';
 import {useVaultTransactions} from '@/vault/useVaultTransactions';
 import type {Operation, TransferRow} from '@/vault/transactions';
 import {TokenIcon} from '@/components/TokenIcon';
@@ -570,6 +572,10 @@ export function TransactionsScreen() {
   const network = useNetwork((s) => s.network);
   const vault = useActiveVaultAddress(network);
   const {ops, loading, error, refresh} = useVaultTransactions(vault, network);
+  // A multisig vault: what its owners still have to sign is its own category, and the one it opens on.
+  const active = useVaults((s) => s.vaults.find((v) => v.index === s.activeIndex));
+  const multisig = active?.safe ? active : null;
+  const [waitingReload, setWaitingReload] = React.useState(0);
   // The vault's CoW orders by uid, so a cancellation can say which order it cancelled.
   const [orders, setOrders] = React.useState<Map<string, CowOrder>>(() => new Map());
   React.useEffect(() => {
@@ -587,6 +593,7 @@ export function TransactionsScreen() {
   const [pulled, setPulled] = React.useState(false);
   const onPull = React.useCallback(() => {
     setPulled(true);
+    setWaitingReload((n) => n + 1);
     refresh();
   }, [refresh]);
   React.useEffect(() => {
@@ -643,7 +650,7 @@ export function TransactionsScreen() {
    * the second place long after it had settled. The pending store still exists: it is what the
    * toast watches for settlement, and what tells the balances to re-read. See {showTx}.
    */
-  const [tab, setTab] = React.useState<Category | 'all'>('all');
+  const [tab, setTab] = React.useState<Category | 'all' | 'waiting'>(multisig ? 'waiting' : 'all');
 
   // One tab per category that has entries, as on the web.
   const placedBy = React.useMemo(() => ordersBySetup(ops, orders), [ops, orders]);
@@ -676,7 +683,8 @@ export function TransactionsScreen() {
     () => new Map(ops.map((op) => [op.txHash, classify(op, network, t, orders, words, undefined, rates, placedBy.get(op.txHash))])),
     [ops, network, t, orders, words, rates, placedBy],
   );
-  const tabs: {key: Category | 'all'; label: string}[] = [
+  const tabs: {key: Category | 'all' | 'waiting'; label: string}[] = [
+    ...(multisig ? [{key: 'waiting' as const, label: t('mobile.safe.waiting_tab')}] : []),
     {key: 'all', label: t('vault.all')},
     ...CATEGORY_ORDER.filter((cat) => ops.some((op) => views.get(op.txHash)?.category === cat)).map((cat) => ({
       key: cat,
@@ -702,7 +710,8 @@ export function TransactionsScreen() {
     if (!tabs.some((x) => x.key === tab)) setTab('all');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabs.length]);
-  const shown = tab === 'all' ? ops : ops.filter((op) => views.get(op.txHash)?.category === tab);
+  const waiting = tab === 'waiting' && !!multisig;
+  const shown = tab === 'all' || tab === 'waiting' ? ops : ops.filter((op) => views.get(op.txHash)?.category === tab);
 
   /**
    * The feed and the failures, as ONE list in time order.
@@ -717,12 +726,13 @@ export function TransactionsScreen() {
    */
   const feed = React.useMemo(() => {
     const at = (op: Operation) => (op.timestamp ? Date.parse(op.timestamp) : op.blockNum);
+    if (waiting) return [];
     const rows: {key: string; at: number; op?: Operation; tx?: Attempt}[] = [
       ...shown.map((op) => ({key: op.txHash, at: at(op), op})),
       ...failures.map((tx) => ({key: `relay-${tx.id}`, at: tx.at * 1000, tx})),
     ];
     return rows.sort((a, b) => b.at - a.at);
-  }, [shown, failures]);
+  }, [shown, failures, waiting]);
 
   /**
    * Ten rows at a time.
@@ -743,7 +753,7 @@ export function TransactionsScreen() {
 
   const header = (
     <>
-      {tabs.length > 2 ? (
+      {tabs.length > 2 || multisig ? (
         <View style={styles.tabStrip}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabRow}>
             {tabs.map((x) => (
@@ -758,7 +768,7 @@ export function TransactionsScreen() {
         </View>
       ) : null}
 
-      {error ? <Text style={styles.err}>{error}</Text> : null}
+      {error && !waiting ? <Text style={styles.err}>{error}</Text> : null}
     </>
   );
 
@@ -776,7 +786,9 @@ export function TransactionsScreen() {
         }
         ListHeaderComponent={header}
         ListEmptyComponent={
-          error ? null : loading && ops.length === 0 ? <ActivityIndicator color={c.accent} /> : <Text style={styles.note}>{loading ? '' : t('vault.no_operations')}</Text>
+          waiting && multisig ? (
+            <MultisigWaiting vault={multisig} network={network} reload={waitingReload} />
+          ) : error ? null : loading && ops.length === 0 ? <ActivityIndicator color={c.accent} /> : <Text style={styles.note}>{loading ? '' : t('vault.no_operations')}</Text>
         }
         // The next page while the last screenful is still in view, so it is there before the end is.
         onEndReached={loadMore}
@@ -789,7 +801,7 @@ export function TransactionsScreen() {
         contentInsetAdjustmentBehavior="automatic"
         style={styles.container}
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={pulled && loading} onRefresh={onPull} tintColor={c.text} colors={[c.accent]} />}
+        refreshControl={<RefreshControl refreshing={pulled && (loading || waiting)} onRefresh={onPull} tintColor={c.text} colors={[c.accent]} />}
       />
       <Sheet visible={managerSheet != null} title={t('vault.asset_manager')} onClose={() => setManagerSheet(null)}>
         <View style={styles.managerSheet}>

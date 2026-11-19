@@ -14,7 +14,7 @@ import {useActiveVaultAddress} from '@/core/active-vault';
 import {fetchWhitelist, removeWhitelisted, type WhitelistedRecipient} from '@/vault/payments';
 import {WHITELIST_STATUS} from '@/core/abi';
 import {getRiskConfig, type RiskConfig} from '@/vault/risk';
-import {fmtAllowance} from '@/components/riskFormat';
+import {fmtAllowance, fmtDuration} from '@/components/riskFormat';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {showToast} from '@/components/Toast';
 import {ProgressRing, leftUnit, waitDone} from '@/components/ProgressRing';
@@ -45,7 +45,16 @@ export function WhitelistScreen() {
   return <SelectRecipientScreen manage />;
 }
 
-export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
+/**
+ * Overview › Payees: the same book as a starting point rather than a picker. A tap opens Send with
+ * that payee chosen, + adds a payee to the book, and with send to anyone on, an address can be typed
+ * to pay once (and kept as a payee). With no payee yet, it says to add one first, and how long that takes.
+ */
+export function PayeesScreen() {
+  return <SelectRecipientScreen payees />;
+}
+
+export function SelectRecipientScreen({manage = false, payees = false}: {manage?: boolean; payees?: boolean}) {
   const {t} = useT();
   const c = useColors();
   const styles = useStyles(makeStyles);
@@ -134,6 +143,9 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
     [vaults, activeIndex, network, t],
   );
 
+  // Overview › Payees: rename and remove only in edit mode (Edit at the top right); otherwise each
+  // row is a way to pay, with an arrow saying so.
+  const [editing, setEditing] = useState(false);
   const setPicked = useRecipientPick((st) => st.set);
   const names = useRecipientNames((st) => st.names);
   const setName = useRecipientNames((st) => st.setName);
@@ -167,7 +179,9 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
       return;
     }
     setPicked({address: address as Address, label, addToBook: false});
-    nav.goBack();
+    // From the Overview there is no Send page below to return to: open one, with the payee chosen.
+    if (payees) nav.navigate('Payments');
+    else nav.goBack();
   };
 
   /** One book entry: its name, the full address, a status note where it has one, and the ✕. */
@@ -190,13 +204,15 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
     const waitUntil = removeAt ?? (b.status === WHITELIST_STATUS.pending ? b.effectiveAt : undefined);
     const note = b.status === WHITELIST_STATUS.voided ? t('mobile.payments.voided_by_lock') : null;
     // Locked, an entry that cannot be paid yet cannot be paid at all: offering it only leads to a refusal.
-    const unpayable = lockedSends && (b.status === WHITELIST_STATUS.pending || b.status === WHITELIST_STATUS.voided);
+    const notYet = b.status === WHITELIST_STATUS.pending || b.status === WHITELIST_STATUS.voided;
+    // On the Send page a payee still waiting (or voided) is not one to pay: no arrow, no tap.
+    const unpayable = (lockedSends || payees) && notYet;
     return (
       <Pressable
         key={b.id}
         style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === list.length - 1 && styles.rowLast, (pressed || unpayable) && styles.pressed]}
         // Managing the book, a tap chooses nothing.
-        disabled={manage || unpayable}
+        disabled={manage || unpayable || (payees && editing)}
         onPress={() => pick(b.recipientAddress, named)}
         onLongPress={() => copy(b.recipientAddress)}>
         {/* Every entry under a name: the one saved on this device, or its place in the
@@ -207,6 +223,7 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
               {named ?? t('mobile.payments.recipient_n', {n: b.id})}
             </Text>
             {/* Its own target, like the ✕: a tap on the row chooses the recipient. */}
+            {payees && !editing ? null : (
             <Pressable
               hitSlop={10}
               onPress={() => rename(b.recipientAddress, named)}
@@ -224,6 +241,7 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
                 />
               </Svg>
             </Pressable>
+            )}
             {/* Still waiting out the timelock, to be added or to be removed: how far it has run,
                 and in one phrase what happens when. */}
             {waitUntil ? (
@@ -242,7 +260,14 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
             </Text>
           ) : null}
         </View>
-        {busy === `rm-${b.id}` ? (
+        {payees && !editing ? (
+          // Not editing: a tap pays this payee, which the arrow says. One a lock voided cannot be paid.
+          unpayable ? null : (
+            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+              <Path d="M9 6l6 6-6 6" stroke={c.subtext} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+            </Svg>
+          )
+        ) : busy === `rm-${b.id}` ? (
           <ActivityIndicator color={c.subtext} />
         ) : removeAt || b.status === WHITELIST_STATUS.voided ? null : lockLevel && !removeGate.allowed ? (
           <LockIcon level={lockLevel} size={18} />
@@ -273,8 +298,8 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
 
   /** One card of book entries, or its loading / empty state. */
   const group = (rows: WhitelistedRecipient[], empty: string) => (
-    <View style={styles.card}>
-      {loading ? (
+    <View style={[styles.card, loading && payees && styles.hidden]}>
+      {loading && payees ? null : loading ? (
         <View style={[styles.row, styles.rowFirst, styles.rowLast, styles.centered]}>
           <ActivityIndicator color={c.accent} />
         </View>
@@ -296,10 +321,11 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
 
   // New recipient: the + in the header when managing the book (always in reach, however long it
   // grows), and after the Payees title when choosing whom to pay — as on web.
-  const newOff = !addGate.allowed && (manage || !sendGate.allowed);
+  const newOff = !addGate.allowed && (manage || payees || !sendGate.allowed);
   const newButton = (style: object) => (
     <Pressable
-      onPress={() => nav.navigate(manage ? 'VaultWhitelistAdd' : 'NewRecipient')}
+      // From the Overview, + adds a payee to the book; choosing whom to pay, it is a new recipient.
+      onPress={() => nav.navigate(manage || payees ? 'VaultWhitelistAdd' : 'NewRecipient')}
       // A new address can be paid or saved; locked, the vault does neither.
       disabled={newOff}
       hitSlop={10}
@@ -312,9 +338,27 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
     </Pressable>
   );
   useLayoutEffect(() => {
-    nav.setOptions({headerRight: manage ? () => newButton(styles.headerBtn) : undefined});
+    nav.setOptions({
+      headerRight: manage
+        ? () => newButton(styles.headerBtn)
+        : payees && book.length > 0
+          ? () => (
+              <Pressable
+                onPress={() => setEditing((e) => !e)}
+                hitSlop={10}
+                style={styles.headerText}
+                accessibilityRole="button">
+                <Text style={styles.link}>{editing ? t('vault.done') : t('vault.edit')}</Text>
+              </Pressable>
+            )
+          : undefined,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nav, t, c, styles, manage, newOff]);
+  }, [nav, t, c, styles, manage, newOff, payees, editing, book.length]);
+  // The last payee removed: nothing left to edit, so out of edit mode with the button gone.
+  useEffect(() => {
+    if (book.length === 0) setEditing(false);
+  }, [book.length]);
 
   /**
    * Security › Whitelisted addresses: three categories, a page each, swiped between or picked from
@@ -381,11 +425,35 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
           already pays is the common case, and an empty list still says the vault HAS one. */}
       {/* Each group's title on the left and what a payment to it may be on the right. */}
       <View style={styles.sectionRow}>
-        <Text style={styles.sectionTitle}>{t('mobile.payments.whitelisted_book')}</Text>
+        <Text style={styles.sectionTitle}>{t(payees ? 'mobile.payments.send_to_payee' : 'mobile.payments.whitelisted_book')}</Text>
         {newButton(styles.sectionAdd)}
-        <Text style={styles.sectionLimit}>{t('mobile.payments.max_send_none')}</Text>
+        <Text style={styles.sectionLimit}>{t('mobile.payments.send_no_limit')}</Text>
       </View>
       {group(live, t('mobile.payments.book_empty_title'))}
+      {/* The section's footnote, always on the Send page: how long a new payee waits before it is one,
+          the time in blue to change the timelock. With no payee at all, the red dot the Overview
+          shows and "add your payees first" in front. */}
+      {payees && risk?.read ? (() => {
+        const none = !loading && book.every((b) => b.status === WHITELIST_STATUS.voided);
+        const MARK = '\u0000';
+        const [before, after = ''] = t(none ? 'mobile.payments.payees_first' : 'mobile.payments.payee_wait', {time: MARK}).split(MARK);
+        return (
+          <>
+          <View style={styles.firstNote}>
+            {none ? <View style={styles.firstDot} /> : null}
+            <Text style={styles.firstText}>
+              {before}
+              <Text style={styles.firstLink} onPress={() => nav.navigate('VaultRiskValue', {field: 'timelock'})} suppressHighlighting>
+                {fmtDuration(risk.timelock, t)}
+              </Text>
+              {after}
+            </Text>
+          </View>
+          {/* With none yet, why a payee is worth the wait: it is what keeps a thief from emptying the vault. */}
+          {none ? <Text style={[styles.firstText, styles.firstWhy]}>{t('mobile.payments.payees_why')}</Text> : null}
+          </>
+        );
+      })() : null}
 
       {/* Not payable as whitelisted yet: until then, a send to one of these is held to the daily
           send allowance, which the title says. */}
@@ -393,12 +461,26 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
         <>
           <View style={styles.sectionRow}>
             <Text style={styles.sectionTitle}>{t('mobile.payments.pending_whitelisted')}</Text>
-            {allowance ? <Text style={styles.sectionLimit}>{allowance}</Text> : null}
+            {/* On the Send page, no limit beside them: they are not paid from here until they are payees. */}
+            {allowance && !payees ? <Text style={styles.sectionLimit}>{allowance}</Text> : null}
           </View>
           <View style={styles.card}>{waiting.map((b, i) => entryRow(b, i, waiting))}</View>
         </>
       ) : null}
 
+      {/* Overview › Payees: no address section. With send to anyone on (and the vault not locked),
+          one button to pay an address that is not a payee, held to the daily allowance. */}
+      {payees && risk?.read && !sendsToNewOff && !lockedSends ? (
+        <Pressable
+          style={({pressed}) => [styles.anyone, pressed && styles.pressed]}
+          onPress={() => nav.navigate('Payments', {anyone: true})}
+          accessibilityRole="button">
+          <Text style={styles.anyoneText}>{t('mobile.payments.send_anyone')}</Text>
+          {allowance ? <Text style={styles.anyoneSub}>{allowance}</Text> : null}
+        </Pressable>
+      ) : null}
+      {payees ? null : (
+      <>
       {/* Typing an address: its own category, held to Send to new, which the title says. With it
           off (or the vault locked) the row says so, greyed, instead of opening a form whose payment
           would only be refused; Off is a setting, so it links to it. A lock is not. As on web. */}
@@ -435,7 +517,9 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
 
       {/* Off when send to new is off: a vault of your own that is not whitelisted then cannot be
           paid, and one that is already shows in the whitelist above. */}
-      {!manage && mine.length > 0 && !sendsToNewOff ? (
+      </>
+      )}
+      {!manage && !payees && mine.length > 0 && !sendsToNewOff ? (
         <>
           {/* Your own vaults are paid like anyone else: no limit once whitelisted, else the allowance. */}
           <View style={styles.sectionRow}>
@@ -508,6 +592,8 @@ const makeStyles = (c: Colors) =>
     entryNameOff: {color: c.subtext},
     // Sized to the bar's 44, as the Pending page's lock: the native bar anchors a custom view by its bottom.
     headerBtn: {width: 44, height: 44, alignItems: 'center', justifyContent: 'center'},
+    // Edit / Done: text, sized to the bar's 44 like the + (the native bar anchors a custom view by its bottom).
+    headerText: {height: 44, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center'},
     // The + after the Payees title: the title's line, not the header's 44.
     sectionAdd: {alignSelf: 'center', marginVertical: -4},
     flexText: {flex: 1},
@@ -517,6 +603,15 @@ const makeStyles = (c: Colors) =>
     subWarn: {color: c.danger},
     emptyText: {color: c.subtext, fontSize: 15},
     centered: {justifyContent: 'center'},
+    hidden: {opacity: 0},
+    anyone: {marginTop: 24, minHeight: 52, borderRadius: 16, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, gap: 2},
+    anyoneText: {color: c.accent, fontSize: 16, fontWeight: '600'},
+    anyoneSub: {color: c.subtext, fontSize: 12},
+    firstNote: {flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingHorizontal: 4, paddingTop: 10},
+    firstDot: {width: 8, height: 8, borderRadius: 4, backgroundColor: c.danger, marginTop: 5},
+    firstText: {flex: 1, color: c.subtext, fontSize: 13, lineHeight: 18},
+    firstLink: {color: c.accent, fontWeight: '600'},
+    firstWhy: {flex: 0, paddingLeft: 20, paddingRight: 4, paddingTop: 8},
     manageNotice: {marginHorizontal: 16, marginBottom: 8},
     remove: {width: 28, height: 28, borderRadius: 14, backgroundColor: c.neutralSoft, alignItems: 'center', justifyContent: 'center'},
     removeText: {color: c.subtext, fontSize: 13, fontWeight: '700'},
