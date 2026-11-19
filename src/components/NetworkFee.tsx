@@ -159,11 +159,15 @@ export function useActivationDue(): boolean {
   return payer !== 'owner' && activated === false;
 }
 
-/** The activation fee, at the top left of a confirm button: "Activation $1.00". */
+/**
+ * The activation fee, at the top right of a confirm button where the network fee otherwise goes:
+ * "Activation $9.90 (network fee included)". The flat fee covers the deployment's gas, so there is
+ * no second figure beside it.
+ */
 export function ActivationFee({usd = ACTIVATION_FEE_USD}: {usd?: number}) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
-  return <Text style={styles.line}>{t('mobile.fees.activation_fee', {fee: `$${usd.toFixed(2)}`})}</Text>;
+  return <Text style={styles.line}>{t('mobile.fees.activation_included', {fee: `$${usd.toFixed(2)}`})}</Text>;
 }
 
 const makeStyles = (c: Colors) =>

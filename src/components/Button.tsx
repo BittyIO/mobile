@@ -168,12 +168,13 @@ function PlainConfirmButton({
   if (!showFee && activation === null) return button;
   // The cost sits with the control that incurs it, so every signing surface answers "what does this
   // cost me" in the same place without each screen having to remember to say it. A vault's first
-  // write also activates it: that flat fee at the top left, the operation's own on the right.
+  // write also activates it: then the flat activation fee, network fee included, takes the network
+  // fee's place at the top right.
   return (
     <View style={styles.confirmWrap}>
       <View style={styles.feeRow}>
-        {activation !== null ? <ActivationFee usd={activation} /> : <View />}
-        {showFee ? <NetworkFee gas={gas} free={free} usd={networkFeeUsd} /> : null}
+        <View />
+        {activation !== null ? <ActivationFee usd={activation} /> : showFee ? <NetworkFee gas={gas} free={free} usd={networkFeeUsd} /> : null}
       </View>
       {button}
     </View>
