@@ -7,7 +7,7 @@ import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {Address} from 'viem';
 import type {RootStackParamList} from '@/App';
-import {useVaults} from '@/core/vault-store';
+import {useVaults, vaultLabel} from '@/core/vault-store';
 import {useNetwork} from '@/core/network-store';
 import {useWallet} from '@/wallet/store';
 import {useActiveVaultAddress} from '@/core/active-vault';
@@ -126,7 +126,7 @@ export function SelectRecipientScreen({manage = false}: {manage?: boolean}) {
         .filter((v) => v.index !== activeIndex)
         .map((v) => ({
           index: v.index,
-          name: v.name || t('mobile.app.vault_n', {n: v.index + 1}),
+          name: vaultLabel(v, (n) => t('mobile.app.vault_n', {n}), vaults),
           // Received vaults exist on one chain only; elsewhere this is null and the row is left out.
           address: vaultAddressOf(v, network),
         }))

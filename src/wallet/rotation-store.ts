@@ -15,10 +15,18 @@ const store = new MMKV({id: 'bitty.rotation'});
 const onKey = (network: string, vault: string) => `on.${network}:${vault.toLowerCase()}`;
 const KEYS = 'keys';
 const USED = 'used';
-const nextKey = (index: number) => `next.${index}`;
+// The main phrase keeps the keys it always had; another phrase's accounts are kept apart by its id.
+const nextKey = (index: number, phrase?: string) => (phrase && phrase !== 'main' ? `next.${phrase}.${index}` : `next.${index}`);
 
-/** A one-time key's place in the phrase: account `index`, key `k` (m/44'/60'/index'/1/k). */
-export type KeyPath = {index: number; k: number};
+/**
+ * A one-time key's place: account `index`, key `k` (m/44'/60'/index'/1/k), of `phrase` — unset for
+ * the main phrase (wallet/keyring MAIN_PHRASE).
+ */
+export type KeyPath = {index: number; k: number; phrase?: string};
+
+/** Whether `p` is a key of account `index` of `phrase`. */
+export const isKeyOf = (p: KeyPath | null, index: number, phrase?: string): boolean =>
+  !!p && p.index === index && (p.phrase ?? 'main') === (phrase ?? 'main');
 
 function readJson<T>(key: string, fallback: T): T {
   try {
@@ -69,10 +77,10 @@ export function keyPathOf(address: string | null | undefined): KeyPath | null {
 }
 
 /** Record one-time keys just derived, so they are recognised without the phrase from now on. */
-export function rememberKeys(entries: {address: string; index: number; k: number}[]): void {
+export function rememberKeys(entries: {address: string; index: number; k: number; phrase?: string}[]): void {
   if (entries.length === 0) return;
   const keys = {...useRotationStore.getState().keys};
-  for (const e of entries) keys[e.address.toLowerCase()] = {index: e.index, k: e.k};
+  for (const e of entries) keys[e.address.toLowerCase()] = e.phrase && e.phrase !== 'main' ? {index: e.index, k: e.k, phrase: e.phrase} : {index: e.index, k: e.k};
   store.set(KEYS, JSON.stringify(keys));
   useRotationStore.setState({keys});
 }
@@ -82,12 +90,12 @@ export function rememberKeys(entries: {address: string; index: number; k: number
  * out once, whether or not the handover it was picked for went through, so no two vaults — or the
  * same vault on two chains — can ever be given the same key.
  */
-export function nextKeyOf(index: number): number {
-  return store.getNumber(nextKey(index)) ?? 0;
+export function nextKeyOf(index: number, phrase?: string): number {
+  return store.getNumber(nextKey(index, phrase)) ?? 0;
 }
 
-export function bumpNextKey(index: number, atLeast: number): void {
-  if (atLeast > nextKeyOf(index)) store.set(nextKey(index), atLeast);
+export function bumpNextKey(index: number, atLeast: number, phrase?: string): void {
+  if (atLeast > nextKeyOf(index, phrase)) store.set(nextKey(index, phrase), atLeast);
 }
 
 /** Whether this phone has signed anything with `address`: once it has, its public key is out. */

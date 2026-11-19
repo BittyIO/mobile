@@ -1,10 +1,16 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useLayoutEffect, useMemo, useState} from 'react';
 import {Alert, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import type {RootStackParamList} from '@/App';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 import Svg, {Path, Rect} from 'react-native-svg';
-import {SettingsGroup} from '@/components/SettingsRow';
-import {revealMnemonic} from '@/wallet/keyring';
+import {SettingsGroup, makeSettingsStyles} from '@/components/SettingsRow';
+import {listPhrases, MAIN_PHRASE, phraseLabel, renamePhrase, revealMnemonic} from '@/wallet/keyring';
+import {useWallet} from '@/wallet/store';
+import {phraseOf, useVaults} from '@/core/vault-store';
+import {showToast} from '@/components/Toast';
 import {useRevealGuard} from '@/core/device-security';
 import {backupChoices, isPhraseVerified, markPhraseVerified} from '@/wallet/phrase-backup';
 
@@ -85,14 +91,27 @@ function TipIcon({name, color}: {name: Tip; color: string}) {
  *
  * Above it all, how to keep the words safe — paper, no cameras, nobody watching, never typed in,
  * and that Bitty never asks.
+ *
+ * One phrase of those on the phone (`phrase` in the route, the main one when absent), titled with
+ * its name. Below the words it can be renamed, or deleted: after Face ID, and a warning that its
+ * vaults leave the phone with it and only the words bring them back.
  */
 export function RecoveryPhraseScreen() {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
+  const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const id = useRoute<RouteProp<RootStackParamList, 'VaultRecoveryPhrase'>>().params?.phrase ?? MAIN_PHRASE;
+  const removePhrase = useWallet((s) => s.removePhrase);
+  const vaultCount = useVaults((s) => s.vaults.filter((v) => !v.imported && phraseOf(v) === id).length);
+  const [info, setInfo] = useState(() => listPhrases().find((p) => p.id === id));
+  const title = info ? phraseLabel(info, (n) => t('mobile.phrases.phrase_n', {n})) : t('mobile.settings.recovery_phrase');
+  useLayoutEffect(() => {
+    nav.setOptions({title});
+  }, [nav, title]);
   const [phrase, setPhrase] = useState<string | null>(null);
   const reveal = useRevealGuard();
-  const [verified, setVerified] = useState(() => isPhraseVerified());
+  const [verified, setVerified] = useState(() => isPhraseVerified(id));
   // Positions being asked for, or null while the words show (or nothing does).
   const [ask, setAsk] = useState<number[] | null>(null);
   const [answers, setAnswers] = useState<Record<number, string>>({});
@@ -110,7 +129,7 @@ export function RecoveryPhraseScreen() {
   const onVerify = () => {
     if (!ask) return;
     if (ask.every((p) => answers[p] === words[p - 1])) {
-      markPhraseVerified();
+      markPhraseVerified(id);
       setVerified(true);
       setAsk(null);
       setPhrase(null);
@@ -126,11 +145,57 @@ export function RecoveryPhraseScreen() {
 
   const onReveal = async () => {
     try {
-      const m = await revealMnemonic();
+      const m = await revealMnemonic(id);
       if (m) setPhrase(m);
     } catch {
       // cancelled biometric prompt
     }
+  };
+
+  /** The name is this phone's, like a vault's; saved empty, it goes back to "Recovery phrase {n}". */
+  const onRename = () =>
+    Alert.prompt(
+      t('mobile.phrases.rename'),
+      undefined,
+      [
+        {text: t('common.cancel'), style: 'cancel'},
+        {
+          text: t('vault.save'),
+          onPress: (name?: string) => {
+            renamePhrase(id, name ?? '');
+            setInfo(listPhrases().find((p) => p.id === id));
+          },
+        },
+      ],
+      'plain-text',
+      info?.name ?? '',
+    );
+
+  /**
+   * Delete, after a warning and Face ID — whoever holds an unlocked phone should not be able to
+   * throw a phrase away. The last phrase takes the wallet with it, and the app starts over.
+   */
+  const onDelete = () => {
+    const last = listPhrases().length <= 1;
+    Alert.alert(
+      t('mobile.phrases.delete_title', {name: title}),
+      last ? t('mobile.phrases.delete_last_body') : t('mobile.phrases.delete_body', {count: vaultCount}),
+      [
+        {text: t('common.cancel'), style: 'cancel'},
+        {
+          text: t('mobile.phrases.delete_confirm'),
+          style: 'destructive',
+          onPress: async () => {
+            const words = await revealMnemonic(id).catch(() => null);
+            if (!words) return;
+            setPhrase(null);
+            await removePhrase(id);
+            showToast('success', t('mobile.phrases.deleted'));
+            if (!last) nav.goBack();
+          },
+        },
+      ],
+    );
   };
   useEffect(() => {
     if (reveal.screenshotCount > 0 && phrase) {
@@ -234,12 +299,25 @@ export function RecoveryPhraseScreen() {
           </View>
         </View>
       </SettingsGroup>
+
+      <SettingsGroup>
+        <Pressable style={[styles.row, styles.rowDivider]} onPress={onRename}>
+          <Text style={styles.rowText}>{t('mobile.phrases.rename')}</Text>
+          <Text style={styles.chev}>›</Text>
+        </Pressable>
+        <Pressable style={styles.row} onPress={onDelete}>
+          <Text style={[styles.rowText, styles.danger]}>{t('mobile.phrases.delete')}</Text>
+        </Pressable>
+      </SettingsGroup>
     </ScrollView>
   );
 }
 
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
+    ...makeSettingsStyles(c),
+    rowText: {color: c.text, fontSize: 15, fontWeight: '600'},
+    danger: {color: c.danger},
     container: {flex: 1, backgroundColor: c.bg},
     body: {flexGrow: 1, padding: 16, gap: 20},
     box: {padding: 16, gap: 12},

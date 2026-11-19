@@ -15,6 +15,7 @@ import {useNetwork} from '@/core/network-store';
 import {useActiveVaultAddress} from '@/core/active-vault';
 import {LOCK_ICON, LOCK_TITLE} from '@/core/lock-status';
 import {isPhraseVerified} from '@/wallet/phrase-backup';
+import {listPhrases} from '@/wallet/keyring';
 import {useRotationOn} from '@/wallet/rotation-store';
 import {useVaults} from '@/core/vault-store';
 import {useVaultVersionRow} from '@/components/useVaultVersionRow';
@@ -31,8 +32,16 @@ export function SecurityScreen() {
   const styles = useStyles(makeStyles);
   const owner = useWallet((s) => s.address);
   // Re-read on focus: the Recovery phrase page is where it is verified.
-  const [phraseOk, setPhraseOk] = useState(() => isPhraseVerified());
-  useFocusEffect(useCallback(() => setPhraseOk(isPhraseVerified()), []));
+  // Every phrase on the phone has to be checked for the row to say so.
+  const allVerified = () => listPhrases().every((p) => isPhraseVerified(p.id));
+  const [phraseOk, setPhraseOk] = useState(allVerified);
+  const [phraseCount, setPhraseCount] = useState(() => listPhrases().length);
+  useFocusEffect(
+    useCallback(() => {
+      setPhraseOk(allVerified());
+      setPhraseCount(listPhrases().length);
+    }, []),
+  );
   const network = useNetwork((s) => s.network);
   const vault = useActiveVaultAddress(network);
   const isSafe = useVaults((s) => !!s.vaults.find((v) => v.index === s.activeIndex)?.safe);
@@ -106,11 +115,11 @@ export function SecurityScreen() {
         <SettingsRow icon={LOCK_ICON[lockLevel ?? 0]} title={t('mobile.vault.vault_lock')} value={lockValue} onPress={() => nav.navigate('VaultLock')} />
         <SettingsRow
           icon="recovery"
-          title={t('mobile.settings.recovery_phrase')}
+          title={phraseCount > 1 ? t('mobile.phrases.title') : t('mobile.settings.recovery_phrase')}
           // "Verified" once the words have been checked; nothing otherwise — a standing "Not
           // verified" read as a fault on every visit, where the page itself is where to deal with it.
           value={phraseOk ? t('mobile.settings.phrase_verified') : undefined}
-          onPress={() => nav.navigate('VaultRecoveryPhrase')} last />
+          onPress={() => nav.navigate('RecoveryPhrases')} last />
       </SettingsGroup>
     </ScrollView>
   );

@@ -12,8 +12,8 @@
 import {useEffect, useState} from 'react';
 import {getAddress, parseAbi, type Address, type Hex} from 'viem';
 import {apiFetch, apiUrl, publicClientFor, type Network} from '@/core/chain';
-import {keyIndexOf, type VaultRef} from '@/core/vault-store';
-import {keyPathOf} from '@/wallet/rotation-store';
+import {keyIndexOf, phraseOf, type VaultRef} from '@/core/vault-store';
+import {isKeyOf, keyPathOf} from '@/wallet/rotation-store';
 import {vaultAddressOf} from '@/core/active-vault';
 import {vaultGuard} from '@/core/vault-contracts';
 import {VAULT_RISK_ABI} from '@/core/abi';
@@ -94,15 +94,15 @@ export async function vaultOwnerOf(network: Network, vault: Address): Promise<Ad
   }
 }
 
-/** One of this device's keys: its BIP-44 index and address. */
-export type DeviceKey = {index: number; address: Address};
+/** One of this device's keys: its BIP-44 index on its recovery phrase, and address. */
+export type DeviceKey = {index: number; address: Address; phrase: string};
 
 /** Every key the list knows of — each created vault's owner, and each Safe or received vault's signer. */
 export function deviceKeys(vaults: VaultRef[]): DeviceKey[] {
   const out = new Map<string, DeviceKey>();
   for (const v of vaults) {
-    if (!v.safe && !v.vault && v.owner) out.set(v.owner.toLowerCase(), {index: v.index, address: v.owner});
-    if ((v.safe || v.vault) && v.signer && v.signerIndex !== undefined) out.set(v.signer.toLowerCase(), {index: v.signerIndex, address: v.signer});
+    if (!v.safe && !v.vault && v.owner) out.set(v.owner.toLowerCase(), {index: keyIndexOf(v), address: v.owner, phrase: phraseOf(v)});
+    if ((v.safe || v.vault) && v.signer && v.signerIndex !== undefined) out.set(v.signer.toLowerCase(), {index: v.signerIndex, address: v.signer, phrase: phraseOf(v)});
   }
   return [...out.values()];
 }
@@ -155,7 +155,7 @@ export function useVaultDirectory(
           if (!vault || !expected) return;
           const now = await vaultOwnerOf(network, vault);
           // Handed to one of its own key's one-time keys (quantum-safe keys): still this phone's.
-          const ownKey = !v.safe && !!now && keyPathOf(now)?.index === keyIndexOf(v);
+          const ownKey = !v.safe && !!now && isKeyOf(keyPathOf(now), keyIndexOf(v), phraseOf(v));
           if (now && now.toLowerCase() !== expected.toLowerCase() && !ownKey) gone.set(v.index, now);
         }),
       );

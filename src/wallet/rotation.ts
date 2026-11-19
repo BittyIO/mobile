@@ -29,6 +29,7 @@ import type {Signer} from './signer';
 import {accountAt, oneTimeKeys} from './keyring';
 import {
   bumpNextKey,
+  isKeyOf,
   keyPathOf,
   markUsed,
   nextKeyOf,
@@ -92,18 +93,18 @@ function tracked(a: LocalAccount): Signer & LocalAccount {
  * Known keys are looked up; otherwise the keys are walked from the first, which is how a phone that
  * was restored from the phrase — and has no record of which key the vault was last handed — finds it.
  */
-function findOwnerKey(root: HDKey, index: number, owner: Address): LocalAccount | null {
+function findOwnerKey(root: HDKey, index: number, owner: Address, phrase?: string): LocalAccount | null {
   const key = oneTimeKeys(root, index);
   const known = keyPathOf(owner);
-  if (known && known.index === index) return key(known.k);
-  const seen: {address: string; index: number; k: number}[] = [];
+  if (known && isKeyOf(known, index, phrase)) return key(known.k);
+  const seen: {address: string; index: number; k: number; phrase?: string}[] = [];
   let found: LocalAccount | null = null;
-  for (let k = 0; k < nextKeyOf(index) + SCAN && !found; k++) {
+  for (let k = 0; k < nextKeyOf(index, phrase) + SCAN && !found; k++) {
     const a = key(k);
-    seen.push({address: a.address, index, k});
+    seen.push({address: a.address, index, k, phrase});
     if (a.address.toLowerCase() === owner.toLowerCase()) {
       found = a;
-      bumpNextKey(index, k + 1);
+      bumpNextKey(index, k + 1, phrase);
     }
   }
   rememberKeys(seen);
@@ -149,21 +150,21 @@ export async function hasOpenOrders(vault: Address, network: Network): Promise<b
 }
 
 /** The next fresh one-time key of account `index`, or null when none of the next few is. */
-async function pickFresh(root: HDKey, index: number, network: Network, vault: Address): Promise<Address | null> {
+async function pickFresh(root: HDKey, index: number, network: Network, vault: Address, phrase?: string): Promise<Address | null> {
   const key = oneTimeKeys(root, index);
   for (let i = 0; i < TRIES; i++) {
-    const k = nextKeyOf(index);
+    const k = nextKeyOf(index, phrase);
     const a = key(k);
     // Handed out now, whatever happens next: the key is never offered to anything again.
-    bumpNextKey(index, k + 1);
-    rememberKeys([{address: a.address, index, k}]);
+    bumpNextKey(index, k + 1, phrase);
+    rememberKeys([{address: a.address, index, k, phrase}]);
     if (await isFresh(a.address, network, vault)) return a.address;
   }
   return null;
 }
 
 /** Whether this write should hand the vault on, and to whom. */
-async function plan(root: HDKey, index: number, network: Network, vault: Address): Promise<RotationPlan> {
+async function plan(root: HDKey, index: number, network: Network, vault: Address, phrase?: string): Promise<RotationPlan> {
   try {
     const [pending, lock, orders] = await Promise.all([
       getPendingChanges(vault, network),
@@ -173,7 +174,7 @@ async function plan(root: HDKey, index: number, network: Network, vault: Address
     if (pending.some((p) => p.kind === 'newOwner')) return {held: 'pending'};
     if (lock !== 0) return {held: 'locked'};
     if (orders) return {held: 'orders'};
-    const to = await pickFresh(root, index, network, vault);
+    const to = await pickFresh(root, index, network, vault, phrase);
     return to ? {to} : {held: 'no-fresh'};
   } catch {
     return {held: 'unreachable'};
@@ -188,12 +189,12 @@ async function plan(root: HDKey, index: number, network: Network, vault: Address
  * The owner is read from the chain every time, not remembered: the handover finishes on its own
  * when the timelock runs, with nothing on this phone to tell it so.
  */
-export async function vaultSigner(o: {root: HDKey; index: number; network: Network; vault: Address}): Promise<Signer> {
+export async function vaultSigner(o: {root: HDKey; index: number; network: Network; vault: Address; /** Unset for the main phrase. */ phrase?: string}): Promise<Signer> {
   const base = accountAt(o.root, o.index);
   const owner = await vaultOwnerOf(o.network, o.vault);
   let key: LocalAccount = base;
   if (owner && owner.toLowerCase() !== base.address.toLowerCase()) {
-    const found = findOwnerKey(o.root, o.index, owner);
+    const found = findOwnerKey(o.root, o.index, owner, o.phrase);
     // Owned by one of this phrase's one-time keys — an earlier handover, or a phone restored from
     // the phrase. That key signs; the SETTING is left as the owner set it. It used to be switched on
     // here, which turned quantum-safe on for a vault and network nobody had chosen it for: it is off
@@ -203,7 +204,7 @@ export async function vaultSigner(o: {root: HDKey; index: number; network: Netwo
   const signer = tracked(key);
   // Not deployed yet: the first write activates it, which is signed by the account's own key.
   if (!owner || !rotationOn(o.network, o.vault)) return signer;
-  return {...signer, rotation: await plan(o.root, o.index, o.network, o.vault)};
+  return {...signer, rotation: await plan(o.root, o.index, o.network, o.vault, o.phrase)};
 }
 
 /** Whether `address` is the account's own key or one of its one-time keys, as far as this phone knows. */
@@ -218,15 +219,15 @@ export function isOwnKey(address: string | null | undefined, base: string | null
  * Run in the background after an unlock. A restored phone has no record of them, and the vault list
  * would otherwise show a vault owned by one as handed to a stranger until its first write.
  */
-export function learnKeys(root: HDKey, indexes: number[]): void {
+export function learnKeys(root: HDKey, indexes: number[], phrase?: string): void {
   const queue = [...new Set(indexes)];
   const step = () => {
     const index = queue.shift();
     if (index === undefined) return;
     const key = oneTimeKeys(root, index);
-    const upTo = nextKeyOf(index) + 8;
+    const upTo = nextKeyOf(index, phrase) + 8;
     const out = [];
-    for (let k = 0; k < upTo; k++) out.push({address: key(k).address, index, k});
+    for (let k = 0; k < upTo; k++) out.push({address: key(k).address, index, k, phrase});
     rememberKeys(out);
     setTimeout(step, 0);
   };

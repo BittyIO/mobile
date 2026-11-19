@@ -13,13 +13,13 @@ import type {HDAccount} from 'viem/accounts';
 import type {Signer} from './signer';
 import * as keyring from './keyring';
 import {learnKeys, vaultSigner} from './rotation';
-import {keyIndexOf, useVaults, type VaultRef} from '@/core/vault-store';
+import {keyIndexOf, phraseOf, useVaults, type VaultRef} from '@/core/vault-store';
 import {activeVaultAddress} from '@/core/active-vault';
 import {useNetwork} from '@/core/network-store';
 import {fetchSafe, safeSigner} from '@/vault/safe';
 import {translate} from '@/i18n';
 import {useLanguage} from '@/core/language-store';
-import {forgetPhraseVerified} from './phrase-backup';
+import {forgetPhraseVerified, markPhraseVerified} from './phrase-backup';
 
 const cache = new MMKV();
 // The Tron wallet's cached addresses, from builds that had one: public, but nothing reads them now.
@@ -64,6 +64,16 @@ interface WalletState {
   signer: () => Promise<Signer>;
   /** Put another vault in front. Free: its owner address was cached when it was added. */
   selectVault: (index: number) => void;
+  /**
+   * Keep another recovery phrase on this phone and put its first vault in front. A phrase already
+   * here is not added again: its first vault is chosen instead, and `existing` says so.
+   */
+  addPhrase: (mnemonic: string) => Promise<{id: string; existing: boolean}>;
+  /**
+   * Delete a recovery phrase from this phone, with every vault of it on the list. The last phrase
+   * takes the wallet with it (back to onboarding). Nothing changes on chain.
+   */
+  removePhrase: (id: string) => Promise<void>;
 }
 
 /** The vault in front, if the list has it. */
@@ -102,13 +112,22 @@ const active = () => {
   return v ? keyIndexOf(v) : useVaults.getState().activeIndex;
 };
 
+/** The recovery phrase whose key signs for the vault in front. */
+const activePhrase = () => {
+  const v = activeVault();
+  return v ? phraseOf(v) : keyring.MAIN_PHRASE;
+};
+
+/** The phrase as rotation-store keys it: unset for the main one. */
+const rotationPhrase = (id: string) => (id === keyring.MAIN_PHRASE ? undefined : id);
+
 /**
  * This phone's key among a Safe vault's owners, behind Face ID: the key imported for it, or the
  * phrase's account at its `signerIndex`. Null if cancelled.
  */
 export async function safeDeviceKey(v: VaultRef): Promise<LocalAccount | null> {
   if (v.imported && v.signer) return keyring.unlockImported(v.signer);
-  return keyring.unlock(v.signerIndex ?? 0);
+  return keyring.unlock(v.signerIndex ?? 0, phraseOf(v));
 }
 
 export const useWallet = create<WalletState>((set) => ({
@@ -130,21 +149,29 @@ export const useWallet = create<WalletState>((set) => ({
   },
 
   unlock: async () => {
-    const root = await keyring.unlockRoot();
+    const phrase = activePhrase();
+    const root = await keyring.unlockRoot(phrase);
     if (!root) return;
     const account = keyring.accountAt(root, active());
     remember(account);
+    if (phrase === keyring.MAIN_PHRASE) keyring.recordMainPhrase(keyring.accountAt(root, 0).address);
     set({account, address: ownerFor(account), status: 'unlocked', unlocked: true});
     // So a vault already handed to one of this phrase's one-time keys reads as this phone's own.
-    learnKeys(root, useVaults.getState().vaults.filter((v) => !v.safe).map(keyIndexOf));
+    // Only this phrase's: another phrase's keys would need its own Face ID prompt.
+    const mine = useVaults.getState().vaults.filter((v) => !v.safe && !v.imported && phraseOf(v) === phrase);
+    learnKeys(root, mine.map(keyIndexOf), rotationPhrase(phrase));
   },
 
   lock: () => set({account: null, unlocked: false, status: 'locked', lockedBy: 'user'}),
 
   wipe: async () => {
+    const phrases = keyring.listPhrases();
     await keyring.wipe();
     cache.delete(ADDRESS_KEY);
     forgetPhraseVerified();
+    for (const p of phrases) forgetPhraseVerified(p.id);
+    // Every vault on the list was one of the phrases' or keys' just deleted.
+    useVaults.getState().reset();
     set({account: null, unlocked: false, address: null, status: 'no-wallet'});
   },
 
@@ -154,12 +181,15 @@ export const useWallet = create<WalletState>((set) => ({
     const network = useNetwork.getState().network;
     if (!safe) {
       // The ACTIVE index, not index 0: a write must be signed by the owner of the vault on screen.
-      const root = await keyring.unlockRoot();
+      const phrase = activePhrase();
+      const root = await keyring.unlockRoot(phrase);
       if (!root) throw new Error('Unlock cancelled');
       // Whichever of this account's keys owns the vault now: on quantum-safe keys, that is the
       // one-time key it was last handed, not the account's own (see ./rotation).
       const vault = activeVaultAddress(network);
-      return vault ? vaultSigner({root, index: active(), network, vault}) : keyring.accountAt(root, active());
+      return vault
+        ? vaultSigner({root, index: active(), network, vault, phrase: rotationPhrase(phrase)})
+        : keyring.accountAt(root, active());
     }
     const account = await safeDeviceKey(ref);
     if (!account) throw new Error('Unlock cancelled');
@@ -189,6 +219,33 @@ export const useWallet = create<WalletState>((set) => ({
     // The account goes, the session does not: the next write re-derives at the new index.
     set({account: null, address: v.owner});
   },
+
+  addPhrase: async (mnemonic) => {
+    const {id, account, existing} = await keyring.addPhrase(mnemonic);
+    const vaults = useVaults.getState().vaults;
+    const first = vaults.find((v) => !v.safe && !v.vault && phraseOf(v) === id && keyIndexOf(v) === 0);
+    const index = first
+      ? first.index
+      : useVaults.getState().add(account.address, {phrase: id, account: 0});
+    // Typed in from its backup, or generated and checked word by word: either way, proven.
+    markPhraseVerified(id);
+    useWallet.getState().selectVault(index);
+    return {id, existing};
+  },
+
+  removePhrase: async (id) => {
+    const others = keyring.listPhrases().filter((p) => p.id !== id);
+    const keeps = useVaults.getState().vaults.some((v) => v.imported || phraseOf(v) !== id);
+    if (others.length === 0 || !keeps) {
+      await useWallet.getState().wipe();
+      return;
+    }
+    useVaults.getState().removePhrase(id);
+    await keyring.removePhrase(id);
+    forgetPhraseVerified(id);
+    // The vault in front may have been one of them: put the one now in front up, owner and all.
+    useWallet.getState().selectVault(useVaults.getState().activeIndex);
+  },
 }));
 
 /**
@@ -203,4 +260,8 @@ export const useWallet = create<WalletState>((set) => ({
   const cached = cache.getString(ADDRESS_KEY) as `0x${string}` | undefined;
   const {vaults, activeIndex, setOwner} = useVaults.getState();
   if (cached && !vaults.find((v) => v.index === activeIndex)?.owner) setOwner(activeIndex, cached);
+  // The main phrase's first account, for recognising it if it is imported again: the owner of its
+  // first vault, already on disk, so no prompt is needed to know it.
+  const first = useVaults.getState().vaults.find((v) => v.index === 0 && !v.phrase && !v.safe && !v.vault)?.owner;
+  if (first) keyring.recordMainPhrase(first);
 }
