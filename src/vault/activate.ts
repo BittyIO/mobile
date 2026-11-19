@@ -12,7 +12,7 @@ import type {Signer} from '@/wallet/signer';
 import {apiUrl, CHAIN_ID, NATIVE, publicClientFor, type Network} from '@/core/chain';
 import {ACTIVATION_TYPES, GUARD_IMPL_ABI, IMPLEMENTATION_VAULT, PRICE_FEED_ABI} from '@/core/abi';
 import {API_VERSION, vaultFactory, vaultGuard} from '@/core/vault-contracts';
-import {ACTIVATION_GAS, SIGNED_ACTIVATION_OVERHEAD_GAS, activationFlatNative, activationFlatUnits, relayFeeUnits} from '@/core/activation-fee';
+import {ACTIVATION_GAS, SIGNED_ACTIVATION_OVERHEAD_GAS, activationFlatNative, activationFlatUnits} from '@/core/activation-fee';
 // One copy of the ETH/USD feeds: the fee shown before signing and the fee actually signed must be
 // priced from the same source, or the two disagree for no reason the user can see.
 import {ETH_USD_FEED} from './fee-quote';
@@ -315,13 +315,11 @@ export async function priceActivation(o: {
     }) as Promise<number>,
   ]);
 
-  // TODO(base): add the OP Stack L1 data fee for exact Base pricing (0 undercharges slightly there).
-  const l1FeeWei = BigInt(0);
   const calls = (o.calls ?? []) as Hex[];
-  // The activation itself is a flat $1 (core/activation-fee). The owner's first calls, when they
-  // ride on it, are charged for their own gas, as any relayed operation is: the gas of this exact
-  // activation, calls and all, less a bare one's — each by the gas the chain BILLS (eth_simulateV1),
-  // or its estimate where the node cannot simulate. The server prices it the same way.
+  // The activation is a flat $9.90 (core/activation-fee), the network fee included — the first
+  // calls riding on it as well: nothing is added for their gas. The gas is still worked out, by what
+  // the chain BILLS (eth_simulateV1) or its estimate where the node cannot simulate, for the network
+  // fee the relayer pays out of it and to catch calls that would revert.
   const gasOf = async (cs: Hex[]): Promise<bigint> => {
     const data = encodeFunctionData({abi: ACTIVATE_ESTIMATE_ABI, functionName: 'activateVault', args: [o.allowlistEnabled, cs]});
     return (
@@ -332,15 +330,10 @@ export async function priceActivation(o: {
         }))) + SIGNED_ACTIVATION_OVERHEAD_GAS
     );
   };
-  const [gasUnits, bareGas] = await Promise.all([gasOf(calls), calls.length > 0 ? gasOf([]) : null]);
-  const callsGas = bareGas != null && gasUnits > bareGas ? gasUnits - bareGas : BigInt(0);
+  const gasUnits = await gasOf(calls);
   const nativeDecimals = NATIVE[o.network].decimals;
-  // In WETH the dollar is converted at the feed's price, and the calls' gas is charged at cost, with
-  // no margin, as the server quotes it.
-  const feeAmount = weth
-    ? activationFlatNative(ethUsd, nativeDecimals) + (calls.length > 0 ? callsGas * gasPrice + l1FeeWei : BigInt(0))
-    : activationFlatUnits(Number(decimals)) +
-      (calls.length > 0 ? relayFeeUnits(callsGas, gasPrice, ethUsd, Number(decimals), l1FeeWei, nativeDecimals) : BigInt(0));
+  // In WETH the dollar is converted at the feed's price.
+  const feeAmount = weth ? activationFlatNative(ethUsd, nativeDecimals) : activationFlatUnits(Number(decimals));
 
   // Over the vault's per-operation cap the activation cannot be paid, however the vault is funded:
   // said now, in dollars, before anything is signed — not as the relayer's refusal afterwards.

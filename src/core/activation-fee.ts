@@ -17,20 +17,21 @@ export const SIGNED_ACTIVATION_OVERHEAD_GAS = BigInt(70_000);
 const ACTIVATION_MARGIN_BPS = BigInt(2000);
 
 /**
- * What activating a vault costs, on every chain: a flat $1, whatever the deployment's gas. The
- * owner's first operations, when they ride on the activation, are charged for their own gas on top,
- * as any relayed operation is (see vault/activate `priceActivation`). Mirrors web lib/activation-fee,
- * whose server expects exactly this.
+ * What activating a vault costs, on every chain: a flat $9.90, the network fee included — the
+ * relayer pays the deployment's gas out of it, and the gas of the first operation's calls riding on
+ * it (see vault/activate `priceActivation`). Mirrors web lib/activation-fee, whose server expects
+ * exactly this.
  */
-export const ACTIVATION_FEE_USD = 1;
+export const ACTIVATION_FEE_USD = 9.9;
+const ACTIVATION_FEE_CENTS = BigInt(Math.round(ACTIVATION_FEE_USD * 100));
 
 /** {ACTIVATION_FEE_USD} in a coin of `decimals`. */
-export const activationFlatUnits = (decimals: number): bigint => BigInt(ACTIVATION_FEE_USD) * BigInt(10) ** BigInt(decimals);
+export const activationFlatUnits = (decimals: number): bigint => (ACTIVATION_FEE_CENTS * BigInt(10) ** BigInt(decimals)) / BigInt(100);
 
 /** {ACTIVATION_FEE_USD} in the native coin's smallest unit (wei, sun) at `nativeUsd`, rounded up. */
 export function activationFlatNative(nativeUsd: number, nativeDecimals: number): bigint {
   const price = BigInt(Math.round(nativeUsd * 1e6));
-  const num = BigInt(ACTIVATION_FEE_USD) * BigInt(1_000_000) * BigInt(10) ** BigInt(nativeDecimals);
+  const num = ACTIVATION_FEE_CENTS * BigInt(10_000) * BigInt(10) ** BigInt(nativeDecimals);
   return (num + price - BigInt(1)) / price;
 }
 const BPS = BigInt(10000);
