@@ -1,10 +1,10 @@
 import React, {useState} from 'react';
-import {Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {Keyboard, ScrollView, StyleSheet, Text} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import Clipboard from '@react-native-clipboard/clipboard';
 import type {RootStackParamList} from '@/App';
 import {Button} from '@/components/Button';
+import {SecretKeyInput} from '@/components/SecretKeyInput';
 import {showToast} from '@/components/Toast';
 import {alertIfBiometricsRequired} from '@/components/biometrics-alert';
 import {useRevealGuard} from '@/core/device-security';
@@ -65,31 +65,15 @@ export function ImportPrivateKeyScreen() {
       {reveal.captured ? (
         <Text style={styles.warn}>{t('mobile.settings.phrase_hidden_capture')}</Text>
       ) : (
-        <View style={[styles.inputWrap, !!error && styles.inputError]}>
-          <TextInput
-            style={styles.input}
-            value={draft}
-            onChangeText={(v) => {
-              setDraft(v);
-              setError(null);
-            }}
-            autoCapitalize="none"
-            autoCorrect={false}
-            spellCheck={false}
-            secureTextEntry
-            textContentType="none"
-            autoComplete="off"
-            onSubmitEditing={onImport}
-          />
-          {!draft ? (
-            <Pressable
-              style={({pressed}) => [styles.pill, pressed && styles.pressed]}
-              onPress={async () => setDraft((await Clipboard.getString()).trim())}
-              hitSlop={6}>
-              <Text style={styles.pillText}>{t('mobile.safe.paste')}</Text>
-            </Pressable>
-          ) : null}
-        </View>
+        <SecretKeyInput
+          value={draft}
+          onChangeText={(v) => {
+            setDraft(v);
+            setError(null);
+          }}
+          onSubmit={onImport}
+          error={!!error}
+        />
       )}
       {error ? <Text style={styles.warn}>{error}</Text> : null}
       <Button title={t('mobile.phrases.import_key_btn')} onPress={onImport} loading={busy} disabled={busy || !draft || reveal.captured} />

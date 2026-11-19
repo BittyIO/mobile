@@ -55,7 +55,7 @@ export const TERMS: TermsSection[] = [
       },
       {
         "type": "p",
-        "text": "We may change, suspend or discontinue any part of the Services at any time (section 10). Support is available at info@bitty.io and is informational only: we will never ask for your recovery phrase or private key, and we do not give support through SMS, WhatsApp, Telegram or other direct messages. Anyone who does is not us."
+        "text": "We may change, suspend or discontinue any part of the Services at any time (section 10). Support is available at info@bitty.io and is informational only: we will never ask for your seed phrase or private key, and we do not give support through SMS, WhatsApp, Telegram or other direct messages. Anyone who does is not us."
       }
     ]
   },
@@ -64,7 +64,7 @@ export const TERMS: TermsSection[] = [
     "blocks": [
       {
         "type": "p",
-        "text": "Bitty is a developer of software. We never hold your digital assets, your private keys or your recovery phrase, and we cannot move, freeze, recover or reverse anything in your vault."
+        "text": "Bitty is a developer of software. We never hold your digital assets, your private keys or your seed phrase, and we cannot move, freeze, recover or reverse anything in your vault."
       },
       {
         "type": "ul",
@@ -115,7 +115,7 @@ export const TERMS: TermsSection[] = [
     ]
   },
   {
-    "title": "5. Your keys, recovery phrase and security",
+    "title": "5. Your keys, seed phrase and security",
     "blocks": [
       {
         "type": "p",
@@ -124,7 +124,7 @@ export const TERMS: TermsSection[] = [
       {
         "type": "ul",
         "items": [
-          "**Recovery phrase.** The apps create or import a 12- or 24-word recovery phrase on your device. It is the only backup of your keys and every vault they own. Anyone who learns it can take everything in those vaults. If you lose it and your device, no one, including us, can restore access.",
+          "**Seed phrase.** The apps create or import a 12- or 24-word seed phrase on your device. It is the only backup of your keys and every vault they own. Anyone who learns it can take everything in those vaults. If you lose it and your device, no one, including us, can restore access.",
           "**We never see it.** The phrase and keys stay on your device, protected by its secure storage and biometrics. We do not store, transmit or recover them.",
           "**Keep it offline.** Write it down and store it safely. Keeping it in a photo, a note, email or cloud storage greatly increases the risk of theft.",
           "**Several owners from one phrase.** Each additional vault you create uses another key derived from the same phrase. The phrase restores them all; names you give vaults and address-book entries are kept only on your device.",
@@ -134,7 +134,7 @@ export const TERMS: TermsSection[] = [
       },
       {
         "type": "p",
-        "text": "We will never ask for your recovery phrase or private key. If you suspect your key is compromised, lock your vault (section 6) and move your assets to a new owner."
+        "text": "We will never ask for your seed phrase or private key. If you suspect your key is compromised, lock your vault (section 6) and move your assets to a new owner."
       }
     ]
   },
@@ -302,7 +302,7 @@ export const TERMS: TermsSection[] = [
       },
       {
         "type": "p",
-        "text": "Without limiting the above, the Bitty Parties are not liable for: loss of your recovery phrase or keys; transactions you or anyone with your keys signed; the operation of your vault's controls as configured; third-party services; network fees or failed transactions; or anything outside our reasonable control."
+        "text": "Without limiting the above, the Bitty Parties are not liable for: loss of your seed phrase or keys; transactions you or anyone with your keys signed; the operation of your vault's controls as configured; third-party services; network fees or failed transactions; or anything outside our reasonable control."
       },
       {
         "type": "p",

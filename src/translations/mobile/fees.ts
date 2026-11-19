@@ -25,7 +25,7 @@ export const fees: MobileTable = {
     gas_high_fund_owner: 'Or send ETH to your owner wallet and pay it from there.',
     relayer_unfunded: 'Bitty\'s relayer is short of ETH to send transactions on this network right now, so nothing was sent and your vault was not charged. Please try again a little later.',
     owner_off_quantum: "New key after signing is on: the vault moves to a new key after every operation, and none of them holds ETH, so network fees are always paid from the vault.",
-    owner_off_safe: 'This vault is owned by a Safe, which can\'t send transactions of its own, so network fees are always paid from the vault.',
+    owner_off_safe: 'This vault is owned by a multisig, which can\'t send transactions of its own, so network fees are always paid from the vault.',
   },
   zh: {
     activation_fee: '激活 {{fee}}',
@@ -47,7 +47,7 @@ export const fees: MobileTable = {
     gas_high_fund_owner: '或向所有者钱包转入 ETH，由它支付。',
     relayer_unfunded: 'Bitty 的中继器目前在该网络上没有足够的 ETH 发送交易，因此未发送任何交易，你的金库也未被扣费。请稍后再试。',
     owner_off_quantum: "已开启签名后换新密钥：每次操作后金库都会换到新密钥，这些密钥都不持有 ETH，所以网络费始终从金库支付。",
-    owner_off_safe: '此金库由 Safe 持有，Safe 无法自行发送交易，所以网络费始终从金库支付。',
+    owner_off_safe: '此金库由多签持有，多签无法自行发送交易，所以网络费始终从金库支付。',
   },
   'zh-TW': {
     activation_fee: '啟用 {{fee}}',
@@ -69,7 +69,7 @@ export const fees: MobileTable = {
     gas_high_fund_owner: '或向擁有者錢包轉入 ETH，由它支付。',
     relayer_unfunded: 'Bitty 的中繼器目前在此網路上沒有足夠的 ETH 發送交易，因此未發送任何交易，你的金庫也未被扣費。請稍後再試。',
     owner_off_quantum: "已開啟簽名後換新金鑰：每次操作後金庫都會換到新金鑰，這些金鑰都不持有 ETH，所以網路費始終從金庫支付。",
-    owner_off_safe: '此金庫由 Safe 持有，Safe 無法自行發送交易，所以網路費始終從金庫支付。',
+    owner_off_safe: '此金庫由多簽持有，多簽無法自行發送交易，所以網路費始終從金庫支付。',
   },
   ja: {
     activation_fee: '有効化 {{fee}}',
@@ -91,7 +91,7 @@ export const fees: MobileTable = {
     gas_high_fund_owner: 'または、オーナーウォレットに ETH を送り、そこから支払ってください。',
     relayer_unfunded: '現在 Bitty のリレーヤーはこのネットワークでトランザクションを送る ETH が不足しているため、何も送信されず、ボールトにも請求されていません。しばらくしてからもう一度お試しください。',
     owner_off_quantum: "署名後に新しいキーがオンです。操作のたびにボールトは新しいキーに移り、どのキーも ETH を持たないため、ネットワーク手数料は常にボールトから支払われます。",
-    owner_off_safe: 'このボールトは Safe が所有しています。Safe は自分でトランザクションを送れないため、ネットワーク手数料は常にボールトから支払われます。',
+    owner_off_safe: 'このボールトはマルチシグが所有しています。マルチシグは自分でトランザクションを送れないため、ネットワーク手数料は常にボールトから支払われます。',
   },
   ko: {
     activation_fee: '활성화 {{fee}}',
@@ -113,7 +113,7 @@ export const fees: MobileTable = {
     gas_high_fund_owner: '또는 소유자 지갑에 ETH를 보내 그곳에서 지불하세요.',
     relayer_unfunded: '지금 Bitty 릴레이어가 이 네트워크에서 트랜잭션을 보낼 ETH가 부족해 아무것도 전송되지 않았고 볼트에도 요금이 청구되지 않았습니다. 잠시 후 다시 시도하세요.',
     owner_off_quantum: "서명 후 새 키가 켜져 있습니다. 볼트는 작업할 때마다 새 키로 옮겨지고 어떤 키도 ETH를 보유하지 않으므로 네트워크 수수료는 항상 볼트에서 지불됩니다.",
-    owner_off_safe: '이 볼트는 Safe가 소유하고 있습니다. Safe는 직접 트랜잭션을 보낼 수 없으므로 네트워크 수수료는 항상 볼트에서 지불됩니다.',
+    owner_off_safe: '이 볼트는 멀티시그가 소유하고 있습니다. 멀티시그는 직접 트랜잭션을 보낼 수 없으므로 네트워크 수수료는 항상 볼트에서 지불됩니다.',
   },
   fr: {
     activation_fee: 'Activation {{fee}}',
@@ -136,7 +136,7 @@ export const fees: MobileTable = {
     gas_high_fund_owner: 'Ou envoyez de l’ETH à votre portefeuille propriétaire et payez depuis celui-ci.',
     relayer_unfunded: 'Le relais de Bitty manque d’ETH pour envoyer des transactions sur ce réseau en ce moment : rien n’a été envoyé et votre coffre n’a pas été débité. Réessayez un peu plus tard.',
     owner_off_quantum: "Nouvelle clé après signature est activé : le coffre passe à une nouvelle clé après chaque opération, et aucune ne détient d’ETH, donc les frais de réseau sont toujours payés par le coffre.",
-    owner_off_safe: 'Ce coffre appartient à un Safe, qui ne peut pas envoyer de transactions lui-même, donc les frais de réseau sont toujours payés par le coffre.',
+    owner_off_safe: 'Ce coffre appartient à un multisig, qui ne peut pas envoyer de transactions lui-même, donc les frais de réseau sont toujours payés par le coffre.',
   },
   es: {
     activation_fee: 'Activación {{fee}}',
@@ -159,7 +159,7 @@ export const fees: MobileTable = {
     gas_high_fund_owner: 'O envía ETH a tu billetera propietaria y paga desde ella.',
     relayer_unfunded: 'El relayer de Bitty no tiene ETH suficiente para enviar transacciones en esta red ahora mismo, así que no se envió nada y no se cobró a tu bóveda. Vuelve a intentarlo en un rato.',
     owner_off_quantum: "Clave nueva tras firmar está activado: la bóveda pasa a una clave nueva tras cada operación y ninguna tiene ETH, así que las comisiones de red siempre se pagan desde la bóveda.",
-    owner_off_safe: 'Esta bóveda pertenece a una Safe, que no puede enviar transacciones por sí misma, así que las comisiones de red siempre se pagan desde la bóveda.',
+    owner_off_safe: 'Esta bóveda pertenece a un multifirma, que no puede enviar transacciones por sí mismo, así que las comisiones de red siempre se pagan desde la bóveda.',
   },
   de: {
     activation_fee: 'Aktivierung {{fee}}',
@@ -182,7 +182,7 @@ export const fees: MobileTable = {
     gas_high_fund_owner: 'Oder sende ETH an deine Owner-Wallet und zahle von dort.',
     relayer_unfunded: 'Bittys Relayer hat gerade nicht genug ETH, um auf diesem Netzwerk Transaktionen zu senden. Es wurde nichts gesendet und deinem Tresor nichts berechnet. Versuche es bitte etwas später erneut.',
     owner_off_quantum: "Neuer Schlüssel nach dem Signieren ist aktiv: Der Tresor wechselt nach jeder Aktion zu einem neuen Schlüssel, und keiner davon hält ETH, daher werden Netzwerkgebühren immer aus dem Tresor bezahlt.",
-    owner_off_safe: 'Dieser Tresor gehört einem Safe, der keine eigenen Transaktionen senden kann, daher werden Netzwerkgebühren immer aus dem Tresor bezahlt.',
+    owner_off_safe: 'Dieser Tresor gehört einem Multisig, das keine eigenen Transaktionen senden kann, daher werden Netzwerkgebühren immer aus dem Tresor bezahlt.',
   },
   'pt-BR': {
     activation_fee: 'Ativação {{fee}}',
@@ -205,7 +205,7 @@ export const fees: MobileTable = {
     gas_high_fund_owner: 'Ou envie ETH para sua carteira do proprietário e pague por ela.',
     relayer_unfunded: 'O relayer da Bitty está sem ETH suficiente para enviar transações nesta rede agora, então nada foi enviado e seu cofre não foi cobrado. Tente novamente daqui a pouco.',
     owner_off_quantum: "Nova chave após assinar está ativado: o cofre passa para uma nova chave a cada operação, e nenhuma delas tem ETH, então as taxas de rede são sempre pagas pelo cofre.",
-    owner_off_safe: 'Este cofre pertence a um Safe, que não envia transações próprias, então as taxas de rede são sempre pagas pelo cofre.',
+    owner_off_safe: 'Este cofre pertence a um multisig, que não envia transações próprias, então as taxas de rede são sempre pagas pelo cofre.',
   },
   hi: {
     activation_fee: 'सक्रियण {{fee}}',
@@ -227,7 +227,7 @@ export const fees: MobileTable = {
     gas_high_fund_owner: 'या अपने ओनर वॉलेट में ETH भेजें और वहीं से भुगतान करें।',
     relayer_unfunded: 'Bitty के रिलेयर के पास अभी इस नेटवर्क पर लेनदेन भेजने के लिए पर्याप्त ETH नहीं है, इसलिए कुछ नहीं भेजा गया और आपके वॉल्ट से कोई शुल्क नहीं लिया गया। कृपया थोड़ी देर बाद फिर कोशिश करें।',
     owner_off_quantum: "साइन के बाद नई कुंजी चालू है: हर ऑपरेशन के बाद वॉल्ट नई कुंजी पर चला जाता है और किसी भी कुंजी में ETH नहीं होता, इसलिए नेटवर्क शुल्क हमेशा वॉल्ट से चुकाया जाता है।",
-    owner_off_safe: 'यह वॉल्ट एक Safe के स्वामित्व में है, जो खुद लेनदेन नहीं भेज सकता, इसलिए नेटवर्क शुल्क हमेशा वॉल्ट से चुकाया जाता है।',
+    owner_off_safe: 'यह वॉल्ट एक मल्टीसिग के स्वामित्व में है, जो खुद लेनदेन नहीं भेज सकता, इसलिए नेटवर्क शुल्क हमेशा वॉल्ट से चुकाया जाता है।',
   },
   tr: {
     activation_fee: 'Etkinleştirme {{fee}}',
@@ -249,7 +249,7 @@ export const fees: MobileTable = {
     gas_high_fund_owner: 'Ya da sahip cüzdanınıza ETH gönderip oradan ödeyin.',
     relayer_unfunded: 'Bitty\'nin aktarıcısında şu anda bu ağda işlem gönderecek kadar ETH yok; hiçbir şey gönderilmedi ve kasanızdan ücret alınmadı. Lütfen biraz sonra tekrar deneyin.',
     owner_off_quantum: "İmzadan sonra yeni anahtar açık: kasa her işlemden sonra yeni bir anahtara geçer ve hiçbiri ETH tutmaz, bu yüzden ağ ücretleri her zaman kasadan ödenir.",
-    owner_off_safe: 'Bu kasa bir Safe\'e ait; Safe kendi işlemlerini gönderemez, bu yüzden ağ ücretleri her zaman kasadan ödenir.',
+    owner_off_safe: 'Bu kasa bir çoklu imzaya ait; çoklu imza kendi işlemlerini gönderemez, bu yüzden ağ ücretleri her zaman kasadan ödenir.',
   },
   ru: {
     activation_fee: 'Активация {{fee}}',
@@ -271,7 +271,7 @@ export const fees: MobileTable = {
     gas_high_fund_owner: 'Или отправьте ETH на кошелёк владельца и оплатите с него.',
     relayer_unfunded: 'Сейчас у ретранслятора Bitty не хватает ETH для отправки транзакций в этой сети, поэтому ничего не отправлено и с хранилища ничего не списано. Попробуйте немного позже.',
     owner_off_quantum: "Новый ключ после подписи включён: после каждой операции хранилище переходит на новый ключ, и ни на одном из них нет ETH, поэтому сетевые комиссии всегда оплачиваются из хранилища.",
-    owner_off_safe: 'Это хранилище принадлежит Safe, который не может сам отправлять транзакции, поэтому сетевые комиссии всегда оплачиваются из хранилища.',
+    owner_off_safe: 'Это хранилище принадлежит мультисигу, который не может сам отправлять транзакции, поэтому сетевые комиссии всегда оплачиваются из хранилища.',
   },
   id: {
     activation_fee: 'Aktivasi {{fee}}',
@@ -293,7 +293,7 @@ export const fees: MobileTable = {
     gas_high_fund_owner: 'Atau kirim ETH ke dompet pemilik dan bayar dari sana.',
     relayer_unfunded: 'Relayer Bitty sedang kekurangan ETH untuk mengirim transaksi di jaringan ini, jadi tidak ada yang dikirim dan brankas Anda tidak dikenai biaya. Coba lagi sebentar lagi.',
     owner_off_quantum: "Kunci baru setelah tanda tangan aktif: brankas pindah ke kunci baru setiap operasi, dan tidak ada yang memegang ETH, jadi biaya jaringan selalu dibayar dari brankas.",
-    owner_off_safe: 'Brankas ini dimiliki Safe, yang tidak bisa mengirim transaksi sendiri, jadi biaya jaringan selalu dibayar dari brankas.',
+    owner_off_safe: 'Brankas ini dimiliki multisig, yang tidak bisa mengirim transaksi sendiri, jadi biaya jaringan selalu dibayar dari brankas.',
   },
   vi: {
     activation_fee: 'Kích hoạt {{fee}}',
@@ -315,7 +315,7 @@ export const fees: MobileTable = {
     gas_high_fund_owner: 'Hoặc gửi ETH vào ví chủ sở hữu và trả từ đó.',
     relayer_unfunded: 'Relayer của Bitty hiện không đủ ETH để gửi giao dịch trên mạng này, nên chưa có gì được gửi và kho của bạn không bị tính phí. Vui lòng thử lại sau ít phút.',
     owner_off_quantum: "Khóa mới sau khi ký đang bật: sau mỗi thao tác kho chuyển sang khóa mới và không khóa nào giữ ETH, nên phí mạng luôn được trả từ kho.",
-    owner_off_safe: 'Kho này thuộc sở hữu của một Safe, vốn không tự gửi giao dịch, nên phí mạng luôn được trả từ kho.',
+    owner_off_safe: 'Kho này thuộc sở hữu của một ví đa chữ ký, vốn không tự gửi giao dịch, nên phí mạng luôn được trả từ kho.',
   },
   th: {
     activation_fee: 'เปิดใช้งาน {{fee}}',
@@ -337,6 +337,6 @@ export const fees: MobileTable = {
     gas_high_fund_owner: 'หรือส่ง ETH ไปยังกระเป๋าเจ้าของแล้วจ่ายจากที่นั่น',
     relayer_unfunded: 'ตอนนี้รีเลย์ของ Bitty มี ETH ไม่พอสำหรับส่งธุรกรรมบนเครือข่ายนี้ จึงยังไม่มีการส่งอะไรและไม่มีการเรียกเก็บเงินจากห้องนิรภัย โปรดลองอีกครั้งในอีกสักครู่',
     owner_off_quantum: "เปิดคีย์ใหม่หลังลงนามอยู่: ห้องนิรภัยจะย้ายไปใช้คีย์ใหม่ทุกครั้งที่ทำรายการ และไม่มีคีย์ใดถือ ETH ค่าธรรมเนียมเครือข่ายจึงจ่ายจากห้องนิรภัยเสมอ",
-    owner_off_safe: 'ห้องนิรภัยนี้เป็นของ Safe ซึ่งส่งธุรกรรมเองไม่ได้ ค่าธรรมเนียมเครือข่ายจึงจ่ายจากห้องนิรภัยเสมอ',
+    owner_off_safe: 'ห้องนิรภัยนี้เป็นของมัลติซิก ซึ่งส่งธุรกรรมเองไม่ได้ ค่าธรรมเนียมเครือข่ายจึงจ่ายจากห้องนิรภัยเสมอ',
   },
 };

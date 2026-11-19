@@ -6,7 +6,7 @@ type T = (key: string) => string;
 /**
  * When saving or opening the key failed because no Face ID / fingerprint can protect it, say so and
  * offer the way there; returns whether it was that. Without it every such failure was reported by
- * whatever the caller's generic title was. On restore, that title was "Invalid recovery phrase", for
+ * whatever the caller's generic title was. On restore, that title was "Invalid seed phrase", for
  * twelve words that were perfectly valid.
  *
  * iOS: Bitty's own page in Settings, which holds its "Face ID" switch and leads on to Face ID &

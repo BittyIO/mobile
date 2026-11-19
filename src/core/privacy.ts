@@ -36,7 +36,7 @@ export const PRIVACY: TermsSection[] = [
         {
           "type": "ul",
           "items": [
-            "your recovery phrase or private keys;",
+            "your seed phrase or private keys;",
             "your device passcode, Face ID or other biometric data (the device checks them; we only learn that a signature was made);",
             "your name, email, phone number or identity documents, unless you choose to email us;",
             "your payment card or bank details — the Services take no fiat payments."
@@ -44,7 +44,7 @@ export const PRIVACY: TermsSection[] = [
         },
         {
           "type": "p",
-          "text": "We will never ask for your recovery phrase or private key. Anyone who does is not us."
+          "text": "We will never ask for your seed phrase or private key. Anyone who does is not us."
         }
       ]
     },
@@ -58,7 +58,7 @@ export const PRIVACY: TermsSection[] = [
         {
           "type": "ul",
           "items": [
-            "your recovery phrase and keys, in the device's secure storage behind its biometrics;",
+            "your seed phrase and keys, in the device's secure storage behind its biometrics;",
             "names you give your vaults and whitelisted addresses;",
             "tokens you add by contract address, your watch lists, and display settings such as language, currency and theme;",
             "a custom blockchain node (RPC) you set, if any."
@@ -66,7 +66,7 @@ export const PRIVACY: TermsSection[] = [
         },
         {
           "type": "p",
-          "text": "They are lost if you delete the app or lose the device, except what the recovery phrase restores (your keys and vaults). On the website, similar preferences are kept in your browser's local storage."
+          "text": "They are lost if you delete the app or lose the device, except what the seed phrase restores (your keys and vaults). On the website, similar preferences are kept in your browser's local storage."
         }
       ]
     },
@@ -186,7 +186,7 @@ export const PRIVACY: TermsSection[] = [
         },
         {
           "type": "p",
-          "text": "No system is perfectly secure. If a breach affects your personal data, we will notify you and the authorities where the law requires. Keeping your device and recovery phrase safe is up to you (section 5 of the Terms)."
+          "text": "No system is perfectly secure. If a breach affects your personal data, we will notify you and the authorities where the law requires. Keeping your device and seed phrase safe is up to you (section 5 of the Terms)."
         }
       ]
     },

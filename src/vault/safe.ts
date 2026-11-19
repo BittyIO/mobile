@@ -110,6 +110,16 @@ export function definitionOf(status: SafeMessageStatus): TypedDataDefinition {
   return {...status.typedData, types} as unknown as TypedDataDefinition;
 }
 
+/** File `typedData` for `safe`'s owners to sign, with one owner's signature. Proposing it again adds to it. */
+export async function proposeSafeMessage(network: Network, safe: Address, typedData: TypedDataDefinition, signature: Hex): Promise<SafeMessageStatus> {
+  return (await api<{status: SafeMessageStatus}>(network, 'POST', `/api/ethereum/safe/${safe}/messages`, {typedData: typedDataJson(typedData), signature})).status;
+}
+
+/** Add one owner's signature to a filed message. The API checks it recovers to a current owner. */
+export async function addSafeSignature(network: Network, hash: Hex, signature: Hex): Promise<SafeMessageStatus> {
+  return (await api<{status: SafeMessageStatus}>(network, 'POST', `/api/ethereum/safe/messages/${hash}/signatures`, {signature})).status;
+}
+
 /**
  * Add this device's signature to a pending message. The API checks it recovers to a current owner.
  */

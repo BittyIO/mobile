@@ -105,6 +105,11 @@ type State = {
    * in front; one already listed for that key is just put in front. Returns its index.
    */
   addImported: (key: `0x${string}`) => number;
+  /**
+   * Take every vault an imported key signs for off the list (the key is being deleted): the vault it
+   * owns, ones it received, Safe vaults it is the co-owner for. The last one stays.
+   */
+  removeKey: (key: `0x${string}`) => void;
   /** Take every vault of `phrase` off the list (the phrase is being deleted). The last one stays. */
   removePhrase: (phrase: string) => void;
   /**
@@ -201,6 +206,16 @@ export const useVaults = create<State>((set, get) => ({
     store.set(ACTIVE, index);
     set({vaults, activeIndex: index});
     return index;
+  },
+
+  removeKey: (key) => {
+    const signs = (v: VaultRef) => !!v.imported && (v.signer ?? v.owner)?.toLowerCase() === key.toLowerCase();
+    const vaults = get().vaults.filter((v) => !signs(v));
+    if (vaults.length === 0) return;
+    store.set(KEY, JSON.stringify(vaults));
+    const activeIndex = vaults.some((v) => v.index === get().activeIndex) ? get().activeIndex : vaults[0].index;
+    store.set(ACTIVE, activeIndex);
+    set({vaults, activeIndex});
   },
 
   removePhrase: (phrase) => {

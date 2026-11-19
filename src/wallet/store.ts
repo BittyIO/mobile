@@ -71,6 +71,8 @@ interface WalletState {
   addPhrase: (mnemonic: string) => Promise<{id: string; existing: boolean}>;
   /** Keep a private key on this phone behind Face ID and put the vault it owns in front. */
   importKey: (key: `0x${string}`) => Promise<void>;
+  /** Delete an imported private key from this phone, with every vault it signs for on the list. */
+  removeKey: (address: `0x${string}`) => Promise<void>;
   /**
    * Delete a recovery phrase from this phone, with every vault of it on the list. The last phrase
    * takes the wallet with it (back to onboarding). Nothing changes on chain.
@@ -257,10 +259,23 @@ export const useWallet = create<WalletState>((set) => ({
     useWallet.getState().selectVault(useVaults.getState().addImported(address));
   },
 
+  removeKey: async (address) => {
+    const signs = (v: VaultRef) => !!v.imported && (v.signer ?? v.owner)?.toLowerCase() === address.toLowerCase();
+    // Nothing else left on the phone: the wallet goes with it, as deleting the last phrase does.
+    if (!useVaults.getState().vaults.some((v) => !signs(v))) {
+      await useWallet.getState().wipe();
+      return;
+    }
+    useVaults.getState().removeKey(address);
+    await keyring.removeImportedKey(address);
+    useWallet.getState().selectVault(useVaults.getState().activeIndex);
+  },
+
   removePhrase: async (id) => {
-    const others = keyring.listPhrases().filter((p) => p.id !== id);
+    // Whatever else still holds a vault — another phrase, an imported key — stays; with nothing
+    // left, the wallet goes.
     const keeps = useVaults.getState().vaults.some((v) => v.imported || phraseOf(v) !== id);
-    if (others.length === 0 || !keeps) {
+    if (!keeps) {
       await useWallet.getState().wipe();
       return;
     }
