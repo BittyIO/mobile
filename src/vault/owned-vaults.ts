@@ -12,7 +12,7 @@
 import {useEffect, useState} from 'react';
 import {getAddress, parseAbi, type Address, type Hex} from 'viem';
 import {apiFetch, apiUrl, publicClientFor, type Network} from '@/core/chain';
-import {keyIndexOf, phraseOf, type VaultRef} from '@/core/vault-store';
+import {IMPORTED_SECTION, keyIndexOf, phraseOf, type VaultRef} from '@/core/vault-store';
 import {isKeyOf, keyPathOf} from '@/wallet/rotation-store';
 import {vaultAddressOf} from '@/core/active-vault';
 import {vaultGuard} from '@/core/vault-contracts';
@@ -94,13 +94,19 @@ export async function vaultOwnerOf(network: Network, vault: Address): Promise<Ad
   }
 }
 
-/** One of this device's keys: its BIP-44 index on its recovery phrase, and address. */
+/** One of this device's keys: its BIP-44 index on its recovery phrase (`phrase` 'imported' for an imported private key, index 0), and address. */
 export type DeviceKey = {index: number; address: Address; phrase: string};
 
 /** Every key the list knows of — each created vault's owner, and each Safe or received vault's signer. */
 export function deviceKeys(vaults: VaultRef[]): DeviceKey[] {
   const out = new Map<string, DeviceKey>();
   for (const v of vaults) {
+    // An imported private key: no phrase and no index; it signs by its address alone.
+    if (v.imported && !v.safe) {
+      const key = v.signer ?? v.owner;
+      if (key) out.set(key.toLowerCase(), {index: 0, address: key, phrase: IMPORTED_SECTION});
+      continue;
+    }
     if (!v.safe && !v.vault && v.owner) out.set(v.owner.toLowerCase(), {index: keyIndexOf(v), address: v.owner, phrase: phraseOf(v)});
     if ((v.safe || v.vault) && v.signer && v.signerIndex !== undefined) out.set(v.signer.toLowerCase(), {index: v.signerIndex, address: v.signer, phrase: phraseOf(v)});
   }
