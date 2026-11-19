@@ -6,14 +6,12 @@ import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
 
-import {SAFE_ENABLED} from '@/core/features';
 
 import {useLanguage, LANGUAGES, languageLabel} from '@/core/language-store';
 import {useCurrency, useDisplayCurrency, CURRENCIES, currencyLabel, type Currency} from '@/core/currency-store';
 import Svg, {Circle, Path, Rect} from 'react-native-svg';
 import {useAppearance, APPEARANCES, useColors, useStyles, type Colors} from '@/theme';
 import {SettingsRow as Row, makeSettingsStyles} from '@/components/SettingsRow';
-import {useVaults} from '@/core/vault-store';
 import {APP_VERSION} from '@/core/app-version';
 import {fetchUpdateInfo, isNewer, promptUpdate} from '@/core/app-update';
 import {LegalSheet} from '@/components/LegalSheet';
@@ -62,7 +60,6 @@ export function SettingsScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const {t} = useT();
   const {language, setLanguage} = useLanguage();
-  const isSafeVault = useVaults((st) => !!st.vaults.find((v) => v.index === st.activeIndex)?.safe);
   const headerHeight = useTransparentHeaderInset();
   const tabBarHeight = useBottomTabBarHeight();
   const styles = useStyles(makeStyles);
@@ -116,10 +113,6 @@ export function SettingsScreen() {
       automaticallyAdjustContentInsets={false}>
       {/* The vault's own settings. */}
       <View style={styles.group}>
-        {/* Only for a vault owned by a Safe: where its owners co-sign what one of them started. */}
-        {SAFE_ENABLED && isSafeVault ? (
-          <Row icon="security" title={t('mobile.safe.approvals')} sub={t('mobile.safe.approvals_sub')} onPress={() => nav.navigate('SafeApprovals')} />
-        ) : null}
         {/* One row for the whole subject: which coins a fee may be billed to, and the float
             that is never spent. They were two rows opening two sheets, and each left the
             other's question hanging. */}

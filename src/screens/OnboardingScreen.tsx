@@ -37,14 +37,14 @@ function randomPositions(): number[] {
 
 /**
  * First-run onboarding: create a wallet (the generated phrase is stored only after the user confirms
- * three words), or restore one from its recovery phrase.
+ * three words), or restore one from its seed phrase.
  *
  * Restore is not optional. The phrase lives in the Keychain, which iOS deletes with the app, so
  * without it a user who reinstalled could never reach their vault again — the phrase they were
  * made to write down had nowhere to go.
  *
  * With `add`, the same two flows add ANOTHER phrase to a phone that already has one (Security ›
- * Recovery phrases): it starts on the chosen flow, Back from there leaves, and the phrase is kept
+ * Seed phrases): it starts on the chosen flow, Back from there leaves, and the phrase is kept
  * beside the others, with its first vault put in front.
  */
 export function OnboardingScreen({add}: {add?: {mode: 'create' | 'import'; onDone: () => void}} = {}) {
@@ -94,7 +94,7 @@ export function OnboardingScreen({add}: {add?: {mode: 'create' | 'import'; onDon
     if (reveal.screenshotCount > 0 && (step === 'reveal' || step === 'confirm')) {
       Alert.alert(
         'Screenshot detected',
-        'Anything in Photos can sync to the cloud and be stolen. Write your recovery phrase on paper instead, then delete the screenshot.',
+        'Anything in Photos can sync to the cloud and be stolen. Write your seed phrase on paper instead, then delete the screenshot.',
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -143,7 +143,7 @@ export function OnboardingScreen({add}: {add?: {mode: 'create' | 'import'; onDon
       // phrase: most often there is no Face ID to keep it behind. Only a phrase error says "invalid".
       if (alertIfBiometricsRequired(e, t)) return;
       const msg = String((e as Error)?.message ?? e);
-      Alert.alert(msg === 'Invalid recovery phrase' ? t('mobile.payments.onboarding_invalid_phrase') : t('vault.failed'), msg);
+      Alert.alert(msg === 'Invalid seed phrase' ? t('mobile.payments.onboarding_invalid_phrase') : t('vault.failed'), msg);
     } finally {
       setBusy(false);
     }
@@ -182,7 +182,7 @@ export function OnboardingScreen({add}: {add?: {mode: 'create' | 'import'; onDon
             {phraseHidden ? (
               <View style={styles.grid}>
                 <Text style={styles.fine}>
-                  Your recovery phrase is hidden while the screen is being recorded or mirrored. Stop
+                  Your seed phrase is hidden while the screen is being recorded or mirrored. Stop
                   the recording to enter it.
                 </Text>
               </View>
@@ -205,7 +205,7 @@ export function OnboardingScreen({add}: {add?: {mode: 'create' | 'import'; onDon
             {phraseHidden ? (
               <View style={styles.grid}>
                 <Text style={styles.fine}>
-                  Your recovery phrase is hidden while the screen is being recorded or mirrored. Stop
+                  Your seed phrase is hidden while the screen is being recorded or mirrored. Stop
                   the recording to reveal it.
                 </Text>
               </View>
@@ -235,7 +235,7 @@ export function OnboardingScreen({add}: {add?: {mode: 'create' | 'import'; onDon
             {phraseHidden ? (
               <View style={styles.grid}>
                 <Text style={styles.fine}>
-                  Your recovery phrase is hidden while the screen is being recorded or mirrored. Stop
+                  Your seed phrase is hidden while the screen is being recorded or mirrored. Stop
                   the recording to confirm it.
                 </Text>
               </View>

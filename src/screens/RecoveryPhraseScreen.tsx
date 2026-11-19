@@ -176,7 +176,8 @@ export function RecoveryPhraseScreen() {
    * throw a phrase away. The last phrase takes the wallet with it, and the app starts over.
    */
   const onDelete = () => {
-    const last = listPhrases().length <= 1;
+    // Nothing else on the phone holds a vault: the wallet goes with it.
+    const last = !useVaults.getState().vaults.some((v) => v.imported || phraseOf(v) !== id);
     Alert.alert(
       t('mobile.phrases.delete_title', {name: title}),
       last ? t('mobile.phrases.delete_last_body') : t('mobile.phrases.delete_body', {count: vaultCount}),

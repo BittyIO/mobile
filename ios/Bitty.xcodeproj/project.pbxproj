@@ -11,9 +11,9 @@
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		6A2739686A9034485FC0A6C5 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5737DAED570BAFD67C16DE8D /* InfoPlist.strings */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
+		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		B1771E0A2F00000000000002 /* DeviceSecurity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1771E0A2F00000000000001 /* DeviceSecurity.swift */; };
 		B1771E0A2F00000000000004 /* DeviceSecurity.m in Sources */ = {isa = PBXBuildFile; fileRef = B1771E0A2F00000000000003 /* DeviceSecurity.m */; };
-		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		CAFF055F79865E33F181B05F /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
@@ -34,11 +34,11 @@
 		6405F4F795E7C85D92538FCA /* zh-Hant */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = "zh-Hant"; path = "Bitty/zh-Hant.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
 		6A865EE67B287B9317B4C0E5 /* ko */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = ko; path = Bitty/ko.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Bitty/AppDelegate.swift; sourceTree = "<group>"; };
-		B1771E0A2F00000000000001 /* DeviceSecurity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DeviceSecurity.swift; path = Bitty/DeviceSecurity.swift; sourceTree = "<group>"; };
-		B1771E0A2F00000000000003 /* DeviceSecurity.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = DeviceSecurity.m; path = Bitty/DeviceSecurity.m; sourceTree = "<group>"; };
 		813F422E1D38B6252E7BCD3F /* zh-Hans */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "Bitty/zh-Hans.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = Bitty/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		A13544C67EE10350B79041FE /* vi */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = vi; path = Bitty/vi.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		B1771E0A2F00000000000001 /* DeviceSecurity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DeviceSecurity.swift; path = Bitty/DeviceSecurity.swift; sourceTree = "<group>"; };
+		B1771E0A2F00000000000003 /* DeviceSecurity.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = DeviceSecurity.m; path = Bitty/DeviceSecurity.m; sourceTree = "<group>"; };
 		DD5887E37F4B6592FC5053AC /* th */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = th; path = Bitty/th.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		DEA1E578122F415B65A883A1 /* de */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = de; path = Bitty/de.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		E7FD9C084ECF40ACF71E1B05 /* pt-BR */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = "pt-BR"; path = "Bitty/pt-BR.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
@@ -229,9 +229,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Bitty/Pods-Bitty-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Bitty/Pods-Bitty-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -268,9 +272,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Bitty/Pods-Bitty-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Bitty/Pods-Bitty-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -325,7 +333,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = V73V784TR6;
+				DEVELOPMENT_TEAM = 89J6R3Z5VD;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Bitty/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Bitty Vault";
@@ -356,7 +364,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = V73V784TR6;
+				DEVELOPMENT_TEAM = 89J6R3Z5VD;
 				INFOPLIST_FILE = Bitty/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Bitty Vault";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";

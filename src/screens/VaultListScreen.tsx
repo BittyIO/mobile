@@ -1,12 +1,11 @@
 import React, {useEffect, useLayoutEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, View} from 'react-native';
-import {useNavigation} from '@react-navigation/native';
+import {useIsFocused, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
 import Svg, {Path} from 'react-native-svg';
 import type {Address} from 'viem';
-import {SAFE_ENABLED} from '@/core/features';
-import {IMPORTED_SECTION, nextAccountOf, nextNumberOf, phraseOf, sectionOf, useVaults, vaultLabel, type VaultRef} from '@/core/vault-store';
+import {IMPORTED_SECTION, nextAccountOf, nextNumberOf, phraseOf, useVaults, vaultLabel, type VaultRef} from '@/core/vault-store';
 import {vaultAddressOf} from '@/core/active-vault';
 import {ownerVaultAddress} from '@/vault/read';
 import {NETWORKS, useNetwork} from '@/core/network-store';
@@ -48,8 +47,9 @@ import {useColors, useStyles, type Colors, MONO} from '@/theme';
 const SHOW_OWNERS = 'vaults.showOwners';
 /** The section for vaults signed for by a private key imported on its own, outside every phrase. */
 const IMPORTED = IMPORTED_SECTION;
+/** The section multisig (Safe) vaults are listed in, after Imported private keys, whoever signs for them. */
+const MULTISIG = 'multisig';
 const SHOW_TRANSFERRED = 'vaults.showTransferred';
-const SHOW_SAFE = 'vaults.showSafe';
 
 /**
  * The Vaults page's header-right: a ⋯ like the Trade screen's, opening how the list is shown (see
@@ -98,18 +98,6 @@ export function VaultListScreen() {
     setShowTransferred(on);
     setPref(SHOW_TRANSFERRED, on ? '1' : '0');
   };
-  // Safe vaults, and adding one: hidden unless asked for (the ⋯ menu). Until it has been set, on for
-  // a phone that already lists a Safe vault, so none it has goes missing.
-  // Never while Safe vaults are switched off app-wide (see SAFE_ENABLED).
-  const [showSafe, setShowSafe] = useState(() => {
-    if (!SAFE_ENABLED) return false;
-    const p = getPref(SHOW_SAFE);
-    return p == null ? vaults.some((v) => v.safe) : p === '1';
-  });
-  const toggleSafe = (on: boolean) => {
-    setShowSafe(on);
-    setPref(SHOW_SAFE, on ? '1' : '0');
-  };
   const [menuOpen, setMenuOpen] = useState(false);
   useLayoutEffect(() => {
     nav.setOptions({headerRight: () => <VaultsMenuButton onPress={() => setMenuOpen(true)} />});
@@ -123,7 +111,11 @@ export function VaultListScreen() {
    */
   const ownerOf = (v: VaultRef): string => (v.safe ?? v.owner)?.toLowerCase() ?? `index:${v.index}`;
   // The recovery phrases on this phone, in their order; vaults are listed under each when there is more than one.
-  const phrases = useMemo(() => keyring.listPhrases(), [vaults]);
+  // Read again on coming back to the page as well: a phrase deleted (or added) with no vaults of its
+  // own changes no vault, and its section would otherwise stay, empty, until something else did.
+  const focused = useIsFocused();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const phrases = useMemo(() => keyring.listPhrases(), [vaults, focused]);
   const phraseRank = (id: string) => {
     const i = phrases.findIndex((p) => p.id === id);
     return i < 0 ? phrases.length : i;
@@ -140,13 +132,13 @@ export function VaultListScreen() {
     for (const v of vaults)
       if (!v.safe && !v.vault && !v.owner) keys.push({key: `index:${v.index}`, address: null, keyIndex: v.account ?? v.index, safe: false, phrase: phraseOf(v)});
     const safes = vaults
-      .filter((v) => v.safe && showSafe)
-      .map((v) => ({key: v.safe!.toLowerCase(), address: v.safe!, keyIndex: v.signerIndex ?? 0, safe: true, phrase: sectionOf(v)}));
+      .filter((v) => v.safe)
+      .map((v) => ({key: v.safe!.toLowerCase(), address: v.safe!, keyIndex: v.signerIndex ?? 0, safe: true, phrase: MULTISIG}));
     return [...keys, ...safes.filter((s) => !keys.some((k) => k.key === s.key))].sort((a, b) =>
       a.phrase !== b.phrase ? phraseRank(a.phrase) - phraseRank(b.phrase) : a.safe === b.safe ? a.keyIndex - b.keyIndex : a.safe ? 1 : -1,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vaults, showSafe, phrases]);
+  }, [vaults, phrases]);
   const label = (n: number) => t('mobile.app.vault_n', {n});
   const {notYours, transferredTo} = useVaultDirectory(network, vaults, refresh);
 
@@ -478,6 +470,8 @@ export function VaultListScreen() {
       ? [{id: IMPORTED, label: t('mobile.phrases.imported_keys'), groups: groups.filter((g) => g.owner.phrase === IMPORTED)}]
       : []),
   ];
+  // Last: every multisig vault, under the multisig's address, whichever key signs for it.
+  const multisig = groups.filter((g) => g.owner.phrase === MULTISIG);
 
   return (
     <ScrollView
@@ -504,13 +498,23 @@ export function VaultListScreen() {
       {sections.length > 1 ? (
         sections.map((sec) => (
           <View key={sec.id} style={styles.section}>
-            <Text style={styles.groupLabel}>{sec.label}</Text>
+            {/* The header opens what it names: the phrase's page (reveal, rename, delete), or the
+                list of imported keys (copy, delete). */}
+            <Pressable
+              hitSlop={4}
+              style={({pressed}) => [styles.sectionHead, pressed && styles.pressed]}
+              onPress={() => (sec.id === IMPORTED ? nav.navigate('RecoveryPhrases') : nav.navigate('VaultRecoveryPhrase', {phrase: sec.id}))}
+              accessibilityRole="button">
+              <Text style={[styles.groupLabel, styles.sectionLabel]}>{sec.label}</Text>
+              <Text style={styles.sectionChev}>›</Text>
+            </Pressable>
             {renderGroups(sec.groups, sec.id === IMPORTED ? null : sec.id)}
           </View>
         ))
       ) : (
         <>
-          {renderGroups(groups, null)}
+          {/* Multisig vaults are not the phrase's: they have their own section below. */}
+          {renderGroups(groups.filter((g) => g.owner.phrase !== MULTISIG), null)}
           <SettingsGroup>
             <Pressable style={styles.row} onPress={() => onAdd(sections[0]?.id ?? keyring.MAIN_PHRASE)} disabled={busy}>
               <Text style={styles.link}>{`＋ ${t('mobile.settings.add_vault')}`}</Text>
@@ -519,11 +523,29 @@ export function VaultListScreen() {
           </SettingsGroup>
         </>
       )}
-      {/* A key imported on its own lists its vault under Imported private keys. Creating,
-          importing, naming and deleting recovery phrases has its own page. */}
+      {multisig.length > 0 ? (
+        <View style={styles.section}>
+          {/* Opens the multisig page: choosing one, approvals, taking one off the phone. */}
+          <Pressable
+            hitSlop={4}
+            style={({pressed}) => [styles.sectionHead, pressed && styles.pressed]}
+            onPress={() => nav.navigate('SafeVaults')}
+            accessibilityRole="button">
+            <Text style={[styles.groupLabel, styles.sectionLabel]}>{t('mobile.safemode.section')}</Text>
+            <Text style={styles.sectionChev}>›</Text>
+          </Pressable>
+          {renderGroups(multisig, null)}
+        </View>
+      ) : null}
+      {/* A key imported on its own lists its vault under Imported private keys, a multisig its vault
+          under Multisig vaults. Creating, importing, naming and deleting recovery phrases has its own page. */}
       <SettingsGroup>
         <Pressable style={[styles.row, styles.rowDivider]} onPress={() => nav.navigate('ImportPrivateKey')}>
           <Text style={styles.link}>{t('mobile.phrases.import_key')}</Text>
+          <Text style={styles.chev}>›</Text>
+        </Pressable>
+        <Pressable style={[styles.row, styles.rowDivider]} onPress={() => nav.navigate('AddSafeVault')}>
+          <Text style={styles.link}>{t('mobile.safemode.import')}</Text>
           <Text style={styles.chev}>›</Text>
         </Pressable>
         <Pressable style={styles.row} onPress={() => nav.navigate('RecoveryPhrases')}>
@@ -531,16 +553,6 @@ export function VaultListScreen() {
           <Text style={styles.chev}>›</Text>
         </Pressable>
       </SettingsGroup>
-      {/* Its own group and its own page: a Safe vault is signed for by a key imported for it, which
-          is a different thing to set up from the phrase's next vault. */}
-      {showSafe ? (
-        <SettingsGroup footer={t('mobile.safe.add_safe_footer')}>
-          <Pressable style={styles.row} onPress={() => nav.navigate('AddSafeVault')} disabled={busy}>
-            <Text style={styles.link}>{`＋ ${t('mobile.safe.add_safe_vault')}`}</Text>
-            <Text style={styles.chev}>›</Text>
-          </Pressable>
-        </SettingsGroup>
-      ) : null}
       <Sheet visible={menuOpen} title={t('mobile.settings.choose_vault')} onClose={() => setMenuOpen(false)}>
         <View style={styles.menuCard}>
           <View style={[styles.menuRow, styles.rowDivider]}>
@@ -548,16 +560,22 @@ export function VaultListScreen() {
             <Switch value={showOwners} onValueChange={toggleOwners} />
           </View>
           {/* Vaults given away stay on the phone's list; they are shown only when asked for. */}
-          <View style={[styles.menuRow, SAFE_ENABLED && styles.rowDivider]}>
+          <View style={[styles.menuRow, styles.rowDivider]}>
             <Text style={styles.menuLabel}>{t('mobile.vaults.show_transferred')}</Text>
             <Switch value={showTransferred} onValueChange={toggleTransferred} />
           </View>
-          {SAFE_ENABLED ? (
-            <View style={styles.menuRow}>
-              <Text style={styles.menuLabel}>{t('mobile.vaults.show_safe')}</Text>
-              <Switch value={showSafe} onValueChange={toggleSafe} />
-            </View>
-          ) : null}
+          {/* Last: the Safe vaults' own page — adding one (the owner's key, the Safe's address),
+              choosing one, taking one off the phone. */}
+          <Pressable
+            style={({pressed}) => [styles.menuRow, pressed && styles.pressed]}
+            onPress={() => {
+              setMenuOpen(false);
+              nav.navigate('SafeVaults');
+            }}
+            accessibilityRole="button">
+            <Text style={styles.menuLabel}>{t('mobile.safemode.menu')}</Text>
+            <Text style={styles.chev}>›</Text>
+          </Pressable>
         </View>
       </Sheet>
       {sheet}
@@ -594,5 +612,8 @@ const makeStyles = (c: Colors) =>
     checkHidden: {opacity: 0},
     link: {color: c.accent, fontSize: 15, fontWeight: '600'},
     ownersStack: {gap: 16},
+    sectionHead: {flexDirection: 'row', alignItems: 'center', marginTop: 8, marginBottom: 6, paddingRight: 16},
+    sectionLabel: {flexShrink: 1, marginTop: 0, marginBottom: 0},
+    sectionChev: {color: c.subtext, fontSize: 18, fontWeight: '300', marginLeft: 4},
     addTop: {borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border},
   });

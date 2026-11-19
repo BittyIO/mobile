@@ -182,6 +182,9 @@ export type RootStackParamList = {
   /** Settings › Vaults: every vault on this phone, and the ones its keys own that are not yet. */
   VaultList: undefined;
   AddSafeVault: undefined;
+  /** Choose vault › ⋯ › Safe multi-sig: the Safe vaults on this phone, and adding one. */
+  SafeVaults: undefined;
+  ManageMultisig: {safe: `0x${string}`; payer?: `0x${string}`};
   VaultLockAction: {action: 'emergency' | 'unlock' | 'forever'};
   /** Overview › Pending: changes the vault has queued and not applied yet. */
   PendingChanges: undefined;
@@ -190,7 +193,6 @@ export type RootStackParamList = {
   /** Security › Quantum-safe keys: a fresh key after every operation (see wallet/rotation). */
   QuantumSafe: undefined;
   /** For a vault owned by a Safe: what is waiting for the Safe's owners to sign. */
-  SafeApprovals: undefined;
   /** One recovery phrase: reveal and verify it, rename or delete it. Absent `phrase` is the main one. */
   VaultRecoveryPhrase: {phrase?: string} | undefined;
   /** Security › Recovery phrases: every phrase on the phone, and adding one. */
@@ -199,6 +201,8 @@ export type RootStackParamList = {
   AddRecoveryPhrase: {mode: 'create' | 'import'};
   /** Import a private key: its vault goes under Imported private keys. */
   ImportPrivateKey: undefined;
+  /** Show one owner key: a phrase's account (`phrase`, `account`) or an imported key (`imported`). */
+  ExportPrivateKey: {address: `0x${string}`; phrase?: string; account?: number; imported?: `0x${string}`};
   VaultAssetManager: undefined;
   VaultSetAssetManager: undefined;
 };
@@ -631,6 +635,8 @@ function Root() {
         />
         <Stack.Screen name="VaultList" getComponent={() => require('@/screens/VaultListScreen').VaultListScreen} options={{title: t('mobile.settings.choose_vault')}} />
         <Stack.Screen name="AddSafeVault" getComponent={() => require('@/screens/AddSafeVaultScreen').AddSafeVaultScreen} options={{title: t('mobile.safe.add_safe_title')}} />
+        <Stack.Screen name="SafeVaults" getComponent={() => require('@/screens/SafeVaultsScreen').SafeVaultsScreen} options={{title: t('mobile.safemode.menu')}} />
+        <Stack.Screen name="ManageMultisig" getComponent={() => require('@/screens/ManageMultisigScreen').ManageMultisigScreen} options={{title: t('mobile.safemode.owners_row')}} />
         <Stack.Screen name="VaultLock" getComponent={() => require('@/screens/VaultLockScreen').VaultLockScreen} options={{title: t('mobile.vault.vault_lock')}} />
         <Stack.Screen
           name="VaultLockAction"
@@ -648,7 +654,6 @@ function Root() {
         <Stack.Screen name="PendingChanges" getComponent={() => require('@/screens/PendingChangesScreen').PendingChangesScreen} options={{title: t('mobile.vault.timelock_page_title')}} />
         <Stack.Screen name="VaultOwnership" getComponent={() => require('@/screens/OwnershipScreen').OwnershipScreen} options={{title: t('mobile.vault.ownership')}} />
         <Stack.Screen name="QuantumSafe" getComponent={() => require('@/screens/QuantumSafeScreen').QuantumSafeScreen} options={{title: t('mobile.quantum.title')}} />
-        <Stack.Screen name="SafeApprovals" getComponent={() => require('@/screens/SafeApprovalsScreen').SafeApprovalsScreen} options={{title: t('mobile.safe.approvals')}} />
         <Stack.Screen name="VaultAssetManager" getComponent={() => require('@/screens/AssetManagerScreen').AssetManagerScreen} options={{title: t('mobile.vault.delegation')}} />
         <Stack.Screen
           name="VaultSetAssetManager"
@@ -658,6 +663,7 @@ function Root() {
         <Stack.Screen name="VaultRecoveryPhrase" getComponent={() => require('@/screens/RecoveryPhraseScreen').RecoveryPhraseScreen} options={{title: t('mobile.settings.recovery_phrase')}} />
         <Stack.Screen name="RecoveryPhrases" getComponent={() => require('@/screens/RecoveryPhrasesScreen').RecoveryPhrasesScreen} options={{title: t('mobile.phrases.title')}} />
         <Stack.Screen name="AddRecoveryPhrase" getComponent={() => require('@/screens/AddRecoveryPhraseScreen').AddRecoveryPhraseScreen} options={{title: t('mobile.phrases.add_title')}} />
+        <Stack.Screen name="ExportPrivateKey" getComponent={() => require('@/screens/ExportPrivateKeyScreen').ExportPrivateKeyScreen} options={{title: t('mobile.phrases.show_key')}} />
         <Stack.Screen name="ImportPrivateKey" getComponent={() => require('@/screens/ImportPrivateKeyScreen').ImportPrivateKeyScreen} options={{title: t('mobile.phrases.import_key')}} />
       </Stack.Navigator>
     </NavigationContainer>

@@ -1,6 +1,6 @@
 /**
  * Embedded keyring — the vault owner's key lives ON THIS DEVICE, in the iOS Keychain / Android Keystore
- * behind biometrics (Face ID / fingerprint) — always; there is no other lock and no way to turn it off. The app IS the wallet: it creates a BIP-39 recovery phrase, derives
+ * behind biometrics (Face ID / fingerprint) — always; there is no other lock and no way to turn it off. The app IS the wallet: it creates a BIP-39 seed phrase, derives
  * the account with viem, and signs every vault action locally. The mnemonic is never in JS-readable
  * storage and never leaves the device.
  *
@@ -31,7 +31,7 @@ const tr = (key: string, params?: Record<string, string | number>) => translate(
 const SERVICE = 'io.bitty.vault.mnemonic';
 
 /**
- * More than one recovery phrase on a phone.
+ * More than one seed phrase on a phone.
  *
  * The phrase this phone has always had is {MAIN_PHRASE}, at {SERVICE} as before, so nothing about an
  * existing wallet moves. Each phrase added after it sits in its own Keychain item, behind the same
@@ -82,7 +82,7 @@ export function renamePhrase(id: string, name: string): void {
   savePhrases(listPhrases().map((p) => (p.id === id ? {...p, name: name.trim()} : p)));
 }
 
-/** A phrase's label: what the user named it, or "Recovery phrase {n}" by its place in the list. */
+/** A phrase's label: what the user named it, or "Seed phrase {n}" by its place in the list. */
 export function phraseLabel(p: PhraseInfo, fallback: (n: number) => string): string {
   return p.name || fallback(listPhrases().findIndex((x) => x.id === p.id) + 1);
 }
@@ -97,7 +97,7 @@ export const phraseWithFirst = (first: Address): PhraseInfo | undefined =>
  */
 export async function addPhrase(mnemonic: string): Promise<{id: string; account: HDAccount; existing: boolean}> {
   const normalized = normalize(mnemonic);
-  if (!validateMnemonic(normalized, wordlist)) throw new Error('Invalid recovery phrase');
+  if (!validateMnemonic(normalized, wordlist)) throw new Error('Invalid seed phrase');
   const account = mnemonicToAccount(normalized);
   const same = phraseWithFirst(account.address);
   if (same) return {id: same.id, account, existing: true};
@@ -128,7 +128,7 @@ const SECURE: Keychain.SetOptions = {
   service: SERVICE,
   // iOS: the faces enrolled NOW. Adding or resetting a face (or Alternate Appearance) makes this copy
   // unreadable for good — someone who knows the phone's passcode cannot enrol their own face and get
-  // in; the owner restores from the recovery phrase.
+  // in; the owner restores from the seed phrase.
   // Android already behaves so: its biometric-bound key is invalidated by a new enrolment.
   accessControl: Platform.OS === 'ios' ? Keychain.ACCESS_CONTROL.BIOMETRY_CURRENT_SET : Keychain.ACCESS_CONTROL.BIOMETRY_ANY,
   accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
@@ -151,7 +151,7 @@ export class BiometricsRequiredError extends Error {
  * `service.open`; under a password of the user's own, a sealed copy at `service.pw` (or at `service`
  * itself in the very first). Face ID is always on now and there is no password: a plain copy is moved
  * behind Face ID at launch, and a sealed one cannot be opened any more, so the phone is treated as
- * having no wallet and the user restores from the recovery phrase, which clears it.
+ * having no wallet and the user restores from the seed phrase, which clears it.
  */
 const unlockPrefs = new MMKV({id: 'bitty.unlock'});
 const legacyOpenService = (service: string) => `${service}.open`;
@@ -235,8 +235,9 @@ export async function hasWallet(): Promise<boolean> {
   // The very first password builds sealed it at the biometric name, in the no-auth store: no prompt to look.
   const sealedHere = bio && unlockPrefs.getString('method') === 'password' && (await Keychain.getGenericPassword({service: SERVICE}).then((c) => !!c && isLegacySealed(c.password)).catch(() => false));
   if (sealedHere) return false;
-  // Or only phrases added later, the main one having been deleted.
-  return bio || plain || savedPhrases().some((p) => p.id !== MAIN_PHRASE);
+  // Or only phrases added later, the main one having been deleted — or no phrase at all, just
+  // private keys imported on their own.
+  return bio || plain || savedPhrases().some((p) => p.id !== MAIN_PHRASE) || importedKeys().length > 0;
 }
 
 /** A fresh 12-word BIP-39 phrase. Show once, then persist after the backup check. Never log/transmit. */
@@ -253,7 +254,7 @@ export function generateNewMnemonic(): string {
  */
 export async function createWallet(mnemonic: string): Promise<HDAccount> {
   const normalized = normalize(mnemonic);
-  if (!validateMnemonic(normalized, wordlist)) throw new Error('Invalid recovery phrase');
+  if (!validateMnemonic(normalized, wordlist)) throw new Error('Invalid seed phrase');
   const account = mnemonicToAccount(normalized);
   await putBio(SERVICE, 'bitty', normalized);
   phraseList.delete(MAIN_GONE);
@@ -344,9 +345,26 @@ export async function addressesUpTo(count: number, phrase: string = MAIN_PHRASE)
   return Array.from({length: count}, (_, i) => mnemonicToAccount(m, {accountIndex: i}).address);
 }
 
-/** Reveal the raw recovery phrase (Face ID). Null if cancelled. */
+/**
+ * The private key of account `index` of `phrase` (m/44'/60'/index'/0/0), behind Face ID, for the
+ * owner to take elsewhere. Null if cancelled. Never logged or sent anywhere.
+ */
+export async function exportAccountKey(index: number, phrase: string = MAIN_PHRASE): Promise<`0x${string}` | null> {
+  const m = await readSecret('Show private key', phraseService(phrase));
+  if (!m) return null;
+  const key = HDKey.fromMasterSeed(mnemonicToSeedSync(m)).derive(`m/44'/60'/${index}'/0/0`).privateKey;
+  return key ? toHex(key) : null;
+}
+
+/** An imported private key, behind Face ID, for the owner to take elsewhere. Null if cancelled. */
+export async function exportImportedKey(address: Address): Promise<`0x${string}` | null> {
+  const key = await readSecret('Show private key', importedService(address));
+  return key ? (key as `0x${string}`) : null;
+}
+
+/** Reveal the raw seed phrase (Face ID). Null if cancelled. */
 export async function revealMnemonic(phrase: string = MAIN_PHRASE): Promise<string | null> {
-  return readSecret('Reveal your recovery phrase', phraseService(phrase));
+  return readSecret('Reveal your seed phrase', phraseService(phrase));
 }
 
 /**
@@ -390,6 +408,14 @@ export async function importPrivateKey(key: `0x${string}`): Promise<Address> {
   const list = importedKeys();
   if (!list.some((a) => a.toLowerCase() === address.toLowerCase())) imported.set(IMPORTED, JSON.stringify([...list, address]));
   return address;
+}
+
+/** Remove an imported key from this phone for good: its Keychain item and its entry. Nothing changes on chain. */
+export async function removeImportedKey(address: Address): Promise<void> {
+  const service = importedService(address);
+  await Keychain.resetGenericPassword({service}).catch(() => false);
+  await Keychain.resetGenericPassword({service: legacyOpenService(service)}).catch(() => false);
+  imported.set(IMPORTED, JSON.stringify(importedKeys().filter((a) => a.toLowerCase() !== address.toLowerCase())));
 }
 
 /** The imported key at `address`, behind Face ID. Null if cancelled, or if it is not on this phone. */

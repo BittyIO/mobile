@@ -30,7 +30,7 @@ export function LockScreen() {
         const proceed = await new Promise<boolean>((resolve) => {
           Alert.alert(
             'This device looks compromised',
-            'Bitty detected a jailbreak or debugger. On such a device your recovery phrase can be stolen when you unlock. Continue only if you trust this device.',
+            'Bitty detected a jailbreak or debugger. On such a device your seed phrase can be stolen when you unlock. Continue only if you trust this device.',
             [
               {text: 'Cancel', style: 'cancel', onPress: () => resolve(false)},
               {text: 'Continue anyway', style: 'destructive', onPress: () => resolve(true)},
