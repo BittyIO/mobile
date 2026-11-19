@@ -14,6 +14,7 @@ import {useWallet} from '@/wallet/store';
 import * as keyring from '@/wallet/keyring';
 import {deviceKeys, fetchOwnedVaults, useVaultDirectory, type FoundVault} from '@/vault/owned-vaults';
 import {acceptOwnership} from '@/vault/ownership';
+import {fetchSafe} from '@/vault/safe';
 import {relayGasFor} from '@/vault/fee-quote';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {useConfirmAction} from '@/components/ConfirmAction';
@@ -114,6 +115,35 @@ export function VaultListScreen() {
   // Read again on coming back to the page as well: a phrase deleted (or added) with no vaults of its
   // own changes no vault, and its section would otherwise stay, empty, until something else did.
   const focused = useIsFocused();
+  /**
+   * Each multisig's "signatures needed / owners", read from the Safe on this chain (its chain of
+   * record when not deployed here), so the row says 2/3 beside its tag. Read again on coming back:
+   * an owner or threshold change made on the multisig page shows at once.
+   */
+  const [quorum, setQuorum] = useState<Record<string, string>>({});
+  const safeKey = vaults.filter((v) => v.safe).map((v) => `${v.safe}:${v.network ?? ''}`).join(',');
+  useEffect(() => {
+    if (!focused) return;
+    let live = true;
+    for (const v of vaults) {
+      if (!v.safe) continue;
+      const safe = v.safe;
+      const tries = [network, ...(v.network && v.network !== network ? [v.network as Network] : [])];
+      (async () => {
+        for (const n of tries) {
+          try {
+            const info = await fetchSafe(n, safe);
+            if (live && info.owners.length) setQuorum((q) => ({...q, [safe.toLowerCase()]: `${info.threshold}/${info.owners.length}`}));
+            return;
+          } catch {}
+        }
+      })();
+    }
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [safeKey, network, focused]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const phrases = useMemo(() => keyring.listPhrases(), [vaults, focused]);
   const phraseRank = (id: string) => {
@@ -324,6 +354,7 @@ export function VaultListScreen() {
               </Svg>
             </Pressable>
             {tag ? <Text style={styles.tag}>{tag}</Text> : null}
+            {v.safe && quorum[v.safe.toLowerCase()] ? <Text style={styles.tag}>{quorum[v.safe.toLowerCase()]}</Text> : null}
             {/* The one in front, at the end of its name's line — the address below gets the
                 row's full width. */}
             {on ? <Text style={[styles.check, styles.checkEnd]}>✓</Text> : null}

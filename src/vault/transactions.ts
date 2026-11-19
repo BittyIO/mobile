@@ -124,12 +124,29 @@ export async function fetchTransactions(
   for (const op of map.values()) {
     op.bridgedFrom = arrivals.arrivals.get(op.txHash.toLowerCase());
     op.bridgedTo = arrivals.departures.get(op.txHash.toLowerCase());
+    if (!ownsCall(op)) op.actions = [];
   }
   // Newest first across both: the legless ones arrive as their own list.
   return order.map((h) => map.get(h)!).sort((a, b) => b.blockNum - a.blockNum);
 }
 
-type V1Trc20 = {transaction_id: string; block_timestamp: number; from: string; to: string; value: string; token_info?: {address?: string}};
+/** Calls that bring tokens in and send nothing out of the vault: a claim from a withdrawal queue. */
+const RECEIVE_ONLY_CALLS = new Set(['claimWithdrawal', 'claimWithdrawals']);
+
+/**
+ * Whether the decoded calls are this vault's own. The server decodes a transaction's calldata by
+ * hash alone, so a vault that was only PAID in someone else's transaction gets that transaction's
+ * calls too: the fee vault, paid a relay or adapter fee by every other vault's trade, deposit or
+ * supply, read as having made each of them. A vault's own call almost always moves something out
+ * of it (the relay fee at least, or the token it trades, deposits or burns); one that only received
+ * owns the calls only when they are a claim.
+ */
+function ownsCall(op: Operation): boolean {
+  if (op.legs.length === 0 || op.legs.some((l) => l.direction === 'out')) return true;
+  return op.actions.every((a) => RECEIVE_ONLY_CALLS.has(a.name));
+}
+
+type V1Trc20 ={transaction_id: string; block_timestamp: number; from: string; to: string; value: string; token_info?: {address?: string}};
 
 /**
  * The vault's history on Tron, which the Bitty server does not index: TronGrid's own index of the
