@@ -427,15 +427,17 @@ export function VaultListScreen() {
    * list. With `addTo`, that phrase's "＋ Add vault" ends the list.
    */
   const renderGroups = (gs: typeof groups, addTo: string | null) => {
+    // Run on under the vaults it divides from them; on its own card (with owners shown) it needs no divider.
     const add = addTo ? (
-      <Pressable key="add" style={[styles.row, gs.length > 0 && styles.addTop]} onPress={() => onAdd(addTo)} disabled={busy}>
+      <Pressable key="add" style={[styles.row, gs.length > 0 && !showOwners && styles.addTop]} onPress={() => onAdd(addTo)} disabled={busy}>
         <Text style={styles.link}>{`＋ ${t('mobile.settings.add_vault')}`}</Text>
         {busy ? <ActivityIndicator color={c.subtext} /> : null}
       </Pressable>
     ) : null;
     if (showOwners) {
+      // Spaced like the page's own groups: the Add card sat flush under the last owner's vaults.
       return (
-        <>
+        <View style={styles.ownersStack}>
           {gs.map((g) => {
             const o = g.owner;
             return (
@@ -451,7 +453,7 @@ export function VaultListScreen() {
             );
           })}
           {add ? <View style={styles.group}>{add}</View> : null}
-        </>
+        </View>
       );
     }
     const total = gs.reduce((n, g) => n + groupSize(g), 0);
@@ -591,5 +593,6 @@ const makeStyles = (c: Colors) =>
     pressed: {opacity: 0.6},
     checkHidden: {opacity: 0},
     link: {color: c.accent, fontSize: 15, fontWeight: '600'},
+    ownersStack: {gap: 16},
     addTop: {borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border},
   });
