@@ -15,6 +15,7 @@ import {finishSafeMessage} from '@/vault/safe-finish';
 import {ownerVaultAddress} from '@/vault/read';
 import {MMKV} from 'react-native-mmkv';
 import {describeOwnerChange} from '@/vault/safe-owners';
+import {describeActions} from '@/vault/tx-actions';
 import {safeDeviceKey} from '@/wallet/store';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors, MONO} from '@/theme';
@@ -65,11 +66,30 @@ function describeCall(network: Network, data: Hex, t: T): string[] {
     const {functionName, args = []} = decodeFunctionData({abi: KNOWN_CALLS, data});
     const a = args as readonly unknown[];
     if (functionName === 'multicall') return (a[0] as Hex[]).flatMap((d) => describeCall(network, d, t));
-    if (functionName === 'send') return [`${t('vault.send')} ${amount(network, String(a[1]), a[2])} → ${shortAddress(String(a[0]))}`];
-    const shown = a.map((x) =>
-      typeof x === 'string' && x.startsWith('0x') && x.length === 42 ? shortAddress(x) : JSON.stringify(x, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)),
-    );
-    return [`${functionName}(${shown.join(', ')})`];
+    const to = (x: unknown) => shortAddress(String(x));
+    switch (functionName) {
+      case 'send':
+        return [`${t('vault.send')} ${amount(network, String(a[1]), a[2])} → ${to(a[0])}`];
+      case 'sendToWhitelistedRecipient':
+        return [`${t('vault.send')} ${amount(network, String(a[1]), a[2])}`];
+      case 'batchSend':
+        return (a[0] as readonly string[]).map((r, i) => `${t('vault.send')} ${amount(network, String((a[1] as readonly string[])[i]), (a[2] as readonly bigint[])[i])} → ${to(r)}`);
+      case 'marketSell':
+        return [`${t('vault.market_trade')}: ${amount(network, String(a[1]), a[2])} → ≥ ${amount(network, String(a[3]), a[4])}`];
+      case 'marketBuy':
+        return [`${t('vault.market_trade')}: ≤ ${amount(network, String(a[1]), a[2])} → ${amount(network, String(a[3]), a[4])}`];
+    }
+    // Everything else as the history names it, from the same decoded call; the bare function name
+    // when the history has no words for it. Never the raw arguments: a path or calldata is a wall of hex.
+    const item = KNOWN_CALLS.find((f) => f.type === 'function' && f.name === functionName);
+    const named: Record<string, string | string[]> = {};
+    const flat = (x: unknown): string | string[] => (Array.isArray(x) ? x.map((y) => String(y)) : String(x));
+    (item && 'inputs' in item ? item.inputs : []).forEach((inp, i) => {
+      named[inp.name || `arg${i}`] = flat(a[i]);
+    });
+    const lines = describeActions([{name: functionName, args: named}], network, t, undefined);
+    const extra = functionName === 'deposit' || functionName === 'withdraw' ? [amount(network, String(a[1]), a[2])] : [];
+    return lines.length ? [...lines, ...extra] : [functionName];
   } catch {
     return [t('mobile.safe.unknown_call', {selector: data.slice(0, 10)})];
   }
