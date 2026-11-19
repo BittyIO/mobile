@@ -13,6 +13,7 @@
  * enough (see ./safe-finish). The API keeps the payload itself, so any owner can finish it from any
  * device; nothing about a pending request is kept on this phone.
  */
+import {markSoft} from '@/core/soft-errors';
 import {hashTypedData, type Address, type Hex, type LocalAccount, type TypedDataDefinition} from 'viem';
 import type {Signer} from '@/wallet/signer';
 import {apiUrl, CHAIN_ID, type Network} from '@/core/chain';
@@ -148,6 +149,7 @@ export class SafeSignaturePending extends Error {
         need: status.threshold,
       }),
     );
+    markSoft(this.message);
   }
 }
 

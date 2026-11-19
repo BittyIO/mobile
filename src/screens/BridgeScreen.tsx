@@ -1,6 +1,6 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View} from 'react-native';
-import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
@@ -16,7 +16,8 @@ import {Sheet} from '@/components/Sheet';
 import {ConfirmButton} from '@/components/Button';
 import {ClearBtn} from '@/components/ClearBtn';
 import {useConfirmAction} from '@/components/ConfirmAction';
-import {showTx} from '@/components/Toast';
+import {showToast, showTx} from '@/components/Toast';
+import Clipboard from '@react-native-clipboard/clipboard';
 import {FIT} from '@/core/text-scale';
 import {isTestnet, isTronNetwork, NATIVE, type Network} from '@/core/chain';
 import {networkLabel, useNetwork, useNetworks} from '@/core/network-store';
@@ -24,7 +25,7 @@ import {useAssetCatalog} from '@/core/asset-catalog';
 import {availableVaultUpgrade, plannedVaultUpgrade} from '@/vault/auto-upgrade';
 import {ProtocolChip} from '@/components/ProtocolIcon';
 import {useActiveVaultAddress} from '@/core/active-vault';
-import {displaySymbol, fmtNum} from '@/core/format';
+import {asShown, displaySymbol, fmtNum, shortAddress} from '@/core/format';
 import {useWallet} from '@/wallet/store';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {useVaultPositions} from '@/vault/useVaultPositions';
@@ -75,7 +76,8 @@ export function BridgeScreen() {
   const c = useColors();
   const styles = useStyles(makeStyles);
   const headerHeight = useTransparentHeaderInset();
-  const tabBarHeight = useBottomTabBarHeight();
+  // A pushed page now, not a tab: the home indicator is all there is to clear at the bottom.
+  const tabBarHeight = useSafeAreaInsets().bottom;
   const {height: screenHeight} = useWindowDimensions();
   const network = useNetwork((s) => s.network);
   const setNetwork = useNetwork((s) => s.setNetwork);
@@ -523,6 +525,8 @@ export function BridgeScreen() {
             <Text style={styles.cardTitle}>{t('mobile.bridge.from')}</Text>
             {/* Picked here or in the header's switcher: both are the app's network. */}
             <NetPill network={network} name={label(network)} onPress={() => setPicker('from')} styles={styles} />
+            {/* The vault it leaves, after its network. */}
+            {vault ? <VaultAddr address={vault} styles={styles} /> : null}
           </View>
           {/* Send's card: one line per source of the coin — its free balance, its yielding or
               lending position — each with its own amount, Max and clear. The pill picks the coin
@@ -582,6 +586,8 @@ export function BridgeScreen() {
           <View style={styles.cardHead}>
             <Text style={styles.cardTitle}>{t('mobile.bridge.to')}</Text>
             <NetPill network={to} name={to ? label(to) : t('mobile.bridge.choose_destination')} onPress={() => setPicker('to')} styles={styles} />
+            {/* The owner's vault there, where it arrives. */}
+            {to && recipient ? <VaultAddr address={recipient} styles={styles} /> : null}
             <View style={styles.spacer} />
             {quote?.fillSeconds ? (
               <Text {...FIT} style={styles.arrival}>
@@ -731,6 +737,23 @@ function Check({color}: {color: string}) {
   );
 }
 
+/** A vault's address after its network, shortened; a long press copies it in full. */
+function VaultAddr({address, styles}: {address: Address; styles: ReturnType<typeof makeStyles>}) {
+  const {t} = useT();
+  return (
+    <Pressable
+      hitSlop={6}
+      onLongPress={() => {
+        Clipboard.setString(asShown(address));
+        showToast('success', t('common.copied'), asShown(address), 1500);
+      }}>
+      <Text style={styles.vaultAddr} numberOfLines={1}>
+        {shortAddress(asShown(address))}
+      </Text>
+    </Pressable>
+  );
+}
+
 /** A card header's network: its icon and name in a pill, tapped to pick another. */
 function NetPill({network, name, onPress, styles}: {network: Network | null; name: string; onPress?: () => void; styles: ReturnType<typeof makeStyles>}) {
   // No onPress: shown, not chosen here, so no pill to tap.
@@ -817,6 +840,7 @@ const makeStyles = (c: Colors) =>
     // Earn's card header: the title, then what it is about, a hairline under it.
     cardHead: {flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},
     cardTitle: {color: c.subtext, fontSize: 13, fontWeight: '600'},
+    vaultAddr: {color: c.subtext, fontSize: 12, fontVariant: ['tabular-nums']},
     spacer: {flex: 1},
     arrival: {color: c.subtext, fontSize: 13, flexShrink: 1},
     arrivalValue: {color: c.text, fontWeight: '600'},

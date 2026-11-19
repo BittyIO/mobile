@@ -1,4 +1,5 @@
 import React, {useEffect, useRef} from 'react';
+import {softMessage} from '@/core/soft-errors';
 import {ActivityIndicator, Animated, Easing, PanResponder, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Svg, {Path} from 'react-native-svg';
@@ -110,7 +111,9 @@ export function showTx(
     },
     error: (detail?: string) => {
       stop();
-      useToasts.getState().update(id, {kind: 'error', detail});
+      // Signed and waiting for the multisig's other owners: done for now, not failed.
+      const soft = softMessage(detail);
+      useToasts.getState().update(id, soft ? {kind: 'success', detail: soft} : {kind: 'error', detail});
     },
     /**
      * Nothing was submitted after all — a precondition the handler only discovers once it is under

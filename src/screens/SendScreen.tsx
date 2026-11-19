@@ -1,6 +1,11 @@
 import {displayAddress, parseAddress} from '@/core/address';
 import React, {useEffect, useMemo, useState} from 'react';
-import {Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View} from 'react-native';
+import {Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View} from 'react-native';
+import {ScanButton} from '@/components/ScanIcon';
+import {QrScanner} from '@/components/QrScanner';
+import {fmtDuration} from '@/components/riskFormat';
+import {usePayeeAdding} from '@/vault/payees';
+import {softMessage} from '@/core/soft-errors';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {formatUnits, parseUnits, type Address} from 'viem';
 import {isPayableAddress} from '@/core/asset-catalog';
@@ -122,7 +127,11 @@ function AvatarIcon({color}: {color: string}) {
  * position withdraws exactly that amount from it and sends it; nothing is pulled from a position the
  * user did not choose. Sent as one gasless batch.
  */
-export function SendScreen() {
+/**
+ * `anyone`: Payees › Send to anyone — no payee chosen beforehand, so the address is typed (or
+ * scanned) here, with "Save to payees", off by default, to add it to the book with the payment.
+ */
+export function SendScreen({anyone = false}: {anyone?: boolean} = {}) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const c = useColors();
@@ -162,11 +171,14 @@ export function SendScreen() {
    * a second send the same day can still be refused; the vault's own message says why then.
    */
   const [allowance, setAllowance] = useState<number>(Number(RISK_BOUNDS.sendDailyAllowance.max));
+  // The wait before a saved payee is one, said under "Save to payees".
+  const [timelock, setTimelock] = useState<bigint | null>(null);
   useEffect(() => {
     if (!vault) return;
     let live = true;
     getRiskConfig(vault, network).then((r) => {
       if (live) setAllowance(Number(r.read ? r.sendDailyAllowance : RISK_BOUNDS.sendDailyAllowance.max));
+      if (live && r.read) setTimelock(r.timelock);
     });
     return () => {
       live = false;
@@ -305,6 +317,14 @@ export function SendScreen() {
   }, [defaultLines, linesTouched]);
 
   const patchR = (patch: Partial<Recipient>) => setRecipient((r) => ({...r, ...patch}));
+  // Send to anyone: the typed address, and the recipient it makes once it parses (none until then).
+  const [draft, setDraft] = useState('');
+  const [scanning, setScanning] = useState(false);
+  const addGate = useCapability('addWhitelistedRecipient');
+  const typeAddress = (v: string) => {
+    setDraft(v);
+    patchR({to: parseAddress(network, v) ?? '', label: undefined});
+  };
 
   // One transfer per funded line, plus one withdrawal for each distinct position the payment draws
   // on, so funding a line from Earn moves the fee line with it.
@@ -482,13 +502,21 @@ export function SendScreen() {
               pinFee,
             });
       tx.success(h);
+      // Saved as a payee with the payment: the Overview's "no payees" dot can go now.
+      if (recipient.needsWhitelist && vault) usePayeeAdding.getState().mark(vault);
       setStatus('done');
-      setRecipient({to: '', lines: defaultLines});
+      // The payee stays: it was chosen before this page, which has no picker of its own now.
+      setRecipient((r) => ({...r, needsWhitelist: false, lines: defaultLines}));
       setLinesTouched(false);
       custom.reload();
     } catch (e) {
       const msg = String((e as Error)?.message ?? e);
       tx.error(msg);
+      // Signed for a multisig and waiting for the other owners: not an error on this page either.
+      if (softMessage(msg)) {
+        setStatus('done');
+        return;
+      }
       setErr(msg);
       setStatus('error');
     }
@@ -499,13 +527,43 @@ export function SendScreen() {
       {/* The scroll view is the whole page, so a drag anywhere scrolls; the button holds the bottom. */}
       <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.scroll} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         {/* Grouped like Settings: who, then what, then a way to add more. */}
+        {anyone ? (
+          <SettingsGroup>
+            {/* Send to anyone: the address typed here, and whether to keep it as a payee. */}
+            <View style={styles.addrRow}>
+              <TextInput
+                style={[styles.addrInput, draft.length > 0 && !parseAddress(network, draft) && styles.addrErr]}
+                placeholder={t('mobile.vault.enter_address')}
+                placeholderTextColor={c.subtext}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoFocus
+                value={draft}
+                onChangeText={typeAddress}
+              />
+              <ScanButton onPress={() => setScanning(true)} />
+            </View>
+            <View style={styles.saveRow}>
+              <View style={styles.toLine}>
+                <Text style={styles.saveLabel}>{t('mobile.payments.save_to_payees')}</Text>
+                {timelock != null ? (
+                  <Text style={styles.toAddrMuted}>{`${t('mobile.payments.whitelist_wait')} ${fmtDuration(timelock, t)}`}</Text>
+                ) : null}
+              </View>
+              <Switch value={!!recipient.needsWhitelist && addGate.allowed} disabled={!addGate.allowed} onValueChange={(v) => patchR({needsWhitelist: v})} />
+            </View>
+          </SettingsGroup>
+        ) : (
         <SettingsGroup>
             {/* Chosen, not typed. The common case on this screen is paying somewhere the vault
                 has paid before, or one of the owner's own vaults, and both are lists the app
                 already holds; typing an address is the exception and lives inside the picker.
                 */}
+              {/* The payee was chosen on Payees before this page opened, so it is shown, not picked
+                  again. Only with none (nothing chosen) does the row still open the picker. */}
               <Pressable
-                style={({pressed}) => [styles.toField, pressed && styles.pressed]}
+                style={({pressed}) => [styles.toField, pressed && !recipient.to && styles.pressed]}
+                disabled={!!recipient.to}
                 onPress={() => nav.navigate('SelectRecipient')}
                 accessibilityRole="button"
                 accessibilityLabel={t('mobile.payments.select_recipient')}>
@@ -533,9 +591,10 @@ export function SendScreen() {
                     {t('mobile.payments.select_recipient')}
                   </Text>
                 )}
-                <Text style={styles.chev}>›</Text>
+                {recipient.to ? null : <Text style={styles.chev}>›</Text>}
               </Pressable>
         </SettingsGroup>
+        )}
         <SettingsGroup>
             {recipient.lines.map((l, k) => {
               const max = maxFor(l);
@@ -659,7 +718,16 @@ export function SendScreen() {
           />
         </ScrollView>
       </Sheet>
-
+      {anyone ? (
+        <QrScanner
+          visible={scanning}
+          onScan={(a) => {
+            setScanning(false);
+            typeAddress(displayAddress(network, a));
+          }}
+          onClose={() => setScanning(false)}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -670,6 +738,11 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   body: {flexGrow: 1, padding: 16, gap: 24, paddingBottom: 16},
   footer: {paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16},
   // The whole bar is the button: the mark, the chosen recipient, and a chevron.
+  addrRow: {flexDirection: 'row', alignItems: 'stretch', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},
+  addrInput: {flex: 1, minHeight: 56, color: c.text, paddingHorizontal: 16, paddingVertical: 14, fontSize: 15},
+  addrErr: {color: c.danger},
+  saveRow: {flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56, paddingVertical: 10, paddingHorizontal: 16},
+  saveLabel: {color: c.text, fontSize: 15, fontWeight: '600'},
   toField: {flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56, paddingVertical: 12, paddingHorizontal: 16},
   pressed: {opacity: 0.6},
   // Two lines where a vault has a name, one where the address is all there is.

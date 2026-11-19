@@ -1,4 +1,4 @@
-import {isTronNetwork, NETWORK_FEATURES, type Network} from '@/core/chain';
+import {NETWORK_FEATURES} from '@/core/chain';
 import React, {useEffect} from 'react';
 import {ActivityIndicator, Platform, StatusBar, StyleSheet, View} from 'react-native';
 import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -66,14 +66,17 @@ export type TabParamList = {
   Earn: undefined;
   /** The market directory. The pushed TradePair screen is where a pair is actually traded. */
   Market: TradeParams;
-  /** Moving an asset to the owner's vault on another network. */
-  Bridge: undefined;
   Settings: undefined;
 };
 
 export type RootStackParamList = {
   Main: undefined;
-  Payments: undefined;
+  /** Send. `anyone`: Payees › Send to anyone, where the address is typed on the page. */
+  Payments: {anyone?: boolean} | undefined;
+  /** Overview › Payees: the address book, to pay from (a tap opens Send) and add to. */
+  Payees: undefined;
+  /** Overview › Bridge: moving an asset to the owner's vault on another network. */
+  Bridge: undefined;
   SelectRecipient: undefined;
   NewRecipient: undefined;
   /** Security › Whitelisted addresses: the address book, to add to and remove from. */
@@ -266,17 +269,7 @@ function TradeTab() {
   return <TradeScreen />;
 }
 
-/** Bridge: the vault in front to the owner's vault on another network (see vault/bridge). */
-function BridgeTab() {
-  const {BridgeScreen} = require('@/screens/BridgeScreen');
-  return <BridgeScreen />;
-}
-
-/** Whether the Bridge tab is in the bar. Not on Tron Nile: Across does not serve it. */
-const hasBridge = (network: Network) => !isTronNetwork(network);
-
 function MainTabs() {
-  const network = useNetwork((s) => s.network);
   const {t} = useT();
   // Once a session reaches the vault: is a newer build out? See {useLaunchUpdateCheck}.
   useLaunchUpdateCheck(t);
@@ -368,8 +361,6 @@ function MainTabs() {
             nearest navigator that has it, and a tab called Trade once swallowed every push to the
             pair screen. The title is what the user reads; the name is what routing matches. */}
         <Tab.Screen name="Market" options={{title: t('mobile.app.trade')}} component={TradeTab} />
-      {/* Left out of the bar where there is nothing to bridge with (see {hasBridge}). */}
-      {hasBridge(network) ? <Tab.Screen name="Bridge" options={{title: t('mobile.bridge.tab')}} component={BridgeTab} /> : null}
       {/* Settings, label and route the same — which is also what `navigate` and the tab icon key
           off. It was labelled "Me" for a while, on the grounds that the tab holds the vault, the
           key on this device and the app's own preferences, and "Settings" named only the last of
@@ -456,6 +447,13 @@ function Root() {
         }}>
         <Stack.Screen name="Main" component={MainTabs} options={MAIN_NATIVE_BAR ? mainBarOptions() : {headerShown: false}} />
         <Stack.Screen name="Payments" getComponent={() => require('@/screens/PaymentsScreen').PaymentsScreen} options={{title: t('vault.send')}} />
+        <Stack.Screen
+          name="Payees"
+          getComponent={() => require('@/screens/SelectRecipientScreen').PayeesScreen}
+          options={{title: t('vault.send')}}
+        />
+        {/* Pushed from the Overview's Bridge action; it was a tab of its own. */}
+        <Stack.Screen name="Bridge" getComponent={() => require('@/screens/BridgeScreen').BridgeScreen} options={{title: t('mobile.bridge.tab')}} />
         <Stack.Screen
           name="SelectRecipient"
           getComponent={() => require('@/screens/SelectRecipientScreen').SelectRecipientScreen}
@@ -548,7 +546,7 @@ function Root() {
           // categories swipe horizontally and would fight it.
           options={{title: t('mobile.app.trade'), fullScreenGestureEnabled: true}}
         />
-        <Stack.Screen name="Transactions" getComponent={() => require('@/screens/TransactionsScreen').TransactionsScreen} options={{title: t('mobile.app.history')}} />
+        <Stack.Screen name="Transactions" getComponent={() => require('@/screens/TransactionsScreen').TransactionsScreen} options={{title: t('mobile.app.transactions')}} />
         {/* No title here: the screen sets its own from the page, and a placeholder would flash
             first. See {BrowserScreen}. */}
         <Stack.Screen name="Browser" getComponent={() => require('@/screens/BrowserScreen').BrowserScreen} options={{title: ''}} />
