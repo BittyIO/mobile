@@ -191,7 +191,12 @@ export type RootStackParamList = {
   QuantumSafe: undefined;
   /** For a vault owned by a Safe: what is waiting for the Safe's owners to sign. */
   SafeApprovals: undefined;
-  VaultRecoveryPhrase: undefined;
+  /** One recovery phrase: reveal and verify it, rename or delete it. Absent `phrase` is the main one. */
+  VaultRecoveryPhrase: {phrase?: string} | undefined;
+  /** Security › Recovery phrases: every phrase on the phone, and adding one. */
+  RecoveryPhrases: undefined;
+  /** Add a recovery phrase: a new one (its words, then the check) or one imported. */
+  AddRecoveryPhrase: {mode: 'create' | 'import'};
   VaultAssetManager: undefined;
   VaultSetAssetManager: undefined;
 };
@@ -649,6 +654,8 @@ function Root() {
           options={{title: t('mobile.vault.set_asset_manager')}}
         />
         <Stack.Screen name="VaultRecoveryPhrase" getComponent={() => require('@/screens/RecoveryPhraseScreen').RecoveryPhraseScreen} options={{title: t('mobile.settings.recovery_phrase')}} />
+        <Stack.Screen name="RecoveryPhrases" getComponent={() => require('@/screens/RecoveryPhrasesScreen').RecoveryPhrasesScreen} options={{title: t('mobile.phrases.title')}} />
+        <Stack.Screen name="AddRecoveryPhrase" getComponent={() => require('@/screens/AddRecoveryPhraseScreen').AddRecoveryPhraseScreen} options={{title: t('mobile.phrases.add_title')}} />
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -12,15 +12,18 @@ import {useVaults} from '@/core/vault-store';
  * {forgetPhraseVerified}), since a device holds one phrase at a time.
  */
 const PHRASE_KEY = 'wallet.phraseVerified';
+/** Each phrase is proven on its own: the main one at {PHRASE_KEY} as before, another by its id. */
+const keyFor = (phrase: string) => (phrase === 'main' ? PHRASE_KEY : `${PHRASE_KEY}.${phrase}`);
 /** Where the flag lived before: one per key address. Still read, so a backup proven then counts. */
 const legacyKeyOf = (address: string) => `wallet.phraseVerified:${address.toLowerCase()}`;
 
-export function isPhraseVerified(): boolean {
-  if (getPref(PHRASE_KEY) === '1') return true;
+export function isPhraseVerified(phrase = 'main'): boolean {
+  if (getPref(keyFor(phrase)) === '1') return true;
+  if (phrase !== 'main') return false;
   // Proven under the old per-key flag, for any vault of this phrase: carry it over once.
   const keys = useVaults
     .getState()
-    .vaults.filter((v) => !v.imported)
+    .vaults.filter((v) => !v.imported && !v.phrase)
     .flatMap((v) => (v.safe ? [v.signer] : [v.owner]))
     .filter((a): a is `0x${string}` => !!a);
   if (!keys.some((a) => getPref(legacyKeyOf(a)) === '1')) return false;
@@ -28,13 +31,13 @@ export function isPhraseVerified(): boolean {
   return true;
 }
 
-export function markPhraseVerified(): void {
-  setPref(PHRASE_KEY, '1');
+export function markPhraseVerified(phrase = 'main'): void {
+  setPref(keyFor(phrase), '1');
 }
 
-/** The wallet is gone: the next phrase on this device has not been proven. */
-export function forgetPhraseVerified(): void {
-  setPref(PHRASE_KEY, '');
+/** The phrase is gone (or the whole wallet, with no argument): the next one here has not been proven. */
+export function forgetPhraseVerified(phrase = 'main'): void {
+  setPref(keyFor(phrase), '');
 }
 
 function randomIndex(max: number): number {

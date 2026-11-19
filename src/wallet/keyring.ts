@@ -31,6 +31,95 @@ const tr = (key: string, params?: Record<string, string | number>) => translate(
 const SERVICE = 'io.bitty.vault.mnemonic';
 
 /**
+ * More than one recovery phrase on a phone.
+ *
+ * The phrase this phone has always had is {MAIN_PHRASE}, at {SERVICE} as before, so nothing about an
+ * existing wallet moves. Each phrase added after it sits in its own Keychain item, behind the same
+ * Face ID gate, at `SERVICE.<id>`; MMKV lists them with what is public about each — a name, and the
+ * address of its first account, which is how the same phrase is recognised if it is imported twice.
+ * Each phrase restores only its own vaults, so each has to be written down.
+ */
+export const MAIN_PHRASE = 'main';
+export type PhraseInfo = {id: string; name: string; /** Account 0's address: public, for recognising a phrase imported again. */ first: Address; added: number};
+const phraseList = new MMKV({id: 'bitty.phrases'});
+const PHRASES = 'phrases';
+/** Set when the main phrase has been deleted, so it is no longer listed for the wallets from before. */
+const MAIN_GONE = 'mainGone';
+const NO_ADDRESS = '0x0000000000000000000000000000000000000000' as Address;
+const phraseService = (id: string) => (id === MAIN_PHRASE ? SERVICE : `${SERVICE}.${id}`);
+const normalize = (m: string) => m.trim().toLowerCase().replace(/\s+/g, ' ');
+
+/**
+ * The phrases on this phone, the main one first. The main one is listed whether or not it was ever
+ * recorded here (every wallet from before had it), unless it has been deleted.
+ */
+function savedPhrases(): PhraseInfo[] {
+  try {
+    return JSON.parse(phraseList.getString(PHRASES) ?? '[]') as PhraseInfo[];
+  } catch {
+    return [];
+  }
+}
+export function listPhrases(): PhraseInfo[] {
+  const list = savedPhrases();
+  if (list.some((p) => p.id === MAIN_PHRASE) || phraseList.getBoolean(MAIN_GONE)) return list;
+  return [{id: MAIN_PHRASE, name: '', first: NO_ADDRESS, added: 0}, ...list];
+}
+const savePhrases = (list: PhraseInfo[]) => phraseList.set(PHRASES, JSON.stringify(list));
+
+/** Record the main phrase in the list, the first time it is seen (an existing wallet, or the first created). */
+export function recordMainPhrase(first: Address): void {
+  const list = savedPhrases();
+  if (phraseList.getBoolean(MAIN_GONE)) return;
+  const main = list.find((p) => p.id === MAIN_PHRASE);
+  if (main && main.first !== NO_ADDRESS) return;
+  // Saved by a rename before its address was known: fill the address in.
+  if (main) return savePhrases(list.map((p) => (p.id === MAIN_PHRASE ? {...p, first} : p)));
+  savePhrases([{id: MAIN_PHRASE, name: '', first, added: 0}, ...list]);
+}
+
+export function renamePhrase(id: string, name: string): void {
+  savePhrases(listPhrases().map((p) => (p.id === id ? {...p, name: name.trim()} : p)));
+}
+
+/** A phrase's label: what the user named it, or "Recovery phrase {n}" by its place in the list. */
+export function phraseLabel(p: PhraseInfo, fallback: (n: number) => string): string {
+  return p.name || fallback(listPhrases().findIndex((x) => x.id === p.id) + 1);
+}
+
+/** The phrase whose first account is `first`, if one on this phone is. */
+export const phraseWithFirst = (first: Address): PhraseInfo | undefined =>
+  listPhrases().find((p) => p.first.toLowerCase() === first.toLowerCase());
+
+/**
+ * Keep another phrase on this phone, behind Face ID. Validated like {createWallet}. A phrase already
+ * here is not stored twice: its id comes back with `existing`.
+ */
+export async function addPhrase(mnemonic: string): Promise<{id: string; account: HDAccount; existing: boolean}> {
+  const normalized = normalize(mnemonic);
+  if (!validateMnemonic(normalized, wordlist)) throw new Error('Invalid recovery phrase');
+  const account = mnemonicToAccount(normalized);
+  const same = phraseWithFirst(account.address);
+  if (same) return {id: same.id, account, existing: true};
+  const bytes = new Uint8Array(6);
+  globalThis.crypto.getRandomValues(bytes);
+  const id = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  await putBio(phraseService(id), 'bitty', normalized);
+  savePhrases([...savedPhrases(), {id, name: '', first: account.address, added: Date.now()}]);
+  return {id, account, existing: false};
+}
+
+/** Remove a phrase from this phone for good: its Keychain item and its entry. Nothing changes on chain. */
+export async function removePhrase(id: string): Promise<void> {
+  await Keychain.resetGenericPassword({service: phraseService(id)}).catch(() => false);
+  if (id === MAIN_PHRASE) {
+    await Keychain.resetGenericPassword({service: legacyOpenService(SERVICE)}).catch(() => false);
+    phraseList.set(MAIN_GONE, true);
+  }
+  savePhrases(savedPhrases().filter((p) => p.id !== id));
+}
+
+/**
  * Options that gate the stored secret behind Face ID / fingerprint ONLY and keep it on this device.
  * Not "or device passcode": the phone's passcode is not the wallet's. Android's prompt is
  * biometric-only whatever this says.
@@ -69,7 +158,7 @@ const legacyOpenService = (service: string) => `${service}.open`;
 const legacyPwService = (service: string) => `${service}.pw`;
 /** A secret an earlier build sealed under the user's password (`bitty-pw1:` + its JSON envelope). */
 const isLegacySealed = (stored: string) => stored.startsWith('bitty-pw1:');
-const allServices = () => [SERVICE, ...importedKeys().map(importedService)];
+const allServices = () => [SERVICE, ...savedPhrases().filter((p) => p.id !== MAIN_PHRASE).map((p) => phraseService(p.id)), ...importedKeys().map(importedService)];
 
 /** The biometric copy of `secret`. */
 async function putBio(service: string, username: string, secret: string): Promise<void> {
@@ -146,7 +235,8 @@ export async function hasWallet(): Promise<boolean> {
   // The very first password builds sealed it at the biometric name, in the no-auth store: no prompt to look.
   const sealedHere = bio && unlockPrefs.getString('method') === 'password' && (await Keychain.getGenericPassword({service: SERVICE}).then((c) => !!c && isLegacySealed(c.password)).catch(() => false));
   if (sealedHere) return false;
-  return bio || plain;
+  // Or only phrases added later, the main one having been deleted.
+  return bio || plain || savedPhrases().some((p) => p.id !== MAIN_PHRASE);
 }
 
 /** A fresh 12-word BIP-39 phrase. Show once, then persist after the backup check. Never log/transmit. */
@@ -162,10 +252,13 @@ export function generateNewMnemonic(): string {
  * so the user saw their vault gone instead of being told the phrase was wrong.
  */
 export async function createWallet(mnemonic: string): Promise<HDAccount> {
-  const normalized = mnemonic.trim().toLowerCase().replace(/\s+/g, ' ');
+  const normalized = normalize(mnemonic);
   if (!validateMnemonic(normalized, wordlist)) throw new Error('Invalid recovery phrase');
   const account = mnemonicToAccount(normalized);
   await putBio(SERVICE, 'bitty', normalized);
+  phraseList.delete(MAIN_GONE);
+  savePhrases(savedPhrases().filter((p) => p.id !== MAIN_PHRASE));
+  recordMainPhrase(account.address);
   await Keychain.resetGenericPassword({service: legacyOpenService(SERVICE)}).catch(() => false);
   await dropLegacyPassword();
   return account;
@@ -204,8 +297,8 @@ async function readSecret(prompt: string, service = SERVICE): Promise<string | n
  * means a second owner. Derived from the same phrase, so the phrase still recovers all of them.
  * Index 0 is the wallet that has always existed and keeps the default path.
  */
-export async function unlock(index = 0): Promise<HDAccount | null> {
-  const root = await unlockRoot();
+export async function unlock(index = 0, phrase: string = MAIN_PHRASE): Promise<HDAccount | null> {
+  const root = await unlockRoot(phrase);
   return root ? accountAt(root, index) : null;
 }
 
@@ -214,8 +307,8 @@ export async function unlock(index = 0): Promise<HDAccount | null> {
  * than one key of it at once — the vault's owner key and the fresh key it is handed to next (see
  * ./rotation). Held only for the operation in hand, like the account {unlock} returns.
  */
-export async function unlockRoot(): Promise<HDKey | null> {
-  const m = await readSecret(tr('mobile.app.unlock_prompt'), SERVICE);
+export async function unlockRoot(phrase: string = MAIN_PHRASE): Promise<HDKey | null> {
+  const m = await readSecret(tr('mobile.app.unlock_prompt'), phraseService(phrase));
   return m ? HDKey.fromMasterSeed(mnemonicToSeedSync(m)) : null;
 }
 
@@ -245,15 +338,15 @@ export function oneTimeKeys(root: HDKey, index: number): (k: number) => PrivateK
  * Switching vaults must not ask for Face ID — the addresses are public, so they are read once and
  * cached, and the key stays behind the prompt where it belongs.
  */
-export async function addressesUpTo(count: number): Promise<`0x${string}`[] | null> {
-  const m = await readSecret('Add a vault');
+export async function addressesUpTo(count: number, phrase: string = MAIN_PHRASE): Promise<`0x${string}`[] | null> {
+  const m = await readSecret('Add a vault', phraseService(phrase));
   if (!m) return null;
   return Array.from({length: count}, (_, i) => mnemonicToAccount(m, {accountIndex: i}).address);
 }
 
 /** Reveal the raw recovery phrase (Face ID). Null if cancelled. */
-export async function revealMnemonic(): Promise<string | null> {
-  return readSecret('Reveal your recovery phrase');
+export async function revealMnemonic(phrase: string = MAIN_PHRASE): Promise<string | null> {
+  return readSecret('Reveal your recovery phrase', phraseService(phrase));
 }
 
 /**
@@ -312,4 +405,6 @@ export async function wipe(): Promise<void> {
   // The probe a temporary build kept behind Face ID.
   await Keychain.resetGenericPassword({service: 'io.bitty.vault.faceid-probe'}).catch(() => false);
   imported.delete(IMPORTED);
+  phraseList.delete(PHRASES);
+  phraseList.delete(MAIN_GONE);
 }

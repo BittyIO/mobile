@@ -6,6 +6,7 @@ import {useWallet} from '@/wallet/store';
 import {backupChoices, markPhraseVerified} from '@/wallet/phrase-backup';
 import {generateNewMnemonic} from '@/wallet/keyring';
 import {alertIfBiometricsRequired} from '@/components/biometrics-alert';
+import {showToast} from '@/components/Toast';
 import {useRevealGuard} from '@/core/device-security';
 import {PhraseInput} from '@/components/PhraseInput';
 import {validateMnemonic} from '@scure/bip39';
@@ -41,13 +42,36 @@ function randomPositions(): number[] {
  * Restore is not optional. The phrase lives in the Keychain, which iOS deletes with the app, so
  * without it a user who reinstalled could never reach their vault again — the phrase they were
  * made to write down had nowhere to go.
+ *
+ * With `add`, the same two flows add ANOTHER phrase to a phone that already has one (Security ›
+ * Recovery phrases): it starts on the chosen flow, Back from there leaves, and the phrase is kept
+ * beside the others, with its first vault put in front.
  */
-export function OnboardingScreen() {
+export function OnboardingScreen({add}: {add?: {mode: 'create' | 'import'; onDone: () => void}} = {}) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const createWallet = useWallet((s) => s.createWallet);
+  const addPhrase = useWallet((s) => s.addPhrase);
+  /** Store the phrase: the wallet's first, or one more beside it. */
+  const keep = async (words: string) => {
+    if (!add) {
+      await createWallet(words);
+      markPhraseVerified();
+      return;
+    }
+    const {existing} = await addPhrase(words);
+    showToast('success', t(existing ? 'mobile.phrases.already_added' : 'mobile.phrases.added'));
+    add.onDone();
+  };
+  /** Back from the first step of a flow: to the choice, or out when adding. */
+  const leave = (reset: () => void) => {
+    reset();
+    if (add) add.onDone();
+    else setStep('choose');
+  };
 
-  const [step, setStep] = useState<Step>('choose');
+  // Adding goes straight to its flow (a new phrase's words are drawn on mount, below).
+  const [step, setStep] = useState<Step>(add ? (add.mode === 'import' ? 'import' : 'reveal') : 'choose');
   const [mnemonic, setMnemonic] = useState('');
   const [challengePositions, setChallengePositions] = useState<number[]>([]);
   const [answers, setAnswers] = useState<Record<number, string>>({});
@@ -83,6 +107,11 @@ export function OnboardingScreen() {
     setAnswers({});
     setStep('reveal');
   };
+  // Adding a new phrase starts on its words.
+  useEffect(() => {
+    if (add?.mode === 'create') onCreate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onCommitNew = async () => {
     const matches = challengePositions.every((position) => answers[position] === words[position - 1]);
@@ -95,8 +124,7 @@ export function OnboardingScreen() {
 
     setBusy(true);
     try {
-      await createWallet(mnemonic);
-      markPhraseVerified();
+      await keep(mnemonic);
     } catch (e) {
       if (alertIfBiometricsRequired(e, t)) return;
       Alert.alert(t('vault.failed'), String((e as Error)?.message ?? e));
@@ -108,9 +136,8 @@ export function OnboardingScreen() {
   const onImport = async () => {
     setBusy(true);
     try {
-      await createWallet(phrase);
       // Typed in from the backup, so the backup is proven.
-      markPhraseVerified();
+      await keep(phrase);
     } catch (e) {
       // The words are checked before this can be pressed, so a failure here is almost never the
       // phrase: most often there is no Face ID to keep it behind. Only a phrase error says "invalid".
@@ -169,15 +196,7 @@ export function OnboardingScreen() {
               loading={busy}
               disabled={phraseHidden || busy || !phraseValid}
             />
-            <Button
-              title={t('common.back')}
-              variant="secondary"
-              onPress={() => {
-                setImportWords(Array(24).fill(''));
-                setStep('choose');
-              }}
-              disabled={busy}
-            />
+            <Button title={t('common.back')} variant="secondary" onPress={() => leave(() => setImportWords(Array(24).fill('')))} disabled={busy} />
           </>
         ) : step === 'reveal' ? (
           <>
@@ -201,14 +220,7 @@ export function OnboardingScreen() {
               </View>
             )}
             <Button title={t('mobile.payments.onboarding_verify_phrase')} onPress={() => setStep('confirm')} disabled={phraseHidden} />
-            <Button
-              title={t('common.back')}
-              variant="secondary"
-              onPress={() => {
-                setMnemonic('');
-                setStep('choose');
-              }}
-            />
+            <Button title={t('common.back')} variant="secondary" onPress={() => leave(() => setMnemonic(''))} />
           </>
         ) : (
           <>

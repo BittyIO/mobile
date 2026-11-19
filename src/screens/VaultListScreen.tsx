@@ -6,7 +6,7 @@ import type {RootStackParamList} from '@/App';
 import Svg, {Path} from 'react-native-svg';
 import type {Address} from 'viem';
 import {SAFE_ENABLED} from '@/core/features';
-import {useVaults, vaultLabel, type VaultRef} from '@/core/vault-store';
+import {nextAccountOf, nextNumberOf, phraseOf, useVaults, vaultLabel, type VaultRef} from '@/core/vault-store';
 import {vaultAddressOf} from '@/core/active-vault';
 import {ownerVaultAddress} from '@/vault/read';
 import {NETWORKS, useNetwork} from '@/core/network-store';
@@ -46,6 +46,8 @@ import {useColors, useStyles, type Colors, MONO} from '@/theme';
  * only says whose it is.
  */
 const SHOW_OWNERS = 'vaults.showOwners';
+/** The section for Safe vaults signed for by a key imported on its own, outside every phrase. */
+const IMPORTED = 'imported';
 const SHOW_TRANSFERRED = 'vaults.showTransferred';
 const SHOW_SAFE = 'vaults.showSafe';
 
@@ -120,23 +122,33 @@ export function VaultListScreen() {
    * index until it has one, so its vault is still listed under it.
    */
   const ownerOf = (v: VaultRef): string => (v.safe ?? v.owner)?.toLowerCase() ?? `index:${v.index}`;
+  // The recovery phrases on this phone, in their order; vaults are listed under each when there is more than one.
+  const phrases = useMemo(() => keyring.listPhrases(), [vaults]);
+  const phraseRank = (id: string) => {
+    const i = phrases.findIndex((p) => p.id === id);
+    return i < 0 ? phrases.length : i;
+  };
+  // A Safe signed for by a key imported on its own belongs to no phrase.
+  const sectionOf = (v: VaultRef) => (v.imported ? IMPORTED : phraseOf(v));
   // Every owner this phone can act as: its keys, then the Safes it has added.
   const owners = useMemo(() => {
-    const keys: {key: string; address: string | null; keyIndex: number; safe: boolean}[] = deviceKeys(vaults).map((k) => ({
+    const keys: {key: string; address: string | null; keyIndex: number; safe: boolean; phrase: string}[] = deviceKeys(vaults).map((k) => ({
       key: k.address.toLowerCase(),
       address: k.address,
       keyIndex: k.index,
       safe: false,
+      phrase: k.phrase,
     }));
     for (const v of vaults)
-      if (!v.safe && !v.vault && !v.owner) keys.push({key: `index:${v.index}`, address: null, keyIndex: v.index, safe: false});
+      if (!v.safe && !v.vault && !v.owner) keys.push({key: `index:${v.index}`, address: null, keyIndex: v.account ?? v.index, safe: false, phrase: phraseOf(v)});
     const safes = vaults
       .filter((v) => v.safe && showSafe)
-      .map((v) => ({key: v.safe!.toLowerCase(), address: v.safe!, keyIndex: v.signerIndex ?? 0, safe: true}));
+      .map((v) => ({key: v.safe!.toLowerCase(), address: v.safe!, keyIndex: v.signerIndex ?? 0, safe: true, phrase: sectionOf(v)}));
     return [...keys, ...safes.filter((s) => !keys.some((k) => k.key === s.key))].sort((a, b) =>
-      a.safe === b.safe ? a.keyIndex - b.keyIndex : a.safe ? 1 : -1,
+      a.phrase !== b.phrase ? phraseRank(a.phrase) - phraseRank(b.phrase) : a.safe === b.safe ? a.keyIndex - b.keyIndex : a.safe ? 1 : -1,
     );
-  }, [vaults, showSafe]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vaults, showSafe, phrases]);
   const label = (n: number) => t('mobile.app.vault_n', {n});
   const {notYours, transferredTo} = useVaultDirectory(network, vaults, refresh);
 
@@ -171,7 +183,7 @@ export function VaultListScreen() {
       // A vault transferred away is listed only with "Show transferred vaults" on.
       const listed = vaults.filter((v) => ownerOf(v) === o.key && (showTransferred || !notYours.has(v.index)));
       const here = new Set(listed.map((v) => vaultAddressOf(v, network)?.toLowerCase()).filter(Boolean) as string[]);
-      const key = {index: o.keyIndex, address: (o.address ?? '0x') as Address};
+      const key = {index: o.keyIndex, address: (o.address ?? '0x') as Address, phrase: o.phrase};
       const h = held[o.key];
       const received: FoundVault[] = (h?.owned ?? []).filter((v) => !here.has(v.toLowerCase())).map((vault) => ({vault, key, pending: false}));
       const waiting: FoundVault[] = (h?.pending ?? []).filter((v) => !here.has(v.toLowerCase())).map((vault) => ({vault, key, pending: true}));
@@ -182,9 +194,12 @@ export function VaultListScreen() {
       return {owner: o, listed, received, waiting, incoming};
     })
     .filter((g) => g.listed.length + g.received.length + g.waiting.length + g.incoming.length > 0);
-  // The name a vault not on the phone yet will have once it is: the next free indexes, in order.
-  const nextIndex = Math.max(...vaults.map((v) => v.index)) + 1;
-  let pendingName = 0;
+  // The name a vault not on the phone yet will have once it is: its phrase's next numbers, in order.
+  const promised: Record<string, number> = {};
+  const pendingLabel = (section: string) => {
+    promised[section] = (promised[section] ?? -1) + 1;
+    return label(nextNumberOf(vaults, section, promised[section]));
+  };
 
   /** An address shortened to its first and last six: 0x111111…000000. */
   const shortAddr = (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}`;
@@ -236,16 +251,22 @@ export function VaultListScreen() {
    * Add the next vault: the phrase's next account. One prompt derives every owner up to it, so a
    * device that only ever unlocked the first fills in the addresses it never had. The vault is
    * counterfactual until its first action, like every new one.
+   *
+   * Each phrase counts its own accounts: the next one past the highest its vaults use, so a phrase's
+   * vaults are Vault 1, 2, 3… whatever else the phone holds.
    */
-  const onAdd = async () => {
+  const onAdd = async (phrase: string = keyring.MAIN_PHRASE) => {
     setBusy(true);
     try {
-      const next = Math.max(...vaults.map((v) => v.index)) + 1;
-      const addrs = await keyring.addressesUpTo(next + 1);
-      if (!addrs) return;
       const {setOwner, add} = useVaults.getState();
-      vaults.forEach((v) => !v.owner && !v.safe && !v.vault && addrs[v.index] && setOwner(v.index, addrs[v.index]));
-      selectVault(add(addrs[next]));
+      const account = nextAccountOf(vaults, phrase);
+      // Every account of the phrase still without an address is filled in by the same prompt.
+      const missing = vaults.filter((v) => !v.owner && !v.safe && !v.vault && phraseOf(v) === phrase);
+      const upTo = Math.max(account, ...missing.map((v) => v.account ?? v.index)) + 1;
+      const addrs = await keyring.addressesUpTo(upTo, phrase);
+      if (!addrs) return;
+      missing.forEach((v) => addrs[v.account ?? v.index] && setOwner(v.index, addrs[v.account ?? v.index]));
+      selectVault(add(addrs[account], {phrase, account}));
       nav.goBack();
     } finally {
       setBusy(false);
@@ -266,7 +287,7 @@ export function VaultListScreen() {
         if (!stable) return;
         const tx = showTx(t('mobile.vaults.accept_title'), network);
         try {
-          const account = await keyring.unlock(f.key.index);
+          const account = await keyring.unlock(f.key.index, f.key.phrase);
           if (!account) return tx.done();
           tx.success(await acceptOwnership({account, vault: f.vault, network, stableCoin: stable}));
           onAddFound(f);
@@ -278,7 +299,7 @@ export function VaultListScreen() {
 
   /** Put a vault this device's key owns by transfer on the list, on this chain, and choose it. */
   const onAddFound = (f: FoundVault) => {
-    const index = useVaults.getState().addReceived(f.vault, network, f.key.index, f.key.address);
+    const index = useVaults.getState().addReceived(f.vault, network, f.key.index, f.key.address, f.key.phrase);
     selectVault(index);
     nav.goBack();
   };
@@ -350,7 +371,7 @@ export function VaultListScreen() {
           <View style={styles.vaultText}>
             <View style={styles.nameLine}>
               <Text style={styles.name} numberOfLines={1}>
-                {label(nextIndex + pendingName++ + 1)}
+                {pendingLabel(g.owner.phrase)}
               </Text>
               {fromOf(f.vault) ? null : <Text style={styles.tag}>{t('mobile.vaults.tag_received')}</Text>}
             </View>
@@ -385,7 +406,7 @@ export function VaultListScreen() {
           <View style={styles.vaultText}>
             <View style={styles.nameLine}>
               <Text style={styles.name} numberOfLines={1}>
-                {label(nextIndex + pendingName++ + 1)}
+                {pendingLabel(g.owner.phrase)}
               </Text>
               <Text style={styles.tag}>{t('mobile.vaults.tag_received')}</Text>
             </View>
@@ -400,6 +421,63 @@ export function VaultListScreen() {
       )),
     ];
   };
+
+  const groupSize = (g: (typeof groups)[number]) => g.listed.length + g.received.length + g.waiting.length + g.incoming.length;
+
+  /**
+   * Some owners' groups: under each owner's address with "Show owners" on, otherwise as one plain
+   * list. With `addTo`, that phrase's "＋ Add vault" ends the list.
+   */
+  const renderGroups = (gs: typeof groups, addTo: string | null) => {
+    const add = addTo ? (
+      <Pressable key="add" style={[styles.row, gs.length > 0 && styles.addTop]} onPress={() => onAdd(addTo)} disabled={busy}>
+        <Text style={styles.link}>{`＋ ${t('mobile.settings.add_vault')}`}</Text>
+        {busy ? <ActivityIndicator color={c.subtext} /> : null}
+      </Pressable>
+    ) : null;
+    if (showOwners) {
+      return (
+        <>
+          {gs.map((g) => {
+            const o = g.owner;
+            return (
+              <View key={o.key} style={styles.section}>
+                <Pressable onLongPress={() => copyAddress(o.address)} hitSlop={4}>
+                  {/* A key whose address is not derived yet goes by its number until it is. */}
+                  <Text style={[styles.groupLabel, o.address && styles.ownerAddr]}>
+                    {o.address ? t('mobile.vaults.owner_header', {address: shortAddr(o.address)}) : t('mobile.vaults.owner_n', {n: o.keyIndex + 1})}
+                  </Text>
+                </Pressable>
+                <View style={styles.group}>{groupRows(g, 0, groupSize(g))}</View>
+              </View>
+            );
+          })}
+          {add ? <View style={styles.group}>{add}</View> : null}
+        </>
+      );
+    }
+    const total = gs.reduce((n, g) => n + groupSize(g), 0);
+    let at = 0;
+    return (
+      <View style={styles.group}>
+        {gs.map((g) => {
+          const out = groupRows(g, at, total);
+          at += groupSize(g);
+          return <React.Fragment key={g.owner.key}>{out}</React.Fragment>;
+        })}
+        {add}
+      </View>
+    );
+  };
+
+  // One section per recovery phrase (its name, its vaults), and one for Safes signed by imported keys.
+  const phraseName = (n: number) => t('mobile.phrases.phrase_n', {n});
+  const sections = [
+    ...phrases.map((p) => ({id: p.id, label: keyring.phraseLabel(p, phraseName), groups: groups.filter((g) => g.owner.phrase === p.id)})),
+    ...(groups.some((g) => g.owner.phrase === IMPORTED)
+      ? [{id: IMPORTED, label: t('mobile.phrases.imported_keys'), groups: groups.filter((g) => g.owner.phrase === IMPORTED)}]
+      : []),
+  ];
 
   return (
     <ScrollView
@@ -420,45 +498,32 @@ export function VaultListScreen() {
           tintColor={c.text}
         />
       }>
-      {/* Every vault on one list, grouped by owner: switching is one tap from anywhere, and the
-          header is the address of the key — or Safe — that holds them. Long press it to copy. */}
       {/* Every vault on one list: grouped under each owner's address when "Show owners" is on
-          (the ⋯ in the header), otherwise one plain list. Long press a header to copy it. */}
-      {showOwners ? (
-        groups.map((g) => {
-          const o = g.owner;
-          return (
-            <View key={o.key} style={styles.section}>
-              <Pressable onLongPress={() => copyAddress(o.address)} hitSlop={4}>
-                {/* A key whose address is not derived yet goes by its number until it is. */}
-                <Text style={[styles.groupLabel, o.address && styles.ownerAddr]}>
-                  {o.address ? t('mobile.vaults.owner_header', {address: shortAddr(o.address)}) : t('mobile.vaults.owner_n', {n: o.keyIndex + 1})}
-                </Text>
-              </Pressable>
-              <View style={styles.group}>{groupRows(g, 0, g.listed.length + g.received.length + g.waiting.length + g.incoming.length)}</View>
-            </View>
-          );
-        })
-      ) : (
-        <View style={styles.section}>
-          <View style={styles.group}>
-            {(() => {
-              const total = groups.reduce((n, g) => n + g.listed.length + g.received.length + g.waiting.length + g.incoming.length, 0);
-              let at = 0;
-              return groups.map((g) => {
-                const out = groupRows(g, at, total);
-                at += g.listed.length + g.received.length + g.waiting.length + g.incoming.length;
-                return <React.Fragment key={g.owner.key}>{out}</React.Fragment>;
-              });
-            })()}
+          (the ⋯ in the header), otherwise one plain list. Long press a header to copy it. With more
+          than one recovery phrase, each phrase's vaults are listed under its name, with its own Add. */}
+      {sections.length > 1 ? (
+        sections.map((sec) => (
+          <View key={sec.id} style={styles.section}>
+            <Text style={styles.groupLabel}>{sec.label}</Text>
+            {renderGroups(sec.groups, sec.id === IMPORTED ? null : sec.id)}
           </View>
-        </View>
+        ))
+      ) : (
+        <>
+          {renderGroups(groups, null)}
+          <SettingsGroup>
+            <Pressable style={styles.row} onPress={() => onAdd(sections[0]?.id ?? keyring.MAIN_PHRASE)} disabled={busy}>
+              <Text style={styles.link}>{`＋ ${t('mobile.settings.add_vault')}`}</Text>
+              {busy ? <ActivityIndicator color={c.subtext} /> : null}
+            </Pressable>
+          </SettingsGroup>
+        </>
       )}
-
+      {/* Creating, importing, naming and deleting recovery phrases has its own page. */}
       <SettingsGroup>
-        <Pressable style={styles.row} onPress={onAdd} disabled={busy}>
-          <Text style={styles.link}>{`＋ ${t('mobile.settings.add_vault')}`}</Text>
-          {busy ? <ActivityIndicator color={c.subtext} /> : null}
+        <Pressable style={styles.row} onPress={() => nav.navigate('RecoveryPhrases')}>
+          <Text style={styles.link}>{t('mobile.phrases.manage')}</Text>
+          <Text style={styles.chev}>›</Text>
         </Pressable>
       </SettingsGroup>
       {/* Its own group and its own page: a Safe vault is signed for by a key imported for it, which
@@ -523,4 +588,5 @@ const makeStyles = (c: Colors) =>
     pressed: {opacity: 0.6},
     checkHidden: {opacity: 0},
     link: {color: c.accent, fontSize: 15, fontWeight: '600'},
+    addTop: {borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border},
   });
