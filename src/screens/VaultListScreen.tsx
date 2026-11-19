@@ -6,7 +6,7 @@ import type {RootStackParamList} from '@/App';
 import Svg, {Path} from 'react-native-svg';
 import type {Address} from 'viem';
 import {SAFE_ENABLED} from '@/core/features';
-import {nextAccountOf, nextNumberOf, phraseOf, useVaults, vaultLabel, type VaultRef} from '@/core/vault-store';
+import {IMPORTED_SECTION, nextAccountOf, nextNumberOf, phraseOf, sectionOf, useVaults, vaultLabel, type VaultRef} from '@/core/vault-store';
 import {vaultAddressOf} from '@/core/active-vault';
 import {ownerVaultAddress} from '@/vault/read';
 import {NETWORKS, useNetwork} from '@/core/network-store';
@@ -46,8 +46,8 @@ import {useColors, useStyles, type Colors, MONO} from '@/theme';
  * only says whose it is.
  */
 const SHOW_OWNERS = 'vaults.showOwners';
-/** The section for Safe vaults signed for by a key imported on its own, outside every phrase. */
-const IMPORTED = 'imported';
+/** The section for vaults signed for by a private key imported on its own, outside every phrase. */
+const IMPORTED = IMPORTED_SECTION;
 const SHOW_TRANSFERRED = 'vaults.showTransferred';
 const SHOW_SAFE = 'vaults.showSafe';
 
@@ -128,8 +128,6 @@ export function VaultListScreen() {
     const i = phrases.findIndex((p) => p.id === id);
     return i < 0 ? phrases.length : i;
   };
-  // A Safe signed for by a key imported on its own belongs to no phrase.
-  const sectionOf = (v: VaultRef) => (v.imported ? IMPORTED : phraseOf(v));
   // Every owner this phone can act as: its keys, then the Safes it has added.
   const owners = useMemo(() => {
     const keys: {key: string; address: string | null; keyIndex: number; safe: boolean; phrase: string}[] = deviceKeys(vaults).map((k) => ({
@@ -287,7 +285,7 @@ export function VaultListScreen() {
         if (!stable) return;
         const tx = showTx(t('mobile.vaults.accept_title'), network);
         try {
-          const account = await keyring.unlock(f.key.index, f.key.phrase);
+          const account = f.key.phrase === IMPORTED ? await keyring.unlockImported(f.key.address) : await keyring.unlock(f.key.index, f.key.phrase);
           if (!account) return tx.done();
           tx.success(await acceptOwnership({account, vault: f.vault, network, stableCoin: stable}));
           onAddFound(f);
@@ -519,8 +517,13 @@ export function VaultListScreen() {
           </SettingsGroup>
         </>
       )}
-      {/* Creating, importing, naming and deleting recovery phrases has its own page. */}
+      {/* A key imported on its own lists its vault under Imported private keys. Creating,
+          importing, naming and deleting recovery phrases has its own page. */}
       <SettingsGroup>
+        <Pressable style={[styles.row, styles.rowDivider]} onPress={() => nav.navigate('ImportPrivateKey')}>
+          <Text style={styles.link}>{t('mobile.phrases.import_key')}</Text>
+          <Text style={styles.chev}>›</Text>
+        </Pressable>
         <Pressable style={styles.row} onPress={() => nav.navigate('RecoveryPhrases')}>
           <Text style={styles.link}>{t('mobile.phrases.manage')}</Text>
           <Text style={styles.chev}>›</Text>

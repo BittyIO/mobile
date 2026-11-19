@@ -45,6 +45,8 @@ export function SecurityScreen() {
   const network = useNetwork((s) => s.network);
   const vault = useActiveVaultAddress(network);
   const isSafe = useVaults((s) => !!s.vaults.find((v) => v.index === s.activeIndex)?.safe);
+  // An imported private key has no one-time keys of a phrase to hand the vault on to.
+  const isImportedKey = useVaults((s) => !!s.vaults.find((v) => v.index === s.activeIndex)?.imported);
   const quantumOn = useRotationOn(network, vault);
   // The Upgrade row answers with the vault's version, "1.0.5 → 1.0.6" when one is waiting.
   const version = useVaultVersionRow();
@@ -98,9 +100,10 @@ export function SecurityScreen() {
       <SettingsGroup>
         {/* No status here: who it is and what is pending live on the asset manager's own page. */}
         <SettingsRow icon="delegation" title={t('mobile.vault.delegation')} onPress={() => nav.navigate('VaultAssetManager')} />
-        <SettingsRow icon="ownership" title={t('mobile.vault.ownership')} onPress={() => nav.navigate('VaultOwnership')} last={isSafe} />
-        {/* A Safe's keys are its owners' to manage: there is no one key here to retire. */}
-        {isSafe ? null : (
+        <SettingsRow icon="ownership" title={t('mobile.vault.ownership')} onPress={() => nav.navigate('VaultOwnership')} last={isSafe || isImportedKey} />
+        {/* A Safe's keys are its owners' to manage: there is no one key here to retire. An imported
+            key has no fresh keys of a phrase to move to. */}
+        {isSafe || isImportedKey ? null : (
           <SettingsRow
             icon="newKey"
             title={t('mobile.quantum.title')}

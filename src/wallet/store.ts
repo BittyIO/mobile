@@ -69,6 +69,8 @@ interface WalletState {
    * here is not added again: its first vault is chosen instead, and `existing` says so.
    */
   addPhrase: (mnemonic: string) => Promise<{id: string; existing: boolean}>;
+  /** Keep a private key on this phone behind Face ID and put the vault it owns in front. */
+  importKey: (key: `0x${string}`) => Promise<void>;
   /**
    * Delete a recovery phrase from this phone, with every vault of it on the list. The last phrase
    * takes the wallet with it (back to onboarding). Nothing changes on chain.
@@ -149,6 +151,15 @@ export const useWallet = create<WalletState>((set) => ({
   },
 
   unlock: async () => {
+    // A vault an imported private key owns: Face ID opens that key, there is no phrase to read.
+    const front = activeVault();
+    if (front?.imported && !front.safe) {
+      const key = front.signer ?? front.owner;
+      const account = key ? await keyring.unlockImported(key) : null;
+      if (!account) return;
+      set({account: null, address: front.owner, status: 'unlocked', unlocked: true});
+      return;
+    }
     const phrase = activePhrase();
     const root = await keyring.unlockRoot(phrase);
     if (!root) return;
@@ -179,6 +190,14 @@ export const useWallet = create<WalletState>((set) => ({
     const ref = activeVault();
     const safe = ref?.safe;
     const network = useNetwork.getState().network;
+    if (!safe && ref?.imported) {
+      // Owned by an imported private key: that key signs. It has no one-time keys to hand the
+      // vault on to, so quantum-safe keys do not apply (Security hides them for it).
+      const key = ref.signer ?? ref.owner;
+      const account = key ? await keyring.unlockImported(key) : null;
+      if (!account) throw new Error('Unlock cancelled');
+      return account;
+    }
     if (!safe) {
       // The ACTIVE index, not index 0: a write must be signed by the owner of the vault on screen.
       const phrase = activePhrase();
@@ -231,6 +250,11 @@ export const useWallet = create<WalletState>((set) => ({
     markPhraseVerified(id);
     useWallet.getState().selectVault(index);
     return {id, existing};
+  },
+
+  importKey: async (key) => {
+    const address = await keyring.importPrivateKey(key);
+    useWallet.getState().selectVault(useVaults.getState().addImported(address));
   },
 
   removePhrase: async (id) => {

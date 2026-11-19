@@ -53,9 +53,11 @@ export type VaultRef = {
   /** That key's address, cached like `owner` so the approvals screen can tell what it signed. */
   signer?: `0x${string}`;
   /**
-   * For a Safe vault signed for by a key imported on its own (see wallet/keyring `importPrivateKey`)
-   * rather than one of the phrase's: true, and `signer` is that key's address. `signerIndex` is
-   * then not set.
+   * Signed for by a private key imported on its own (see wallet/keyring `importPrivateKey`) rather
+   * than one of a phrase's: true, and `signer` is that key's address; `signerIndex` and `phrase`
+   * are then not set. Either a Safe vault that key is a co-owner of, or — with no `safe` — a vault
+   * the key itself owns: the one the factory derives from it, or one received by transfer. Listed
+   * under Imported private keys.
    */
   imported?: boolean;
   /**
@@ -98,6 +100,11 @@ type State = {
    * than the main one, which phrase and account it is.
    */
   add: (owner: `0x${string}`, key?: {phrase: string; account: number}) => number;
+  /**
+   * Append the vault an imported private key owns (the one the factory derives from it) and put it
+   * in front; one already listed for that key is just put in front. Returns its index.
+   */
+  addImported: (key: `0x${string}`) => number;
   /** Take every vault of `phrase` off the list (the phrase is being deleted). The last one stays. */
   removePhrase: (phrase: string) => void;
   /**
@@ -168,7 +175,13 @@ export const useVaults = create<State>((set, get) => ({
   },
 
   addReceived: (vault, network, signerIndex, owner, phrase) => {
-    const ph = phrase && phrase !== MAIN ? {phrase} : {phrase: undefined};
+    // Received by an imported key: no phrase and no index, just the key.
+    const ph =
+      phrase === IMPORTED_SECTION
+        ? {imported: true, phrase: undefined, signerIndex: undefined}
+        : phrase && phrase !== MAIN
+          ? {phrase}
+          : {phrase: undefined};
     const same = (v: VaultRef) => v.vault?.toLowerCase() === vault.toLowerCase() && v.network === network;
     const existing = get().vaults.find(same);
     const index = existing?.index ?? Math.max(...get().vaults.map((v) => v.index)) + 1;
@@ -177,6 +190,16 @@ export const useVaults = create<State>((set, get) => ({
       : [...get().vaults, {index, name: '', owner, vault, network, signerIndex, signer: owner, ...ph}];
     store.set(KEY, JSON.stringify(vaults));
     set({vaults});
+    return index;
+  },
+
+  addImported: (key) => {
+    const existing = get().vaults.find((v) => v.imported && !v.safe && !v.vault && v.owner?.toLowerCase() === key.toLowerCase());
+    const index = existing?.index ?? Math.max(...get().vaults.map((v) => v.index)) + 1;
+    const vaults = existing ? get().vaults : [...get().vaults, {index, name: '', owner: key, signer: key, imported: true}];
+    store.set(KEY, JSON.stringify(vaults));
+    store.set(ACTIVE, index);
+    set({vaults, activeIndex: index});
     return index;
   },
 
@@ -223,8 +246,11 @@ export function nextAccountOf(vaults: VaultRef[], phrase: string): number {
   return used.length ? Math.max(...used) + 1 : 0;
 }
 
-/** The section a vault is counted in: its phrase, or for a Safe signed by an imported key, those keys. */
-const sectionOf = (v: VaultRef): string => (v.imported ? 'imported' : phraseOf(v));
+/** The section of vaults signed for by imported private keys (VaultRef `imported`). */
+export const IMPORTED_SECTION = 'imported';
+
+/** The section a vault is listed and counted in: its phrase, or the imported private keys. */
+export const sectionOf = (v: VaultRef): string => (v.imported ? IMPORTED_SECTION : phraseOf(v));
 /** A vault the phrase's key owns because the factory derives it from that key (not a Safe, not received). */
 const isCreated = (v: VaultRef) => !v.safe && !v.vault;
 

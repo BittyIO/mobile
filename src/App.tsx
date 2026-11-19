@@ -197,6 +197,8 @@ export type RootStackParamList = {
   RecoveryPhrases: undefined;
   /** Add a recovery phrase: a new one (its words, then the check) or one imported. */
   AddRecoveryPhrase: {mode: 'create' | 'import'};
+  /** Import a private key: its vault goes under Imported private keys. */
+  ImportPrivateKey: undefined;
   VaultAssetManager: undefined;
   VaultSetAssetManager: undefined;
 };
@@ -656,6 +658,7 @@ function Root() {
         <Stack.Screen name="VaultRecoveryPhrase" getComponent={() => require('@/screens/RecoveryPhraseScreen').RecoveryPhraseScreen} options={{title: t('mobile.settings.recovery_phrase')}} />
         <Stack.Screen name="RecoveryPhrases" getComponent={() => require('@/screens/RecoveryPhrasesScreen').RecoveryPhrasesScreen} options={{title: t('mobile.phrases.title')}} />
         <Stack.Screen name="AddRecoveryPhrase" getComponent={() => require('@/screens/AddRecoveryPhraseScreen').AddRecoveryPhraseScreen} options={{title: t('mobile.phrases.add_title')}} />
+        <Stack.Screen name="ImportPrivateKey" getComponent={() => require('@/screens/ImportPrivateKeyScreen').ImportPrivateKeyScreen} options={{title: t('mobile.phrases.import_key')}} />
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -61,8 +61,11 @@ export function RecoveryPhrasesScreen() {
         <Pressable style={[styles.row, styles.rowDivider]} onPress={() => nav.navigate('AddRecoveryPhrase', {mode: 'create'})}>
           <Text style={styles.link}>{`＋ ${t('mobile.phrases.create')}`}</Text>
         </Pressable>
-        <Pressable style={styles.row} onPress={() => nav.navigate('AddRecoveryPhrase', {mode: 'import'})}>
+        <Pressable style={[styles.row, styles.rowDivider]} onPress={() => nav.navigate('AddRecoveryPhrase', {mode: 'import'})}>
           <Text style={styles.link}>{t('mobile.phrases.import')}</Text>
+        </Pressable>
+        <Pressable style={styles.row} onPress={() => nav.navigate('ImportPrivateKey')}>
+          <Text style={styles.link}>{t('mobile.phrases.import_key')}</Text>
         </Pressable>
       </SettingsGroup>
     </ScrollView>
