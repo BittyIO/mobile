@@ -162,7 +162,7 @@ export function EarnDetailScreen() {
    * nothing" when the truth is "not known yet".
    */
   const earned = (() => {
-    if (!flows.flows || (!position && pos.loading)) return null;
+    if (!flows.flows || (!position && (pos.loading || pos.error))) return null;
     // Withdrawn in full, it still earned what it earned.
     const p = position ?? closedPosition(protocol, asset, lend ? 'supplied' : 'staked');
     const raw = earnedRaw(p, flows.flows);
@@ -392,7 +392,8 @@ export function EarnDetailScreen() {
       ) : null}
 
       <View style={styles.card}>
-        <Row label={t('mobile.earn.detail_position')} value={`${fmtNum(held)} ${sym}`} />
+        {/* No position because the read failed is not known to be empty: a dash, not 0. */}
+        <Row label={t('mobile.earn.detail_position')} value={!position && pos.error ? '—' : `${fmtNum(held)} ${sym}`} />
         {earned != null && earned > 0 ? (
           <Row label={t('mobile.earn.detail_earned')} value={`+${fmtNum(earned)} ${sym}`} tone="good" />
         ) : null}

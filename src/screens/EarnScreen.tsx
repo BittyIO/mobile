@@ -339,7 +339,8 @@ export function EarnScreen() {
         last={i === rows.length - 1}
         row={row}
         free={freeFor(row.route.asset.symbol)}
-        amountKnown={!pos.loading || pos.positions.length > 0}
+        // A read that failed left no positions: unknown, a dash, never a 0 that says nothing is there.
+        amountKnown={(!pos.loading && !pos.error) || pos.positions.length > 0}
         earned={earnedFor(row)}
         dust={isDust(row)}
         queue={queueFor(row.route)}
