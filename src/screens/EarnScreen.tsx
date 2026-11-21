@@ -183,7 +183,7 @@ export function EarnScreen() {
   const network = useNetwork((s) => s.network);
   const assets = useAssetCatalog(network);
   const bal = useVaultBalances(network);
-  const pos = useVaultPositions(bal.vault, network);
+  const pos = useVaultPositions(bal.readAt, network);
   // The staking queue (Lido's, or TRON Stake's unstake), read from the chain as the Overview and the
   // detail page do. Re-read whenever the positions do, so an unstake or a claim shows here without a
   // second pull.
@@ -209,7 +209,7 @@ export function EarnScreen() {
   };
   // TRON Stake's rate: energy, read with the positions so a pull refreshes it too.
   const energy = useOwnerEnergy(network, pos.positions);
-  const flows = useFlows(bal.vault, network);
+  const flows = useFlows(bal.readAt, network);
   const prices = usePrices(network, 0, useMemo(() => assets.map((a) => a.symbol), [assets]));
   // Auto-Yield routes: lowercased asset address → configured protocol (zero = off).
   const [apy, setApy] = useState<ProtocolApy>(EMPTY_APY);

@@ -73,6 +73,12 @@ export type VaultRef = {
    * with `vault`, for a Safe vault that was transferred to its Safe rather than created by it.
    */
   network?: string;
+  /**
+   * Removed from the choose-vault list by the user, and kept, so it can be restored as it was —
+   * its name, its number, the key that signs for it. Nothing changes on chain. A removed vault is
+   * not listed, not offered as a payee, and never the vault in front.
+   */
+  hidden?: boolean;
 };
 
 function load(): VaultRef[] {
@@ -126,6 +132,13 @@ type State = {
   addReceived: (vault: `0x${string}`, network: string, signerIndex: number, owner: `0x${string}`, phrase?: string) => number;
   /** Take a vault off this device's list. Nothing changes on chain. The last one stays. */
   remove: (index: number) => void;
+  /**
+   * Remove a vault from the list, restorably (see {VaultRef.hidden}). The vault in front moves to
+   * another first; the last one shown stays.
+   */
+  hide: (index: number) => void;
+  /** Put a removed vault back on the list, as it was. */
+  restore: (index: number) => void;
   /** Back to the single first vault: the wallet has been deleted from this phone. */
   reset: () => void;
 };
@@ -171,7 +184,7 @@ export const useVaults = create<State>((set, get) => ({
         ? {signer: signer.address, imported: true, signerIndex: undefined, phrase: undefined}
         : {signer: signer.address, signerIndex: signer.index, imported: undefined, phrase: signer.phrase && signer.phrase !== MAIN ? signer.phrase : undefined};
     const vaults = existing
-      ? get().vaults.map((v) => (v.index === index ? {...v, ...key, ...at} : v))
+      ? get().vaults.map((v) => (v.index === index ? {...v, ...key, ...at, hidden: undefined} : v))
       : [...get().vaults, {index, name: '', owner: safe, safe, ...key, ...at}];
     store.set(KEY, JSON.stringify(vaults));
     store.set(ACTIVE, index);
@@ -191,7 +204,7 @@ export const useVaults = create<State>((set, get) => ({
     const existing = get().vaults.find(same);
     const index = existing?.index ?? Math.max(...get().vaults.map((v) => v.index)) + 1;
     const vaults = existing
-      ? get().vaults.map((v) => (v.index === index ? {...v, signerIndex, signer: owner, owner, ...ph} : v))
+      ? get().vaults.map((v) => (v.index === index ? {...v, signerIndex, signer: owner, owner, ...ph, hidden: undefined} : v))
       : [...get().vaults, {index, name: '', owner, vault, network, signerIndex, signer: owner, ...ph}];
     store.set(KEY, JSON.stringify(vaults));
     set({vaults});
@@ -201,7 +214,9 @@ export const useVaults = create<State>((set, get) => ({
   addImported: (key) => {
     const existing = get().vaults.find((v) => v.imported && !v.safe && !v.vault && v.owner?.toLowerCase() === key.toLowerCase());
     const index = existing?.index ?? Math.max(...get().vaults.map((v) => v.index)) + 1;
-    const vaults = existing ? get().vaults : [...get().vaults, {index, name: '', owner: key, signer: key, imported: true}];
+    const vaults = existing
+      ? get().vaults.map((v) => (v.index === index ? {...v, hidden: undefined} : v))
+      : [...get().vaults, {index, name: '', owner: key, signer: key, imported: true}];
     store.set(KEY, JSON.stringify(vaults));
     store.set(ACTIVE, index);
     set({vaults, activeIndex: index});
@@ -231,6 +246,22 @@ export const useVaults = create<State>((set, get) => ({
     store.delete(KEY);
     store.set(ACTIVE, 0);
     set({vaults: load(), activeIndex: 0});
+  },
+
+  hide: (index) => {
+    const shown = get().vaults.filter((v) => !v.hidden);
+    if (!shown.some((v) => v.index === index) || shown.length <= 1) return;
+    const vaults = get().vaults.map((v) => (v.index === index ? {...v, hidden: true} : v));
+    store.set(KEY, JSON.stringify(vaults));
+    const activeIndex = get().activeIndex === index ? shown.find((v) => v.index !== index)!.index : get().activeIndex;
+    store.set(ACTIVE, activeIndex);
+    set({vaults, activeIndex});
+  },
+
+  restore: (index) => {
+    const vaults = get().vaults.map((v) => (v.index === index ? {...v, hidden: undefined} : v));
+    store.set(KEY, JSON.stringify(vaults));
+    set({vaults});
   },
 
   remove: (index) => {

@@ -8,13 +8,14 @@ import type {Address} from 'viem';
 import {IMPORTED_SECTION, nextAccountOf, nextNumberOf, phraseOf, useVaults, vaultLabel, type VaultRef} from '@/core/vault-store';
 import {vaultAddressOf} from '@/core/active-vault';
 import {ownerVaultAddress} from '@/vault/read';
-import {NETWORKS, useNetwork} from '@/core/network-store';
+import {useNetwork} from '@/core/network-store';
 import {NATIVE, type Network} from '@/core/chain';
 import {useWallet} from '@/wallet/store';
 import * as keyring from '@/wallet/keyring';
 import {deviceKeys, fetchOneTimeKeyVaults, fetchOwnedVaults, recall, remember, useVaultDirectory, type FoundVault} from '@/vault/owned-vaults';
 import {acceptOwnership} from '@/vault/ownership';
 import {CopyButton} from '@/components/CopyButton';
+import {SwipeRow} from '@/components/SwipeRow';
 import {fetchSafe} from '@/vault/safe';
 import {relayGasFor} from '@/vault/fee-quote';
 import {useAssetCatalog} from '@/core/asset-catalog';
@@ -80,8 +81,12 @@ export function VaultListScreen() {
   const styles = useStyles(makeStyles);
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const network = useNetwork((s) => s.network);
-  const setNetwork = useNetwork((s) => s.setNetwork);
-  const vaults = useVaults((s) => s.vaults);
+  // Every entry on the phone, removed ones included, and the ones the page lists (see {VaultRef.hidden}).
+  const allVaults = useVaults((s) => s.vaults);
+  const vaults = useMemo(() => allVaults.filter((v) => !v.hidden), [allVaults]);
+  const hideVault = useVaults((s) => s.hide);
+  /** The row slid open to show Remove, if any: one at a time. */
+  const [swipeOpen, setSwipeOpen] = useState<number | null>(null);
   const activeIndex = useVaults((s) => s.activeIndex);
   const rename = useVaults((s) => s.rename);
   const selectVault = useWallet((s) => s.selectVault);
@@ -233,7 +238,10 @@ export function VaultListScreen() {
   }, [network, keySig, tokenSig, refresh]);
   // Every vault already on the phone for this chain, whoever it is listed under: a one-time key's
   // vault, once added, is its own owner's row and must not be offered again under the account.
-  const onPhone = new Set(vaults.map((v) => vaultAddressOf(v, network)?.toLowerCase()).filter(Boolean) as string[]);
+  // Removed vaults count: still on the phone, so never offered back as found.
+  const onPhone = new Set(allVaults.map((v) => vaultAddressOf(v, network)?.toLowerCase()).filter(Boolean) as string[]);
+  /** Removed from the list on this chain: not offered back as received under its owner either. */
+  const removedAt = new Set(allVaults.filter((v) => v.hidden).map((v) => vaultAddressOf(v, network)?.toLowerCase()).filter(Boolean) as string[]);
 
   /**
    * Every vault, grouped by the owner that holds it: those on this phone, then those the server says
@@ -290,8 +298,27 @@ export function VaultListScreen() {
     if (!now || now === owner) return false;
     return !!shownUnder.get(vaultAddressOf(v, network)?.toLowerCase() ?? '')?.has(now);
   };
-  const groups = grouped
-    .map((g) => ({...g, listed: g.listed.filter((v) => !movedHere(v, g.owner.key))}))
+  const kept = grouped.map((g) => ({...g, listed: g.listed.filter((v) => !movedHere(v, g.owner.key))}));
+  /**
+   * One row per vault. A vault the phone lists is not ALSO offered as received under another owner:
+   * the server (or the one-time key scan) naming a second key for it put the same vault, by the same
+   * name, on the page twice — one row tagged Activated, the other Received. It is one vault, so it is
+   * the listed row, with its name and its pencil, and its own tags and "Transferred from".
+   */
+  const listedAt = new Set(kept.flatMap((g) => g.listed.map((v) => vaultAddressOf(v, network)?.toLowerCase() ?? '')).filter(Boolean));
+  /**
+   * A received entry belongs to the chain it was received on. On any other it has no vault, and its
+   * row only stood for that chain's (tapping it switches there). Where this chain has an entry of its
+   * own at that address — the first owner's, which still owns it here — that row is the vault, and
+   * the other chain's one put the same address on the page a second time, under another owner.
+   */
+  const otherChainDup = (v: VaultRef) => !!v.vault && !vaultAddressOf(v, network) && listedAt.has(v.vault.toLowerCase());
+  const groups = kept
+    .map((g) => ({
+      ...g,
+      listed: g.listed.filter((v) => !otherChainDup(v)),
+      received: g.received.filter((f) => !listedAt.has(f.vault.toLowerCase()) && !removedAt.has(f.vault.toLowerCase())),
+    }))
     .filter((g) => g.listed.length + g.received.length + g.waiting.length + g.incoming.length > 0);
   /**
    * The name a vault already has on this phone, by its address on this chain: a vault moved to another
@@ -319,10 +346,19 @@ export function VaultListScreen() {
    * Who a received vault came from, where this phone can tell: one of its own keys whose own vault
    * (the one the factory derives from it) this is. A vault from anyone else stays just "Received" —
    * the vault does not record its previous owner.
+   *
+   * `self` is the key the row is listed under. A vault that is THAT key's own (an entry for its own
+   * derived vault, as a one-time key's is) came from nobody: it was not transferred, and saying
+   * "Transferred from" its own owner made no sense.
    */
-  const fromOf = (vault: string): string | null =>
-    owners.find((o) => !o.safe && o.address && ownerVaultAddress(o.address as Address, network).toLowerCase() === vault.toLowerCase())
-      ?.address ?? null;
+  const fromOf = (vault: string, self?: string | null): string | null => {
+    const o = owners.find((x) => !x.safe && x.address && ownerVaultAddress(x.address as Address, network).toLowerCase() === vault.toLowerCase());
+    if (!o?.address || (self && o.address.toLowerCase() === self.toLowerCase())) return null;
+    return o.address;
+  };
+  /** The key's own vault, the one the factory derives from it: not received from anyone. */
+  const ownVault = (vault: string, self?: string | null): boolean =>
+    !!self && ownerVaultAddress(self as Address, network).toLowerCase() === vault.toLowerCase();
 
   const [busy, setBusy] = useState(false);
   const stable = useAssetCatalog(network).find((a) => a.kind === 'stable')?.address;
@@ -349,7 +385,9 @@ export function VaultListScreen() {
     // Transferred away: it cannot be opened.
     if (!v.owner || notYours.has(v.index)) return;
     // Never onto a network this build does not offer (Tron, in a store release).
-    if (v.vault && v.network && v.network !== network && NETWORKS.includes(v.network as Network)) setNetwork(v.network as Network);
+    // Choosing a vault never changes the network, and any vault can be chosen on any network: one not
+    // activated here is chosen to activate it, one whose key is not unlocked yet to unlock it. One that
+    // has no vault on this chain (received on another) shows its balances as 0 (see useVaultBalances).
     selectVault(v.index);
     nav.goBack();
   };
@@ -414,19 +452,41 @@ export function VaultListScreen() {
     nav.goBack();
   };
 
+  /**
+   * Remove, asked first: only this phone's list changes. The vault, its money and its owner on
+   * chain stay as they are, and it comes back as it was from Removed vaults.
+   */
+  const confirmRemove = (v: VaultRef) =>
+    Alert.alert(t('mobile.vaults.remove_title', {name: vaultLabel(v, label)}), t('mobile.vaults.remove_body'), [
+      {text: t('common.cancel'), style: 'cancel'},
+      {text: t('mobile.vaults.remove'), style: 'destructive', onPress: () => hideVault(v.index)},
+    ]);
+
   const row = (v: VaultRef, i: number, count: number) => {
     const on = v.index === activeIndex;
     const gone = notYours.has(v.index);
     const address = vaultAddressOf(v, network);
-    // A received vault on another chain: its own address, the one it has there.
-    const elsewhere = !!v.vault && v.network !== network;
-    const from = v.vault && !elsewhere ? fromOf(v.vault) : null;
-    const tag = v.safe ? t('mobile.vaults.tag_safe') : v.vault && !from ? t('mobile.vaults.tag_received') : null;
+    // A received vault on another chain, with no vault on this one: its own address, the one it has there.
+    const elsewhere = !!v.vault && !address;
+    const from = v.vault && !elsewhere ? fromOf(v.vault, v.owner) : null;
+    // Received from someone this phone cannot name. Named, the row says "Transferred from" instead;
+    // the key's own vault was received from no one.
+    const received = !v.safe && !!v.vault && !from && !ownVault(v.vault, v.owner);
+    const tag = v.safe ? t('mobile.vaults.tag_safe') : received ? t('mobile.vaults.tag_received') : null;
     return (
-      <Pressable
+      // Swiped left: Remove, off this phone's list only, restorable from the ⋯ menu's Removed vaults.
+      <SwipeRow
         key={v.index}
+        open={swipeOpen === v.index}
+        onOpen={() => setSwipeOpen(v.index)}
+        onClose={() => setSwipeOpen((o) => (o === v.index ? null : o))}
+        actionLabel={t('mobile.vaults.remove')}
+        onAction={() => confirmRemove(v)}
+        disabled={vaults.length <= 1}>
+      <Pressable
         style={({pressed}) => [styles.vaultRow, i < count - 1 && styles.rowDivider, gone && styles.gone, pressed && styles.pressed]}
-        onPress={() => choose(v)}>
+        // A row slid open closes on a tap, rather than choosing the vault under the finger.
+        onPress={() => (swipeOpen != null ? setSwipeOpen(null) : choose(v))}>
         <View style={styles.vaultText}>
           <View style={styles.nameLine}>
             <Text style={styles.name} numberOfLines={1}>
@@ -441,6 +501,12 @@ export function VaultListScreen() {
                 <Path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke={c.subtext} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none" />
               </Svg>
             </Pressable>
+            {/* Activated on this chain: the vault has code here. Read with its owner (see
+                useVaultDirectory's `ownerNow`, which only a deployed vault answers), so it costs no
+                read of its own. A vault not activated yet, or one the chain could not be asked
+                about, says nothing. Nor does one tagged Received: a vault can only be transferred
+                once it is activated, so Received already says it. */}
+            {!received && ownerNow.has(v.index) ? <Text style={[styles.tag, styles.tagGood]}>{t('mobile.vaults.tag_activated')}</Text> : null}
             {tag ? <Text style={styles.tag}>{tag}</Text> : null}
             {v.safe && quorum[v.safe.toLowerCase()] ? <Text style={styles.tag}>{quorum[v.safe.toLowerCase()]}</Text> : null}
             {/* The row's top right corner, at the end of the name's line so the address below gets
@@ -469,6 +535,7 @@ export function VaultListScreen() {
           {gone ? <Text style={styles.goneText}>{t('mobile.vaults.transferred_to', {address: transferredTo.get(v.index) ?? ''})}</Text> : null}
         </View>
       </Pressable>
+      </SwipeRow>
     );
   };
 
@@ -492,7 +559,7 @@ export function VaultListScreen() {
               <Text style={styles.name} numberOfLines={1}>
                 {nameAt(f.vault) || pendingLabel(g.owner.phrase)}
               </Text>
-              {fromOf(f.vault) ? null : <Text style={styles.tag}>{t('mobile.vaults.tag_received')}</Text>}
+              {fromOf(f.vault, f.key.address) || ownVault(f.vault, f.key.address) ? null : <Text style={styles.tag}>{t('mobile.vaults.tag_received')}</Text>}
               {/* The vault in front, moved here from its old owner's section: the check goes with it. */}
               <View style={styles.nameEnd}>
                 {activeAt === f.vault.toLowerCase() ? <Text style={styles.check}>✓</Text> : <CopyButton address={f.vault} />}
@@ -501,8 +568,8 @@ export function VaultListScreen() {
             <Text style={styles.addr}>
               {asShown(f.vault)}
             </Text>
-            {fromOf(f.vault) ? (
-              <Text style={styles.fromText}>{t('mobile.vaults.transferred_from', {address: shortAddr(fromOf(f.vault)!)})}</Text>
+            {fromOf(f.vault, f.key.address) ? (
+              <Text style={styles.fromText}>{t('mobile.vaults.transferred_from', {address: shortAddr(fromOf(f.vault, f.key.address)!)})}</Text>
             ) : null}
           </View>
         </Pressable>
@@ -704,6 +771,19 @@ export function VaultListScreen() {
             <Text style={styles.menuLabel}>{t('mobile.vaults.show_transferred')}</Text>
             <Switch value={showTransferred} onValueChange={toggleTransferred} />
           </View>
+          {/* Vaults removed from the list, to restore: offered only once there is one. */}
+          {allVaults.some((v) => v.hidden) ? (
+            <Pressable
+              style={({pressed}) => [styles.menuRow, styles.rowDivider, pressed && styles.pressed]}
+              onPress={() => {
+                setMenuOpen(false);
+                nav.navigate('RemovedVaults');
+              }}
+              accessibilityRole="button">
+              <Text style={styles.menuLabel}>{t('mobile.vaults.removed_vaults')}</Text>
+              <Text style={styles.chev}>›</Text>
+            </Pressable>
+          ) : null}
           {/* Last: the Safe vaults' own page — adding one (the owner's key, the Safe's address),
               choosing one, taking one off the phone. */}
           <Pressable
@@ -732,6 +812,7 @@ const makeStyles = (c: Colors) =>
     vaultText: {flex: 1, gap: 3},
     nameLine: {flexDirection: 'row', alignItems: 'center', gap: 6},
     name: {color: c.text, fontSize: 15, fontWeight: '600', flexShrink: 1},
+    tagGood: {color: c.success, borderColor: c.success},
     tag: {color: c.subtext, fontSize: 11, fontWeight: '600', borderWidth: StyleSheet.hairlineWidth, borderColor: c.border, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1, overflow: 'hidden'},
     // Full, and small enough to wrap to two lines rather than be cut: vaults are told apart by
     // their address, and an elided middle is where two would differ.
