@@ -37,6 +37,16 @@ const NILE = {
   bootstrap: '0x584C1CB9995fF8ADF0eE1B82BF25Db7Be7c33fA8',
 } as const satisfies Record<string, Address>;
 
+/**
+ * Bitty's auto-yield keeper (BittyV1AutoYieldKeeper), the one address a vault names as its
+ * autoYieldTrigger so the keeper's sweeps are accepted. The same address on every EVM chain; checked
+ * deployed on mainnet, Base, Sepolia and Robinhood on 2026-11-21, not yet on Arbitrum, BNB Chain or
+ * Base Sepolia (a vault naming it there is swept once it is). None on Tron.
+ */
+export const AUTO_YIELD_KEEPER: Address = '0xC10981d43Fa3897911802ae3F83D605E5E249cF0';
+export const autoYieldKeeper = (network: Network): Address | null =>
+  network === 'tron-nile' ? null : AUTO_YIELD_KEEPER;
+
 export const vaultGuard = (network: Network): Address => (network === 'tron-nile' ? NILE.guard : VAULT_GUARD);
 export const vaultFactory = (network: Network): Address => (network === 'tron-nile' ? NILE.factory : VAULT_FACTORY);
 export const vaultBootstrap = (network: Network): Address => (network === 'tron-nile' ? NILE.bootstrap : VAULT_BOOTSTRAP);

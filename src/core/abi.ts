@@ -109,6 +109,9 @@ export const VAULT_STABLE_COIN_AS_GAS_ABI = parseAbi([
 export const VAULT_AUTOYIELD_ABI = parseAbi([
   'function setAutoYielding((address asset,address protocol) route)',
   'function getAutoYieldings(address[] assetAddresses) view returns (address[] protocols)',
+  // Who may sweep: a slot the owner sets, empty on a new vault. See {setAutoYield}.
+  'function autoYieldTrigger() view returns (address)',
+  'function setAutoYieldTrigger(address trigger)',
 ]);
 
 /** The vault DeFi actions we relay. `deposit` = stake/supply; `withdraw` folds unstake in on v1.0.x. */
