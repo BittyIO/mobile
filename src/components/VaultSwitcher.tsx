@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -7,9 +7,8 @@ import Svg, {Path} from 'react-native-svg';
 import type {RootStackParamList} from '@/App';
 import {useVaults, vaultLabel} from '@/core/vault-store';
 import {useActiveVaultAddress} from '@/core/active-vault';
-import {networkLabel, useNetwork} from '@/core/network-store';
+import {useNetwork} from '@/core/network-store';
 import {asShown} from '@/core/format';
-import {showToast} from '@/components/Toast';
 import {useT} from '@/i18n';
 import {MONO, useColors} from '@/theme';
 
@@ -19,6 +18,8 @@ const shortAddress = (a: string) => (a.length > 16 ? `${a.slice(0, a.startsWith(
 /**
  * The vault in front, in every tab's left-hand corner: its name, opening the Vaults page, and
  * beside it its address on this network (T… on Tron), shortened, which copies the whole of it.
+ * The copy says so in place: its icon turns into a check for a moment, as {CopyAddress} does, rather
+ * than a toast over the page.
  *
  * Opposite the chain in the right-hand corner ({NetworkSwitcher}), because the two together say
  * whose money the page is showing: which vault, on which chain.
@@ -30,6 +31,11 @@ const shortAddress = (a: string) => (a.length > 16 ? `${a.slice(0, a.startsWith(
 export function VaultSwitcher({stack = false}: {stack?: boolean} = {}) {
   const {t} = useT();
   const c = useColors();
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const network = useNetwork((s) => s.network);
   const vault = useActiveVaultAddress(network);
@@ -39,7 +45,9 @@ export function VaultSwitcher({stack = false}: {stack?: boolean} = {}) {
   const copy = () => {
     if (!vault) return;
     Clipboard.setString(asShown(vault));
-    showToast('success', t('mobile.home.address_copied', {network: networkLabel(network, t)}));
+    setCopied(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setCopied(false), 1500);
   };
   return (
     <View style={[styles.row, stack ? styles.stack : styles.pill]}>
@@ -59,13 +67,19 @@ export function VaultSwitcher({stack = false}: {stack?: boolean} = {}) {
           style={styles.addrBtn}
           hitSlop={{top: 12, bottom: 12, left: 4, right: 8}}
           accessibilityRole="button"
-          accessibilityLabel={t('common.copy')}>
+          accessibilityLabel={copied ? t('common.copied') : t('common.copy')}>
           <Text style={[styles.addr, {color: c.subtext}]} numberOfLines={1}>
             {shortAddress(asShown(vault))}
           </Text>
           <Svg width={12} height={12} viewBox="0 0 24 24">
-            <Path d="M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1Z" fill="none" stroke={c.subtext} strokeWidth={2} />
-            <Path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" fill="none" stroke={c.subtext} strokeWidth={2} strokeLinecap="round" />
+            {copied ? (
+              <Path d="M20 6 9 17l-5-5" fill="none" stroke={c.success} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+            ) : (
+              <>
+                <Path d="M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1Z" fill="none" stroke={c.subtext} strokeWidth={2} />
+                <Path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" fill="none" stroke={c.subtext} strokeWidth={2} strokeLinecap="round" />
+              </>
+            )}
           </Svg>
         </Pressable>
       ) : null}

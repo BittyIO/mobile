@@ -2,6 +2,7 @@ import React, {useEffect, useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {SettingsGroup, makeSettingsStyles} from '@/components/SettingsRow';
 import {ReceiveDialog} from '@/components/ReceiveDialog';
+import {CopyButton} from '@/components/CopyButton';
 import {Amount} from '@/components/Amount';
 import {networkLabel, useNetwork} from '@/core/network-store';
 import {useActiveFeePayer} from '@/vault/useFeePayer';
@@ -57,6 +58,8 @@ export function OwnerWalletCard() {
           <Text style={styles.addr} numberOfLines={2}>
             {wrappableAddress(owner)}
           </Text>
+          {/* Copies it here; the row's own tap opens the QR. */}
+          <CopyButton address={owner} />
         </Pressable>
         <View style={styles.row}>
           <Text style={styles.rowTitle}>{t('mobile.fees.balance')}</Text>
@@ -80,5 +83,5 @@ export function OwnerWalletCard() {
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     ...makeSettingsStyles(c),
-    addr: {flex: 1, color: c.text, fontSize: 13, fontFamily: MONO},
+    addr: {flex: 1, color: c.text, fontSize: 13, fontFamily: MONO, marginRight: 10},
   });

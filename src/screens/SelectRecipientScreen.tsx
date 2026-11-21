@@ -15,8 +15,7 @@ import {fetchWhitelist, removeWhitelisted, type WhitelistedRecipient} from '@/va
 import {WHITELIST_STATUS} from '@/core/abi';
 import {getRiskConfig, type RiskConfig} from '@/vault/risk';
 import {fmtAllowance, fmtDuration} from '@/components/riskFormat';
-import Clipboard from '@react-native-clipboard/clipboard';
-import {showToast} from '@/components/Toast';
+import {CopyButton} from '@/components/CopyButton';
 import {ProgressRing, leftUnit, waitDone} from '@/components/ProgressRing';
 import {useVaultWrite} from '@/components/useVaultWrite';
 import {usePending} from '@/vault/pending';
@@ -185,11 +184,6 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
   };
 
   /** One book entry: its name, the full address, a status note where it has one, and the ✕. */
-  // Long press any address to copy it.
-  const copy = (a: string) => {
-    Clipboard.setString(asShown(a));
-    showToast('success', t('common.copied'), asShown(a), 1500);
-  };
 
   // A clock for the pending rings, ticking while the page is up.
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
@@ -213,8 +207,7 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
         style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === list.length - 1 && styles.rowLast, (pressed || unpayable) && styles.pressed]}
         // Managing the book, a tap chooses nothing.
         disabled={manage || unpayable || (payees && editing)}
-        onPress={() => pick(b.recipientAddress, named)}
-        onLongPress={() => copy(b.recipientAddress)}>
+        onPress={() => pick(b.recipientAddress, named)}>
         {/* Every entry under a name: the one saved on this device, or its place in the
             book where none was given. The full address below, since that is what gets paid. */}
         <View style={styles.entryCol}>
@@ -222,6 +215,8 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
             <Text style={[styles.entryName, !named && styles.entryNameOff]} numberOfLines={1}>
               {named ?? t('mobile.payments.recipient_n', {n: b.id})}
             </Text>
+            {/* Copies the address below; a tap on the row chooses the payee. */}
+            <CopyButton address={b.recipientAddress} />
             {/* Its own target, like the ✕: a tap on the row chooses the recipient. */}
             {payees && !editing ? null : (
             <Pressable
@@ -534,10 +529,12 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
                 key={v.index}
                 style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === mine.length - 1 && styles.rowLast, (pressed || unpayable) && styles.pressed]}
                 disabled={unpayable}
-                onPress={() => pick(v.address, v.name)}
-                onLongPress={() => copy(v.address)}>
+                onPress={() => pick(v.address, v.name)}>
                 <View style={styles.entryCol}>
-                  <Text style={styles.entryName} numberOfLines={1}>{v.name}</Text>
+                  <View style={styles.nameLine}>
+                    <Text style={styles.entryName} numberOfLines={1}>{v.name}</Text>
+                    <CopyButton address={v.address} />
+                  </View>
                   <Text style={styles.addrMuted}>{asShown(v.address)}</Text>
                   {whitelisted(v.address) ? (
                     <Text style={styles.sub}>

@@ -63,8 +63,8 @@ export function RecoveryPhrasesScreen() {
       {
         text: t('mobile.safemode.copy'),
         onPress: () => {
+          // The menu closing is the sign it ran: no toast.
           Clipboard.setString(asShown(key));
-          showToast('success', t('common.copied'), asShown(key), 1500);
         },
       },
       {

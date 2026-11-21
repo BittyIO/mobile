@@ -32,6 +32,7 @@ import {getRiskConfig, RISK_BOUNDS, useAllowancesOff} from '@/vault/risk';
 import {useCustomTokens} from '@/vault/custom-tokens';
 import {WHITELIST_STATUS} from '@/core/abi';
 import type {Position} from '@/vault/positions';
+import {isQueuedStake} from '@/vault/lido';
 
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors, MONO} from '@/theme';
@@ -219,16 +220,24 @@ export function SendScreen({anyone = false}: {anyone?: boolean} = {}) {
    * whitelisted recipient whose timelock has run out.
    */
   const plain = (sym: string) => meta(sym)?.kind === 'stable';
-  const stakePos = (sym: string): Position | undefined => pos.positions.find((p) => p.kind === 'staked' && p.symbol === sym);
+  /**
+   * The coin's yielding position: one that pays out at once when there is one. Lido's ETH (and Tron
+   * Stake's TRX) comes out through a queue and a claim days later, so it cannot be withdrawn and sent
+   * in one go; it is offered only as a row that cannot be chosen (see {queued}).
+   */
+  const stakePos = (sym: string): Position | undefined => {
+    const staked = pos.positions.filter((p) => p.kind === 'staked' && p.symbol === sym);
+    return staked.find((p) => !isQueuedStake(p.protocolName)) ?? staked[0];
+  };
   const lendPos = (sym: string): Position | undefined => pos.positions.find((p) => p.kind === 'supplied' && p.symbol === sym);
 
   // One source of one asset: what it holds and, for a position, the adapter to withdraw from.
-  const sourceOf = (sym: string, source: Source): {balance: string; protocol: Address | null} => {
+  const sourceOf = (sym: string, source: Source): {balance: string; protocol: Address | null; queued?: boolean} => {
     const x = customOf(sym);
     if (x) return {balance: source === 'free' ? x.balance : '0', protocol: null};
     if (source === 'yield') {
       const p = stakePos(sym);
-      return {balance: p?.formatted ?? '0', protocol: p?.protocol ?? null};
+      return {balance: p?.formatted ?? '0', protocol: p?.protocol ?? null, queued: !!p && isQueuedStake(p.protocolName)};
     }
     if (source === 'lend') {
       const p = lendPos(sym);
@@ -276,7 +285,14 @@ export function SendScreen({anyone = false}: {anyone?: boolean} = {}) {
     worthShowing(Number(o.balance), o.asset.symbol, prices, o.asset.kind === 'stable');
 
   // Every asset/source the vault can actually pay from — the picker's rows.
-  type SourceOption = {asset: {symbol: string; address: Address; decimals: number; kind: string}; source: Source; balance: string; protocol: Address | null};
+  /** `queued`: a position that withdraws through a queue and a claim, shown in the picker but not choosable. */
+  type SourceOption = {
+    asset: {symbol: string; address: Address; decimals: number; kind: string};
+    source: Source;
+    balance: string;
+    protocol: Address | null;
+    queued?: boolean;
+  };
   const sourceOptions = useMemo<SourceOption[]>(
     () =>
       assets.flatMap((a): SourceOption[] =>
@@ -299,7 +315,7 @@ export function SendScreen({anyone = false}: {anyone?: boolean} = {}) {
   // three lines ready and nothing to add by hand. Falls back to any funded token, then to a blank
   // line on the first asset.
   const defaultLines = useMemo<Line[]>(() => {
-    const funded = sourceOptions.filter(worth);
+    const funded = sourceOptions.filter((o) => worth(o) && !o.queued);
     const pick = funded.find((o) => o.asset.kind === 'stable') ?? funded[0];
     if (!pick) return [newLine(first)];
     return funded.filter((o) => o.asset.symbol === pick.asset.symbol).map((o) => newLine(o.asset.symbol, o.source));
@@ -688,15 +704,23 @@ export function SendScreen({anyone = false}: {anyone?: boolean} = {}) {
                 const line = picker.k == null ? null : recipient.lines[picker.k];
                 const on = line != null && lineKey(line) === key;
                 return (
-                  <Pressable key={key} style={styles.pickRow} onPress={() => choose(picker.k, o.asset.symbol, o.source)}>
+                  <Pressable
+                    key={key}
+                    style={[styles.pickRow, o.queued && styles.pickRowOff]}
+                    disabled={o.queued}
+                    onPress={() => choose(picker.k, o.asset.symbol, o.source)}>
                     <TokenIcon symbol={sym} size={30} badgeOnly={!!pasted} />
                     <View style={styles.pickCol}>
                       <Text style={styles.pickLabel}>{o.source === 'free' ? sym : `${sym} ${sourceLabel(o.source)}`}</Text>
                       {/* A pasted token is known by its address, not its name: shown in full. */}
                       {pasted ? <Text style={styles.pickAddr}>{asShown(pasted.address)}</Text> : null}
+                      {/* Lido's ETH: shown so the vault's holding is not missing, but it pays out only after a claim. */}
+                      {o.queued ? <Text style={styles.pickNote}>{t('mobile.payments.source_needs_claim')}</Text> : null}
                     </View>
                     <Text style={styles.pickSub}>
-                      {fmtNum(Number(formatUnits(remaining(o.asset.symbol, o.source), o.asset.decimals)))}
+                      {o.queued
+                        ? fmtNum(Number(o.balance))
+                        : fmtNum(Number(formatUnits(remaining(o.asset.symbol, o.source), o.asset.decimals)))}
                     </Text>
                     {on ? (
                       <Svg width={18} height={18} viewBox="0 0 24 24">
@@ -793,6 +817,8 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   addAddrBtn: {backgroundColor: c.accent, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 10},
   addAddrBtnOff: {opacity: 0.5},
   addAddrBtnText: {color: c.onAccent, fontSize: 14, fontWeight: '700'},
+  pickRowOff: {opacity: 0.45},
+  pickNote: {color: c.subtext, fontSize: 12, marginTop: 2},
   pickSub: {color: c.subtext, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums']},
   addRow: {minHeight: 52, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16},
   addToken: {color: c.accent, fontSize: 15, fontWeight: '600'},

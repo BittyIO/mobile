@@ -2,13 +2,12 @@ import {displayAddress, parseAddress} from '@/core/address';
 import React, {useCallback, useEffect, useState} from 'react';
 import {ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
-import Clipboard from '@react-native-clipboard/clipboard';
 import Svg, {Circle, Path} from 'react-native-svg';
 import {isAddress, type Address} from 'viem';
 import {publicClientFor} from '@/core/chain';
 import {VAULT_OWNERSHIP_ABI} from '@/core/abi';
 import {isPayableAddress} from '@/core/asset-catalog';
-import {shortAddress, asShown} from '@/core/format';
+import {asShown} from '@/core/format';
 import {getLockLevel, getPendingChanges, getRiskConfig} from '@/vault/risk';
 import {cancelOwnershipTransfer, transferOwnership} from '@/vault/ownership';
 import {Button, ConfirmButton} from '@/components/Button';
@@ -16,7 +15,6 @@ import {PendingRow} from '@/components/PendingRow';
 import {QuantumInfoButton, QuantumKeys} from '@/components/QuantumHandover';
 import {SettingsGroup} from '@/components/SettingsRow';
 import {Sheet} from '@/components/Sheet';
-import {showToast} from '@/components/Toast';
 import {useVaultWrite} from '@/components/useVaultWrite';
 import {relayGasFor} from '@/vault/fee-quote';
 import {useWallet} from '@/wallet/store';
@@ -24,6 +22,7 @@ import {isOwnKey} from '@/wallet/rotation';
 import {keyPathOf} from '@/wallet/rotation-store';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors, MONO} from '@/theme';
+import {CopyButton} from '@/components/CopyButton';
 
 /**
  * Security › Ownership — who controls the vault, and handing it to another key.
@@ -83,11 +82,6 @@ export function OwnershipScreen() {
     return () => clearInterval(id);
   }, []);
 
-  const copyOwner = () => {
-    if (!owner) return;
-    Clipboard.setString(displayAddress(network, owner));
-    showToast('success', t('common.copied'), shortAddress(owner));
-  };
 
   // Not the key in charge now, not the vault itself, not a token: each would strand the vault.
   const parsed = parseAddress(network, addr);
@@ -129,9 +123,10 @@ export function OwnershipScreen() {
           </Pressable>
         </View>
         {owner ? (
-          <Pressable onLongPress={copyOwner} accessibilityHint={t('common.copied')}>
-            {({pressed}) => <Text style={[styles.address, pressed && styles.addressPressed]}>{owner}</Text>}
-          </Pressable>
+          <View style={styles.addressLine}>
+            <Text style={[styles.address, styles.addressText]}>{owner}</Text>
+            <CopyButton address={displayAddress(network, owner)} />
+          </View>
         ) : owner === undefined ? (
           <ActivityIndicator color={c.subtext} style={styles.loading} />
         ) : (
@@ -200,8 +195,10 @@ const makeStyles = (c: Colors) =>
     card: {backgroundColor: c.card, borderRadius: 20, padding: 16, gap: 10},
     labelRow: {flexDirection: 'row', alignItems: 'center', gap: 6},
     label: {color: c.subtext, fontSize: 13, fontWeight: '600'},
+    // The owner's address, its copy button at the end of the line.
+    addressLine: {flexDirection: 'row', alignItems: 'center', gap: 8},
+    addressText: {flex: 1},
     address: {color: c.text, fontSize: 15, lineHeight: 22, fontFamily: MONO},
-    addressPressed: {opacity: 0.5},
     loading: {alignSelf: 'flex-start', paddingVertical: 2},
     missing: {color: c.subtext, fontSize: 15},
     sheetBody: {paddingTop: 4, paddingBottom: 24, gap: 14},

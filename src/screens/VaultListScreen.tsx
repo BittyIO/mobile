@@ -14,18 +14,18 @@ import {useWallet} from '@/wallet/store';
 import * as keyring from '@/wallet/keyring';
 import {deviceKeys, fetchOneTimeKeyVaults, fetchOwnedVaults, recall, remember, useVaultDirectory, type FoundVault} from '@/vault/owned-vaults';
 import {acceptOwnership} from '@/vault/ownership';
+import {CopyButton} from '@/components/CopyButton';
 import {fetchSafe} from '@/vault/safe';
 import {relayGasFor} from '@/vault/fee-quote';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {useConfirmAction} from '@/components/ConfirmAction';
-import {showToast, showTx} from '@/components/Toast';
+import {showTx} from '@/components/Toast';
 import {Sheet} from '@/components/Sheet';
 import {MoreIcon} from '@/components/TradeMenu';
 import {getPref, setPref} from '@/core/prefs';
-import Clipboard from '@react-native-clipboard/clipboard';
 import {SettingsGroup, makeSettingsStyles} from '@/components/SettingsRow';
 import {useT} from '@/i18n';
-import {wrappableAddress, asShown} from '@/core/format';
+import {wrappableAddress} from '@/core/format';
 import {useColors, useStyles, type Colors, MONO} from '@/theme';
 
 /**
@@ -324,11 +324,6 @@ export function VaultListScreen() {
     owners.find((o) => !o.safe && o.address && ownerVaultAddress(o.address as Address, network).toLowerCase() === vault.toLowerCase())
       ?.address ?? null;
 
-  const copyAddress = (address: string | null) => {
-    if (!address) return;
-    Clipboard.setString(asShown(address));
-    showToast('success', t('common.copied'), asShown(address), 1500);
-  };
   const [busy, setBusy] = useState(false);
   const stable = useAssetCatalog(network).find((a) => a.kind === 'stable')?.address;
   const {ask, sheet} = useConfirmAction();
@@ -431,9 +426,7 @@ export function VaultListScreen() {
       <Pressable
         key={v.index}
         style={({pressed}) => [styles.vaultRow, i < count - 1 && styles.rowDivider, gone && styles.gone, pressed && styles.pressed]}
-        onPress={() => choose(v)}
-        // Long press copies the vault's address, as it does on every address in the app.
-        onLongPress={() => address && copyAddress(address)}>
+        onPress={() => choose(v)}>
         <View style={styles.vaultText}>
           <View style={styles.nameLine}>
             <Text style={styles.name} numberOfLines={1}>
@@ -450,9 +443,19 @@ export function VaultListScreen() {
             </Pressable>
             {tag ? <Text style={styles.tag}>{tag}</Text> : null}
             {v.safe && quorum[v.safe.toLowerCase()] ? <Text style={styles.tag}>{quorum[v.safe.toLowerCase()]}</Text> : null}
-            {/* The one in front, at the end of its name's line — the address below gets the
-                row's full width. */}
-            {on ? <Text style={[styles.check, styles.checkEnd]}>✓</Text> : null}
+            {/* The row's top right corner, at the end of the name's line so the address below gets
+                the row's full width: the check on the one in front, which needs no copy button (the
+                overview's own copies it); on every other vault its address's copy button. The row's
+                own tap chooses the vault. */}
+            <View style={styles.nameEnd}>
+              {on ? (
+                <Text style={styles.check}>✓</Text>
+              ) : elsewhere ? (
+                <CopyButton address={v.vault!} />
+              ) : address ? (
+                <CopyButton address={address} />
+              ) : null}
+            </View>
           </View>
           {/* Full: vaults are told apart by their address, so none of it is cut. Where the row is
               too narrow for one line it wraps to a second at the same size — shrinking it to fit
@@ -482,8 +485,7 @@ export function VaultListScreen() {
         <Pressable
           key={f.vault}
           style={({pressed}) => [styles.vaultRow, !last(listed.length + i) && styles.rowDivider, pressed && styles.pressed]}
-          onPress={() => onAddFound(f)}
-          onLongPress={() => copyAddress(f.vault)}>
+          onPress={() => onAddFound(f)}>
           <View style={styles.vaultText}>
             <View style={styles.nameLine}>
               <Text style={styles.name} numberOfLines={1}>
@@ -491,7 +493,9 @@ export function VaultListScreen() {
               </Text>
               {fromOf(f.vault) ? null : <Text style={styles.tag}>{t('mobile.vaults.tag_received')}</Text>}
               {/* The vault in front, moved here from its old owner's section: the check goes with it. */}
-              {activeAt === f.vault.toLowerCase() ? <Text style={[styles.check, styles.checkEnd]}>✓</Text> : null}
+              <View style={styles.nameEnd}>
+                {activeAt === f.vault.toLowerCase() ? <Text style={styles.check}>✓</Text> : <CopyButton address={f.vault} />}
+              </View>
             </View>
             <Text style={styles.addr} numberOfLines={2}>
               {wrappableAddress(f.vault)}
@@ -506,7 +510,10 @@ export function VaultListScreen() {
       ...waiting.map((f, i) => (
         <View key={f.vault} style={[styles.vaultRow, !last(listed.length + received.length + i) && styles.rowDivider]}>
           <View style={styles.vaultText}>
-            <Text style={styles.addr}>{f.vault}</Text>
+            <View style={styles.addrLine}>
+              <Text style={[styles.addr, styles.addrText]}>{f.vault}</Text>
+              <CopyButton address={f.vault} />
+            </View>
             <Text style={styles.goneText}>{t('mobile.vaults.pending_note')}</Text>
           </View>
           <Pressable onPress={() => onAccept(f)} hitSlop={8} accessibilityRole="button">
@@ -519,14 +526,16 @@ export function VaultListScreen() {
       ...incoming.map((f, i) => (
         <Pressable
           key={f.vault}
-          style={[styles.vaultRow, !last(listed.length + received.length + waiting.length + i) && styles.rowDivider]}
-          onLongPress={() => copyAddress(f.vault)}>
+          style={[styles.vaultRow, !last(listed.length + received.length + waiting.length + i) && styles.rowDivider]}>
           <View style={styles.vaultText}>
             <View style={styles.nameLine}>
               <Text style={styles.name} numberOfLines={1}>
                 {pendingLabel(g.owner.phrase)}
               </Text>
               <Text style={styles.tag}>{t('mobile.vaults.tag_received')}</Text>
+              <View style={styles.nameEnd}>
+                <CopyButton address={f.vault} />
+              </View>
             </View>
             <Text style={styles.addr} numberOfLines={2}>
               {wrappableAddress(f.vault)}
@@ -562,12 +571,14 @@ export function VaultListScreen() {
             const o = g.owner;
             return (
               <View key={o.key} style={styles.section}>
-                <Pressable onLongPress={() => copyAddress(o.address)} hitSlop={4}>
-                  {/* A key whose address is not derived yet goes by its number until it is. */}
-                  <Text style={[styles.groupLabel, o.address && styles.ownerAddr]}>
+                {/* The owner, and after it the copy button for its full address. A key whose address
+                    is not derived yet goes by its number until it is, with nothing to copy. */}
+                <View style={styles.groupLabelLine}>
+                  <Text style={[styles.groupLabel, styles.groupLabelInline, o.address && styles.ownerAddr]}>
                     {o.address ? t('mobile.vaults.owner_header', {address: shortAddr(o.address)}) : t('mobile.vaults.owner_n', {n: o.keyIndex + 1})}
                   </Text>
-                </Pressable>
+                  {o.address ? <CopyButton address={o.address} size={13} /> : null}
+                </View>
                 <View style={styles.group}>{groupRows(g, 0, groupSize(g))}</View>
               </View>
             );
@@ -723,9 +734,13 @@ const makeStyles = (c: Colors) =>
     tag: {color: c.subtext, fontSize: 11, fontWeight: '600', borderWidth: StyleSheet.hairlineWidth, borderColor: c.border, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1, overflow: 'hidden'},
     // Full, and small enough to wrap to two lines rather than be cut: vaults are told apart by
     // their address, and an elided middle is where two would differ.
+    // A row with no name line (a handover to accept): the address, its copy button at the top right.
+    addrLine: {flexDirection: 'row', alignItems: 'flex-start', gap: 6},
+    addrText: {flexShrink: 1},
     addr: {color: c.subtext, fontSize: 13, fontFamily: MONO, fontWeight: '700', lineHeight: 18},
     // Pushed to the end of the name's line.
-    checkEnd: {marginLeft: 'auto'},
+    // The name line's right end, top right: the check on the vault in front, else the copy button.
+    nameEnd: {marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: 12},
     // A group's header when it is an address: the address font, small enough to fit on one line.
     ownerAddr: {fontSize: 13, fontFamily: MONO, fontWeight: '400'},
     gone: {opacity: 0.45},
