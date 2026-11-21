@@ -9,11 +9,11 @@ import {vaultAddressOf} from '@/core/active-vault';
 import {NETWORKS, useNetwork} from '@/core/network-store';
 import type {Network} from '@/core/chain';
 import {useWallet} from '@/wallet/store';
-import {showToast} from '@/components/Toast';
 import {SettingsGroup, makeSettingsStyles} from '@/components/SettingsRow';
 import {asShown, wrappableAddress} from '@/core/format';
 import {useT} from '@/i18n';
 import {useStyles, type Colors, MONO} from '@/theme';
+import {CopyButton} from '@/components/CopyButton';
 
 /** An address shortened to its first and last six: 0x111111…000000. */
 const shortAddr = (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}`;
@@ -41,10 +41,8 @@ export function SafeVaultsScreen() {
   const safes = vaults.filter((v) => v.safe);
   const label = (n: number) => t('mobile.app.vault_n', {n});
 
-  const copy = (address: string) => {
-    Clipboard.setString(asShown(address));
-    showToast('success', t('common.copied'), asShown(address), 1500);
-  };
+  // The menu's Copy: the menu closing is the sign it ran, so no toast.
+  const copy = (address: string) => Clipboard.setString(asShown(address));
 
   const choose = (v: VaultRef) => {
     // A Safe vault given to the Safe by transfer exists on one chain only.
@@ -84,10 +82,11 @@ export function SafeVaultsScreen() {
         const on = v.index === activeIndex;
         return (
           <View key={v.index} style={styles.section}>
-            {/* The Safe is the vault's owner: its address heads the group. Long press to copy. */}
-            <Pressable onLongPress={() => copy(v.safe!)} hitSlop={4}>
-              <Text style={[styles.groupLabel, styles.mono]}>{t('mobile.safemode.safe_header', {address: shortAddr(v.safe!)})}</Text>
-            </Pressable>
+            {/* The Safe is the vault's owner: its address heads the group, with its copy button. */}
+            <View style={styles.groupLabelLine}>
+              <Text style={[styles.groupLabel, styles.groupLabelInline, styles.mono]}>{t('mobile.safemode.safe_header', {address: shortAddr(v.safe!)})}</Text>
+              <CopyButton address={v.safe!} size={13} />
+            </View>
             <View style={styles.group}>
               <Pressable style={({pressed}) => [styles.vaultRow, pressed && styles.pressed]} onPress={() => choose(v)} onLongPress={() => manage(v)}>
                 <View style={styles.vaultText}>

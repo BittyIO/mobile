@@ -28,6 +28,7 @@ import type {SafeMessageStatus} from '@/vault/safe';
 import * as keyring from '@/wallet/keyring';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors, MONO} from '@/theme';
+import {CopyButton} from '@/components/CopyButton';
 
 /** An address shortened to its first and last six: 0x111111…000000. */
 const shortAddr = (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}`;
@@ -290,13 +291,14 @@ export function ManageMultisigScreen() {
           tintColor={c.text}
         />
       }>
-      {/* The multisig and its rule, as the chain has them now. Long press to copy the address. */}
+      {/* The multisig and its rule, as the chain has them now. The address, then its copy button. */}
       <View style={styles.card}>
-        <Pressable onLongPress={() => Clipboard.setString(safe)}>
-          <Text style={styles.addr} selectable>
+        <View style={styles.copyLine}>
+          <Text style={[styles.addr, styles.copyText]} selectable>
             {safe}
           </Text>
-        </Pressable>
+          <CopyButton address={safe} />
+        </View>
         <Text style={styles.big}>{t('mobile.safe.threshold_of', {n: state.threshold, total: state.owners.length})}</Text>
       </View>
 
@@ -347,10 +349,11 @@ export function ManageMultisigScreen() {
           const here = onPhone.some((a) => a.toLowerCase() === o.toLowerCase());
           return (
             <View key={o} style={[styles.ownerRow, i < state.owners.length - 1 && styles.rowDivider]}>
-              <Pressable style={styles.ownerText} onLongPress={() => Clipboard.setString(o)}>
+              <View style={styles.ownerText}>
                 <Text style={styles.ownerAddr}>{shortAddr(o)}</Text>
+                <CopyButton address={o} />
                 {here ? <Text style={styles.badge}>{t('mobile.safemode.on_phone')}</Text> : null}
-              </Pressable>
+              </View>
               {state.owners.length > 1 ? (
                 <Pressable onPress={() => onRemove(o)} disabled={busy || !canSign} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('vault.remove')}>
                   <Text style={[styles.remove, (busy || !canSign) && styles.off]}>{t('vault.remove')}</Text>
@@ -440,6 +443,9 @@ const makeStyles = (c: Colors) =>
     card: {backgroundColor: c.card, borderRadius: 20, padding: 16, gap: 12},
     title: {color: c.text, fontSize: 17, fontWeight: '600'},
     big: {color: c.text, fontSize: 16, fontWeight: '600'},
+    // An address, its copy button at the end of the line.
+    copyLine: {flexDirection: 'row', alignItems: 'center', gap: 8},
+    copyText: {flex: 1},
     addr: {color: c.subtext, fontSize: 13, fontFamily: MONO},
     pendingRow: {paddingVertical: 12, paddingHorizontal: 16, gap: 8},
     pendingText: {color: c.text, fontSize: 14, lineHeight: 20},

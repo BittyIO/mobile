@@ -23,6 +23,7 @@ import {QrScanner} from '@/components/QrScanner';
 import {SettingsIcon} from '@/components/SettingsIcon';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors, MONO} from '@/theme';
+import {CopyButton} from '@/components/CopyButton';
 
 /** An address shortened to its first and last six: 0x111111…000000. */
 const shortAddr = (a: string) => `${a.slice(0, 8)}…${a.slice(-6)}`;
@@ -460,11 +461,12 @@ export function AddSafeVaultScreen() {
       <View style={styles.planBox}>
         <Text style={styles.hint}>{t('mobile.safe.vault_address')}</Text>
         {plan ? (
-          <Pressable onLongPress={() => Clipboard.setString(plan.address)}>
-            <Text style={styles.planAddr} selectable>
+          <View style={styles.planLine}>
+            <Text style={[styles.planAddr, styles.planText]} selectable>
               {plan.address}
             </Text>
-          </Pressable>
+            <CopyButton address={plan.address} />
+          </View>
         ) : planError ? (
           <Text style={styles.fieldError}>{t('mobile.safe.plan_failed')}</Text>
         ) : (
@@ -579,6 +581,9 @@ const makeStyles = (c: Colors) =>
     chipText: {color: c.text, fontSize: 16, fontWeight: '600'},
     chipTextOn: {color: c.accent},
     planBox: {marginTop: 6, padding: 12, borderRadius: 14, backgroundColor: c.input, gap: 4},
+    // The address, its copy button at the end of the line.
+    planLine: {flexDirection: 'row', alignItems: 'center', gap: 8},
+    planText: {flex: 1},
     planAddr: {color: c.text, fontSize: 13, fontFamily: MONO},
     planSpin: {alignSelf: 'flex-start'},
     toggleWrap: {alignItems: 'center', paddingTop: 8},

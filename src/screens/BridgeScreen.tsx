@@ -18,8 +18,7 @@ import {ClearBtn} from '@/components/ClearBtn';
 import {FundRow} from '@/components/FundRow';
 import {AvailableLine} from '@/components/AvailableLine';
 import {useConfirmAction} from '@/components/ConfirmAction';
-import {showToast, showTx} from '@/components/Toast';
-import Clipboard from '@react-native-clipboard/clipboard';
+import {showTx} from '@/components/Toast';
 import {FIT} from '@/core/text-scale';
 import {isTestnet, isTronNetwork, NATIVE, type Network} from '@/core/chain';
 import {networkLabel, useNetwork, useNetworks} from '@/core/network-store';
@@ -42,6 +41,7 @@ import {feeCoinForSpend, feeWeth, reserveHeld, resolveFeeReserve, useWethFeeCoin
 import {gateReasonKey, useCapability} from '@/vault/gate';
 import {versionAtLeast} from '@/vault/capabilities';
 import {runningVaultVersion} from '@/vault/vault-abi';
+import {CopyButton} from '@/components/CopyButton';
 import {
   BRIDGE_FEE_BPS,
   BRIDGE_PROTOCOL_NAME,
@@ -831,20 +831,15 @@ function Check({color}: {color: string}) {
   );
 }
 
-/** A vault's address after its network, shortened; a long press copies it in full. */
+/** A vault's address after its network, shortened, and its copy button, which copies it in full. */
 function VaultAddr({address, styles}: {address: Address; styles: ReturnType<typeof makeStyles>}) {
-  const {t} = useT();
   return (
-    <Pressable
-      hitSlop={6}
-      onLongPress={() => {
-        Clipboard.setString(asShown(address));
-        showToast('success', t('common.copied'), asShown(address), 1500);
-      }}>
+    <View style={styles.vaultAddrLine}>
       <Text style={styles.vaultAddr} numberOfLines={1}>
         {shortAddress(asShown(address))}
       </Text>
-    </Pressable>
+      <CopyButton address={address} size={12} />
+    </View>
   );
 }
 
@@ -930,6 +925,7 @@ const makeStyles = (c: Colors) =>
     // Earn's card header: the title, then what it is about, a hairline under it.
     cardHead: {flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},
     cardTitle: {color: c.subtext, fontSize: 13, fontWeight: '600'},
+    vaultAddrLine: {flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1},
     vaultAddr: {color: c.subtext, fontSize: 12, fontVariant: ['tabular-nums']},
     spacer: {flex: 1},
     arrival: {color: c.subtext, fontSize: 13, flexShrink: 1},
