@@ -94,7 +94,7 @@ const makeStyles = (c: Colors) =>
     addr: {color: c.text, fontSize: 13, fontFamily: MONO, textAlign: 'center', alignSelf: 'stretch'},
     // Copy and Share on their own line, so neither crowds the address above them.
     actions: {flexDirection: 'row', alignSelf: 'stretch', gap: 10},
-    btn: {flex: 1, height: 44, borderRadius: 22, backgroundColor: c.buttonSecondary, alignItems: 'center', justifyContent: 'center'},
+    btn: {flex: 1, minHeight: 44, paddingVertical: 6, borderRadius: 22, backgroundColor: c.buttonSecondary, alignItems: 'center', justifyContent: 'center'},
     btnText: {color: c.text, fontSize: 15, fontWeight: '600'},
     btnCopied: {backgroundColor: c.success},
     btnTextCopied: {color: c.onAccent},

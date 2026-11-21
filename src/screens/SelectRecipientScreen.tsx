@@ -590,7 +590,7 @@ const makeStyles = (c: Colors) =>
     // Sized to the bar's 44, as the Pending page's lock: the native bar anchors a custom view by its bottom.
     headerBtn: {width: 44, height: 44, alignItems: 'center', justifyContent: 'center'},
     // Edit / Done: text, sized to the bar's 44 like the + (the native bar anchors a custom view by its bottom).
-    headerText: {height: 44, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center'},
+    headerText: {minHeight: 44, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center'},
     // The + after the Payees title: the title's line, not the header's 44.
     sectionAdd: {alignSelf: 'center', marginVertical: -4},
     flexText: {flex: 1},

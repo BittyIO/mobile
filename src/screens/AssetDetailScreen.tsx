@@ -221,7 +221,7 @@ function Row({
     <View style={styles.row}>
       <Text style={styles.label}>{label}</Text>
       {typeof value === 'string' ? (
-        <Text style={[styles.value, strong && styles.valueStrong, tone ? {color: tone} : null]} numberOfLines={1}>
+        <Text style={[styles.value, strong && styles.valueStrong, tone ? {color: tone} : null]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
           {value}
         </Text>
       ) : (

@@ -326,7 +326,7 @@ const makeStyles = (c: Colors) =>
     tip: {flexDirection: 'row', alignItems: 'flex-start', gap: 12},
     tipText: {flex: 1, color: c.text, fontSize: 14, lineHeight: 20},
     tipWarn: {color: c.danger, fontWeight: '600'},
-    revealBtn: {height: 48, borderRadius: 24, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center'},
+    revealBtn: {minHeight: 48, paddingVertical: 8, borderRadius: 24, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center'},
     revealText: {color: c.onAccent, fontSize: 15, fontWeight: '700'},
     btn: {backgroundColor: c.bg, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14, borderWidth: 1, borderColor: c.border, alignSelf: 'flex-start'},
     btnText: {color: c.text, fontSize: 13, fontWeight: '600'},

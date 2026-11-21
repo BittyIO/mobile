@@ -635,7 +635,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   overText: {color: c.danger, fontSize: 12},
   sourceTag: {color: c.subtext, fontSize: 11, fontWeight: '600'},
   input: {
-    height: 44,
+    minHeight: 44,
     borderRadius: 10,
     backgroundColor: c.input,
     color: c.text,

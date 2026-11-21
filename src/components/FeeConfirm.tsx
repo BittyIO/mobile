@@ -91,5 +91,5 @@ const makeStyles = (c: Colors) =>
     // Clear of the fee line and Confirm below it, so the ask reads as its own sentence.
     blocked: {color: c.subtext, fontSize: 14, lineHeight: 20, marginBottom: 12},
     // The height of the fee line it stands in for, so the button does not jump when the fees land.
-    pricing: {height: 16, alignItems: 'flex-end', justifyContent: 'center', paddingRight: 4},
+    pricing: {minHeight: 16, alignItems: 'flex-end', justifyContent: 'center', paddingRight: 4},
   });

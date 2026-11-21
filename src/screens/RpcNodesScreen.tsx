@@ -266,9 +266,9 @@ const makeStyles = (c: Colors) =>
     remove: {color: c.danger, fontSize: 15, fontWeight: '600'},
     removeOff: {color: c.subtext},
     addRow: {flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 10},
-    input: {flex: 1, height: 40, borderRadius: 10, backgroundColor: c.input, color: c.text, paddingHorizontal: 12, fontSize: 16},
+    input: {flex: 1, minHeight: 40, borderRadius: 10, backgroundColor: c.input, color: c.text, paddingHorizontal: 12, fontSize: 16},
     addBtn: {
-      height: 40,
+      minHeight: 40,
       minWidth: 64,
       paddingHorizontal: 16,
       borderRadius: 20,

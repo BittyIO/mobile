@@ -598,7 +598,7 @@ const makeStyles = (c: Colors) =>
     ownerPays: {color: c.warning, fontSize: 13, lineHeight: 19},
     actions: {flexDirection: 'row', gap: 12, marginTop: 8},
     btnRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
-    btn: {flex: 1, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12},
+    btn: {flex: 1, minHeight: 50, paddingVertical: 8, borderRadius: 25, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12},
     depBtn: {backgroundColor: c.accent},
     btnFaded: {opacity: 0.5},
     wdBtn: {backgroundColor: c.buttonSecondary},

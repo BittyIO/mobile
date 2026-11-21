@@ -896,7 +896,7 @@ const makeStyles = (c: Colors) =>
     primary: {backgroundColor: c.accent, borderRadius: 12, paddingVertical: 13, alignItems: 'center'},
     primaryText: {color: '#fff', fontSize: 16, fontWeight: '700'},
     line: {gap: 4, paddingHorizontal: 16, paddingVertical: 8},
-    field: {flexDirection: 'row', alignItems: 'center', height: 48, gap: 8},
+    field: {flexDirection: 'row', alignItems: 'center', minHeight: 48, gap: 8},
     input: {flex: 1, minWidth: 0, color: c.text, fontSize: 17, paddingVertical: 0},
     inputOver: {color: c.danger},
     maxBtn: {flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: 124},

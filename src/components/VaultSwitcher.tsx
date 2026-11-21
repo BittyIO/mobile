@@ -11,6 +11,7 @@ import {useNetwork} from '@/core/network-store';
 import {asShown} from '@/core/format';
 import {useT} from '@/i18n';
 import {MONO, useColors} from '@/theme';
+import {CHROME_SCALE} from '@/core/text-scale';
 
 /** 0x123456...123456: the prefix and six characters, then the last six (T1234567...123456 on Tron). */
 const shortAddress = (a: string) => (a.length > 16 ? `${a.slice(0, a.startsWith('0x') ? 8 : 7)}...${a.slice(-6)}` : a);
@@ -57,7 +58,7 @@ export function VaultSwitcher({stack = false}: {stack?: boolean} = {}) {
         hitSlop={{top: 12, bottom: 12, left: 12, right: 4}}
         accessibilityRole="button"
         accessibilityLabel={`${t('mobile.settings.choose_vault')}: ${label}`}>
-        <Text style={[styles.name, {color: c.text}]} numberOfLines={1}>
+        <Text style={[styles.name, {color: c.text}]} numberOfLines={1} maxFontSizeMultiplier={CHROME_SCALE}>
           {label}
         </Text>
       </Pressable>
@@ -68,7 +69,7 @@ export function VaultSwitcher({stack = false}: {stack?: boolean} = {}) {
           hitSlop={{top: 12, bottom: 12, left: 4, right: 8}}
           accessibilityRole="button"
           accessibilityLabel={copied ? t('common.copied') : t('common.copy')}>
-          <Text style={[styles.addr, {color: c.subtext}]} numberOfLines={1}>
+          <Text style={[styles.addr, {color: c.subtext}]} numberOfLines={1} maxFontSizeMultiplier={CHROME_SCALE}>
             {shortAddress(asShown(vault))}
           </Text>
           <Svg width={12} height={12} viewBox="0 0 24 24">

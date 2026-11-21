@@ -25,7 +25,7 @@ import {MoreIcon} from '@/components/TradeMenu';
 import {getPref, setPref} from '@/core/prefs';
 import {SettingsGroup, makeSettingsStyles} from '@/components/SettingsRow';
 import {useT} from '@/i18n';
-import {wrappableAddress} from '@/core/format';
+import {asShown} from '@/core/format';
 import {useColors, useStyles, type Colors, MONO} from '@/theme';
 
 /**
@@ -457,11 +457,12 @@ export function VaultListScreen() {
               ) : null}
             </View>
           </View>
-          {/* Full: vaults are told apart by their address, so none of it is cut. Where the row is
-              too narrow for one line it wraps to a second at the same size — shrinking it to fit
-              left an address too small to read and compare. */}
-          <Text style={styles.addr} numberOfLines={2}>
-            {elsewhere ? wrappableAddress(v.vault!) : address ? wrappableAddress(address) : t('mobile.settings.vault_unlock_first')}
+          {/* Full: vaults are told apart by their address, so none of it is cut. One line where it
+              fits; where it does not (the accessibility text sizes) it fills the first line and
+              runs on to the next, at the same size. Never shrunk to fit: iOS shrank some rows'
+              addresses far smaller than others' of the same length. */}
+          <Text style={styles.addr}>
+            {elsewhere ? asShown(v.vault!) : address ? asShown(address) : t('mobile.settings.vault_unlock_first')}
           </Text>
           {from ? <Text style={styles.fromText}>{t('mobile.vaults.transferred_from', {address: shortAddr(from)})}</Text> : null}
           {/* Transferred away: to whom, in full, so it can be checked against the receiving key. */}
@@ -497,8 +498,8 @@ export function VaultListScreen() {
                 {activeAt === f.vault.toLowerCase() ? <Text style={styles.check}>✓</Text> : <CopyButton address={f.vault} />}
               </View>
             </View>
-            <Text style={styles.addr} numberOfLines={2}>
-              {wrappableAddress(f.vault)}
+            <Text style={styles.addr}>
+              {asShown(f.vault)}
             </Text>
             {fromOf(f.vault) ? (
               <Text style={styles.fromText}>{t('mobile.vaults.transferred_from', {address: shortAddr(fromOf(f.vault)!)})}</Text>
@@ -537,8 +538,8 @@ export function VaultListScreen() {
                 <CopyButton address={f.vault} />
               </View>
             </View>
-            <Text style={styles.addr} numberOfLines={2}>
-              {wrappableAddress(f.vault)}
+            <Text style={styles.addr}>
+              {asShown(f.vault)}
             </Text>
             <Text style={styles.goneText}>
               {t('mobile.vaults.arriving', {date: new Date((f.readyAt ?? 0) * 1000).toLocaleString(language, {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})})}

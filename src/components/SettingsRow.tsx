@@ -189,11 +189,11 @@ export const makeSettingsStyles = (c: Colors) =>
     rowTitleOff: {color: c.subtext},
     check: {color: c.accent, fontSize: 17, fontWeight: '700'},
     checkHidden: {opacity: 0},
-    rowRight: {flexDirection: 'row', alignItems: 'center', gap: 6},
+    rowRight: {flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, maxWidth: '60%'},
     // A chevron's glyph sits a few points inside its box; a switch fills its own exactly, so
     // without this it looks nearer the edge than every other row in the group.
     rowSwitch: {marginRight: 10},
-    rowValue: {color: c.subtext, fontSize: 14},
+    rowValue: {color: c.subtext, fontSize: 14, flexShrink: 1, textAlign: 'right'},
     chev: {color: c.subtext, fontSize: 22, fontWeight: '300'},
   });
 

@@ -237,7 +237,7 @@ const makeStyles = (c: Colors) =>
     rowValue: {color: c.subtext, fontSize: 14, fontVariant: ['tabular-nums']},
     // A switch fills its box exactly, where a chevron's glyph sits inside; this lines them up.
     switch: {marginRight: 10},
-    use: {height: 52, borderRadius: 26, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', marginTop: 24},
+    use: {minHeight: 52, paddingVertical: 8, borderRadius: 26, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center', marginTop: 24},
     useOff: {backgroundColor: c.neutralSoft},
     useRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
     useText: {color: '#fff', fontSize: 15, fontWeight: '700'},

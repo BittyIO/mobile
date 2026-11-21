@@ -69,7 +69,7 @@ export function FundRow({
           <Text style={[styles.fsLabel, inert && styles.fsInertText]} numberOfLines={1}>
             {label}
           </Text>
-          <Text style={styles.fsHeld} numberOfLines={1}>
+          <Text style={styles.fsHeld} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
             {sub}
           </Text>
         </View>

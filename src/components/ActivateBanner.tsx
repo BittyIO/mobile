@@ -160,7 +160,7 @@ const makeStyles = (c: Colors) =>
     text: {gap: 4},
     title: {color: c.text, fontSize: 17, fontWeight: '700'},
     body: {color: c.subtext, fontSize: 14, lineHeight: 20},
-    button: {height: 44, borderRadius: 22, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center'},
+    button: {minHeight: 44, paddingVertical: 6, borderRadius: 22, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center'},
     buttonOff: {opacity: 0.5},
     buttonText: {color: '#fff', fontSize: 16, fontWeight: '700'},
   });
