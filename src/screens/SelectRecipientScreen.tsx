@@ -61,7 +61,9 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
   const network = useNetwork((s) => s.network);
   const owner = useWallet((s) => s.address);
   const vault = useActiveVaultAddress(network);
-  const vaults = useVaults((s) => s.vaults);
+  // A vault removed from the list is not offered to pay to.
+  const allVaults = useVaults((s) => s.vaults);
+  const vaults = useMemo(() => allVaults.filter((v) => !v.hidden), [allVaults]);
   const activeIndex = useVaults((s) => s.activeIndex);
   // A locked vault pays only book entries already payable, and adds or removes none.
   const sendGate = useCapability('send');

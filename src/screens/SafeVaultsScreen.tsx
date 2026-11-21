@@ -6,8 +6,7 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import type {RootStackParamList} from '@/App';
 import {useVaults, vaultLabel, type VaultRef} from '@/core/vault-store';
 import {vaultAddressOf} from '@/core/active-vault';
-import {NETWORKS, useNetwork} from '@/core/network-store';
-import type {Network} from '@/core/chain';
+import {useNetwork} from '@/core/network-store';
 import {useWallet} from '@/wallet/store';
 import {SettingsGroup, makeSettingsStyles} from '@/components/SettingsRow';
 import {asShown, wrappableAddress} from '@/core/format';
@@ -33,20 +32,19 @@ export function SafeVaultsScreen() {
   const styles = useStyles(makeStyles);
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const network = useNetwork((s) => s.network);
-  const setNetwork = useNetwork((s) => s.setNetwork);
   const vaults = useVaults((s) => s.vaults);
   const activeIndex = useVaults((s) => s.activeIndex);
-  const remove = useVaults((s) => s.remove);
+  // Restorable, as on the choose-vault page: back from its Removed vaults page.
+  const remove = useVaults((s) => s.hide);
   const selectVault = useWallet((s) => s.selectVault);
-  const safes = vaults.filter((v) => v.safe);
+  const safes = vaults.filter((v) => v.safe && !v.hidden);
   const label = (n: number) => t('mobile.app.vault_n', {n});
 
   // The menu's Copy: the menu closing is the sign it ran, so no toast.
   const copy = (address: string) => Clipboard.setString(asShown(address));
 
   const choose = (v: VaultRef) => {
-    // A Safe vault given to the Safe by transfer exists on one chain only.
-    if (v.vault && v.network && v.network !== network && NETWORKS.includes(v.network as Network)) setNetwork(v.network as Network);
+    // Never changes the network; any vault can be chosen on any network.
     selectVault(v.index);
     nav.popToTop();
   };
@@ -78,7 +76,7 @@ export function SafeVaultsScreen() {
       contentContainerStyle={styles.body}>
       {safes.length === 0 ? <Text style={styles.empty}>{t('mobile.safemode.empty')}</Text> : null}
       {safes.map((v) => {
-        const address = v.vault && v.network !== network ? v.vault : vaultAddressOf(v, network);
+        const address = vaultAddressOf(v, network) ?? v.vault ?? null;
         const on = v.index === activeIndex;
         return (
           <View key={v.index} style={styles.section}>

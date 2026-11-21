@@ -187,6 +187,8 @@ export type RootStackParamList = {
   AddSafeVault: undefined;
   /** Choose vault › ⋯ › Safe multi-sig: the Safe vaults on this phone, and adding one. */
   SafeVaults: undefined;
+  /** Choose vault › ⋯ › Removed vaults: the vaults swiped off the list, to restore. */
+  RemovedVaults: undefined;
   ManageMultisig: {safe: `0x${string}`; payer?: `0x${string}`};
   VaultLockAction: {action: 'emergency' | 'unlock' | 'forever'};
   /** Overview › Pending: changes the vault has queued and not applied yet. */
@@ -636,6 +638,7 @@ function Root() {
         <Stack.Screen name="VaultList" getComponent={() => require('@/screens/VaultListScreen').VaultListScreen} options={{title: t('mobile.settings.choose_vault')}} />
         <Stack.Screen name="AddSafeVault" getComponent={() => require('@/screens/AddSafeVaultScreen').AddSafeVaultScreen} options={{title: t('mobile.safe.add_safe_title')}} />
         <Stack.Screen name="SafeVaults" getComponent={() => require('@/screens/SafeVaultsScreen').SafeVaultsScreen} options={{title: t('mobile.safemode.menu')}} />
+        <Stack.Screen name="RemovedVaults" getComponent={() => require('@/screens/RemovedVaultsScreen').RemovedVaultsScreen} options={{title: t('mobile.vaults.removed_vaults')}} />
         <Stack.Screen name="ManageMultisig" getComponent={() => require('@/screens/ManageMultisigScreen').ManageMultisigScreen} options={{title: t('mobile.safemode.owners_row')}} />
         <Stack.Screen name="VaultLock" getComponent={() => require('@/screens/VaultLockScreen').VaultLockScreen} options={{title: t('mobile.vault.vault_lock')}} />
         <Stack.Screen

@@ -14,8 +14,32 @@ import {ownerVaultAddress} from '@/vault/read';
  */
 export function vaultAddressOf(v: VaultRef | undefined, network: Network): Address | null {
   if (!v) return null;
-  if (v.vault) return v.network === network ? v.vault : null;
+  if (v.vault) {
+    if (v.network === network) return v.vault;
+    // Added as received, but it is its own key's vault, the one the factory derives from that key
+    // (a one-time key's, found by the scan): not a transfer, so like any derived vault it is at its
+    // owner's address on every chain. Without this it had an address on one chain only, and every
+    // other chain's screens waited on one that never came.
+    return isOwnVault(v) ? ownerVaultAddress(v.owner!, network) : null;
+  }
   return v.owner ? ownerVaultAddress(v.owner, network) : null;
+}
+
+/** Whether a received entry is in fact its own key's derived vault (see {vaultAddressOf}). Asked on every render: kept. */
+const ownVaultSeen = new Map<string, boolean>();
+function isOwnVault(v: VaultRef): boolean {
+  if (!v.vault || !v.owner || v.safe || !v.network) return false;
+  const key = `${v.network}:${v.owner}:${v.vault}`.toLowerCase();
+  let own = ownVaultSeen.get(key);
+  if (own === undefined) {
+    try {
+      own = ownerVaultAddress(v.owner, v.network as Network).toLowerCase() === v.vault.toLowerCase();
+    } catch {
+      own = false;
+    }
+    ownVaultSeen.set(key, own);
+  }
+  return own;
 }
 
 const activeRef = (s: ReturnType<typeof useVaults.getState>) => s.vaults.find((v) => v.index === s.activeIndex);
@@ -48,7 +72,8 @@ export function followActiveVault(network: Network): void {
   // The address it stands for: a received vault's own; any other, its owner's on this chain.
   const at = (v.vault ?? vaultAddressOf(v, network))?.toLowerCase();
   if (!at) return;
-  const here = vaults.filter((x) => vaultAddressOf(x, network)?.toLowerCase() === at);
+  // Never onto a vault the user removed from the list.
+  const here = vaults.filter((x) => !x.hidden && vaultAddressOf(x, network)?.toLowerCase() === at);
   // Received on this chain wins: there the first owner's key no longer owns it.
   const pick = here.find((x) => !!x.vault) ?? here.find((x) => x.index === activeIndex) ?? here[0];
   if (pick && pick.index !== activeIndex) select(pick.index);

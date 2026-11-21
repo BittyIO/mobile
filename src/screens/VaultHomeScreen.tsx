@@ -427,8 +427,9 @@ export function VaultHomeScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const network = useNetwork((s) => s.network);
   const bal = useVaultBalances(network);
-  const pos = useVaultPositions(bal.vault, network);
-  const flows = useFlows(bal.vault, network);
+  // What the page shows is read where the balances were (`readAt`); what it does goes to `bal.vault`.
+  const pos = useVaultPositions(bal.readAt, network);
+  const flows = useFlows(bal.readAt, network);
   // Queued changes, counted on the Pending action. Re-read on focus: one call, and a change queued
   // elsewhere (or by someone else holding the key) is exactly what this badge is for.
   const [pendingCount, setPendingCount] = useState(0);
@@ -483,17 +484,17 @@ export function VaultHomeScreen() {
   const queuedName = queued?.name ?? 'Lido';
   const [unstake, setUnstake] = useState<{key: string; v: LidoUnstake} | null>(null);
   React.useEffect(() => {
-    const key = bal.vault ? `${network}:${bal.vault.toLowerCase()}` : '';
-    if (!bal.vault) return;
+    const key = bal.readAt ? `${network}:${bal.readAt.toLowerCase()}` : '';
+    if (!bal.readAt) return;
     if (!lidoAdapter) return setUnstake({key, v: NO_UNSTAKE});
     let live = true;
-    getLidoUnstake(bal.vault, lidoAdapter, network)
+    getLidoUnstake(bal.readAt, lidoAdapter, network)
       .then((v) => live && setUnstake({key, v}))
       .catch(() => live && setUnstake((u) => (u?.key === key ? u : {key, v: NO_UNSTAKE})));
     return () => {
       live = false;
     };
-  }, [bal.vault, network, lidoAdapter, pos.positions, priceNonce]);
+  }, [bal.readAt, network, lidoAdapter, pos.positions, priceNonce]);
   /**
    * Every figure the total is made of has arrived: the live catalog (which decides which tokens are
    * read), the balances read against it, the Earn positions, and prices for all of it.
@@ -507,9 +508,9 @@ export function VaultHomeScreen() {
    * source that never answers releases the latch after {READY_TIMEOUT_MS}, so a slow request costs
    * a few seconds of spinner, never an empty screen.
    */
-  const readyKey = bal.vault ? `${network}:${bal.vault.toLowerCase()}` : '';
+  const readyKey = bal.readAt ? `${network}:${bal.readAt.toLowerCase()}` : '';
   const settledNow =
-    !!bal.vault &&
+    !!bal.readAt &&
     catalogSettled &&
     ((bal.current && !!bal.balances) || !!bal.error) &&
     pos.loaded &&
@@ -557,7 +558,7 @@ export function VaultHomeScreen() {
     if (ranked.length) seedStocks(network, ranked);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [network, catalog, catalogSettled, marketStats, listsHere]);
-  const unstakeKey = bal.vault ? `${network}:${bal.vault.toLowerCase()}` : '';
+  const unstakeKey = bal.readAt ? `${network}:${bal.readAt.toLowerCase()}` : '';
   const rowsLive = useMemo<Row[]>(() => {
     // Stablecoins lead the list, then the rest in catalog order.
     const assets = [...catalog].sort((x, y) => Number(y.kind === 'stable') - Number(x.kind === 'stable'));
