@@ -22,6 +22,7 @@ import {FIT} from '@/core/text-scale';
 import {isTestnet, isTronNetwork, NATIVE, type Network} from '@/core/chain';
 import {networkLabel, useNetwork, useNetworks} from '@/core/network-store';
 import {useAssetCatalog} from '@/core/asset-catalog';
+import {knownAssets} from '@/core/assets';
 import {availableVaultUpgrade, plannedVaultUpgrade} from '@/vault/auto-upgrade';
 import {ProtocolChip} from '@/components/ProtocolIcon';
 import {useActiveVaultAddress} from '@/core/active-vault';
@@ -301,6 +302,18 @@ export function BridgeScreen() {
   if (route) lastSym.current = symOf(route);
   /** The coin's name, kept on screen while a switched-to network's routes load. */
   const shownSym = route ? symOf(route) : lastSym.current;
+  /**
+   * What arrives on the other side, which is not always what leaves: Robinhood has no USDC, so its
+   * USDG crosses to Base as Base's USDC. Named from the destination's own asset list by the route's
+   * output token; a token that list does not have keeps the coin's own name.
+   */
+  const outSymOf = (r: BridgeRoute) => {
+    const out = knownAssets(r.to).find((a) => a.address.toLowerCase() === r.outputToken.toLowerCase());
+    return out ? displaySymbol(out.symbol) : symOf(r);
+  };
+  const lastOutSym = useRef<string | null>(null);
+  if (route) lastOutSym.current = outSymOf(route);
+  const shownOutSym = route ? outSymOf(route) : lastOutSym.current;
 
   const decOf = (r: BridgeRoute) => (r.native ? NATIVE[network].decimals : r.asset.decimals);
   const toRaw = (v: string) => {
@@ -597,10 +610,10 @@ export function BridgeScreen() {
           </View>
           <View style={styles.line}>
             <View style={styles.field}>
-              {/* The same coin as From, which is where it is picked: plain, not a pill, so it does not look tappable. */}
+              {/* The coin that arrives (picked on From, so plain, not a pill, so it does not look tappable). */}
               <View style={styles.assetStatic}>
-                {shownSym ? <TokenIcon symbol={shownSym} size={20} /> : null}
-                <Text style={styles.assetSym}>{shownSym ?? '—'}</Text>
+                {shownOutSym ? <TokenIcon symbol={shownOutSym} size={20} /> : null}
+                <Text style={styles.assetSym}>{shownOutSym ?? '—'}</Text>
               </View>
               <Text {...FIT} style={[styles.receiveAmount, !quote && styles.receiveEmpty]}>
                 {quote && route ? `≈ ${fmtRaw(quote.received)}` : '0'}
