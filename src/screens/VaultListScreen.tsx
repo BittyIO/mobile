@@ -12,7 +12,7 @@ import {NETWORKS, useNetwork} from '@/core/network-store';
 import {NATIVE, type Network} from '@/core/chain';
 import {useWallet} from '@/wallet/store';
 import * as keyring from '@/wallet/keyring';
-import {deviceKeys, fetchOneTimeKeyVaults, fetchOwnedVaults, useVaultDirectory, type FoundVault} from '@/vault/owned-vaults';
+import {deviceKeys, fetchOneTimeKeyVaults, fetchOwnedVaults, recall, remember, useVaultDirectory, type FoundVault} from '@/vault/owned-vaults';
 import {acceptOwnership} from '@/vault/ownership';
 import {fetchSafe} from '@/vault/safe';
 import {relayGasFor} from '@/vault/fee-quote';
@@ -170,7 +170,7 @@ export function VaultListScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vaults, phrases]);
   const label = (n: number) => t('mobile.app.vault_n', {n});
-  const {notYours, transferredTo} = useVaultDirectory(network, vaults, refresh);
+  const {notYours, transferredTo, ownerNow} = useVaultDirectory(network, vaults, refresh);
 
   /**
    * What the server says each of this phone's keys holds on this chain, asked when the page opens,
@@ -178,13 +178,19 @@ export function VaultListScreen() {
    * unless that key's own entry for it already is — a vault the phone still lists under the key
    * that GAVE it away (greyed, no longer yours) must not hide it from the key that has it now.
    */
-  const [held, setHeld] = useState<Record<string, Awaited<ReturnType<typeof fetchOwnedVaults>>>>({});
+  type Held = Record<string, Awaited<ReturnType<typeof fetchOwnedVaults>>>;
+  // From the last answer for this chain, so a vault already received is in its owner's section at once.
+  const [held, setHeld] = useState<Held>(() => recall<Held>('held', network) ?? {});
   const keySig = owners.filter((o) => !o.safe && o.address).map((o) => o.key).join(',');
   useEffect(() => {
     let live = true;
     const keys = owners.filter((o) => !o.safe && o.address);
+    setHeld((h) => recall<Held>('held', network) ?? h);
     Promise.all(keys.map((o) => fetchOwnedVaults(network, o.address as Address))).then((rs) => {
-      if (live) setHeld(Object.fromEntries(keys.map((o, i) => [o.key, rs[i]])));
+      if (!live) return;
+      const next = Object.fromEntries(keys.map((o, i) => [o.key, rs[i]]));
+      setHeld(next);
+      remember('held', network, next);
     });
     return () => {
       live = false;
@@ -234,7 +240,7 @@ export function VaultListScreen() {
    * it holds that are not on the phone yet (listed the same way — a transfer needs nothing from the
    * receiver), and any handover still waiting for that owner to accept. An owner with none is left out.
    */
-  const groups = owners
+  const grouped = owners
     .map((o) => {
       // A vault transferred away is listed only with "Show transferred vaults" on.
       const listed = vaults.filter((v) => ownerOf(v) === o.key && (showTransferred || !notYours.has(v.index)));
@@ -254,8 +260,52 @@ export function VaultListScreen() {
         .filter((q) => !here.has(q.vault.toLowerCase()))
         .map((q) => ({vault: q.vault, key, pending: true, readyAt: q.readyAt}));
       return {owner: o, listed, received, waiting, incoming};
-    })
+    });
+  /**
+   * Transferred to another owner on this phone, the vault is that owner's now, and only there: it is
+   * listed in the new owner's section (received, or its own entry once added) and taken out of the old
+   * one's, "Show transferred vaults" or not. Listing it in both put the same address on the page twice,
+   * once under a key that can no longer open it.
+   *
+   * Decided by who owns it on the chain now, not by `notYours`: a vault handed to one of the old key's
+   * own one-time keys still counts as the old account's there, yet when that key has a section of its
+   * own on this page the vault is listed in it, and must not stay under the old one as well. A vault
+   * given to a key that has no section here stays where it was, as before. Per chain: a transfer moves
+   * the vault on this chain only.
+   */
+  const shownUnder = new Map<string, Set<string>>();
+  const showUnder = (vault: string, owner: string) => {
+    const at = vault.toLowerCase();
+    shownUnder.set(at, (shownUnder.get(at) ?? new Set()).add(owner));
+  };
+  for (const g of grouped) {
+    for (const v of g.listed) {
+      const a = vaultAddressOf(v, network);
+      if (a) showUnder(a, g.owner.key);
+    }
+    for (const f of [...g.received, ...g.incoming]) showUnder(f.vault, g.owner.key);
+  }
+  const movedHere = (v: VaultRef, owner: string) => {
+    const now = ownerNow.get(v.index)?.toLowerCase();
+    if (!now || now === owner) return false;
+    return !!shownUnder.get(vaultAddressOf(v, network)?.toLowerCase() ?? '')?.has(now);
+  };
+  const groups = grouped
+    .map((g) => ({...g, listed: g.listed.filter((v) => !movedHere(v, g.owner.key))}))
     .filter((g) => g.listed.length + g.received.length + g.waiting.length + g.incoming.length > 0);
+  /**
+   * The name a vault already has on this phone, by its address on this chain: a vault moved to another
+   * of the phone's owners keeps the name it was given under the old one.
+   */
+  /** The address of the vault in front, on this chain. */
+  const activeAt = (() => {
+    const v = vaults.find((x) => x.index === activeIndex);
+    return v ? vaultAddressOf(v, network)?.toLowerCase() ?? null : null;
+  })();
+  const nameAt = (vault: string): string => {
+    const at = vault.toLowerCase();
+    return vaults.find((v) => v.name && vaultAddressOf(v, network)?.toLowerCase() === at)?.name ?? '';
+  };
   // The name a vault not on the phone yet will have once it is: its phrase's next numbers, in order.
   const promised: Record<string, number> = {};
   const pendingLabel = (section: string) => {
@@ -362,6 +412,9 @@ export function VaultListScreen() {
   /** Put a vault this device's key owns by transfer on the list, on this chain, and choose it. */
   const onAddFound = (f: FoundVault) => {
     const index = useVaults.getState().addReceived(f.vault, network, f.key.index, f.key.address, f.key.phrase);
+    // The name it had under its old owner goes with it.
+    const name = nameAt(f.vault);
+    if (name && !useVaults.getState().vaults.find((v) => v.index === index)?.name) rename(index, name);
     selectVault(index);
     nav.goBack();
   };
@@ -434,9 +487,11 @@ export function VaultListScreen() {
           <View style={styles.vaultText}>
             <View style={styles.nameLine}>
               <Text style={styles.name} numberOfLines={1}>
-                {pendingLabel(g.owner.phrase)}
+                {nameAt(f.vault) || pendingLabel(g.owner.phrase)}
               </Text>
               {fromOf(f.vault) ? null : <Text style={styles.tag}>{t('mobile.vaults.tag_received')}</Text>}
+              {/* The vault in front, moved here from its old owner's section: the check goes with it. */}
+              {activeAt === f.vault.toLowerCase() ? <Text style={[styles.check, styles.checkEnd]}>✓</Text> : null}
             </View>
             <Text style={styles.addr} numberOfLines={2}>
               {wrappableAddress(f.vault)}
