@@ -27,6 +27,7 @@ import {plannedProtocolUpgrade} from '@/vault/auto-upgrade';
 import {InfoIcon} from '@/components/TradeMenu';
 import {Sheet} from '@/components/Sheet';
 import {useActiveFeePayer} from '@/vault/useFeePayer';
+import {usePending} from '@/vault/pending';
 import {
   claimLido,
   fetchLidoEta,
@@ -223,6 +224,14 @@ export function EarnDetailScreen() {
   // ── auto-yield ────────────────────────────────────────────────────────
   const [autoOn, setAutoOn] = useState(false);
   const [autoBusy, setAutoBusy] = useState(false);
+  /**
+   * The route change the relayer accepted and the chain has not mined yet, with the position it
+   * sets. The switch spins until the receipt is in: read back before then, the chain still has the
+   * old route and the switch would jump back as if the change had not taken.
+   */
+  const [autoTx, setAutoTx] = useState<{hash: string; on: boolean} | null>(null);
+  const autoTxStatus = usePending((s) => (autoTx ? s.txs.find((x) => x.hash === autoTx.hash)?.status : undefined));
+  const autoConfirming = !!autoTx && (autoTxStatus === undefined || autoTxStatus === 'pending');
   // The keeper's sweeps are relayed and billed to the vault, so with the owner's wallet paying the
   // network fee nothing ever sweeps. Turning it on is refused and says why; one already on can
   // still be turned off.
@@ -236,7 +245,16 @@ export function EarnDetailScreen() {
     }
   };
   // Again once a write confirms (positions re-read then): a withdraw may have turned it off.
-  useEffect(loadAuto, [bal.vault, network, asset, protocol, pos.positions]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!autoTx) loadAuto(); }, [bal.vault, network, asset, protocol, pos.positions]);
+  // The route change settled: confirmed, the switch takes the position it set; otherwise the chain says.
+  useEffect(() => {
+    if (!autoTx || autoTxStatus === undefined || autoTxStatus === 'pending') return;
+    if (autoTxStatus === 'confirmed') setAutoOn(autoTx.on);
+    else loadAuto();
+    setAutoTx(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoTx, autoTxStatus]);
 
   const toggleAuto = async () => {
     if (!bal.vault || !stable) return;
@@ -244,18 +262,17 @@ export function EarnDetailScreen() {
     const tx = showTx(t(autoOn ? 'mobile.actions.auto_yield_off' : 'mobile.actions.auto_yield_set', {token: sym}), network);
     try {
       const acct = await getSigner();
-      tx.success(
-        await setAutoYield({
-          account: acct,
-          vault: bal.vault,
-          network,
-          asset: asset as Address,
-          // Turning it off clears the route; the contract reads the zero address as "no route".
-          protocol: (autoOn ? '0x0000000000000000000000000000000000000000' : protocol) as Address,
-          stableCoin: stable.address,
-        }),
-      );
-      loadAuto();
+      const hash = await setAutoYield({
+        account: acct,
+        vault: bal.vault,
+        network,
+        asset: asset as Address,
+        // Turning it off clears the route; the contract reads the zero address as "no route".
+        protocol: (autoOn ? '0x0000000000000000000000000000000000000000' : protocol) as Address,
+        stableCoin: stable.address,
+      });
+      tx.success(hash);
+      setAutoTx({hash, on: !autoOn});
     } catch (e) {
       tx.error(String((e as Error)?.message ?? e));
     } finally {
@@ -479,8 +496,8 @@ export function EarnDetailScreen() {
           <Text style={styles.autoLabel}>{autoLabel}</Text>
           <PendingSwitch
             value={autoOn}
-            pending={autoBusy}
-            disabled={(ownerPays && !autoOn) || !autoGate.allowed}
+            pending={autoBusy || autoConfirming}
+            disabled={(ownerPays && !autoOn) || !autoGate.allowed || autoConfirming}
             onValueChange={() =>
               ask({
                 title: autoLabel,
