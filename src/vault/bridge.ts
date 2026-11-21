@@ -52,7 +52,11 @@ const GUARD_ABI = parseAbi([
 const ADAPTER_ABI = parseAbi([
   'function spokePool() view returns (address)',
   'function vaultOn(uint256 destinationChainId, address owner) view returns (address)',
+  'function recipientFor(address vault, uint256 destinationChainId, address originOwner) view returns (address)',
+  'function protocolVersion() view returns (uint256)',
 ]);
+/** The Across adapter release that pays the vault's own address on the other chain (1.1.0). */
+const SAME_ADDRESS_VERSION = 1_001_000n;
 const OWNER_ABI = parseAbi(['function owner() view returns (address)']);
 
 /** The vault's own bridge calls (1.1.0). */
@@ -221,11 +225,22 @@ export async function readBridgeSettings(vault: Address, network: Network): Prom
 }
 
 /**
- * Where the money arrives: the vault's current owner's vault on `to`, as the adapter computes it.
- * A vault not activated yet has no owner to read; its owner is the key it is derived from (`owner`).
+ * Where the money arrives, as the adapter computes it. From adapter 1.1.0 on, between EVM chains,
+ * that is the vault's own address on `to`. Before it, the vault's current owner's vault on `to`: a
+ * vault not activated yet has no owner to read, and its owner is the key it is derived from
+ * (`owner`). Both are asked of the adapter itself, so the quote names what the deposit will.
  */
 export async function bridgeRecipient(network: Network, adapter: Address, vault: Address, to: Network, owner: Address): Promise<Address> {
   const client = publicClientFor(network);
+  const version = (await client.readContract({address: adapter, abi: ADAPTER_ABI, functionName: 'protocolVersion'})) as bigint;
+  if (version >= SAME_ADDRESS_VERSION) {
+    return (await client.readContract({
+      address: adapter,
+      abi: ADAPTER_ABI,
+      functionName: 'recipientFor',
+      args: [vault, BigInt(CHAIN_ID[to]), zeroAddress],
+    })) as Address;
+  }
   const current = ((await client.readContract({address: vault, abi: OWNER_ABI, functionName: 'owner'}).catch(() => null)) as Address | null) ?? owner;
   return (await client.readContract({address: adapter, abi: ADAPTER_ABI, functionName: 'vaultOn', args: [BigInt(CHAIN_ID[to]), current]})) as Address;
 }

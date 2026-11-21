@@ -10,6 +10,7 @@
  * AWAY no longer answers to this device's key, and the list greys it out.
  */
 import {useEffect, useState} from 'react';
+import {MMKV} from 'react-native-mmkv';
 import {getAddress, parseAbi, type Address, type Hex} from 'viem';
 import {apiFetch, apiUrl, isTronNetwork, publicClientFor, type Network} from '@/core/chain';
 import {IMPORTED_SECTION, keyIndexOf, phraseOf, type VaultRef} from '@/core/vault-store';
@@ -81,6 +82,27 @@ export async function fetchOwnedVaults(
     return {owned: [], pending: [], queued: []};
   }
 }
+
+/**
+ * The vault list's last answers per chain, kept on the phone: who owns each listed vault, which ones
+ * were transferred, what the server says each key holds. The page opens on them and then reads again,
+ * so it does not first draw every vault under the owner it had and then move them a moment later.
+ */
+const lastSeen = new MMKV({id: 'bitty.vault-directory'});
+export function recall<T>(name: string, network: Network): T | undefined {
+  try {
+    const raw = lastSeen.getString(`${name}:${network}`);
+    return raw ? (JSON.parse(raw) as T) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+export function remember(name: string, network: Network, value: unknown): void {
+  try {
+    lastSeen.set(`${name}:${network}`, JSON.stringify(value));
+  } catch {}
+}
+const asMap = (rows: [number, Address][] | undefined) => new Map(rows ?? []);
 
 const BALANCE_ABI = parseAbi(['function balanceOf(address) view returns (uint256)']);
 const MULTICALL3_ABI = parseAbi(['function getEthBalance(address addr) view returns (uint256 balance)']);
@@ -205,11 +227,21 @@ export function useVaultDirectory(
   network: Network,
   vaults: VaultRef[],
   refreshKey?: unknown,
-): {found: FoundVault[]; notYours: Set<number>; transferredTo: Map<number, Address>} {
-  const [found, setFound] = useState<FoundVault[]>([]);
+): {found: FoundVault[]; notYours: Set<number>; transferredTo: Map<number, Address>; ownerNow: Map<number, Address>} {
+  // Each starts from the last answer for this chain (see {recall}), then the chain is read again.
+  const [found, setFound] = useState<FoundVault[]>(() => recall<FoundVault[]>('found', network) ?? []);
   // Each listed vault that no longer answers to this device, with whom it answers to now.
-  const [transferredTo, setTransferredTo] = useState<Map<number, Address>>(() => new Map());
+  const [transferredTo, setTransferredTo] = useState<Map<number, Address>>(() => asMap(recall('gone', network)));
+  // Each listed vault's owner on this chain now, whoever that is (one of its own key's one-time keys included).
+  const [ownerNow, setOwnerNow] = useState<Map<number, Address>>(() => asMap(recall('owners', network)));
   const sig = vaults.map((v) => `${v.index}:${v.owner}:${v.vault ?? ''}:${v.network ?? ''}`).join('|');
+
+  // Another chain: its own last answers until it has been read.
+  useEffect(() => {
+    setFound(recall<FoundVault[]>('found', network) ?? []);
+    setTransferredTo(asMap(recall('gone', network)));
+    setOwnerNow(asMap(recall('owners', network)));
+  }, [network]);
 
   useEffect(() => {
     let live = true;
@@ -234,12 +266,14 @@ export function useVaultDirectory(
       const confirmed = add.filter((_, i) => ok[i]);
       // Whose each listed vault is now. A Safe vault answers to the Safe, every other to its key.
       const gone = new Map<number, Address>();
+      const owners = new Map<number, Address>();
       await Promise.all(
         vaults.map(async (v) => {
           const vault = vaultAddressOf(v, network);
           const expected = v.safe ?? v.owner;
           if (!vault || !expected) return;
           const now = await vaultOwnerOf(network, vault);
+          if (now) owners.set(v.index, now);
           // Handed to one of its own key's one-time keys (quantum-safe keys): still this phone's.
           const ownKey = !v.safe && !!now && isKeyOf(keyPathOf(now), keyIndexOf(v), phraseOf(v));
           if (now && now.toLowerCase() !== expected.toLowerCase() && !ownKey) gone.set(v.index, now);
@@ -248,6 +282,10 @@ export function useVaultDirectory(
       if (!live) return;
       setFound(confirmed);
       setTransferredTo(gone);
+      setOwnerNow(owners);
+      remember('found', network, confirmed);
+      remember('gone', network, [...gone]);
+      remember('owners', network, [...owners]);
     })();
     return () => {
       live = false;
@@ -256,5 +294,5 @@ export function useVaultDirectory(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [network, sig, refreshKey]);
 
-  return {found, notYours: new Set(transferredTo.keys()), transferredTo};
+  return {found, notYours: new Set(transferredTo.keys()), transferredTo, ownerNow};
 }
