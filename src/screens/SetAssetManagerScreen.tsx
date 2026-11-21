@@ -160,7 +160,7 @@ const makeStyles = (c: Colors) =>
     expRow: {paddingHorizontal: 16, paddingVertical: 12, gap: 10},
     expTitle: {color: c.text, fontSize: 15, fontWeight: '600'},
     customRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
-    daysInput: {flex: 1, height: 40, borderRadius: 10, backgroundColor: c.input, paddingHorizontal: 12, color: c.text, fontSize: 15},
+    daysInput: {flex: 1, minHeight: 40, borderRadius: 10, backgroundColor: c.input, paddingHorizontal: 12, color: c.text, fontSize: 15},
     daysUnit: {color: c.subtext, fontSize: 14, fontWeight: '600'},
     chips: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
     chip: {paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1, borderColor: c.border},

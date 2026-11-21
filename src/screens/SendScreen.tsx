@@ -646,7 +646,7 @@ export function SendScreen({anyone = false}: {anyone?: boolean} = {}) {
                       <ClearBtn onPress={() => patchLine(k, {amount: '0'})} />
                     ) : worthShowing(Number(max), nameOf(l.sym), prices, meta(l.sym)?.kind === 'stable') ? (
                       <Pressable style={styles.maxBtn} onPress={() => patchLine(k, {amount: max})} hitSlop={8}>
-                        <Text style={styles.balInline} numberOfLines={1}>{fmtNum(Number(max))}</Text>
+                        <Text style={styles.balInline} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{fmtNum(Number(max))}</Text>
                         {/* `common.max` and NOT `vault.max`: the latter is the literal "Max" in
                             every locale that has it and missing from seven of them, so the badge
                             was English at best. This is the same key the Trade screen's Max pill
@@ -791,7 +791,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   // One row per token in the group, a hairline between, as a Settings group draws its rows.
   line: {gap: 4, paddingHorizontal: 16, paddingVertical: 8},
   lineDivider: {borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},
-  field: {flexDirection: 'row', alignItems: 'center', height: 48, gap: 8},
+  field: {flexDirection: 'row', alignItems: 'center', minHeight: 48, gap: 8},
   // minWidth 0 so a long balance beside it cannot push the input past the field's edge.
   fieldInput: {flex: 1, minWidth: 0, color: c.text, fontSize: 17, paddingVertical: 0},
   // Balance and badge are one target: tapping either fills the field, as on the web.

@@ -263,7 +263,7 @@ const makeStyles = (c: Colors) =>
     noteText: {flex: 1, color: c.text, fontSize: 14, lineHeight: 20},
     noteWarn: {color: c.danger, fontWeight: '600'},
     pill: {
-      height: 32,
+      minHeight: 32,
       minWidth: 64,
       paddingHorizontal: 14,
       borderRadius: 16,

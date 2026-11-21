@@ -70,7 +70,7 @@ export function PortfolioPie({slices, total}: {slices: PieSlice[]; total: number
           )}
         </Svg>
         <View style={styles.center} pointerEvents="none">
-          <Text style={styles.centerVal} numberOfLines={1}>
+          <Text style={styles.centerVal} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
             {fmtValue(total)}
           </Text>
         </View>

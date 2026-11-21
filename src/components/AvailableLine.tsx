@@ -43,7 +43,7 @@ export function AvailableLine({
   // number out made it compete with the amount in the field below — which IS the figure, and the
   // only thing on the row that should be reading loud.
   const text = (
-    <Text style={styles.line} numberOfLines={1}>
+    <Text style={styles.line} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
       {label ?? t('vault.available')} <Amount v={fmtFull(amount)} size={12} color={c.subtext} /> {displaySymbol(symbol)}
     </Text>
   );

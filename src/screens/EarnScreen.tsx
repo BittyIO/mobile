@@ -30,6 +30,17 @@ import {useT} from '@/i18n';
 import {useAssetCatalog} from '@/core/asset-catalog';
 
 const fmt = (v: number | string): string => fmtNum(Number(v));
+/**
+ * What a position has earned, at most three decimals: +0.235, not +0.23557. The digits past the
+ * third change every block and say nothing a glance needs. Cut, not rounded, so it never shows more
+ * than was earned; a figure that three decimals would show as 0 keeps its own digits.
+ */
+const fmtEarned = (v: number | string): string => {
+  const n = Number(v);
+  if (!(Math.abs(n) < 1)) return fmtNum(n);
+  const cut = Math.trunc(n * 1000) / 1000;
+  return cut === 0 ? fmtNum(n) : fmtNum(cut);
+};
 
 // A deposit/withdraw route — see {EarnRoute}, which this page and the deposit form share.
 type Route = EarnRoute;
@@ -105,9 +116,14 @@ export function EarnRow({
             <Text style={styles.rowSub}>{free != null ? <Amount v={fmt(free)} size={13} color={c.subtext} /> : '—'}</Text>
           </View>
         </View>
+        {/* What it has earned on top, the line that changes; under it the amount in the position. */}
         <View style={styles.amtCol}>
-          <Text style={styles.amt}>{!amountKnown ? '—' : dust ? '< 0.01' : <Amount v={fmt(amount)} size={15} />}</Text>
-          {earned && Number(earned) > 0 ? <Text style={styles.earned}>+ <Amount v={fmt(earned)} size={12} color={c.success} /></Text> : null}
+          {earned && Number(earned) > 0 ? (
+            <Text style={styles.earnedTop}>
+              +<Amount v={fmtEarned(earned)} size={15} color={c.success} />
+            </Text>
+          ) : null}
+          <Text style={styles.held}>{!amountKnown ? '—' : dust ? '< 0.01' : <Amount v={fmt(amount)} size={13} color={c.subtext} />}</Text>
           {queue && Number(queue.unstaking) > 0 ? (
             <Text style={styles.queued}>
               {t('vault.unstaking')} <Amount v={fmt(queue.unstaking)} size={12} color={c.subtext} />
@@ -432,7 +448,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   rowSub: {color: c.subtext, fontSize: 13, marginTop: 2},
   amtCol: {alignItems: 'flex-end', minWidth: 64},
   queued: {color: c.subtext, fontSize: 12, fontVariant: ['tabular-nums'], marginTop: 1},
-  amt: {color: c.text, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums']},
-  earned: {color: c.success, fontSize: 12, fontVariant: ['tabular-nums'], marginTop: 1},
+  earnedTop: {color: c.success, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums']},
+  held: {color: c.subtext, fontSize: 13, fontVariant: ['tabular-nums'], marginTop: 1, textAlign: 'right'},
   secSpacer: {flex: 1},
 });

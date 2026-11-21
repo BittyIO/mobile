@@ -258,7 +258,7 @@ function Row({item, index}: {item: Toast; index: number}) {
           )}
         </View>
         <View style={styles.text}>
-          <Text style={styles.title} numberOfLines={1}>
+          <Text style={styles.title} numberOfLines={2}>
             {item.title}
           </Text>
           <Text style={[styles.detail, {color: tint}]} numberOfLines={2}>

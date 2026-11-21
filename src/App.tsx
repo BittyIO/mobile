@@ -351,6 +351,8 @@ function MainTabs() {
         tabBarBackground: () => (
           <View style={[StyleSheet.absoluteFill, {backgroundColor: colors.bg, opacity: 0.92}]} />
         ),
+        // A fixed-height bar, like iOS's own tab bar, which doesn't follow the accessibility sizes.
+        tabBarAllowFontScaling: false,
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.subtext,
         tabBarIcon: ({color, size, focused}) => <TabIcon name={route.name as TabName} color={color} size={size} focused={focused} />,

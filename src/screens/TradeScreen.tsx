@@ -7,6 +7,7 @@ import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {ActivityIndicator, Alert, Animated, Keyboard, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type TextStyle} from 'react-native';
 import Svg, {Circle, Path} from 'react-native-svg';
 import {TokenIcon} from '@/components/TokenIcon';
+import {useBigText} from '@/core/text-scale';
 import {InfoIcon} from '@/components/TradeMenu';
 import {NetworkSwitcher} from '@/components/NetworkSwitcher';
 import {WatchlistMenu} from '@/components/WatchlistMenu';
@@ -269,6 +270,11 @@ function SearchIcon({open, color, size = 20}: {open: boolean; color: string; siz
 const MAX_MARKET_IMPACT = 0.05;
 
 export function TradeScreen() {
+  /**
+   * At the accessibility text sizes: an asset is named without its icon, and the validity offers
+   * the usual 1, 7 and 30 days only, with no 180 days and no field for a number of days.
+   */
+  const bigText = useBigText();
   const headerHeight = useTransparentHeaderInset();
   // Read through the context, not the hook: this screen is also PUSHED from the Overview, and
   // there it sits outside the tab navigator, where the hook throws. No bar means no gap to leave.
@@ -638,6 +644,16 @@ export function TradeScreen() {
    */
   const lastPreset = useRef(VALID_PRESETS[0].s);
   const [status, setStatus] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
+  // Into the accessibility sizes with a validity they no longer offer (180 days, or a typed one):
+  // back to 1 day, rather than an order carrying a validity nothing on screen names.
+  useEffect(() => {
+    if (!bigText) return;
+    if (validDays !== '' || !VALID_PRESETS.some((v) => v.n <= 30 && v.s === validSec)) {
+      lastPreset.current = VALID_PRESETS[0].s;
+      setValidSec(VALID_PRESETS[0].s);
+      setValidDays('');
+    }
+  }, [bigText, validDays, validSec]);
   const [err, setErr] = useState<string | null>(null);
 
   const [orders, setOrders] = useState<CowOrder[]>([]);
@@ -2716,7 +2732,7 @@ export function TradeScreen() {
             </Pressable>
           ) : null}
           <Pressable style={styles.sourcePill} onPress={() => setPicker('source')}>
-            <TokenIcon symbol={spendSym} size={20} />
+            {bigText ? null : <TokenIcon symbol={spendSym} size={20} />}
             <Text style={styles.fieldSym}>{displaySymbol(spendSym)}</Text>
             {spendSource !== 'free' ? (
               <Text style={styles.sourceTag}>{spendSource === 'yield' ? t('vault.yielding') : t('vault.lending')}</Text>
@@ -2756,7 +2772,7 @@ export function TradeScreen() {
           onChangeText={applyReceive}
           {...receiveCaret}
         />
-        <TokenIcon symbol={recvSym} size={20} />
+        {bigText ? null : <TokenIcon symbol={recvSym} size={20} />}
         <Text style={styles.fieldSym}>{displaySymbol(recvSym)}</Text>
       </View>
     </View>
@@ -3441,12 +3457,12 @@ export function TradeScreen() {
             title={
               <View style={styles.pair}>
                 <Pressable style={styles.pairPart} onPress={pickBase}>
-                  <TokenIcon symbol={baseSym} size={22} />
+                  {bigText ? null : <TokenIcon symbol={baseSym} size={22} />}
                   <Text style={styles.pairText}>{displaySymbol(baseSym)}</Text>
                 </Pressable>
                 <Text style={styles.pairSlash}>/</Text>
                 <Pressable style={styles.pairPart} onPress={pickQuote}>
-                  <TokenIcon symbol={quoteSym} size={22} />
+                  {bigText ? null : <TokenIcon symbol={quoteSym} size={22} />}
                   <Text style={styles.pairText}>{displaySymbol(quoteSym)}</Text>
                 </Pressable>
               </View>
@@ -3766,7 +3782,7 @@ export function TradeScreen() {
               <View style={styles.validRow}>
                 <Text style={styles.fieldLabel}>{mode === 'TWAP' ? t('mobile.trade.over') : t('vault.valid_for')}</Text>
                 <View style={styles.validChips}>
-                  {VALID_PRESETS.map((v) => (
+                  {(bigText ? VALID_PRESETS.filter((v) => v.n <= 30) : VALID_PRESETS).map((v) => (
                     <Pressable
                       key={v.s}
                       style={[styles.vchip, validDays === '' && validSec === v.s && styles.vchipOn]}
@@ -3780,6 +3796,7 @@ export function TradeScreen() {
                       </Text>
                     </Pressable>
                   ))}
+                  {bigText ? null : (
                   <View style={[styles.vdays, validDays !== '' && styles.vdaysOn]}>
                     <TextInput
                       style={styles.vdaysInput}
@@ -3793,6 +3810,7 @@ export function TradeScreen() {
                     />
                     <Text style={[styles.vchipText, validDays !== '' && styles.vchipTextOn]}>{t(DAY)}</Text>
                   </View>
+                  )}
                 </View>
               </View>
             ) : null}

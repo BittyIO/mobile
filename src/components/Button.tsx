@@ -187,7 +187,8 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   feeRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 4},
   // A full pill, the iOS shape the Buy / Sell buttons already use, so every button in the app matches.
   base: {
-    height: 52,
+    minHeight: 52,
+    paddingVertical: 8,
     borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',

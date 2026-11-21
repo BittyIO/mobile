@@ -169,7 +169,7 @@ export function OrderRow({
   ) : (
     <View style={styles.legWrap}>
       <TokenIcon symbol={leg.symbol} size={18} />
-      <Text style={styles.leg} numberOfLines={1}>
+      <Text style={styles.leg} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
         <Amount v={leg.amount} size={15} /> {displaySymbol(leg.symbol)}
         {price ? <Text style={styles.price}> @{price}</Text> : null}
         {note ? <Text style={styles.price}> {note}</Text> : null}
@@ -257,7 +257,7 @@ export function OrderRow({
     <>
       {(parts ?? []).map((p, i) => (
         <View key={`${p.label}-${i}`} style={styles.partRow}>
-          <Text style={[styles.partText, p.pending && styles.partPending]} numberOfLines={1}>
+          <Text style={[styles.partText, p.pending && styles.partPending]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
             {p.label}
           </Text>
           <Text style={styles.partState}>{p.state}</Text>

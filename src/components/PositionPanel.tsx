@@ -69,7 +69,7 @@ export function PositionPanel({
       <Text style={styles.label} numberOfLines={1}>
         {label}
       </Text>
-      <Text style={[styles.value, color ? {color} : null]} numberOfLines={1}>
+      <Text style={[styles.value, color ? {color} : null]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
         {value}
       </Text>
     </View>
@@ -90,12 +90,12 @@ export function PositionPanel({
   return (
     <View style={bare ? styles.bare : styles.card}>
       <View style={styles.head}>
-        <Text style={styles.amount} numberOfLines={1}>
+        <Text style={styles.amount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
           {loading ? DASH : fmtNum(position.amount)} {displaySymbol(position.symbol)}
         </Text>
         <View style={styles.todayWrap}>
           <Text style={styles.todayLabel}>{t('mobile.trade.today_pnl')}</Text>
-          <Text style={[styles.today, {color: today.color}]} numberOfLines={1}>
+          <Text style={[styles.today, {color: today.color}]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
             {today.text}
           </Text>
         </View>

@@ -255,10 +255,10 @@ const makeStyles = (c: Colors) =>
     explainSub: {color: c.subtext, fontSize: 13, lineHeight: 19},
     explainText: {color: c.text, fontSize: 15, lineHeight: 22},
     customRow: {flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 10},
-    input: {flex: 1, height: 40, borderRadius: 10, backgroundColor: c.input, color: c.text, paddingHorizontal: 12, fontSize: 17},
+    input: {flex: 1, minHeight: 40, borderRadius: 10, backgroundColor: c.input, color: c.text, paddingHorizontal: 12, fontSize: 17},
     unit: {color: c.subtext, fontSize: 13},
     doneBtn: {
-      height: 40,
+      minHeight: 40,
       paddingHorizontal: 16,
       borderRadius: 20,
       alignItems: 'center',

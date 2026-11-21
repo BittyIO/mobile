@@ -48,7 +48,7 @@ export function AmountInput({
         {/* What is available sits right beside Max, where the number and the button that fills it
             belong together, instead of on a line of its own above the field. */}
         {maxLabel ? (
-          <Text style={styles.balance} numberOfLines={1}>
+          <Text style={styles.balance} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
             {maxLabel}
           </Text>
         ) : null}
@@ -75,7 +75,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
     backgroundColor: c.input,
     paddingRight: 8,
   },
-  input: {flex: 1, minWidth: 60, height: 56, color: c.text, paddingHorizontal: 16, fontSize: 17},
+  input: {flex: 1, minWidth: 60, minHeight: 56, color: c.text, paddingHorizontal: 16, fontSize: 17},
   max: {paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: c.accentSoft},
   maxText: {color: c.accent, fontSize: 13, fontWeight: '700'},
 });

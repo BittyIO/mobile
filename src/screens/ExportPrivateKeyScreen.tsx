@@ -105,7 +105,7 @@ const makeStyles = (c: Colors) =>
     addrLabel: {color: c.subtext, fontSize: 13, fontFamily: MONO, lineHeight: 18},
     warn: {color: c.danger, fontSize: 14, lineHeight: 20, fontWeight: '600'},
     key: {color: c.text, fontSize: 15, fontFamily: MONO, lineHeight: 22, backgroundColor: c.bg, borderRadius: 10, padding: 12},
-    revealBtn: {height: 48, borderRadius: 24, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center'},
+    revealBtn: {minHeight: 48, paddingVertical: 8, borderRadius: 24, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center'},
     revealText: {color: c.onAccent, fontSize: 15, fontWeight: '700'},
     off: {opacity: 0.5},
     btns: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
