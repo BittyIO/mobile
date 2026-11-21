@@ -11,13 +11,13 @@
  */
 import {useEffect, useState} from 'react';
 import {getAddress, parseAbi, type Address, type Hex} from 'viem';
-import {apiFetch, apiUrl, publicClientFor, type Network} from '@/core/chain';
+import {apiFetch, apiUrl, isTronNetwork, publicClientFor, type Network} from '@/core/chain';
 import {IMPORTED_SECTION, keyIndexOf, phraseOf, type VaultRef} from '@/core/vault-store';
-import {isKeyOf, keyPathOf} from '@/wallet/rotation-store';
+import {isKeyOf, keyPathOf, useRotationStore} from '@/wallet/rotation-store';
 import {vaultAddressOf} from '@/core/active-vault';
 import {vaultGuard} from '@/core/vault-contracts';
 import {VAULT_RISK_ABI} from '@/core/abi';
-import {vaultProxyRuntimeCode} from '@/core/predict-vault';
+import {predictVaultAddressOn, vaultProxyRuntimeCode} from '@/core/predict-vault';
 
 const OWNER_ABI = parseAbi(['function owner() view returns (address)']);
 const GUARD_REGISTRY_ABI = parseAbi(['function isImplementationRegisteredFor(address implementation, uint8 category) view returns (bool)']);
@@ -80,6 +80,86 @@ export async function fetchOwnedVaults(
   } catch {
     return {owned: [], pending: [], queued: []};
   }
+}
+
+const BALANCE_ABI = parseAbi(['function balanceOf(address) view returns (uint256)']);
+const MULTICALL3_ABI = parseAbi(['function getEthBalance(address addr) view returns (uint256 balance)']);
+const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11' as Address;
+
+/** One scan per network, account and set of keys and coins, shared while it runs and for a minute after. */
+const ONE_TIME_TTL_MS = 60_000;
+const oneTimeCache = new Map<string, {at: number; result: Promise<{vault: Address; key: Address}[]>}>();
+
+/**
+ * On `network`, the vaults of account `index`'s one-time keys (quantum-safe keys): each key's own
+ * vault, the one the factory derives from it, when it is deployed and still owned by that key, or
+ * not deployed yet but already holding one of `tokens`.
+ *
+ * The second kind is where a bridge out of a quantum-safe vault lands. The bridge pays out to the
+ * vault of the vault's CURRENT owner on the destination chain, which is a one-time key; that key's
+ * vault there has usually never been created, so the server has never heard of it and nothing
+ * lists it. Nothing here is the server's: the address is computed on the phone from a key of this
+ * phrase, and its owner and balances are read from the chain.
+ *
+ * Only the one-time keys this phone has derived are checked (wallet/rotation `learnKeys` derives the
+ * first few after an unlock, and every key that has signed is among them). `phrase` is the
+ * vault-store phrase id, 'main' for the main phrase. `tokens` should be what a bridge can pay out
+ * (the stablecoins and the wrapped native coin), not the whole catalog.
+ *
+ * All of it is ONE multicall (a few eth_calls at most): each key's vault `owner()`, its native
+ * balance and its balance of every token. It used to be a getCode, a getBalance and a balanceOf per
+ * token for every key, all at once — thousands of requests for a phone with a few accounts, which
+ * froze the JS thread and got the public nodes rate-limiting every other screen's reads too. An
+ * `owner()` that fails is a vault with no code yet. Tron, which has no bridge, is not scanned.
+ * `force` skips the minute's cache (a pull to refresh).
+ */
+export function fetchOneTimeKeyVaults(
+  network: Network,
+  index: number,
+  phrase: string,
+  tokens: Address[],
+  force = false,
+): Promise<{vault: Address; key: Address}[]> {
+  if (isTronNetwork(network)) return Promise.resolve([]);
+  const keys = Object.entries(useRotationStore.getState().keys)
+    .filter(([, p]) => isKeyOf(p, index, phrase))
+    .map(([address]) => getAddress(address));
+  if (keys.length === 0) return Promise.resolve([]);
+  const id = `${network}|${index}|${phrase}|${keys.join(',')}|${tokens.join(',')}`;
+  const hit = oneTimeCache.get(id);
+  if (hit && !force && Date.now() - hit.at < ONE_TIME_TTL_MS) return hit.result;
+  const result = scanOneTimeKeys(network, keys, tokens).catch(() => {
+    // A failed scan is not kept: the next open asks again.
+    if (oneTimeCache.get(id)?.result === result) oneTimeCache.delete(id);
+    return [] as {vault: Address; key: Address}[];
+  });
+  oneTimeCache.set(id, {at: Date.now(), result});
+  return result;
+}
+
+async function scanOneTimeKeys(network: Network, keys: Address[], tokens: Address[]): Promise<{vault: Address; key: Address}[]> {
+  const vaults = keys.map((key) => predictVaultAddressOn(network, key));
+  const per = 2 + tokens.length;
+  const contracts = vaults.flatMap((vault) => [
+    {address: vault, abi: OWNER_ABI, functionName: 'owner'} as const,
+    // Across pays WETH routes out as the native coin, so that is looked at too.
+    {address: MULTICALL3, abi: MULTICALL3_ABI, functionName: 'getEthBalance', args: [vault]} as const,
+    ...tokens.map((token) => ({address: token, abi: BALANCE_ABI, functionName: 'balanceOf', args: [vault]}) as const),
+  ]);
+  // Big chunks, so the whole scan is one or two requests rather than viem's default of many small ones.
+  const res = await publicClientFor(network).multicall({contracts, allowFailure: true, batchSize: 16_384});
+  const found: {vault: Address; key: Address}[] = [];
+  keys.forEach((key, i) => {
+    const at = res.slice(i * per, (i + 1) * per);
+    const owner = at[0];
+    if (owner?.status === 'success') {
+      // Deployed: listed only while this key still owns it.
+      if (String(owner.result).toLowerCase() === key.toLowerCase()) found.push({vault: vaults[i], key});
+      return;
+    }
+    if (at.slice(1).some((r) => r.status === 'success' && typeof r.result === 'bigint' && r.result > 0n)) found.push({vault: vaults[i], key});
+  });
+  return found;
 }
 
 /** A vault's current owner, or null for one not deployed yet (it has no owner but its creator). */

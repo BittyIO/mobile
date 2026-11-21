@@ -15,6 +15,8 @@ import {SettingsGroup} from '@/components/SettingsRow';
 import {Sheet} from '@/components/Sheet';
 import {ConfirmButton} from '@/components/Button';
 import {ClearBtn} from '@/components/ClearBtn';
+import {FundRow} from '@/components/FundRow';
+import {AvailableLine} from '@/components/AvailableLine';
 import {useConfirmAction} from '@/components/ConfirmAction';
 import {showToast, showTx} from '@/components/Toast';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -35,6 +37,8 @@ import {worthShowing} from '@/core/prices';
 import {isQueuedStake} from '@/vault/lido';
 import {balanceOfSymbol} from '@/vault/read';
 import {relayGasFor} from '@/vault/fee-quote';
+import {useFeeFloor} from '@/vault/useFeeFloor';
+import {feeCoinForSpend, feeWeth, reserveHeld, resolveFeeReserve, useWethFeeCoin} from '@/vault/stableCoinAsGas';
 import {gateReasonKey, useCapability} from '@/vault/gate';
 import {versionAtLeast} from '@/vault/capabilities';
 import {runningVaultVersion} from '@/vault/vault-abi';
@@ -170,8 +174,8 @@ export function BridgeScreen() {
   // The form: where to, what, how much.
   const [to, setTo] = useState<Network | null>(null);
   const [assetAddr, setAssetAddr] = useState<string | null>(null);
-  /** The From or To network, or a line's coin and source (`k` is the line, null when adding one). */
-  const [picker, setPicker] = useState<'from' | 'to' | {k: number | null} | null>(null);
+  /** The From or To network, or the coin and where it comes from. */
+  const [picker, setPicker] = useState<'from' | 'to' | 'source' | null>(null);
   const destinations = useMemo(() => Array.from(new Set((bi?.routes ?? []).map((r) => r.to))), [bi]);
   /**
    * Where To should land once the network switch below has loaded its routes: the network just
@@ -256,47 +260,24 @@ export function BridgeScreen() {
   const movable = route ? movableFor(route) : [];
   const positionTag = (kind: string) => t(kind === 'supplied' ? 'vault.lending' : 'vault.yielding');
   /**
-   * The card's lines, as on Send: one per place the coin comes from — its free balance ('free'), or
-   * a yielding or lending position (keyed by its adapter) — each with its own amount. One coin per
-   * bridge, so every line is a source of the same coin; the positions are withdrawn in the same
-   * multicall as the bridge, and what crosses is the lines' total.
+   * Where the coin comes from, as on Trade's market order: a tick per source and how much of it to
+   * take. The sources are the free balance ('free'), each yielding or lending position (keyed by its
+   * adapter), and the fee reserve ('reserve'). One coin per bridge, so every source is the same coin;
+   * the positions are withdrawn in the same multicall as the bridge, and what crosses is the total.
+   *
+   * The free balance's ceiling has the fee reserve taken off it, as Trade's does, so Max leaves the
+   * float for later fees. Unlike Trade, the reserve is a source of its own: ticking it takes the
+   * float too, all but what THIS bridge will be billed, so a vault can be emptied to the other side.
    */
-  type Line = {key: string; amount: string};
-  const [lines, setLines] = useState<Line[]>([{key: 'free', amount: ''}]);
-  /**
-   * Until the lines are edited they track every funded source of the coin, as Send's do: balances
-   * arrive before positions, so the yielding and lending lines join once those are read.
-   */
-  const linesTouched = useRef(false);
+  const [fundOn, setFundOn] = useState<Record<string, boolean>>({free: true});
+  const [fundAmt, setFundAmt] = useState<Record<string, string>>({});
+  /** The amount field as typed; the rows hold how it is split. */
+  const [amountText, setAmountText] = useState('');
+  /** Until a tick is changed, the ticks follow the coin's funded sources as balances and positions load. */
+  const fundTouched = useRef(false);
   const freeOf = (r: BridgeRoute) => Number(balanceOfSymbol(bal.balances, r.asset.symbol) || 0);
   /** The free balance, when it is more than dust. */
   const freeWorth = (r: BridgeRoute) => worthOf(r, freeOf(r));
-  const defaultKeys = route ? [...(freeWorth(route) || !movable.length ? ['free'] : []), ...movable.map((p) => p.protocol as string)] : ['free'];
-  const defaultKey = defaultKeys.join(',');
-  useEffect(() => {
-    if (linesTouched.current) return;
-    setLines(defaultKeys.map((key) => ({key, amount: ''})));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [defaultKey]);
-  /** Back to the coin's own sources, empty: a new coin or a new From network. */
-  const resetFunding = () => {
-    linesTouched.current = false;
-    setLines(defaultKeys.map((key) => ({key, amount: ''})));
-  };
-  const setAmount = (v: string) => (v === '' ? setLines((ls) => ls.map((l) => ({...l, amount: ''}))) : undefined);
-  const patchLine = (k: number, amount: string) => {
-    linesTouched.current = true;
-    setLines((ls) => ls.map((l, j) => (j === k ? {...l, amount} : l)));
-  };
-  const posOf = (key: string) => movable.find((p) => p.protocol === key);
-  /** What one source holds. The WETH balance for WETH (it counts any ETH not yet wrapped), as every other screen reads it. */
-  const capStr = (key: string): string => (!route ? '0' : key === 'free' ? balanceOfSymbol(bal.balances, route.asset.symbol) || '0' : posOf(key)?.formatted ?? '0');
-  const lineTag = (key: string) => {
-    const p = key === 'free' ? undefined : posOf(key);
-    return p ? positionTag(p.kind) : null;
-  };
-  /** The sources not on the card yet, for "Add". */
-  const unused = route ? [...(freeWorth(route) ? ['free'] : []), ...movable.map((p) => p.protocol as string)].filter((k) => !lines.some((l) => l.key === k)) : [];
   /** What the free balance plus every position of a coin holds, for the coin list. */
   const totalOf = (r: BridgeRoute) => freeOf(r) + movableFor(r).reduce((n, p) => n + Number(p.formatted), 0);
   if (route) lastSym.current = symOf(route);
@@ -316,6 +297,7 @@ export function BridgeScreen() {
   const shownOutSym = route ? outSymOf(route) : lastOutSym.current;
 
   const decOf = (r: BridgeRoute) => (r.native ? NATIVE[network].decimals : r.asset.decimals);
+  const dec = route ? decOf(route) : 18;
   const toRaw = (v: string) => {
     if (!route || !v) return 0n;
     try {
@@ -324,15 +306,118 @@ export function BridgeScreen() {
       return 0n;
     }
   };
-  const lineRaw = lines.map((l) => toRaw(l.amount));
-  const lineOver = lines.map((l, i) => lineRaw[i] > 0n && lineRaw[i] > toRaw(capStr(l.key)));
-  /** What crosses: every line's amount together. */
-  const raw = lineRaw.reduce((n, x) => n + x, 0n);
-  const amount = route && raw > 0n ? formatUnits(raw, decOf(route)) : '';
-  const over = lineOver.some(Boolean);
-  /** The positions drawn on: each position line withdraws exactly its own amount. */
-  const plan = lines.flatMap((l, i) => (l.key !== 'free' && lineRaw[i] > 0n ? [{protocol: l.key as Address, raw: lineRaw[i]}] : []));
+  const numRaw = (n: number) => (route && n > 0 ? toRaw(n.toFixed(dec)) : 0n);
+  const fmtCap = (x: bigint) => formatUnits(x, dec);
+  const big = (x: bigint) => (x > 0n ? x : 0n);
+
+  /**
+   * The fee float, worked out as Trade and Send do: held back only in its own coin, and never below
+   * what this operation will be billed ({useFeeFloor}). Nothing of this coin is held back when the
+   * vault pays its fees in another one.
+   */
+  const feeFloor = useFeeFloor(network);
+  const weth = useWethFeeCoin(network, vault);
+  const reserve = resolveFeeReserve({
+    network,
+    vault,
+    heldStables: [
+      ...assets.filter((a) => a.kind === 'stable').map((a) => ({symbol: a.symbol, amount: Number(balanceOfSymbol(bal.balances, a.symbol) || 0)})),
+      ...(weth ? [{symbol: feeWeth(network), amount: Number(balanceOfSymbol(bal.balances, feeWeth(network)) || 0), usd: weth.usd}] : []),
+    ],
+    spendSymbol: route?.asset.symbol,
+    floorUsd: feeFloor,
+  });
+  const freeRaw = route ? toRaw(balanceOfSymbol(bal.balances, route.asset.symbol) || '0') : 0n;
+  const keepRaw = numRaw(reserve.keep);
+  /** What the float actually holds of the free balance: never more than there is. */
+  const heldRaw = keepRaw < freeRaw ? keepRaw : freeRaw;
+  /** This bridge's own fee, in the coin: what stays behind even when the reserve is taken. */
+  const coinUsd = reserve.coin?.toUpperCase() === feeWeth(network) ? weth?.usd ?? 0 : 1;
+  const feeNowRaw = reserve.keep > 0 && coinUsd > 0 ? numRaw(feeFloor / coinUsd) : 0n;
+  const posOf = (key: string) => movable.find((p) => p.protocol === key);
+  /** The most each source can put in, in the coin's smallest unit. */
+  const capRaw = (key: string): bigint =>
+    !route ? 0n : key === 'free' ? big(freeRaw - keepRaw) : key === 'reserve' ? big(heldRaw - feeNowRaw) : toRaw(posOf(key)?.formatted ?? '0');
+  /** Every source of this coin, in the order a typed amount fills them: free, the positions, the reserve last. */
+  const sourceKeys = route ? ['free', ...movable.map((p) => p.protocol as string), ...(heldRaw > 0n ? ['reserve'] : [])] : ['free'];
+  const sourceKey = sourceKeys.join(',');
+  /** Ticked to begin with: the free balance, or the positions when the free balance is only dust. */
+  const defaultOn = (): Record<string, boolean> => {
+    if (!route) return {free: true};
+    const freeFirst = freeWorth(route) || !movable.length;
+    return Object.fromEntries(sourceKeys.filter((k) => k !== 'reserve').map((k) => [k, k === 'free' ? freeFirst : !freeFirst]));
+  };
+  useEffect(() => {
+    if (fundTouched.current) return;
+    setFundOn(defaultOn());
+    setFundAmt({});
+    setAmountText('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceKey, assetAddr]);
+  /** Back to the coin's own sources, empty: a new coin or a new From network. */
+  const resetFunding = () => {
+    fundTouched.current = false;
+    setFundOn(defaultOn());
+    setFundAmt({});
+    setAmountText('');
+  };
+  const setAmount = (v: string) => {
+    if (v !== '') return;
+    setFundAmt({});
+    setAmountText('');
+  };
+  const ticked = sourceKeys.filter((k) => fundOn[k]);
+  /** A row's amount, never past what its source holds. */
+  const rowOf = (on: Record<string, boolean>, amt: Record<string, string>, k: string) => {
+    if (!on[k]) return 0n;
+    const x = toRaw(amt[k] ?? '');
+    const cap = capRaw(k);
+    return x > cap ? cap : x;
+  };
+  /** What the ticked sources hold together: the figure Available names and Max fills. */
+  const availRaw = ticked.reduce((n, k) => n + capRaw(k), 0n);
+  /** A row changed: the field restates the rows' total, so the two always agree. */
+  const applyRows = (on: Record<string, boolean>, amt: Record<string, string>) => {
+    fundTouched.current = true;
+    setFundOn(on);
+    setFundAmt(amt);
+    const total = sourceKeys.reduce((n, k) => n + rowOf(on, amt, k), 0n);
+    setAmountText(total > 0n ? fmtCap(total) : '');
+  };
+  /** The field was typed in: the amount is split over the ticked sources in order, each up to what it holds. */
+  const typeAmount = (v: string) => {
+    fundTouched.current = true;
+    setAmountText(v);
+    let left = toRaw(v);
+    const amt: Record<string, string> = {};
+    for (const k of ticked) {
+      const cap = capRaw(k);
+      const take = left < cap ? left : cap;
+      amt[k] = take > 0n ? fmtCap(take) : '';
+      left -= take;
+    }
+    setFundAmt(amt);
+  };
+  /** Max: every ticked source in full. */
+  const maxAll = () => applyRows(fundOn, Object.fromEntries(ticked.map((k) => [k, fmtCap(capRaw(k))])));
+  /** Tick or untick a source: ticking brings all of it in, unticking takes it out. */
+  const toggleSource = (k: string) => {
+    const on = {...fundOn, [k]: !fundOn[k]};
+    applyRows(on, {...fundAmt, [k]: on[k] ? fmtCap(capRaw(k)) : ''});
+  };
+  /** What crosses: the amount in the field. */
+  const raw = toRaw(amountText);
+  const amount = route && raw > 0n ? formatUnits(raw, dec) : '';
+  /** More than the ticked sources hold, or rows that no longer add up to the field (a balance moved). */
+  const over = raw > availRaw || (raw > 0n && ticked.reduce((n, k) => n + rowOf(fundOn, fundAmt, k), 0n) !== raw);
+  /** The positions drawn on: each withdraws exactly its row. The free balance and the reserve are in the vault already. */
+  const plan = movable.flatMap((p) => {
+    const x = rowOf(fundOn, fundAmt, p.protocol as string);
+    return x > 0n ? [{protocol: p.protocol as Address, raw: x}] : [];
+  });
   const planKey = plan.map((w) => `${w.protocol}:${w.raw}`).join(',');
+  /** The float's coin, when it is another than this one: billed, pinned, as on Trade. */
+  const pinnedFee = route ? feeCoinForSpend(network, reserve.coin, route.asset.symbol) : null;
 
   // Where it lands, and Across's quote for it — re-asked shortly after the amount stops changing.
   const [recipient, setRecipient] = useState<Address | null>(null);
@@ -372,9 +457,13 @@ export function BridgeScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route, recipient, raw, network, quoteNonce, planKey]);
 
-  // The coin the relayer bills: a stablecoin this bridge is not spending, so the fee is still there.
+  // The coin the relayer bills.
   const stables = assets.filter((a) => a.kind === 'stable');
   const billFor = (r: BridgeRoute) => {
+    // The float is in another coin: that one, pinned past the fee-coin order (see {pinnedFee}).
+    if (pinnedFee) return {coin: pinnedFee, pin: true};
+    // The float is held back in this very coin, so this coin still has the fee after the bridge.
+    if (keepRaw > 0n) return {coin: r.asset.address, pin: r.asset.address !== stables[0]?.address};
     const other = stables.find((a) => a.address !== r.asset.address);
     return {coin: (other ?? stables[0])?.address, pin: !!other && other.address !== stables[0]?.address};
   };
@@ -484,7 +573,6 @@ export function BridgeScreen() {
   const stuck = upgradeYourself && !askUpgrade;
 
   const fillTime = (s: number) => (s < 90 ? t('mobile.bridge.seconds', {n: Math.max(1, Math.round(s))}) : t('mobile.bridge.minutes', {n: Math.round(s / 60)}));
-  const dec = route ? decOf(route) : 18;
   const fmtRaw = (x: bigint) => fmtNum(Number(formatUnits(x, dec)));
   const errText = quoteErr
     ? t(`mobile.bridge.${quoteErr.key}`, {
@@ -541,51 +629,34 @@ export function BridgeScreen() {
             {/* The vault it leaves, after its network. */}
             {vault ? <VaultAddr address={vault} styles={styles} /> : null}
           </View>
-          {/* Send's card: one line per source of the coin — its free balance, its yielding or
-              lending position — each with its own amount, Max and clear. The pill picks the coin
-              and the source; the lines' total is what crosses. */}
-          {lines.map((l, k) => {
-            const cap = capStr(l.key);
-            const tag = lineTag(l.key);
-            return (
-              <View key={l.key} style={[styles.line, styles.lineTop]}>
-                <View style={styles.field}>
-                  <Pressable style={styles.assetPill} onPress={() => setPicker({k})} accessibilityRole="button">
-                    {shownSym ? <TokenIcon symbol={shownSym} size={20} /> : null}
-                    <Text style={styles.assetSym}>{shownSym ?? '—'}</Text>
-                    {tag ? <Text style={styles.sourceTag}>{tag}</Text> : null}
-                  </Pressable>
-                  <TextInput
-                    style={[styles.input, lineOver[k] && styles.inputOver]}
-                    keyboardType="decimal-pad"
-                    value={l.amount}
-                    placeholder="0"
-                    placeholderTextColor={c.subtext}
-                    onChangeText={(v) => patchLine(k, v)}
-                  />
-                  {Number(l.amount) > 0 ? (
-                    <ClearBtn onPress={() => patchLine(k, '')} />
-                  ) : route && worthOf(route, Number(cap)) ? (
-                    <Pressable style={styles.maxBtn} onPress={() => patchLine(k, cap)} hitSlop={8}>
-                      <Text style={styles.balInline} numberOfLines={1}>{fmtNum(Number(cap))}</Text>
-                      <Text style={styles.maxBadge}>{t('common.max')}</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-                {lineOver[k] ? <Text style={styles.err}>{t('vault.exceeds_balance')}</Text> : null}
-              </View>
-            );
-          })}
+          {/* Trade's field: what the ticked sources hold above it (tapped, it is Max), the amount, Max
+              or clear, and the coin's pill, which opens where it comes from. */}
+          <View style={[styles.line, styles.lineTop]}>
+            {shownSym ? <AvailableLine amount={Number(fmtCap(availRaw))} symbol={shownSym} onPress={maxAll} /> : null}
+            <View style={styles.field}>
+              <Pressable style={styles.assetPill} onPress={() => setPicker('source')} accessibilityRole="button">
+                {shownSym ? <TokenIcon symbol={shownSym} size={20} /> : null}
+                <Text style={styles.assetSym}>{shownSym ?? '—'}</Text>
+              </Pressable>
+              <TextInput
+                style={[styles.input, over && styles.inputOver]}
+                keyboardType="decimal-pad"
+                value={amountText}
+                placeholder="0"
+                placeholderTextColor={c.subtext}
+                onChangeText={typeAmount}
+              />
+              {Number(amountText) > 0 ? (
+                <ClearBtn onPress={() => setAmount('')} />
+              ) : availRaw > 0n ? (
+                <Pressable style={styles.maxBtn} onPress={maxAll} hitSlop={8}>
+                  <Text style={styles.maxBadge}>{t('common.max')}</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            {over ? <Text style={styles.err}>{t('vault.exceeds_balance')}</Text> : null}
+          </View>
         </SettingsGroup>
-
-        {/* As Send's: another place the same coin comes from, while one is left. */}
-        {unused.length ? (
-          <SettingsGroup>
-            <Pressable style={({pressed}) => [styles.addRow, pressed && styles.pressed]} onPress={() => setPicker({k: null})}>
-              <Text style={styles.addToken}>＋ {t('mobile.payments.add_token')}</Text>
-            </Pressable>
-          </SettingsGroup>
-        ) : null}
 
         {/* The same arrow as Trade's, with room around it: swaps From and To. */}
         <Pressable onPress={flip} disabled={!to} hitSlop={8} style={[styles.flipBtn, !to && styles.dim]} accessibilityRole="button" accessibilityLabel={t('mobile.trade.swap_sides')}>
@@ -668,8 +739,14 @@ export function BridgeScreen() {
         ) : null}
       </ScrollView>
 
-      <Sheet visible={picker != null} title={t(picker === 'from' ? 'mobile.bridge.from' : picker === 'to' ? 'mobile.bridge.to' : 'vault.select_asset')} onClose={() => setPicker(null)} height={Math.round(screenHeight * 0.5)}>
-        <ScrollView showsVerticalScrollIndicator={false}>
+      <Sheet
+        visible={picker != null}
+        title={t(picker === 'from' ? 'mobile.bridge.from' : picker === 'to' ? 'mobile.bridge.to' : 'vault.select_asset')}
+        onClose={() => setPicker(null)}
+        // The sources apply as they are ticked, so closing confirms, as on Trade; and taller, for the fractions and the keyboard.
+        done={picker === 'source'}
+        height={Math.round(screenHeight * (picker === 'source' ? 0.8 : 0.5))}>
+        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           {picker === 'from'
             ? fromChoices.map((n) => (
                 <Pressable key={n} style={styles.pickRow} onPress={() => (pickFrom(n), setPicker(null))}>
@@ -686,54 +763,58 @@ export function BridgeScreen() {
                   {n === to ? <Check color={c.accent} /> : null}
                 </Pressable>
               ))
-            : picker && route
-            ? (() => {
-                const k = picker.k;
-                // This coin's sources not on another line, then (changing a line, not adding one)
-                // the other coins: one coin crosses per bridge, so picking one starts the card over on it.
-                const keys = [...(freeWorth(route) || lines[k ?? -1]?.key === 'free' ? ['free'] : []), ...movable.map((p) => p.protocol as string)].filter(
-                  (key) => !lines.some((l, j) => j !== k && l.key === key),
-                );
-                const choose = (key: string) => {
-                  linesTouched.current = true;
-                  setLines((ls) => (k == null ? [...ls, {key, amount: ''}] : ls.map((l, j) => (j === k ? {key, amount: ''} : l))));
-                  setPicker(null);
-                };
-                return (
-                  <>
-                    {keys.map((key) => {
-                      const tag = lineTag(key);
-                      return (
-                        <Pressable key={key} style={styles.pickRow} onPress={() => choose(key)}>
-                          <TokenIcon symbol={symOf(route)} size={30} />
-                          <Text style={styles.pickLabel}>{tag ? `${symOf(route)} ${tag}` : symOf(route)}</Text>
-                          <Text style={styles.pickSub}>{fmtNum(Number(capStr(key)))}</Text>
-                          {k != null && lines[k]?.key === key ? <Check color={c.accent} /> : null}
-                        </Pressable>
-                      );
-                    })}
-                    {k == null
-                      ? null
-                      : routesTo
-                          .filter((r) => routeId(r) !== assetAddr)
-                          .map((r) => (
-                            <Pressable
-                              key={routeId(r)}
-                              style={styles.pickRow}
-                              onPress={() => {
-                                userPicked.current = true;
-                                linesTouched.current = false;
-                                setAssetAddr(routeId(r));
-                                setPicker(null);
-                              }}>
-                              <TokenIcon symbol={symOf(r)} size={30} />
-                              <Text style={styles.pickLabel}>{symOf(r)}</Text>
-                              <Text style={styles.pickSub}>{fmtNum(totalOf(r))}</Text>
-                            </Pressable>
-                          ))}
-                  </>
-                );
-              })()
+            : picker === 'source' && route
+            ? (
+                <>
+                  {/* Where it comes from, as Trade's funding sheet: a tick per source, the fractions and
+                      the amount under a ticked one. The reserve is the last row and, unlike Trade's,
+                      can be ticked: all of it but this bridge's own fee then crosses too. */}
+                  {sourceKeys.map((key) => {
+                    const p = posOf(key);
+                    const cap = Number(fmtCap(capRaw(key)));
+                    const sym = symOf(route);
+                    const label = key === 'free' ? sym : key === 'reserve' ? `${sym} ${t('mobile.trade.fee_reserved')}` : `${sym} ${p ? positionTag(p.kind) : ''}`;
+                    const sub = key === 'free' ? `${t('vault.balance')} · ${fmtNum(cap)}` : `${fmtNum(cap)} ${sym}`;
+                    if (key !== 'free' && key !== 'reserve' && !(cap > 0)) return null;
+                    return (
+                      <FundRow
+                        key={key}
+                        label={label}
+                        sub={sub}
+                        symbol={route.asset.symbol}
+                        cap={cap}
+                        on={!!fundOn[key]}
+                        amount={fundAmt[key] ?? ''}
+                        inert={key === 'reserve' && !(cap > 0)}
+                        onToggle={() => toggleSource(key)}
+                        onAmount={(v) => applyRows({...fundOn, [key]: true}, {...fundAmt, [key]: v})}
+                        onCommit={() => {
+                          // Edited down to nothing: the source is out, so its tick goes with it.
+                          if (!(Number(fundAmt[key]) > 0)) applyRows({...fundOn, [key]: false}, {...fundAmt, [key]: ''});
+                        }}
+                      />
+                    );
+                  })}
+                  {/* The other coins: one crosses per bridge, so picking one starts the card over on it. */}
+                  {routesTo
+                    .filter((r) => routeId(r) !== assetAddr)
+                    .map((r) => (
+                      <Pressable
+                        key={routeId(r)}
+                        style={styles.pickRow}
+                        onPress={() => {
+                          userPicked.current = true;
+                          fundTouched.current = false;
+                          setAssetAddr(routeId(r));
+                          setPicker(null);
+                        }}>
+                        <TokenIcon symbol={symOf(r)} size={30} />
+                        <Text style={styles.pickLabel}>{symOf(r)}</Text>
+                        <Text style={styles.pickSub}>{fmtNum(totalOf(r))}</Text>
+                      </Pressable>
+                    ))}
+                </>
+              )
             : null}
         </ScrollView>
       </Sheet>
@@ -824,18 +905,14 @@ const makeStyles = (c: Colors) =>
     input: {flex: 1, minWidth: 0, color: c.text, fontSize: 17, paddingVertical: 0},
     inputOver: {color: c.danger},
     maxBtn: {flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: 124},
-    balInline: {color: c.subtext, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'], flexShrink: 1},
     maxBadge: {color: c.accent, backgroundColor: c.accentSoft, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2, overflow: 'hidden'},
     netStatic: {flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, paddingVertical: 5},
     assetStatic: {flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 7},
     assetPill: {flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.neutralSoft, borderRadius: 18, paddingVertical: 7, paddingHorizontal: 10},
     assetSym: {color: c.text, fontSize: 14, fontWeight: '700'},
     // As Send's pay pill names its source.
-    sourceTag: {color: c.subtext, fontSize: 11, fontWeight: '600'},
     // Send's: a hairline between the card's lines, and the Add row under them.
     lineTop: {borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border},
-    addRow: {minHeight: 52, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16},
-    addToken: {color: c.accent, fontSize: 15, fontWeight: '600'},
     // Trade's venue and fee lines, in its sizes.
     caption: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingHorizontal: 4, marginBottom: -12},
     captionText: {flexShrink: 1, color: c.subtext, fontSize: 13},

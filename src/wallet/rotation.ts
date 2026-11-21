@@ -27,6 +27,7 @@ import {NETWORKS} from '@/core/network-store';
 import {FORWARDER_ABI, VAULT_FWD_ABI} from '@/core/abi';
 import type {Signer} from './signer';
 import {accountAt, oneTimeKeys} from './keyring';
+import {predictVaultAddressOn} from '@/core/predict-vault';
 import {
   bumpNextKey,
   isKeyOf,
@@ -103,6 +104,32 @@ function findOwnerKey(root: HDKey, index: number, owner: Address, phrase?: strin
     const a = key(k);
     seen.push({address: a.address, index, k, phrase});
     if (a.address.toLowerCase() === owner.toLowerCase()) {
+      found = a;
+      bumpNextKey(index, k + 1, phrase);
+    }
+  }
+  rememberKeys(seen);
+  return found;
+}
+
+/**
+ * The one-time key of account `index` whose own vault on `network` is `vault`, for a vault not
+ * created yet: the key the factory derives that address from, and so the only key that can sign
+ * its activation.
+ *
+ * A bridge out of a quantum-safe vault pays the vault of the one-time key that owns it on the
+ * destination chain, and that vault usually does not exist yet. The account's own key would sign
+ * for (and activate) a different vault, so the key is found by computing each one's vault address.
+ */
+function findCreatorKey(root: HDKey, index: number, network: Network, vault: Address, phrase?: string): LocalAccount | null {
+  const key = oneTimeKeys(root, index);
+  const at = vault.toLowerCase();
+  const seen: {address: string; index: number; k: number; phrase?: string}[] = [];
+  let found: LocalAccount | null = null;
+  for (let k = 0; k < nextKeyOf(index, phrase) + SCAN && !found; k++) {
+    const a = key(k);
+    seen.push({address: a.address, index, k, phrase});
+    if (predictVaultAddressOn(network, a.address).toLowerCase() === at) {
       found = a;
       bumpNextKey(index, k + 1, phrase);
     }
@@ -201,8 +228,14 @@ export async function vaultSigner(o: {root: HDKey; index: number; network: Netwo
     // until the owner turns it on, per network and vault (see {useRotationOn}).
     if (found) key = found;
   }
+  // Not deployed yet: the first write activates it, signed by the key the factory derives the address
+  // from. That is the account's own key for its own vault, and a one-time key for one a bridge out
+  // of a quantum-safe vault paid into.
+  if (!owner && predictVaultAddressOn(o.network, base.address).toLowerCase() !== o.vault.toLowerCase()) {
+    const creator = findCreatorKey(o.root, o.index, o.network, o.vault, o.phrase);
+    if (creator) key = creator;
+  }
   const signer = tracked(key);
-  // Not deployed yet: the first write activates it, which is signed by the account's own key.
   if (!owner || !rotationOn(o.network, o.vault)) return signer;
   return {...signer, rotation: await plan(o.root, o.index, o.network, o.vault, o.phrase)};
 }

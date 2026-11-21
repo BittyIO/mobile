@@ -1,5 +1,5 @@
-import React, {useEffect, useLayoutEffect, useMemo, useState} from 'react';
-import {ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, View} from 'react-native';
+import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
+import {ActivityIndicator, Alert, InteractionManager, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, View} from 'react-native';
 import {useIsFocused, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
@@ -9,10 +9,10 @@ import {IMPORTED_SECTION, nextAccountOf, nextNumberOf, phraseOf, useVaults, vaul
 import {vaultAddressOf} from '@/core/active-vault';
 import {ownerVaultAddress} from '@/vault/read';
 import {NETWORKS, useNetwork} from '@/core/network-store';
-import type {Network} from '@/core/chain';
+import {NATIVE, type Network} from '@/core/chain';
 import {useWallet} from '@/wallet/store';
 import * as keyring from '@/wallet/keyring';
-import {deviceKeys, fetchOwnedVaults, useVaultDirectory, type FoundVault} from '@/vault/owned-vaults';
+import {deviceKeys, fetchOneTimeKeyVaults, fetchOwnedVaults, useVaultDirectory, type FoundVault} from '@/vault/owned-vaults';
 import {acceptOwnership} from '@/vault/ownership';
 import {fetchSafe} from '@/vault/safe';
 import {relayGasFor} from '@/vault/fee-quote';
@@ -194,6 +194,42 @@ export function VaultListScreen() {
   }, [network, keySig, refresh]);
 
   /**
+   * The vaults of each phrase key's one-time keys (quantum-safe keys) on this chain, which the
+   * server cannot know of: above all one not created yet that a bridge has paid into, since a bridge
+   * out of a quantum-safe vault pays the vault of the one-time key that owns it now. Found from the
+   * phone's own keys and the chain (vault/owned-vaults `fetchOneTimeKeyVaults`).
+   */
+  // Only what a bridge pays out: the stablecoins and the wrapped native coin (see fetchOneTimeKeyVaults).
+  const catalog = useAssetCatalog(network);
+  const wrapped = NATIVE[network]?.wrapped?.toUpperCase();
+  const bridgeTokens = catalog.filter((a) => a.kind === 'stable' || a.symbol.toUpperCase() === wrapped).map((a) => a.address as Address);
+  const tokenSig = bridgeTokens.join(',');
+  const [oneTime, setOneTime] = useState<Record<string, {vault: Address; key: Address}[]>>({});
+  /** The refresh last scanned for: a pull to refresh reads the chain again rather than the cache. */
+  const scannedRefresh = useRef(refresh);
+  useEffect(() => {
+    let live = true;
+    const force = scannedRefresh.current !== refresh;
+    scannedRefresh.current = refresh;
+    const keys = owners.filter((o) => !o.safe && o.address && o.phrase !== IMPORTED_SECTION);
+    // After the page has come up, so the scan never competes with the transition into it.
+    const task = InteractionManager.runAfterInteractions(() => {
+      Promise.all(keys.map((o) => fetchOneTimeKeyVaults(network, o.keyIndex, o.phrase, bridgeTokens, force))).then((rs) => {
+        if (live) setOneTime(Object.fromEntries(keys.map((o, i) => [o.key, rs[i]])));
+      });
+    });
+    return () => {
+      live = false;
+      task.cancel();
+    };
+    // `keySig` and `tokenSig` stand for the keys and the coins.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [network, keySig, tokenSig, refresh]);
+  // Every vault already on the phone for this chain, whoever it is listed under: a one-time key's
+  // vault, once added, is its own owner's row and must not be offered again under the account.
+  const onPhone = new Set(vaults.map((v) => vaultAddressOf(v, network)?.toLowerCase()).filter(Boolean) as string[]);
+
+  /**
    * Every vault, grouped by the owner that holds it: those on this phone, then those the server says
    * it holds that are not on the phone yet (listed the same way — a transfer needs nothing from the
    * receiver), and any handover still waiting for that owner to accept. An owner with none is left out.
@@ -206,6 +242,12 @@ export function VaultListScreen() {
       const key = {index: o.keyIndex, address: (o.address ?? '0x') as Address, phrase: o.phrase};
       const h = held[o.key];
       const received: FoundVault[] = (h?.owned ?? []).filter((v) => !here.has(v.toLowerCase())).map((vault) => ({vault, key, pending: false}));
+      // Owned by (or waiting to be created for) one of this account's one-time keys: that key signs.
+      for (const f of oneTime[o.key] ?? []) {
+        const at = f.vault.toLowerCase();
+        if (onPhone.has(at) || received.some((r) => r.vault.toLowerCase() === at)) continue;
+        received.push({vault: f.vault, key: {...key, address: f.key}, pending: false});
+      }
       const waiting: FoundVault[] = (h?.pending ?? []).filter((v) => !here.has(v.toLowerCase())).map((vault) => ({vault, key, pending: true}));
       // Transferred to this owner and still in the vault's timelock: listed now, with when it arrives.
       const incoming: FoundVault[] = (h?.queued ?? [])
