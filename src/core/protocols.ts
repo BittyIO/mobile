@@ -5,11 +5,16 @@ import {currentGuardProtocols} from '@/core/guard-catalog';
 
 /**
  * Guard categories, as the app names them. `amm` is the market-trade adapter (guard category 3),
- * which swaps through the Universal Router. The guard's market-maker category (5, concentrated
- * liquidity) has no name here: the app provides no liquidity, and the guard reads skip it — see
- * {IGNORED_GUARD_CATEGORIES} in `core/vault-contracts`.
+ * which swaps through the Universal Router. `bridge` is guard category 5, the Across adapter.
  */
-export type ProtocolCategory = 'staking' | 'lending' | 'amm' | 'intent' | 'unknown';
+export type ProtocolCategory = 'staking' | 'lending' | 'amm' | 'intent' | 'bridge' | 'unknown';
+
+/**
+ * The bridge adapter's name, whichever build the guard runs. The server's catalog has lagged the
+ * bridge's upgrades (and names none on Ethereum), so a bridge the guard lists is named here rather
+ * than shown as a bare address.
+ */
+export const BRIDGE_NAME = 'Across';
 
 type ProtocolInfo = {name: string; category: ProtocolCategory};
 
@@ -143,6 +148,7 @@ const SERVED_CATEGORY: Record<string, ProtocolCategory> = {
   lending: 'lending',
   marketTrade: 'amm',
   intent: 'intent',
+  bridge: 'bridge',
 };
 // The server names adapters as displayed ("Sky V1"); the app keys its routes by the short name.
 const SHORT_NAME: Record<string, string> = Object.fromEntries(Object.entries(DISPLAY_NAME).map(([k, v]) => [v, k]));
@@ -199,6 +205,7 @@ export function protocolMeta(network: Network, address: string): ProtocolInfo {
   const vendored = table(network)[address.toLowerCase()] ?? RETIRED[network]?.[address.toLowerCase()];
   if (vendored) return vendored;
   const live = currentGuardProtocols(network)?.find((p) => p.address.toLowerCase() === address.toLowerCase());
+  if (live?.category === 'bridge') return {name: BRIDGE_NAME, category: 'bridge'};
   return {name: short(address), category: live?.category ?? 'unknown'};
 }
 

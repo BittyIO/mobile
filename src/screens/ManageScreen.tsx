@@ -38,7 +38,7 @@ import {displaySymbol} from '@/core/format';
  * The order the services are listed in: what the vault earns with, then what it trades with.
  * Anything with no rank here follows, in the order the registry gave it.
  */
-const SERVICE_ORDER: ProtocolCategory[] = ['staking', 'lending', 'amm', 'intent', 'unknown'];
+const SERVICE_ORDER: ProtocolCategory[] = ['staking', 'lending', 'amm', 'intent', 'bridge', 'unknown'];
 const serviceRank = (c: ProtocolCategory) => {
   const i = SERVICE_ORDER.indexOf(c);
   return i < 0 ? SERVICE_ORDER.length : i;
@@ -87,7 +87,10 @@ export function ManageScreen() {
   // registered on chain before the server's config names it would otherwise be missing here.
   const guardList = useGuardProtocols(network);
   const protocols = useMemo(() => {
-    const served = currentServices(catalog, implVersion);
+    // The bridge is taken from the guard alone: the server's catalog has gone on naming builds the
+    // guard has since deprecated (Sepolia's and Base Sepolia's Across 1.0.0), and a switch for one of
+    // those would allow an adapter the vault can no longer use.
+    const served = currentServices(catalog, implVersion).filter((p) => p.category !== 'bridge');
     const servedCategories = new Set(served.map((p) => p.category));
     const seen = new Set<string>();
     // allAdapters lists newest first, so the first of a category is its canonical adapter.

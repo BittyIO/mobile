@@ -9,6 +9,7 @@ import {useAdapterVersions} from '@/components/useAdapterVersions';
 import {useNetwork} from '@/core/network-store';
 import {useActiveVaultAddress} from '@/core/active-vault';
 import {isNamedProtocol, protocolDisplayName, protocolMeta} from '@/core/protocols';
+import {useGuardProtocols} from '@/core/guard-catalog';
 import {
   autoUpgradeProtocol,
   autoUpgradeVault,
@@ -36,6 +37,7 @@ export function UpgradeScreen() {
   const vault = useActiveVaultAddress(network);
   const version = useVaultVersionRow();
   const adapters = useAdapterVersions();
+  const guardList = useGuardProtocols(network);
   // Redraw on a flip: the switches read through the store's functions.
   useAutoUpgradeVersion((s) => s.v);
 
@@ -46,7 +48,9 @@ export function UpgradeScreen() {
         const name = s.addresses.map((a) => protocolMeta(network, a).name).find(isNamedProtocol);
         return name ? [{...s, name: protocolDisplayName(name)}] : [];
       }),
-    [adapters.statuses, network],
+    // guardList: a bridge is named from the guard's own list (see {protocolMeta}), so redraw when it lands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [adapters.statuses, network, guardList],
   );
 
   const checking = t('mobile.settings.vault_checking');

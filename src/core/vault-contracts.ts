@@ -68,11 +68,12 @@ export const TRON_VAULT_PROXY: Partial<Record<Network, {prefix: '0x41'; initCode
 };
 
 /** The guard's uint8 protocol category → the app's name for it. */
-export const GUARD_CATEGORIES: Record<number, ProtocolCategory> = {1: 'staking', 2: 'lending', 3: 'amm', 4: 'intent'};
+export const GUARD_CATEGORIES: Record<number, ProtocolCategory> = {1: 'staking', 2: 'lending', 3: 'amm', 4: 'intent', 5: 'bridge'};
 
 /**
- * Guard categories the app reads past: 5 is market maker (concentrated liquidity). The app provides
- * no liquidity, so those adapters are neither services to offer nor venues to route to — dropped
- * from the guard catalog rather than shown as unknown.
+ * Guard categories the app reads past. None now: 5 was the market-maker adapter, which no guard lists
+ * any more, and is the Across bridge on every chain (read back from each guard's protocolCategory()
+ * on 2026-11-22). Dropping it hid the bridge from the allow list and from Upgrade, and left Base
+ * Sepolia, whose guard runs the bridge alone, with no protocols at all.
  */
-export const IGNORED_GUARD_CATEGORIES: ReadonlySet<number> = new Set([5]);
+export const IGNORED_GUARD_CATEGORIES: ReadonlySet<number> = new Set();

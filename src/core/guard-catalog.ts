@@ -33,8 +33,7 @@ const GUARD_ABI = parseAbi([
 ]);
 
 /**
- * The guard's category numbers: see {GUARD_CATEGORIES}. 3 is the market-TRADE adapter. 5, market
- * maker, is dropped: see {IGNORED_GUARD_CATEGORIES}.
+ * The guard's category numbers: see {GUARD_CATEGORIES}. 3 is the market-TRADE adapter, 5 the bridge.
  */
 
 export type GuardProtocol = {address: Address; category: ProtocolCategory};
