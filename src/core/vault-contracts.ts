@@ -38,14 +38,29 @@ const NILE = {
 } as const satisfies Record<string, Address>;
 
 /**
- * Bitty's auto-yield keeper (BittyV1AutoYieldKeeper), the one address a vault names as its
- * autoYieldTrigger so the keeper's sweeps are accepted. The same address on every EVM chain; checked
- * deployed on mainnet, Base, Sepolia and Robinhood on 2026-11-21, not yet on Arbitrum, BNB Chain or
- * Base Sepolia (a vault naming it there is swept once it is). None on Tron.
+ * Bitty's auto-yield keeper (BittyV1AutoYieldKeeper): the address a vault names as its
+ * autoYieldTrigger so the keeper's sweeps are accepted, per network.
+ *
+ * Not one address everywhere. The keeper is placed by CREATE2, so its address is a hash of its code,
+ * and its code names the guard it reads its owner from. 0xC109…9cF0, the first build, reads the old
+ * guard (0x00006Dc0…0Dc7), which exists on Ethereum, Base, Robinhood and Sepolia but was never
+ * deployed on Arbitrum or BNB Chain: a 0xC109 there has no owner, so it can never be given a signer
+ * or a forwarder (deployed on both on 2026-11-22 and confirmed so). Arbitrum and BNB Chain use the
+ * later build at 0xAa5D…2e36, which reads the current guard; both were given the forwarder and a
+ * signer the same day.
+ *
+ * Null where no keeper can sweep: Base Sepolia (no yield protocols) and Tron. A route set there names no trigger, and {setAutoYield} names one the
+ * next time a route is turned on once this has an address for the network.
  */
 export const AUTO_YIELD_KEEPER: Address = '0xC10981d43Fa3897911802ae3F83D605E5E249cF0';
+const AUTO_YIELD_KEEPER_BY_NETWORK: Partial<Record<Network, Address | null>> = {
+  arbitrum: '0xAa5D5c85CA26ab7fdB01767dF5C2Cb3fe7d52e36',
+  bsc: '0xAa5D5c85CA26ab7fdB01767dF5C2Cb3fe7d52e36',
+  'base-sepolia': null,
+  'tron-nile': null,
+};
 export const autoYieldKeeper = (network: Network): Address | null =>
-  network === 'tron-nile' ? null : AUTO_YIELD_KEEPER;
+  network in AUTO_YIELD_KEEPER_BY_NETWORK ? AUTO_YIELD_KEEPER_BY_NETWORK[network] ?? null : AUTO_YIELD_KEEPER;
 
 export const vaultGuard = (network: Network): Address => (network === 'tron-nile' ? NILE.guard : VAULT_GUARD);
 export const vaultFactory = (network: Network): Address => (network === 'tron-nile' ? NILE.factory : VAULT_FACTORY);
