@@ -29,7 +29,9 @@ import {protocolDisplayName} from '@/core/protocols';
 import {useMarketStats, type MarketStat, type MarketStatMap} from '@/vault/useMarketStats';
 
 import {usdValue, fmtValue} from '@/core/prices';
-import {fmtNum, displaySymbol} from '@/core/format';
+import {fmtNum, displaySymbol, shortAddress} from '@/core/format';
+import {CopyAddress} from '@/components/CopyAddress';
+import {useActiveVaultAddress} from '@/core/active-vault';
 
 import {currentCatalog, useAssetCatalog, useCatalogSettled} from '@/core/asset-catalog';
 import {assetCategory, type AssetCategory} from '@/core/assets';
@@ -426,6 +428,7 @@ export function VaultHomeScreen() {
   const styles = useStyles(makeStyles);
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const network = useNetwork((s) => s.network);
+  const vaultAddress = useActiveVaultAddress(network);
   const bal = useVaultBalances(network);
   // What the page shows is read where the balances were (`readAt`); what it does goes to `bal.vault`.
   const pos = useVaultPositions(bal.readAt, network);
@@ -1018,44 +1021,51 @@ export function VaultHomeScreen() {
       {/* A Tron vault not activated yet: activation is its own step, before anything else. */}
       <ActivateBanner onActivated={onRefresh} />
       <View style={styles.heroCard}>
+        {/* The figure itself heads the card, no label over it: the pie beside it breaks it down,
+            the eye at the far end masks it. A testnet's figures are test money, said beside it. */}
         <View style={styles.totalHeader}>
-          {/* A testnet's figures are test money: said once, beside the total (Sepolia, Tron Nile). */}
-          <View style={styles.totalLabelRow}>
-            <Text style={styles.totalLabel}>{t('vault.total_value_label')}</Text>
-            {isTestnet(network) ? <Text style={styles.testnet}>{t('mobile.app.testnet')}</Text> : null}
+          <View style={styles.totalRow}>
+            {hidden ? (
+              <Text {...FIT} style={styles.totalValue}>{MASK_TOTAL}</Text>
+            ) : !ready && !showingSnapshot ? (
+              // The figure's own line height, so the card does not jump when it lands.
+              <View style={styles.totalLoading}>
+                <ActivityIndicator color={c.subtext} />
+              </View>
+            ) : (
+              <Text {...FIT} style={styles.totalValue}>{totalUsd != null ? fmtValue(totalUsd) : '—'}</Text>
+            )}
+            {/* Disabled while balances are hidden: the page would show the very values the eye
+                toggle is masking. */}
+            <Pressable
+              style={styles.distBtn}
+              onPress={() => nav.navigate('Distribution', {vault: bal.vault ?? null, held: distribution.held, total: distribution.total})}
+              disabled={hidden}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityState={{disabled: hidden}}
+              accessibilityLabel={t('mobile.trade.distribution')}>
+              <Svg width={24} height={24} viewBox="0 0 24 24">
+                {/* Two-tone solid pie: the faint full circle is the whole, the accent sector a slice. */}
+                <Circle cx={12} cy={12} r={9} fill={c.subtext} fillOpacity={0.22} />
+                <Path d="M12 12 L12 3 A9 9 0 0 1 17.3 19.3 Z" fill={hidden ? c.border : c.accent} />
+              </Svg>
+            </Pressable>
           </View>
-          <Pressable onPress={toggleHidden} hitSlop={10}>
-            <EyeIcon off={hidden} color={c.subtext} />
-          </Pressable>
+          <View style={styles.totalLabelRow}>
+            {isTestnet(network) ? <Text style={styles.testnet}>{t('mobile.app.testnet')}</Text> : null}
+            <Pressable onPress={toggleHidden} hitSlop={10}>
+              <EyeIcon off={hidden} color={c.subtext} />
+            </Pressable>
+          </View>
         </View>
-        <View style={styles.totalRow}>
-          {hidden ? (
-            <Text {...FIT} style={styles.totalValue}>{MASK_TOTAL}</Text>
-          ) : !ready && !showingSnapshot ? (
-            // The figure's own line height, so the card does not jump when it lands.
-            <View style={styles.totalLoading}>
-              <ActivityIndicator color={c.subtext} />
-            </View>
-          ) : (
-            <Text {...FIT} style={styles.totalValue}>{totalUsd != null ? fmtValue(totalUsd) : '—'}</Text>
-          )}
-          {/* Holdings distribution, right after the figure it breaks down. Disabled while balances
-              are hidden: the page would show the very values the eye toggle is masking. */}
-          <Pressable
-            style={styles.distBtn}
-            onPress={() => nav.navigate('Distribution', {vault: bal.vault ?? null, held: distribution.held, total: distribution.total})}
-            disabled={hidden}
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityState={{disabled: hidden}}
-            accessibilityLabel={t('mobile.trade.distribution')}>
-            <Svg width={24} height={24} viewBox="0 0 24 24">
-              {/* Two-tone solid pie: the faint full circle is the whole, the accent sector a slice. */}
-              <Circle cx={12} cy={12} r={9} fill={c.subtext} fillOpacity={0.22} />
-              <Path d="M12 12 L12 3 A9 9 0 0 1 17.3 19.3 Z" fill={hidden ? c.border : c.accent} />
-            </Svg>
-          </Pressable>
-        </View>
+        {/* The vault's address on this network (T… on Tron), under the figure; tap copies it. The
+            header leaves it out on this tab so it is not shown twice. */}
+        {vaultAddress ? (
+          <View style={styles.addressRow}>
+            <CopyAddress address={vaultAddress} label={shortAddress(vaultAddress)} textStyle={styles.address} iconSize={13} />
+          </View>
+        ) : null}
         <View style={styles.actions}>
           {/* Payees first: sending starts from whom to pay. Bridge after it, where the network has one
               (Across does not serve Tron). */}
@@ -1217,7 +1227,9 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   feeTipBody: {color: c.textMuted, fontSize: 13, lineHeight: 18},
   feeTipClose: {position: 'absolute', top: 14, right: 14, padding: 2},
   totalHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
-  totalLabel: {color: c.subtext, fontSize: 13, fontWeight: '600'},
+  address: {color: c.subtext, fontSize: 13},
+  // Clear of the figure above it: the card's own 6 alone left the two reading as one block.
+  addressRow: {flexDirection: 'row', marginTop: 6},
   totalLabelRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
   testnet: {color: c.warning, backgroundColor: c.warningSoft, fontSize: 12, fontWeight: '700', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, overflow: 'hidden'},
   totalValue: {color: c.text, fontSize: 34, fontWeight: '800'},
@@ -1260,7 +1272,7 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   // on every side: it sits where it did, and each name is a finger-sized target.
   listHead: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10, marginTop: -12, marginBottom: -18},
   // The total value and the distribution pie icon beside it, on one line in the hero card.
-  totalRow: {flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 2},
+  totalRow: {flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1},
   distBtn: {flexShrink: 0},
   // The same weight and colour as "hide 0" across from it: the two ends of this row are both
   // labels on the list below, not a heading over a control. The one in front takes the text
