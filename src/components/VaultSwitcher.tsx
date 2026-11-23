@@ -1,6 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {useNavigation} from '@react-navigation/native';
+import {useNavigation, useNavigationState, type NavigationState, type PartialState} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import Clipboard from '@react-native-clipboard/clipboard';
 import Svg, {Path} from 'react-native-svg';
@@ -15,6 +15,16 @@ import {CHROME_SCALE} from '@/core/text-scale';
 
 /** 0x123456...123456: the prefix and six characters, then the last six (T1234567...123456 on Tron). */
 const shortAddress = (a: string) => (a.length > 16 ? `${a.slice(0, a.startsWith('0x') ? 8 : 7)}...${a.slice(-6)}` : a);
+
+type NavState = NavigationState | PartialState<NavigationState>;
+
+/** The route in front, through any nested navigators (Main › its tabs on iOS's native bar). */
+function focusedRoute(state: NavState | undefined): string | undefined {
+  if (!state?.routes?.length) return undefined;
+  const route = state.routes[state.index ?? 0];
+  if (route.name === 'Main') return route.state ? focusedRoute(route.state as NavState) : 'Overview';
+  return route.name;
+}
 
 /**
  * The vault in front, in every tab's left-hand corner: its name, opening the Vaults page, and
@@ -40,6 +50,8 @@ export function VaultSwitcher({stack = false}: {stack?: boolean} = {}) {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const network = useNetwork((s) => s.network);
   const vault = useActiveVaultAddress(network);
+  // The Overview shows the address under its total, so the bar leaves it out there.
+  const onOverview = useNavigationState((s) => focusedRoute(s as NavState) === 'Overview');
   const current = useVaults((s) => s.vaults.find((v) => v.index === s.activeIndex) ?? s.vaults[0]);
   if (!current) return null;
   const label = vaultLabel(current, (n) => t('mobile.app.vault_n', {n}));
@@ -62,7 +74,7 @@ export function VaultSwitcher({stack = false}: {stack?: boolean} = {}) {
           {label}
         </Text>
       </Pressable>
-      {vault ? (
+      {vault && !onOverview ? (
         <Pressable
           onPress={copy}
           style={styles.addrBtn}
