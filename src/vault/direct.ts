@@ -66,7 +66,7 @@ export class OwnerGasShort extends Error {
       translate(useLanguage.getState().language, 'mobile.fees.owner_short', {
         need: formatNative(n, need),
         have: formatNative(n, have),
-        owner: n === 'tron-nile' ? evmToTron(owner) : owner,
+        owner: isTronNetwork(n) ? evmToTron(owner) : owner,
       }),
     );
   }

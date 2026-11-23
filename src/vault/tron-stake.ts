@@ -1,5 +1,5 @@
 import {formatUnits, parseAbi, zeroAddress, type Address} from 'viem';
-import {NATIVE, publicClientFor, type Network} from '@/core/chain';
+import {isTronNetwork, NATIVE, publicClientFor, type Network} from '@/core/chain';
 import {ASSETS} from '@/core/assets';
 import {adapterByName} from '@/core/protocols';
 import {accountEnergy, type TronEnergy} from '@/tron/client';
@@ -120,7 +120,7 @@ export async function getTronUnstake(vault: Address, protocol: Address, network:
 
 /** The owner's energy and today's rate, or null where the node will not say. */
 export async function fetchOwnerEnergy(owner: Address, network: Network): Promise<TronEnergy | null> {
-  if (network !== 'tron-nile') return null;
+  if (!isTronNetwork(network)) return null;
   try {
     return await accountEnergy(network, evmToTron(owner));
   } catch {

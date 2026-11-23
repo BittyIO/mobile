@@ -2,7 +2,7 @@ import {create} from 'zustand';
 import {MMKV} from 'react-native-mmkv';
 import type {Network} from '@/core/chain';
 
-/** A chain with a node list: every vault network, Tron Nile among them. */
+/** A chain with a node list: every vault network, Tron's among them. */
 export type NodeChain = Network;
 
 /**
@@ -39,6 +39,10 @@ export const BUILTIN_RPC: Record<NodeChain, string[]> = {
   // where a vault transaction is broadcast ({tronApiHost}). TronGrid is the only public Nile node
   // with JSON-RPC on (api.nileex.io answers /jsonrpc with 404, checked Nov 2026).
   'tron-nile': ['https://nile.trongrid.io/jsonrpc'],
+  // Mainnet: TronGrid and PublicNode, the two public nodes found serving JSON-RPC and java-tron's
+  // API on one host (checked 2026-11-22; dRPC, Ankr and TronStack serve no /jsonrpc). TronGrid
+  // unkeyed rate-limits bursts (429), so PublicNode is the second node rather than a spare.
+  tron: ['https://api.trongrid.io/jsonrpc', 'https://tron-rpc.publicnode.com/jsonrpc'],
 };
 
 /**
@@ -64,10 +68,12 @@ function loadNodes(): Nodes {
       const p = JSON.parse(raw) as Nodes;
       const off = p.off ?? {};
       const custom = p.custom ?? {};
-      // Nile's nodes were java-tron API hosts while Nile was a wallet chain; a vault network reads
+      // Tron's nodes were java-tron API hosts while Tron was a wallet chain; a vault network reads
       // JSON-RPC, so those are dropped rather than asked for eth_call.
-      if (off['tron-nile']) off['tron-nile'] = off['tron-nile'].filter((u) => /\/jsonrpc\/?$/i.test(u));
-      if (custom['tron-nile']) custom['tron-nile'] = custom['tron-nile'].filter((u) => /\/jsonrpc\/?$/i.test(u));
+      for (const n of ['tron', 'tron-nile'] as const) {
+        if (off[n]) off[n] = off[n].filter((u) => /\/jsonrpc\/?$/i.test(u));
+        if (custom[n]) custom[n] = custom[n].filter((u) => /\/jsonrpc\/?$/i.test(u));
+      }
       return {off, custom};
     }
   } catch {}

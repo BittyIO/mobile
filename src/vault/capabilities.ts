@@ -326,6 +326,10 @@ export const REVERT_REASON: Record<string, string> = {
   NotRegistered: 'err_not_registered',
   ProtectionPeriodNotEnded: 'err_recipient_waiting',
   NoEscapeRecipient: 'err_no_escape',
+  // Vault 1.1.1: no payee is an owner, either way round.
+  WhitelistedRecipientIsOwner: 'err_payee_is_owner',
+  NewOwnerIsWhitelisted: 'err_new_owner_is_payee',
+  WhitelistedRecipientExists: 'err_payee_exists',
   GasBudgetExceeded: 'err_gas_budget',
   PriceStale: 'err_price_unavailable',
   PriceFeedMissing: 'err_price_unavailable',

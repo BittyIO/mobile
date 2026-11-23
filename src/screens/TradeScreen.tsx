@@ -169,6 +169,22 @@ const fmtFee = (n: number): string =>
  *
  * "Assets" is not a name anyone chose, so there it is plain text.
  */
+/**
+ * The pair a network opens on when there is no last pair to return to there: TRX/USDT on Tron (its
+ * wrapped TRX against Tether's USDT, the chain's one liquid market), where the catalog order would
+ * otherwise decide. Elsewhere the catalog's first asset against its preferred stablecoin.
+ */
+const DEFAULT_PAIR: Partial<Record<Network, readonly [base: string, quote: string]>> = {
+  tron: ['WTRX', 'USDT'],
+  'tron-nile': ['WTRX', 'USDT'],
+};
+
+/** {DEFAULT_PAIR}'s base where the catalog has it, else the first non-stable asset. */
+function defaultBase(network: Network, assets: readonly {symbol: string; kind: string}[]): string | undefined {
+  const d = DEFAULT_PAIR[network]?.[0];
+  return (d && assets.some((a) => a.symbol === d) ? d : undefined) ?? assets.find((a) => a.kind !== 'stable')?.symbol;
+}
+
 function WatchlistTitle({network}: {network: Network}) {
   const {t} = useT();
   const c = useColors();
@@ -311,9 +327,7 @@ export function TradeScreen() {
   // the user has been watching one asset all week is a small, daily annoyance.
   const [lastBase, lastQuote] = (getPref(LAST_PAIR) ?? '').split('/');
   const [baseSym, setBaseSym] = useState(
-    (lastBase && assets.some((a) => a.symbol === lastBase) ? lastBase : null) ??
-      assets.find((a) => a.kind !== 'stable')?.symbol ??
-      'WETH',
+    (lastBase && assets.some((a) => a.symbol === lastBase) ? lastBase : null) ?? defaultBase(network, assets) ?? 'WETH',
   );
   const rememberedQuote = lastQuote && lastQuote !== lastBase && assets.some((a) => a.symbol === lastQuote) ? lastQuote : null;
   const [quoteSym, setQuoteSym] = useState(rememberedQuote ?? stables[0]?.symbol ?? 'USDC');
@@ -347,7 +361,7 @@ export function TradeScreen() {
     // Nothing to check against yet. An empty catalog answers "no" to everything, which would reset
     // a perfectly good pair to WETH on every cold launch.
     if (assets.length === 0) return;
-    if (!assets.some((a) => a.symbol === baseSym)) setBaseSym(assets.find((a) => a.kind !== 'stable')?.symbol ?? assets[0]?.symbol ?? 'WETH');
+    if (!assets.some((a) => a.symbol === baseSym)) setBaseSym(defaultBase(network, assets) ?? assets[0]?.symbol ?? 'WETH');
     // Provisional: the new network's balances are not in yet, so `preferredQuote` cannot run here.
     // Clearing the flag is what lets it correct this once they are.
     if (!assets.some((a) => a.symbol === quoteSym)) {
@@ -551,9 +565,28 @@ export function TradeScreen() {
     setQuoteSym(baseSym);
   }, [baseSym, quoteSym, stables]);
 
+  /**
+   * Never a coin against itself. On Tron, USDT is the only stablecoin, so a stable base — USDT tapped
+   * on the Overview of a vault holding nothing else, or a last pair like USDT/USDC from another
+   * network — fell back to USDT as its quote too and opened on USDT/USDT. A stable base then gives
+   * way to the network's default asset (TRX on Tron), keeping the stable as the quote; an asset base
+   * takes the preferred stable instead.
+   */
+  useEffect(() => {
+    if (!baseSym || baseSym !== quoteSym || assets.length === 0) return;
+    if (stables.some((a) => a.symbol === baseSym)) {
+      const base = defaultBase(network, assets);
+      if (base && base !== quoteSym) setBaseSym(base);
+    } else {
+      const quote = preferredQuote(baseSym);
+      if (quote) setQuoteSym(quote);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseSym, quoteSym, assetKey, stableKey]);
+
   // Written whenever the pair settles, so the tab reopens on it next launch.
   useEffect(() => {
-    if (baseSym && quoteSym) setPref(LAST_PAIR, `${baseSym}/${quoteSym}`);
+    if (baseSym && quoteSym && baseSym !== quoteSym) setPref(LAST_PAIR, `${baseSym}/${quoteSym}`);
   }, [baseSym, quoteSym]);
 
   const [tab, setTab] = useState<Tab>('open');
@@ -729,7 +762,10 @@ export function TradeScreen() {
   const preferredQuote = (exclude?: string): string | undefined => {
     const held = (sym: string) => Number(balanceOfSymbol(balances.balances, sym) || 0) > 0;
     const options = stables.map((a) => a.symbol).filter((sy) => sy !== exclude);
+    // A network's own default quote first (USDT on Tron, which has no USDC).
+    const own = DEFAULT_PAIR[network]?.[1];
     return (
+      options.find((sy) => sy === own) ??
       options.find((sy) => sy === 'USDC' && held(sy)) ??
       options.find(held) ??
       options.find((sy) => sy === 'USDC') ??

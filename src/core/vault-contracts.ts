@@ -38,6 +38,22 @@ const NILE = {
 } as const satisfies Record<string, Address>;
 
 /**
+ * Tron mainnet's deployment (2026-11-22; guard repo `deployments/tron.json`, vault repo `tron/`),
+ * checked on chain the same day. Base58: guard TXrvqX2YMe7N7Muiaxuu2Fs1smTB4sSR3n, factory
+ * TH9QaqjfK9Yutk2suGzoE9sFXzYGj6y5dk, vault bootstrap TNBQVqfHEBERy8HoKDPBvukDQWArcR3hie.
+ */
+const TRON = {
+  guard: '0xf022C72D48c2E3B81731dbA6649BF780302c0035',
+  factory: '0x4eB6B569DafBe5eAB47C62F4eE14Ce2336fE291F',
+  bootstrap: '0x85f018F64dE9e4A780c11beB30674b335ae2939d',
+} as const satisfies Record<string, Address>;
+
+const TRON_DEPLOYMENT: Partial<Record<Network, {guard: Address; factory: Address; bootstrap: Address}>> = {
+  tron: TRON,
+  'tron-nile': NILE,
+};
+
+/**
  * Bitty's auto-yield keeper (BittyV1AutoYieldKeeper): the address a vault names as its
  * autoYieldTrigger so the keeper's sweeps are accepted, per network.
  *
@@ -57,28 +73,38 @@ const AUTO_YIELD_KEEPER_BY_NETWORK: Partial<Record<Network, Address | null>> = {
   arbitrum: '0xAa5D5c85CA26ab7fdB01767dF5C2Cb3fe7d52e36',
   bsc: '0xAa5D5c85CA26ab7fdB01767dF5C2Cb3fe7d52e36',
   'base-sepolia': null,
+  tron: null,
   'tron-nile': null,
 };
 export const autoYieldKeeper = (network: Network): Address | null =>
   network in AUTO_YIELD_KEEPER_BY_NETWORK ? AUTO_YIELD_KEEPER_BY_NETWORK[network] ?? null : AUTO_YIELD_KEEPER;
 
-export const vaultGuard = (network: Network): Address => (network === 'tron-nile' ? NILE.guard : VAULT_GUARD);
-export const vaultFactory = (network: Network): Address => (network === 'tron-nile' ? NILE.factory : VAULT_FACTORY);
-export const vaultBootstrap = (network: Network): Address => (network === 'tron-nile' ? NILE.bootstrap : VAULT_BOOTSTRAP);
+export const vaultGuard = (network: Network): Address => TRON_DEPLOYMENT[network]?.guard ?? VAULT_GUARD;
+export const vaultFactory = (network: Network): Address => TRON_DEPLOYMENT[network]?.factory ?? VAULT_FACTORY;
+export const vaultBootstrap = (network: Network): Address => TRON_DEPLOYMENT[network]?.bootstrap ?? VAULT_BOOTSTRAP;
 
 /**
  * The vault proxy as the factory deploys it on a Tron network: the CREATE2 prefix (the TVM hashes
  * 0x41 where the EVM hashes 0xff), the hash of the proxy's init code (the factory's own
- * `_VAULT_PROXY_INITCODE_HASH`, over the Tron build's ERC1967Proxy and Nile's bootstrap), and the
+ * `_VAULT_PROXY_INITCODE_HASH`, over the Tron build's ERC1967Proxy and that network's bootstrap), and the
  * proxy's runtime code, which is how a contract is recognised as a vault the factory made. The Tron
  * build (`FOUNDRY_PROFILE=tron`, cancun) compiles the proxy to different bytes from the EVM build,
  * so neither carries over from core/predict-vault.
  */
+const TRON_PROXY_RUNTIME =
+  '0x60806040525f8073ffffffffffffffffffffffffffffffffffffffff7f360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc5416368280378136915af43d5f803e156053573d5ff35b3d5ffdfea2646970667358221220519b672690faf875676d1f0d90f46e548dab021b7c35f02a79569238faf2a7fe64736f6c63430008220033';
 export const TRON_VAULT_PROXY: Partial<Record<Network, {prefix: '0x41'; initCodeHash: `0x${string}`; runtimeCode: `0x${string}`}>> = {
+  // The proxy runtime is byte for byte Nile's (read off mainnet's factory proxy, the same build, on
+  // 2026-11-22); the hash differs because mainnet's bootstrap address does.
+  tron: {
+    prefix: '0x41',
+    initCodeHash: '0xa2268803d8f227cb4a2a12b068deee34869044ce8ceb1d3d6bbfdcca0a33a151',
+    runtimeCode: TRON_PROXY_RUNTIME,
+  },
   'tron-nile': {
     prefix: '0x41',
     initCodeHash: '0x521894190e6b5a5cb1a1448751c8cd310390f565a3453d203b5577e99e6b4fbd',
-    runtimeCode: '0x60806040525f8073ffffffffffffffffffffffffffffffffffffffff7f360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc5416368280378136915af43d5f803e156053573d5ff35b3d5ffdfea2646970667358221220519b672690faf875676d1f0d90f46e548dab021b7c35f02a79569238faf2a7fe64736f6c63430008220033',
+    runtimeCode: TRON_PROXY_RUNTIME,
   },
 };
 

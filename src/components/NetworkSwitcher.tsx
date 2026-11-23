@@ -8,7 +8,7 @@ import {useIsDark} from '@/theme';
 import type {Network} from '@/core/chain';
 
 // Static requires (Metro can't resolve dynamic paths). Icons vendored from the web repo (public/icons).
-const ICONS: Record<Exclude<Network, 'base' | 'base-sepolia' | 'robinhood' | 'tron-nile'>, number> = {
+const ICONS: Record<Exclude<Network, 'base' | 'base-sepolia' | 'robinhood' | 'tron' | 'tron-nile'>, number> = {
   mainnet: require('@/assets/networks/ethereum.png'),
   sepolia: require('@/assets/networks/sepolia.png'),
   arbitrum: require('@/assets/networks/arbitrum.png'),
@@ -95,6 +95,7 @@ function SepoliaIcon({size}: {size: number}) {
 
 export function NetworkIcon({network, size}: {network: Network; size: number}) {
   if (network === 'sepolia') return <SepoliaIcon size={size} />;
+  if (network === 'tron') return <TronIcon size={size} />;
   if (network === 'tron-nile') return <TronIcon size={size} testnet />;
   if (network === 'base') return <BaseIcon size={size} />;
   if (network === 'base-sepolia') return <BaseIcon size={size} testnet />;

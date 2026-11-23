@@ -12,15 +12,16 @@ import {defineChain} from 'viem';
 import {API_VERSION} from '@/core/vault-contracts';
 import {rpcUrlsFor} from '@/core/rpc-store';
 import {evmToTron} from '@/tron/address';
+import type {TronChain} from '@/tron/config';
 
 // Sepolia is the testnet — included so the app can be exercised end to end (activate, deposit, trade)
 // without real funds. "Ethereum" in the UI means Sepolia on a testnet build, mainnet on production.
-export type Network = 'mainnet' | 'base' | 'sepolia' | 'base-sepolia' | 'robinhood' | 'arbitrum' | 'bsc' | 'tron-nile';
+export type Network = 'mainnet' | 'base' | 'sepolia' | 'base-sepolia' | 'robinhood' | 'arbitrum' | 'bsc' | 'tron' | 'tron-nile';
 
 /**
- * Tron's testnet, Nile, as a VAULT network: the vault stack is deployed there (vault repo
- * `tron/`), so every vault screen runs on it as on any EVM chain, read through the node's
- * Ethereum-compatible JSON-RPC (`/jsonrpc`).
+ * Tron, mainnet and its testnet Nile, as VAULT networks: the vault stack is deployed on both (vault
+ * repo `tron/`; mainnet 2026-11-22), so every vault screen runs on them as on any EVM chain, read
+ * through the node's Ethereum-compatible JSON-RPC (`/jsonrpc`).
  *
  * What that JSON-RPC does not do, and what the app does instead:
  * - It accepts no transactions (no eth_sendRawTransaction, no nonces). A transaction is a Tron
@@ -31,10 +32,16 @@ export type Network = 'mainnet' | 'base' | 'sepolia' | 'base-sepolia' | 'robinho
  * - Addresses are the same 20 bytes, but people read and type Tron's base58 `T…` form: see
  *   core/address `displayAddress` / `parseAddress`.
  * - The native coin is TRX at 6 decimals, and fees are energy and bandwidth, priced in sun.
- *
- * Tron MAINNET is not here: no vault is deployed there yet.
  */
-export const isTronNetwork = (n: Network): n is 'tron-nile' => n === 'tron-nile';
+export const isTronNetwork = (n: Network): n is TronChain => n === 'tron' || n === 'tron-nile';
+
+export const tron = defineChain({
+  id: 728126428,
+  name: 'Tron',
+  nativeCurrency: {name: 'Tron', symbol: 'TRX', decimals: 6},
+  rpcUrls: {default: {http: ['https://api.trongrid.io/jsonrpc']}},
+  blockExplorers: {default: {name: 'Tronscan', url: 'https://tronscan.org'}},
+});
 
 export const tronNile = defineChain({
   id: 3448148188,
@@ -59,11 +66,12 @@ export const NATIVE: Record<Network, {symbol: string; decimals: number; wrapped:
   robinhood: {symbol: 'ETH', decimals: 18, wrapped: 'WETH'},
   arbitrum: {symbol: 'ETH', decimals: 18, wrapped: 'WETH'},
   bsc: {symbol: 'BNB', decimals: 18, wrapped: 'WBNB'},
+  tron: {symbol: 'TRX', decimals: 6, wrapped: 'WTRX'},
   'tron-nile': {symbol: 'TRX', decimals: 6, wrapped: 'WTRX'},
 };
 
 /**
- * What the network can do beyond holding, sending and paying. Nile runs TRX staking (energy for the
+ * What the network can do beyond holding, sending and paying. Tron runs TRX staking (energy for the
  * owner, no yield) and SunSwap market trades; there is no lending and no limit order on Tron.
  */
 export const NETWORK_FEATURES: Record<Network, {defi: boolean}> = {
@@ -75,6 +83,7 @@ export const NETWORK_FEATURES: Record<Network, {defi: boolean}> = {
   robinhood: {defi: true},
   arbitrum: {defi: true},
   bsc: {defi: true},
+  tron: {defi: true},
   'tron-nile': {defi: true},
 };
 
@@ -97,7 +106,7 @@ export const robinhood = defineChain({
 // The nodes each chain is read from — the built-in public list, less any the owner switched off, plus
 // their own — live in `core/rpc-store` (Settings › RPC nodes).
 
-const VIEM_CHAIN = {mainnet, base, sepolia, 'base-sepolia': baseSepolia, robinhood, arbitrum, bsc, 'tron-nile': tronNile} as const;
+const VIEM_CHAIN = {mainnet, base, sepolia, 'base-sepolia': baseSepolia, robinhood, arbitrum, bsc, tron, 'tron-nile': tronNile} as const;
 
 // EIP-712 domain chainId per network — the ForwardRequest is signed against this (see vault/relay.ts).
 export const CHAIN_ID: Record<Network, number> = {
@@ -108,6 +117,7 @@ export const CHAIN_ID: Record<Network, number> = {
   robinhood: robinhood.id,
   arbitrum: arbitrum.id,
   bsc: bsc.id,
+  tron: tron.id,
   'tron-nile': tronNile.id,
 };
 
@@ -191,6 +201,7 @@ export const EXPLORER_TX: Record<Network, string> = {
   robinhood: 'https://robinhoodchain.blockscout.com/tx/',
   arbitrum: 'https://arbiscan.io/tx/',
   bsc: 'https://bscscan.com/tx/',
+  tron: 'https://tronscan.org/#/transaction/',
   'tron-nile': 'https://nile.tronscan.org/#/transaction/',
 };
 
@@ -204,7 +215,7 @@ export const explorerTxUrl = (network: Network, hash: string): string =>
  */
 export const explorerAddressUrl = (network: Network, address: string): string =>
   isTronNetwork(network)
-    ? `https://nile.tronscan.org/#/address/${evmToTron(address)}`
+    ? EXPLORER_TX[network].replace(/#\/transaction\/$/, '#/address/') + evmToTron(address)
     : EXPLORER_TX[network].replace(/\/tx\/$/, '/address/') + address;
 
 // The existing Next.js API (data feeds: transfers, stake/supply flows, sync, …). The mobile app is a

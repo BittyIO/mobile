@@ -24,7 +24,7 @@ import {Amount} from '@/components/Amount';
 import {GasIcon} from '@/components/GasIcon';
 import {splitMarketSwap, netTrade, isReceiptToken, STAKE_TOKENS, SUPPLY_TOKENS, STAKE_COUNTERPARTY, SUPPLY_COUNTERPARTY, isRelayFeeCollector} from '@/vault/market-trades';
 import {fmtNum, fmtShort, displaySymbol, shortAddress} from '@/core/format';
-import {EXPLORER_TX, NATIVE, type Network} from '@/core/chain';
+import {EXPLORER_TX, isTronNetwork, NATIVE, type Network} from '@/core/chain';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 import {asUnderlying, bridgeDestination, categoryForActions, defiMoveFromActions, defiMovesFromActions, describeActions, earnProtocolName, ordersBySetup, stakeClaimFromActions, orderTrade, swapFromActions} from '@/vault/tx-actions';
@@ -398,7 +398,7 @@ function Op({
   // left every line on screen as it was.
   const v = classify(op, network, t, orders, words, details, rates, placed);
   return (
-    <Pressable style={styles.op} onPress={() => openLink(explorer + (network === 'tron-nile' ? op.txHash.replace(/^0x/, '') : op.txHash), network === 'tron-nile' ? 'Tronscan' : 'Etherscan')}>
+    <Pressable style={styles.op} onPress={() => openLink(explorer + (isTronNetwork(network) ? op.txHash.replace(/^0x/, '') : op.txHash), isTronNetwork(network) ? 'Tronscan' : 'Etherscan')}>
       {v.parts.map((part, i) => (
         <View key={`${op.txHash}-${i}`} style={i > 0 ? styles.partGap : undefined}>
           {/* The title owns the line. It shared it with the timestamp until a Russian
@@ -445,14 +445,8 @@ function Op({
               shown on every row: it left the vault, whatever the operation was. No minus: beside
               the gas mark a fee is only ever a cost. */}
           <Text style={styles.date}>{fmtDate(op.timestamp, language)}</Text>
-          {v.fee && op.actions?.some((a) => a.name === 'activateVault') ? (
-            // The activation pays its flat fee to the same collector as a relay fee; it covers the
-            // deployment's gas, so it is named for what it is, the network fee inside it.
-            <>
-              <GasIcon color={c.subtext} size={12} />
-              <Text style={styles.fee}>{t('mobile.fees.activation_included', {fee: `${fmtAmt(v.fee.amount)} ${displaySymbol(v.fee.assetSymbol)}`})}</Text>
-            </>
-          ) : v.fee ? (
+          {/* An activation's fee is its network fee, shown like any other. */}
+          {v.fee ? (
             <>
               <GasIcon color={c.subtext} size={12} />
               <Text style={styles.fee}>
@@ -522,7 +516,7 @@ function FailedOp({tx, explorer, network}: {tx: Attempt; explorer: string; netwo
     <Pressable
       style={styles.op}
       disabled={!onChain}
-      onPress={onChain ? () => openLink(explorer + (network === 'tron-nile' ? tx.txHash!.replace(/^0x/, '') : tx.txHash), network === 'tron-nile' ? 'Tronscan' : 'Etherscan') : undefined}>
+      onPress={onChain ? () => openLink(explorer + (isTronNetwork(network) ? tx.txHash!.replace(/^0x/, '') : tx.txHash), isTronNetwork(network) ? 'Tronscan' : 'Etherscan') : undefined}>
       <View style={styles.opHeader}>
         <Text style={styles.title}>{title}</Text>
       </View>

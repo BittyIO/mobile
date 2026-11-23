@@ -71,13 +71,14 @@ export function FeeConfirmHost() {
             <ActivityIndicator size="small" color={c.subtext} />
           </View>
         ) : null}
-        {/* The activation's fee at the button's top right, network fee included; paid from the owner
-            key there is no fee, and the owner's own gas takes that place instead. */}
+        {/* The activation's network fee at the button's top right; paid from the owner key, the
+            owner's own gas takes that place instead. */}
         <ConfirmButton
           onPress={() => answer(true)}
           fee={false}
           activationFee={q?.feeUsd ?? undefined}
           networkFeeUsd={q?.networkFeeUsd ?? undefined}
+          pricing={!q}
           disabled={!q || !!q.blocked}
         />
       </View>
