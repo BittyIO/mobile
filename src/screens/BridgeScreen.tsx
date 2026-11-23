@@ -20,7 +20,7 @@ import {AvailableLine} from '@/components/AvailableLine';
 import {useConfirmAction} from '@/components/ConfirmAction';
 import {showTx} from '@/components/Toast';
 import {FIT} from '@/core/text-scale';
-import {isTestnet, isTronNetwork, NATIVE, type Network} from '@/core/chain';
+import {isTestnet, NATIVE, type Network} from '@/core/chain';
 import {networkLabel, useNetwork, useNetworks} from '@/core/network-store';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {knownAssets} from '@/core/assets';
@@ -47,7 +47,9 @@ import {
   BRIDGE_PROTOCOL_NAME,
   BRIDGE_SINCE,
   BridgeQuoteError,
+  acrossServes,
   bridgeFromVault,
+  bridgeOriginOwner,
   bridgeRecipient,
   loadBridge,
   quoteBridge,
@@ -199,7 +201,7 @@ export function BridgeScreen() {
    */
   // Every vault network the picker lists, not only those this one bridges to: BSC and Robinhood send
   // where Ethereum, Base and Arbitrum do not yet receive.
-  const fromChoices = listed.filter((n) => !isTronNetwork(n) && isTestnet(n) === isTestnet(network));
+  const fromChoices = listed.filter((n) => acrossServes(n) && isTestnet(n) === isTestnet(network));
   const pickFrom = (n: Network) => {
     if (n === network) return;
     const next = n === to ? network : to;
@@ -444,7 +446,7 @@ export function BridgeScreen() {
     let live = true;
     setQuoting(true);
     const timer = setTimeout(() => {
-      quoteBridge(network, route, raw, recipient)
+      quoteBridge(network, route, raw, recipient, bridgeOriginOwner(network, route.to, owner as Address))
         .then((q) => live && setQuote(q))
         .catch((e) => live && setQuoteErr(e instanceof BridgeQuoteError ? e : new BridgeQuoteError('quote_failed')))
         .finally(() => live && setQuoting(false));

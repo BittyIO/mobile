@@ -154,6 +154,12 @@ export const ASSETS: Record<Network, Asset[]> = {
     {symbol: 'USDT', address: '0x55d398326f99059fF775485246999027B3197955', decimals: 18, kind: 'stable'},
     {symbol: 'USDC', address: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', decimals: 18, kind: 'stable'},
   ],
+  // What the mainnet guard lists (guard repo deployments/tron.json, registered 2026-11-22): Tether's
+  // USDT (TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t) and Wrapped TRX (TNUC9Qb1rRpS5CbWLmNMxXBjyFoydXjWFR).
+  tron: [
+    {symbol: 'WTRX', address: '0x891cdb91d149f23B1a45D9c5Ca78a88d0cB44C18', decimals: 6, kind: 'crypto'},
+    {symbol: 'USDT', address: '0xa614f803B6FD780986A42c78Ec9c7f77e6DeD13C', decimals: 6, kind: 'stable'},
+  ],
   // What the Nile guard lists (guard repo deployments/tron-nile.json): Tether's Nile USDT
   // (TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf) and Wrapped TRX (TYsbWxNnyTgsZaTFaue9hqpxkU3Fkco94a), the
   // gas token — WTRX is to TRX what WETH is to ETH. The 20 bytes behind each T… address.
@@ -239,7 +245,8 @@ export const RECEIPT_TOKENS: Record<Network, Record<string, {symbol: string; dec
     '0xa9251ca9de909cb71783723713b21e4233fbf1b1': {symbol: 'aBnbUSDT', decimals: 18, underlying: 'USDT'},
     '0x00901a076785e0906d1028c7d6372d247bec7d61': {symbol: 'aBnbUSDC', decimals: 18, underlying: 'USDC'},
   },
-  // No protocol on Tron, so nothing a vault holds there is a receipt for something else.
+  // TRON Stake and SunSwap mint no receipt token, so nothing a vault holds on Tron is a receipt.
+  tron: {},
   'tron-nile': {},
 };
 

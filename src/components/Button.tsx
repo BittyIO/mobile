@@ -10,7 +10,9 @@ import {
 } from 'react-native';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {FaceIdIcon} from '@/components/FaceIdIcon';
-import {ActivationFee, NetworkFee, useActivationDue} from '@/components/NetworkFee';
+import {NetworkFee, useActivationDue} from '@/components/NetworkFee';
+import {ACTIVATION_GAS} from '@/core/activation-fee';
+import {TYPICAL_RELAY_GAS} from '@/vault/fee-quote';
 import {useT} from '@/i18n';
 import {LockIcon, useLockLevel} from '@/components/LockNotice';
 
@@ -120,12 +122,19 @@ type ConfirmProps = {
   /** The lock refuses this operation: while the vault is locked, disabled behind a {LockIcon}. */
   locked?: boolean;
   /**
-   * The activation fee shown at the top left, in dollars. Left out, it is shown whenever the vault
-   * in front is not activated yet (its first write activates it) and the vault pays.
+   * The network fee of an activation, in dollars, when the caller has priced it. Left out, an
+   * activation's network fee is quoted here whenever the vault in front is not activated yet (its
+   * first write activates it) and the vault pays.
    */
   activationFee?: number;
   /** The network fee at the top right, in dollars, when the caller has already priced it. */
   networkFeeUsd?: number;
+  /**
+   * The caller is still pricing this operation and shows its own spinner where the fee goes: no fee
+   * line until it is done. Without it an activation sheet first showed a generic estimate (a typical
+   * write's gas plus a bare activation's, $16 on Tron) and then swapped in its own quote.
+   */
+  pricing?: boolean;
 };
 
 function PlainConfirmButton({
@@ -139,6 +148,7 @@ function PlainConfirmButton({
   free,
   activationFee,
   networkFeeUsd,
+  pricing,
   lockLevel = 0,
 }: ConfirmProps & {lockLevel?: 0 | 1 | 2}) {
   const {t} = useT();
@@ -165,16 +175,16 @@ function PlainConfirmButton({
     </Pressable>
   );
   const showFee = fee || free || networkFeeUsd != null;
-  if (!showFee && activation === null) return button;
+  if (pricing || (!showFee && activation === null)) return button;
   // The cost sits with the control that incurs it, so every signing surface answers "what does this
   // cost me" in the same place without each screen having to remember to say it. A vault's first
-  // write also activates it: then the flat activation fee, network fee included, takes the network
-  // fee's place at the top right.
+  // write also activates it: then the fee is the activation's network fee — the deployment's gas on
+  // top of the operation's — and nothing else.
   return (
     <View style={styles.confirmWrap}>
       <View style={styles.feeRow}>
         <View />
-        {activation !== null ? <ActivationFee usd={activation} /> : showFee ? <NetworkFee gas={gas} free={free} usd={networkFeeUsd} /> : null}
+        {activation !== null ? <NetworkFee gas={(gas ?? TYPICAL_RELAY_GAS) + ACTIVATION_GAS} usd={activation} /> : showFee ? <NetworkFee gas={gas} free={free} usd={networkFeeUsd} /> : null}
       </View>
       {button}
     </View>

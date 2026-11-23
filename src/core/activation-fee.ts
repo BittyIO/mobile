@@ -1,6 +1,10 @@
 /**
  * Activation/relay fee priced from live gas, ported from web `lib/activation-fee`. The owner SIGNS the
  * fee, so the client must compute it before signing; the server recomputes and accepts within a band.
+ *
+ * An activation costs its network fee and nothing else: the gas of deploying the vault and of the
+ * first operation riding on it, priced as a relayed operation is. There is no activation fee of
+ * Bitty's own any more; it was a flat $9.90 until 2026-11-23.
  */
 
 // Gas for a signed activation with no calls (deploy clone + init + pay fee), for quoting before the
@@ -16,25 +20,14 @@ export const SIGNED_ACTIVATION_OVERHEAD_GAS = BigInt(70_000);
 // 1.2x margin over measured cost.
 const ACTIVATION_MARGIN_BPS = BigInt(2000);
 
-/**
- * What activating a vault costs, on every chain: a flat $9.90, the network fee included — the
- * relayer pays the deployment's gas out of it, and the gas of the first operation's calls riding on
- * it (see vault/activate `priceActivation`). Mirrors web lib/activation-fee, whose server expects
- * exactly this.
- */
-export const ACTIVATION_FEE_USD = 9.9;
-const ACTIVATION_FEE_CENTS = BigInt(Math.round(ACTIVATION_FEE_USD * 100));
-
-/** {ACTIVATION_FEE_USD} in a coin of `decimals`. */
-export const activationFlatUnits = (decimals: number): bigint => (ACTIVATION_FEE_CENTS * BigInt(10) ** BigInt(decimals)) / BigInt(100);
-
-/** {ACTIVATION_FEE_USD} in the native coin's smallest unit (wei, sun) at `nativeUsd`, rounded up. */
-export function activationFlatNative(nativeUsd: number, nativeDecimals: number): bigint {
-  const price = BigInt(Math.round(nativeUsd * 1e6));
-  const num = ACTIVATION_FEE_CENTS * BigInt(10_000) * BigInt(10) ** BigInt(nativeDecimals);
-  return (num + price - BigInt(1)) / price;
-}
 const BPS = BigInt(10000);
+
+/**
+ * An activation's network fee paid in the wrapped native coin (WETH, WTRX), in wei (sun): its gas at
+ * `gasPriceWei`, with the margin {relayFeeUnits} applies. Mirrors web lib/activation-fee.
+ */
+export const activationFeeNative = (gasUnits: bigint, gasPriceWei: bigint): bigint =>
+  (gasUnits * gasPriceWei * (BPS + ACTIVATION_MARGIN_BPS)) / BPS;
 const MICRO = BigInt(1_000_000);
 
 /**

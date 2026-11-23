@@ -5,6 +5,7 @@ import {vaultGuard} from '@/core/vault-contracts';
 import type {Asset} from '@/core/assets';
 import {VAULT_DEFI_ABI} from '@/core/abi';
 import {relayVaultMulticall, relayVaultWrite} from './relay';
+import {evmToTron, tronToEvm} from '@/tron/address';
 
 type Acct = Parameters<typeof relayVaultWrite>[0]['account'];
 
@@ -107,8 +108,24 @@ export type BridgeRoute = {
 
 export type BridgeInfo = {adapter: Address; spokePool: Address; routes: BridgeRoute[]};
 
-const EVM_DESTINATIONS = (from: Network): Network[] =>
-  NETWORKS.filter((n) => n !== from && !isTronNetwork(n) && isTestnet(n) === isTestnet(from));
+/**
+ * Whether Across serves `n` at all. Tron mainnet yes (USDT, to and from Ethereum, Base, Arbitrum and
+ * BNB Chain); Nile no: Across has no SpokePool there. Which pairs actually run is the guards' routes.
+ */
+export const acrossServes = (n: Network): boolean => n !== 'tron-nile';
+
+const BRIDGE_DESTINATIONS = (from: Network): Network[] =>
+  NETWORKS.filter((n) => n !== from && acrossServes(n) && isTestnet(n) === isTestnet(from));
+
+/**
+ * The vault's creation owner, when the adapter needs it: only to or from Tron. There the vault's
+ * address differs from its EVM one (the TVM's CREATE2 and Tron's own factory), so the adapter is told
+ * whose vault this is, checks `vault` is that owner's vault here, and pays that owner's vault there.
+ * The phone's key is the owner the vault was derived from; a wrong one makes the adapter revert.
+ * Between EVM chains it is the zero address: the money goes to the vault's own address.
+ */
+export const bridgeOriginOwner = (network: Network, to: Network, owner: Address): Address =>
+  isTronNetwork(network) || isTronNetwork(to) ? owner : zeroAddress;
 
 /**
  * Keyed by network AND the assets asked about. Keyed by network alone, a read made the moment after
@@ -143,7 +160,7 @@ export function loadBridge(network: Network, assets: Asset[]): Promise<BridgeInf
 }
 
 async function readBridge(network: Network, assets: Asset[]): Promise<BridgeInfo | null> {
-  if (isTronNetwork(network)) return null;
+  if (!acrossServes(network)) return null;
   const client = publicClientFor(network);
   const guard = vaultGuard(network);
   const protocols = (await client.readContract({address: guard, abi: GUARD_ABI, functionName: 'getProtocols'})) as readonly Address[];
@@ -172,7 +189,7 @@ async function readBridge(network: Network, assets: Asset[]): Promise<BridgeInfo
     const native = asset.symbol.toUpperCase() === gasWrapped;
     return {asset, native, inputToken: native ? spokeWrapped : asset.address};
   });
-  const destinations = EVM_DESTINATIONS(network);
+  const destinations = BRIDGE_DESTINATIONS(network);
   const pairs = candidates.flatMap((c) => destinations.map((to) => ({...c, to})));
   const [categories, routes] = await Promise.all([
     client.multicall({
@@ -226,7 +243,8 @@ export async function readBridgeSettings(vault: Address, network: Network): Prom
 
 /**
  * Where the money arrives, as the adapter computes it. From adapter 1.1.0 on, between EVM chains,
- * that is the vault's own address on `to`. Before it, the vault's current owner's vault on `to`: a
+ * that is the vault's own address on `to`; to or from Tron, the creation owner's vault on `to`
+ * ({bridgeOriginOwner}). Before it, the vault's current owner's vault on `to`: a
  * vault not activated yet has no owner to read, and its owner is the key it is derived from
  * (`owner`). Both are asked of the adapter itself, so the quote names what the deposit will.
  */
@@ -238,7 +256,7 @@ export async function bridgeRecipient(network: Network, adapter: Address, vault:
       address: adapter,
       abi: ADAPTER_ABI,
       functionName: 'recipientFor',
-      args: [vault, BigInt(CHAIN_ID[to]), zeroAddress],
+      args: [vault, BigInt(CHAIN_ID[to]), bridgeOriginOwner(network, to, owner)],
     })) as Address;
   }
   const current = ((await client.readContract({address: vault, abi: OWNER_ABI, functionName: 'owner'}).catch(() => null)) as Address | null) ?? owner;
@@ -271,7 +289,14 @@ const acrossApi = (network: Network) => (isTestnet(network) ? 'https://testnet.a
  * `recipient`, checked as the adapter will check it: what arrives must be at least the deposit less
  * the route's cost cap.
  */
-export async function quoteBridge(network: Network, route: BridgeRoute, amount: bigint, recipient: Address): Promise<BridgeQuote> {
+export async function quoteBridge(
+  network: Network,
+  route: BridgeRoute,
+  amount: bigint,
+  recipient: Address,
+  /** {bridgeOriginOwner}: appended to the quote to or from Tron, the zero address otherwise. */
+  originOwner: Address = zeroAddress,
+): Promise<BridgeQuote> {
   const fee = (amount * BigInt(BRIDGE_FEE_BPS)) / 10_000n;
   const deposit = amount - fee;
   const q = new URLSearchParams({
@@ -334,13 +359,12 @@ export async function quoteBridge(network: Network, route: BridgeRoute, amount: 
   if (!j.outputAmount || !j.timestamp || !j.fillDeadline) throw new BridgeQuoteError('quote_failed');
 
   const outputAmount = BigInt(j.outputAmount);
-  const inDec = route.native ? 18 : route.asset.decimals;
+  const inDec = route.native ? NATIVE[network].decimals : route.asset.decimals;
   const scaleUp = (x: bigint, from: number, to: number) => (to >= from ? x * 10n ** BigInt(to - from) : x / 10n ** BigInt(from - to));
   const least = scaleUp((deposit * BigInt(10_000 - route.maxCostBps)) / 10_000n, inDec, route.outputDecimals);
   if (outputAmount < least || outputAmount === 0n) throw new BridgeQuoteError('cost_too_high');
 
-  const data = encodeAbiParameters(ACROSS_QUOTE, [
-    {
+  const across = {
       destinationChainId: BigInt(CHAIN_ID[route.to]),
       outputToken: route.outputToken,
       outputAmount,
@@ -348,8 +372,12 @@ export async function quoteBridge(network: Network, route: BridgeRoute, amount: 
       quoteTimestamp: Number(j.timestamp),
       fillDeadline: Number(j.fillDeadline),
       exclusivityParameter: Number(j.exclusivityDeadline ?? 0),
-    },
-  ]);
+  };
+  // To or from Tron the adapter takes abi.encode(AcrossQuote, originOwner), 256 bytes; else the quote alone.
+  const data =
+    originOwner === zeroAddress
+      ? encodeAbiParameters(ACROSS_QUOTE, [across])
+      : encodeAbiParameters([...ACROSS_QUOTE, {type: 'address'}], [across, originOwner]);
   return {
     amount,
     fee,
@@ -448,6 +476,15 @@ export async function depositStatus(network: Network, hash: Hex): Promise<Deposi
  * Empty when Across cannot be read: history without the names is still history.
  */
 /** One Across delivery into the vault, as Across reports it: enough to draw it before Bitty's server has indexed it. */
+/**
+ * Across writes Tron addresses in base58 (T…) and Tron transaction ids without 0x; EVM ones as
+ * 0x… hex. History compares both sides in one form: addresses as lowercase 0x hex, hashes as
+ * lowercase hex without 0x ({bridgeTxKey}).
+ */
+const sameAddress = (a: string | undefined | null): string | null =>
+  a ? (/^T/.test(a) ? tronToEvm(a) ?? a : a).toLowerCase() : null;
+export const bridgeTxKey = (hash: string): string => hash.replace(/^0x/i, '').toLowerCase();
+
 export type BridgeArrival = {txHash: string; from: Network; token: string; amount: string; blockNum: number; timestamp: string | null};
 
 export async function bridgeHistory(
@@ -457,9 +494,11 @@ export async function bridgeHistory(
   const arrivals = new Map<string, Network>();
   const departures = new Map<string, Network>();
   const arrivalRows: BridgeArrival[] = [];
-  if (isTronNetwork(network)) return {arrivals, departures, arrivalRows};
+  if (!acrossServes(network)) return {arrivals, departures, arrivalRows};
   try {
-    const res = await fetch(`${acrossApi(network)}/deposits?address=${vault}&limit=100`);
+    // Across finds a Tron account only by its base58 form.
+    const who = isTronNetwork(network) ? evmToTron(vault) : vault;
+    const res = await fetch(`${acrossApi(network)}/deposits?address=${who}&limit=100`);
     if (!res.ok) return {arrivals, departures, arrivalRows};
     const rows = (await res.json()) as {
       depositor?: string;
@@ -479,12 +518,12 @@ export async function bridgeHistory(
     for (const r of rows) {
       const from = byChain.get(Number(r.originChainId));
       const to = byChain.get(Number(r.destinationChainId));
-      if (r.fillTx && r.destinationChainId === here && r.recipient?.toLowerCase() === me && from) {
-        arrivals.set(r.fillTx.toLowerCase(), from);
+      if (r.fillTx && r.destinationChainId === here && sameAddress(r.recipient) === me && from) {
+        arrivals.set(bridgeTxKey(r.fillTx), from);
         if (r.outputToken && r.outputAmount && r.fillBlockNumber)
-          arrivalRows.push({txHash: r.fillTx, from, token: r.outputToken, amount: r.outputAmount, blockNum: Number(r.fillBlockNumber), timestamp: r.fillBlockTimestamp ?? null});
+          arrivalRows.push({txHash: r.fillTx, from, token: sameAddress(r.outputToken) ?? r.outputToken, amount: r.outputAmount, blockNum: Number(r.fillBlockNumber), timestamp: r.fillBlockTimestamp ?? null});
       }
-      if (r.depositTxHash && r.originChainId === here && r.depositor?.toLowerCase() === me && to) departures.set(r.depositTxHash.toLowerCase(), to);
+      if (r.depositTxHash && r.originChainId === here && sameAddress(r.depositor) === me && to) departures.set(bridgeTxKey(r.depositTxHash), to);
     }
   } catch {
     // As above.

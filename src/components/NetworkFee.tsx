@@ -8,7 +8,6 @@ import {NATIVE} from '@/core/chain';
 import {Amount} from '@/components/Amount';
 import {useActiveFeePayer} from '@/vault/useFeePayer';
 import {isActivated} from '@/vault/activate';
-import {ACTIVATION_FEE_USD} from '@/core/activation-fee';
 import {useActiveVaultAddress} from '@/core/active-vault';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
@@ -159,16 +158,6 @@ export function useActivationDue(): boolean {
   return payer !== 'owner' && activated === false;
 }
 
-/**
- * The activation fee, at the top right of a confirm button where the network fee otherwise goes:
- * "Activation $9.90 (network fee included)". The flat fee covers the deployment's gas, so there is
- * no second figure beside it.
- */
-export function ActivationFee({usd = ACTIVATION_FEE_USD}: {usd?: number}) {
-  const {t} = useT();
-  const styles = useStyles(makeStyles);
-  return <Text style={styles.line}>{t('mobile.fees.activation_included', {fee: `$${usd.toFixed(2)}`})}</Text>;
-}
 
 const makeStyles = (c: Colors) =>
   StyleSheet.create({

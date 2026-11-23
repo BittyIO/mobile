@@ -71,9 +71,10 @@ export const TYPICAL_RELAY_GAS = relayGasFor({transfer: 1});
 const RELAY_MARGIN_BPS = 1500;
 const BPS = 10000;
 
-// The chain's coin in US dollars: Chainlink ETH/USD feeds, answer at 8 decimals — and on Tron Nile
-// the TRX/USD feed the Nile guard prices TRX by (TWZ37cpV6LJAoTNuiqEWrEUxQLvvKGmbrm, guard repo
-// deployments/tron-nile.json), same interface, same 8 decimals. Shared with the activation quote,
+// The chain's coin in US dollars: Chainlink ETH/USD feeds, answer at 8 decimals — and on Tron the
+// TRX/USD feed the guard prices TRX by (mainnet TC6o8AakUg4Xz9nHY9qXpJNsgF7CQkwBqF, guard repo
+// deployments/tron.json; Nile TWZ37cpV6LJAoTNuiqEWrEUxQLvvKGmbrm, deployments/tron-nile.json), same
+// interface, same 8 decimals. Shared with the activation quote,
 // which prices the same way; Robinhood Chain has no feed and falls back to the app's own price service.
 export const ETH_USD_FEED: Partial<Record<Network, Address>> = {
   mainnet: '0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419',
@@ -82,6 +83,7 @@ export const ETH_USD_FEED: Partial<Record<Network, Address>> = {
   arbitrum: '0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612',
   // BNB/USD: the coin gas is paid in on BSC, the feed the BSC guard prices WBNB by.
   bsc: '0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE',
+  tron: '0x175fa5B93CA066D9Acd2E4c9Bf68c50865713C4b',
   'tron-nile': '0xE1C867Bb4f2FE0dd8CBFa9F0789e2dd029BD841A',
 };
 

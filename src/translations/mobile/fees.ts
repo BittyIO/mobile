@@ -6,7 +6,6 @@ import type {MobileTable} from './index';
 export const fees: MobileTable = {
   en: {
     activation_fee: 'Activation {{fee}}',
-    activation_included: 'Activation {{fee}} (network fee included)',
     advanced: 'Advanced settings',
     payer_vault: 'Pay from vault',
     payer_owner: 'Pay from owner',
@@ -30,7 +29,6 @@ export const fees: MobileTable = {
   },
   zh: {
     activation_fee: '激活 {{fee}}',
-    activation_included: '激活 {{fee}}（含网络费）',
     advanced: '高级设置',
     payer_vault: '从金库支付',
     payer_owner: '从所有者支付',
@@ -53,7 +51,6 @@ export const fees: MobileTable = {
   },
   'zh-TW': {
     activation_fee: '啟用 {{fee}}',
-    activation_included: '啟用 {{fee}}（含網路費）',
     advanced: '進階設定',
     payer_vault: '從金庫支付',
     payer_owner: '從擁有者支付',
@@ -76,7 +73,6 @@ export const fees: MobileTable = {
   },
   ja: {
     activation_fee: '有効化 {{fee}}',
-    activation_included: '有効化 {{fee}}（ネットワーク手数料込み）',
     advanced: '詳細設定',
     payer_vault: 'ボールトから支払う',
     payer_owner: 'オーナーから支払う',
@@ -99,7 +95,6 @@ export const fees: MobileTable = {
   },
   ko: {
     activation_fee: '활성화 {{fee}}',
-    activation_included: '활성화 {{fee}} (네트워크 수수료 포함)',
     advanced: '고급 설정',
     payer_vault: '볼트에서 지불',
     payer_owner: '소유자에서 지불',
@@ -122,7 +117,6 @@ export const fees: MobileTable = {
   },
   fr: {
     activation_fee: 'Activation {{fee}}',
-    activation_included: 'Activation {{fee}} (frais de réseau inclus)',
     advanced: 'Paramètres avancés',
     payer_vault: 'Payer depuis le coffre',
     payer_owner: 'Payer par le propriétaire',
@@ -146,7 +140,6 @@ export const fees: MobileTable = {
   },
   es: {
     activation_fee: 'Activación {{fee}}',
-    activation_included: 'Activación {{fee}} (comisión de red incluida)',
     advanced: 'Configuración avanzada',
     payer_vault: 'Pagar desde la bóveda',
     payer_owner: 'Pagar desde el propietario',
@@ -170,7 +163,6 @@ export const fees: MobileTable = {
   },
   de: {
     activation_fee: 'Aktivierung {{fee}}',
-    activation_included: 'Aktivierung {{fee}} (inkl. Netzwerkgebühr)',
     advanced: 'Erweiterte Einstellungen',
     payer_vault: 'Aus dem Tresor zahlen',
     payer_owner: 'Vom Eigentümer zahlen',
@@ -194,7 +186,6 @@ export const fees: MobileTable = {
   },
   'pt-BR': {
     activation_fee: 'Ativação {{fee}}',
-    activation_included: 'Ativação {{fee}} (taxa de rede incluída)',
     advanced: 'Configurações avançadas',
     payer_vault: 'Pagar pelo cofre',
     payer_owner: 'Pagar pelo proprietário',
@@ -218,7 +209,6 @@ export const fees: MobileTable = {
   },
   hi: {
     activation_fee: 'सक्रियण {{fee}}',
-    activation_included: 'सक्रियण {{fee}} (नेटवर्क शुल्क सहित)',
     advanced: 'उन्नत सेटिंग्स',
     payer_vault: 'वॉल्ट से भुगतान',
     payer_owner: 'ओनर से भुगतान',
@@ -241,7 +231,6 @@ export const fees: MobileTable = {
   },
   tr: {
     activation_fee: 'Etkinleştirme {{fee}}',
-    activation_included: 'Etkinleştirme {{fee}} (ağ ücreti dahil)',
     advanced: 'Gelişmiş ayarlar',
     payer_vault: 'Kasadan öde',
     payer_owner: 'Sahipten öde',
@@ -264,7 +253,6 @@ export const fees: MobileTable = {
   },
   ru: {
     activation_fee: 'Активация {{fee}}',
-    activation_included: 'Активация {{fee}} (сетевая комиссия включена)',
     advanced: 'Расширенные настройки',
     payer_vault: 'Платить из хранилища',
     payer_owner: 'Платит владелец',
@@ -287,7 +275,6 @@ export const fees: MobileTable = {
   },
   id: {
     activation_fee: 'Aktivasi {{fee}}',
-    activation_included: 'Aktivasi {{fee}} (termasuk biaya jaringan)',
     advanced: 'Pengaturan lanjutan',
     payer_vault: 'Bayar dari brankas',
     payer_owner: 'Bayar dari pemilik',
@@ -310,7 +297,6 @@ export const fees: MobileTable = {
   },
   vi: {
     activation_fee: 'Kích hoạt {{fee}}',
-    activation_included: 'Kích hoạt {{fee}} (đã gồm phí mạng)',
     advanced: 'Cài đặt nâng cao',
     payer_vault: 'Trả từ két',
     payer_owner: 'Trả từ chủ sở hữu',
@@ -333,7 +319,6 @@ export const fees: MobileTable = {
   },
   th: {
     activation_fee: 'เปิดใช้งาน {{fee}}',
-    activation_included: 'เปิดใช้งาน {{fee}} (รวมค่าธรรมเนียมเครือข่าย)',
     advanced: 'การตั้งค่าขั้นสูง',
     payer_vault: 'จ่ายจากวอลต์',
     payer_owner: 'จ่ายจากเจ้าของ',

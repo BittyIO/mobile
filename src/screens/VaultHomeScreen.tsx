@@ -1,4 +1,5 @@
 import {isTestnet, isTronNetwork, NATIVE, NETWORK_FEATURES} from '@/core/chain';
+import {acrossServes} from '@/vault/bridge';
 import {FIT} from '@/core/text-scale';
 import {useTransparentHeaderInset} from '@/components/header-inset';
 import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
@@ -1071,7 +1072,8 @@ export function VaultHomeScreen() {
               (Across does not serve Tron). */}
           {([
             {label: t('vault.send'), icon: 'payees', onPress: () => nav.navigate('Payees')},
-            ...(isTronNetwork(network) ? [] : [{label: t('mobile.bridge.tab'), icon: 'bridge' as const, onPress: () => nav.navigate('Bridge')}]),
+            // Wherever Across serves the network: Tron mainnet too (USDT), not Nile, which has no SpokePool.
+            ...(acrossServes(network) ? [{label: t('mobile.bridge.tab'), icon: 'bridge' as const, onPress: () => nav.navigate('Bridge')}] : []),
             {label: t('mobile.app.transactions'), icon: 'history', onPress: () => nav.navigate('Transactions')},
             {label: t('mobile.vault.timelock_page'), icon: 'pending', onPress: () => nav.navigate('PendingChanges')},
           ] as const).map((a) => (

@@ -178,7 +178,7 @@ function Row({item, index}: {item: Toast; index: number}) {
   const detail = item.detail ?? t(stage);
   const tint = item.kind === 'success' ? c.success : item.kind === 'error' ? c.danger : c.subtext;
   // Tronscan names a transaction by its id without the 0x the app carries it with.
-  const tronTx = item.network === 'tron-nile' || explorer?.includes('tronscan');
+  const tronTx = item.network === 'tron' || item.network === 'tron-nile' || explorer?.includes('tronscan');
   const link = item.hash && explorer ? explorer + (tronTx ? item.hash.replace(/^0x/, '') : item.hash) : null;
 
   /**

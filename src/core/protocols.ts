@@ -73,6 +73,12 @@ const PROTOCOLS: Record<Network, Record<string, ProtocolInfo>> = {
   // Only the Across bridge adapter is registered on the Base Sepolia guard, and a bridge is not an
   // Earn or Trade protocol: vault/bridge reads it off the guard by its category (5).
   'base-sepolia': {},
+  // Registered on the mainnet guard 2026-11-22 (protocol-store deployments/tron-mainnet.json):
+  // TRON Stake TJWkVM2NkoQcZWWKSpeWGqhmZedyrYRDWc, SunSwap TRQyZqQyutRnUkuHdsVM5NtS446EqBcPsu.
+  tron: {
+    '0x5db82f8a11498f377bf1ada82d6fae50558c7f43': {name: 'TRON Stake', category: 'staking'},
+    '0xa9697ca46dbbeb49bc854c938cc886b5b878f5a4': {name: 'SunSwap', category: 'amm'},
+  },
   // Registered on the Nile guard 2026-11-12 (protocol-store deployments/tron-nile.json). TRON Stake
   // freezes WTRX for energy delegated to the owner; SunSwap is the Uniswap trade adapter pointed at
   // SunSwap's Universal Router, its routes from the server like Uniswap's elsewhere.

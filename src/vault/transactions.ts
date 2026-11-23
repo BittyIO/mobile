@@ -5,11 +5,11 @@
 import {formatUnits} from 'viem';
 import {apiFetch, apiUrl, isTronNetwork, type Network} from '@/core/chain';
 import {knownAssets} from '@/core/assets';
-import {TRON_API} from '@/tron/config';
+import {TRON_API, type TronChain} from '@/tron/config';
 import {evmToTron, tronToEvm} from '@/tron/address';
 import {fetchSettlements, type SettlementMeta} from './limit';
 import {vaultActionsFor} from './decode-actions';
-import {bridgeHistory} from './bridge';
+import {bridgeHistory, bridgeTxKey} from './bridge';
 
 export type TransferRow = {
   txHash: string;
@@ -101,10 +101,10 @@ export async function fetchTransactions(
    * so a bridge in shows on arrival. Only coins the app lists; the server's row replaces it once in.
    */
   const listed = new Map(knownAssets(network).map((a) => [a.address.toLowerCase(), a]));
-  const have = new Set([...map.keys()].map((h) => h.toLowerCase()));
+  const have = new Set([...map.keys()].map(bridgeTxKey));
   for (const a of arrivals.arrivalRows) {
     const asset = listed.get(a.token.toLowerCase());
-    if (!asset || have.has(a.txHash.toLowerCase())) continue;
+    if (!asset || have.has(bridgeTxKey(a.txHash))) continue;
     const leg: TransferRow = {
       txHash: a.txHash,
       direction: 'in',
@@ -122,8 +122,8 @@ export async function fetchTransactions(
   }
   // Across's deliveries into the vault are named as bridges, not as payments received.
   for (const op of map.values()) {
-    op.bridgedFrom = arrivals.arrivals.get(op.txHash.toLowerCase());
-    op.bridgedTo = arrivals.departures.get(op.txHash.toLowerCase());
+    op.bridgedFrom = arrivals.arrivals.get(bridgeTxKey(op.txHash));
+    op.bridgedTo = arrivals.departures.get(bridgeTxKey(op.txHash));
     if (!ownsCall(op)) op.actions = [];
   }
   // Newest first across both: the legless ones arrive as their own list.
@@ -146,7 +146,26 @@ function ownsCall(op: Operation): boolean {
   return op.actions.every((a) => RECEIVE_ONLY_CALLS.has(a.name));
 }
 
-type V1Trc20 ={transaction_id: string; block_timestamp: number; from: string; to: string; value: string; token_info?: {address?: string}};
+/**
+ * GET from TronGrid, waiting out a rate limit rather than failing on it.
+ *
+ * Only TronGrid serves its `/v1` index (Alchemy and PublicNode answer 404 for it, checked
+ * 2026-11-23), so there is no other host to fall through to. Unkeyed, it refuses a burst with 429 —
+ * and the app's balance, price and gas reads go to the same host at the same moment the Activity
+ * tab opens — which came back to the user as "transfers 429" over a history that loads a second
+ * later. Four tries, 1s, 2s and 4s apart, honouring a Retry-After when TronGrid sends one.
+ */
+async function tronGridGet(url: string): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await apiFetch(url);
+    if (res.status !== 429 || attempt === 3) return res;
+    const after = Number(res.headers.get('retry-after'));
+    const waitMs = after > 0 && after <= 10 ? after * 1000 : 1000 * 2 ** attempt;
+    await new Promise((r) => setTimeout(r, waitMs));
+  }
+}
+
+type V1Trc20 ={transaction_id: string; block_timestamp: number; from: string; to: string; value: string; type?: string; token_info?: {address?: string}};
 
 /**
  * The vault's history on Tron, which the Bitty server does not index: TronGrid's own index of the
@@ -159,15 +178,24 @@ type V1Trc20 ={transaction_id: string; block_timestamp: number; from: string; to
  * the EVM chains — else the activation and an added payee, which move only the relay fee, read as a
  * send. What it still cannot show: a change that moved no token at all (one the owner paid in TRX).
  */
-async function fetchTronTransactions(vault: string, network: 'tron-nile'): Promise<Operation[]> {
+async function fetchTronTransactions(vault: string, network: TronChain): Promise<Operation[]> {
   const host = TRON_API[network];
   const tokens = new Map(knownAssets(network).map((a) => [a.address.toLowerCase(), a]));
-  const res = await apiFetch(`${host}/v1/accounts/${evmToTron(vault)}/transactions/trc20?limit=50`);
+  // Across's own record beside it, as on the EVM chains: what names a deposit to another network,
+  // and a delivery from one, as a bridge rather than a send or a payment received.
+  const [res, bridges] = await Promise.all([
+    tronGridGet(`${host}/v1/accounts/${evmToTron(vault)}/transactions/trc20?limit=50`),
+    bridgeHistory(vault, network),
+  ]);
   if (!res.ok) throw new Error(`transfers ${res.status}`);
   const json = (await res.json()) as {data?: V1Trc20[]};
   const me = vault.toLowerCase();
   const map = new Map<string, Operation>();
   for (const x of json.data ?? []) {
+    // The feed carries Approval events beside the transfers, as rows of the same shape: an approval
+    // to the bridge read as a second "-20 USDT" next to the 20 USDT actually sent. Only a Transfer
+    // moves money.
+    if (x.type && x.type !== 'Transfer') continue;
     const token = tronToEvm(x.token_info?.address ?? '');
     const asset = token ? tokens.get(token.toLowerCase()) : undefined;
     if (!asset) continue;
@@ -197,6 +225,10 @@ async function fetchTronTransactions(vault: string, network: 'tron-nile'): Promi
   const ops = [...map.values()];
   // Best effort: a row whose calldata cannot be read yet is still shown by its transfers.
   const actions = await vaultActionsFor(ops.map((o) => o.txHash), vault, network).catch(() => new Map<string, VaultAction[]>());
-  for (const op of ops) op.actions = actions.get(op.txHash) ?? [];
+  for (const op of ops) {
+    op.actions = actions.get(op.txHash) ?? [];
+    op.bridgedFrom = bridges.arrivals.get(bridgeTxKey(op.txHash));
+    op.bridgedTo = bridges.departures.get(bridgeTxKey(op.txHash));
+  }
   return ops.sort((a, b) => b.blockNum - a.blockNum);
 }

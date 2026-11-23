@@ -12,7 +12,7 @@ import type {Signer} from '@/wallet/signer';
 import {apiUrl, CHAIN_ID, NATIVE, publicClientFor, type Network} from '@/core/chain';
 import {ACTIVATION_TYPES, GUARD_IMPL_ABI, IMPLEMENTATION_VAULT, PRICE_FEED_ABI} from '@/core/abi';
 import {API_VERSION, vaultFactory, vaultGuard} from '@/core/vault-contracts';
-import {ACTIVATION_GAS, SIGNED_ACTIVATION_OVERHEAD_GAS, activationFlatNative, activationFlatUnits} from '@/core/activation-fee';
+import {ACTIVATION_GAS, SIGNED_ACTIVATION_OVERHEAD_GAS, activationFeeNative, relayFeeUnits} from '@/core/activation-fee';
 // One copy of the ETH/USD feeds: the fee shown before signing and the fee actually signed must be
 // priced from the same source, or the two disagree for no reason the user can see.
 import {ETH_USD_FEED} from './fee-quote';
@@ -316,10 +316,9 @@ export async function priceActivation(o: {
   ]);
 
   const calls = (o.calls ?? []) as Hex[];
-  // The activation is a flat $9.90 (core/activation-fee), the network fee included — the first
-  // calls riding on it as well: nothing is added for their gas. The gas is still worked out, by what
-  // the chain BILLS (eth_simulateV1) or its estimate where the node cannot simulate, for the network
-  // fee the relayer pays out of it and to catch calls that would revert.
+  // The activation costs its network fee and nothing else (core/activation-fee): its gas, the first
+  // calls riding on it included, by what the chain BILLS (eth_simulateV1) or its estimate where the
+  // node cannot simulate — which also catches calls that would revert.
   const gasOf = async (cs: Hex[]): Promise<bigint> => {
     const data = encodeFunctionData({abi: ACTIVATE_ESTIMATE_ABI, functionName: 'activateVault', args: [o.allowlistEnabled, cs]});
     return (
@@ -332,8 +331,11 @@ export async function priceActivation(o: {
   };
   const gasUnits = await gasOf(calls);
   const nativeDecimals = NATIVE[o.network].decimals;
-  // In WETH the dollar is converted at the feed's price.
-  const feeAmount = weth ? activationFlatNative(ethUsd, nativeDecimals) : activationFlatUnits(Number(decimals));
+  // Priced as a relayed operation is: at cost plus the margin in the wrapped native coin, or converted
+  // at the feed's price into the stable coin. The server prices it again and accepts it within a band.
+  const feeAmount = weth
+    ? activationFeeNative(gasUnits, gasPrice)
+    : relayFeeUnits(gasUnits, gasPrice, ethUsd, Number(decimals), BigInt(0), nativeDecimals);
 
   // Over the vault's per-operation cap the activation cannot be paid, however the vault is funded:
   // said now, in dollars, before anything is signed — not as the relayer's refusal afterwards.

@@ -36,7 +36,7 @@ const readShown = (): Shown => {
 const isShown = (shown: Shown, n: Network): boolean => shown[n] ?? !TESTNETS.has(n);
 
 /** Every vault network, listed in the picker or not (see {useNetworks}), in the picker's order. */
-export const NETWORKS: Network[] = ['mainnet', 'base', 'arbitrum', 'bsc', 'robinhood', 'sepolia', 'base-sepolia', 'tron-nile'];
+export const NETWORKS: Network[] = ['mainnet', 'tron', 'base', 'arbitrum', 'bsc', 'robinhood', 'sepolia', 'base-sepolia', 'tron-nile'];
 
 /*
  * The Tron wallet has left the app. A phone left on Nile's wallet opens on Nile's vault; one left on
@@ -93,6 +93,7 @@ export const NETWORK_LABEL: Record<Network, string> = {
   robinhood: 'Robinhood',
   arbitrum: 'Arbitrum',
   bsc: 'BNB Chain',
+  tron: 'Tron',
   'tron-nile': 'Tron Nile',
 };
 
