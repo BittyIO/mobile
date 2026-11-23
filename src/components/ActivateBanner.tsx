@@ -11,7 +11,6 @@ import {useVaultWrite} from '@/components/useVaultWrite';
 import {useActiveFeePayer} from '@/vault/useFeePayer';
 import {showTx} from '@/components/Toast';
 import {confirmWithFee, type FeeQuote} from '@/components/FeeConfirm';
-import {ACTIVATION_FEE_USD} from '@/core/activation-fee';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
@@ -23,9 +22,9 @@ import {useColors, useStyles, type Colors} from '@/theme';
  *
  * The first operation used to be the way in, with its own calls priced into the activation: adding
  * a payee came to $14, over the $10 a vault may pay for one operation, so it could not be done at
- * all. Alone, an activation is the flat fee (core/activation-fee), the network fee included. Activate
- * opens the confirm sheet with that fee and the Face ID button; a fee over the cap is refused with
- * the reason.
+ * all. Alone, an activation costs its own network fee (core/activation-fee) and nothing more.
+ * Activate opens the confirm sheet with that fee and the Face ID button; a fee over the cap is
+ * refused with the reason.
  */
 export function ActivateBanner({onActivated}: {onActivated?: () => void}) {
   const {t} = useT();
@@ -71,9 +70,9 @@ export function ActivateBanner({onActivated}: {onActivated?: () => void}) {
     setActivating(true);
     // The fee, priced the way the activation will be signed, while the sheet is already open (see
     // confirmWithFee). Over the cap it cannot be paid, and says so here. Paid from the vault, the fee
-    // is the flat one, network fee included, and has to be there already: an empty vault cannot
-    // activate, so the sheet says what to send and Confirm stays off. From the owner key there is no
-    // fee, only the owner's own gas.
+    // is the activation's network fee and has to be there already: an empty vault cannot activate,
+    // so the sheet says what to send and Confirm stays off. From the owner key it is the owner's own
+    // gas instead.
     const quote = async (): Promise<FeeQuote> => {
       const price = await priceActivation({owner: owner as `0x${string}`, network, stableCoin: stable.address, allowlistEnabled: false});
       const networkFeeUsd = price.feeNative * price.nativeUsd;
@@ -86,15 +85,15 @@ export function ActivateBanner({onActivated}: {onActivated?: () => void}) {
           price.weth ? client.getBalance({address: vault}) : Promise.resolve(BigInt(0)),
         ]);
         if (held + native < price.feeAmount) {
-          // What to send: the flat fee, in either coin it can be paid with. Rounded up, so sending
-          // the figure shown is always enough.
+          // What to send: the fee, in either coin it can be paid with. Rounded up, so sending the
+          // figure shown is always enough.
           const up = (x: number) => (Math.ceil(x * 100) / 100).toFixed(2);
-          const usd = ACTIVATION_FEE_USD;
+          const usd = price.feeUsd;
           const amount = `${up(usd)} ${stable.symbol} / ${up(price.nativeUsd > 0 ? usd / price.nativeUsd : 0)} ${NATIVE[network].symbol}`;
           blocked = t('mobile.home.activate_fund', {amount});
         }
       }
-      // The network fee is inside the flat fee, so only the fee is shown.
+      // The fee is the network fee, shown once.
       return {feeUsd: price.feeUsd, blocked, networkFeeUsd: null};
     };
     let ok: boolean;

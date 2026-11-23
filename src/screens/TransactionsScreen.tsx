@@ -445,14 +445,8 @@ function Op({
               shown on every row: it left the vault, whatever the operation was. No minus: beside
               the gas mark a fee is only ever a cost. */}
           <Text style={styles.date}>{fmtDate(op.timestamp, language)}</Text>
-          {v.fee && op.actions?.some((a) => a.name === 'activateVault') ? (
-            // The activation pays its flat fee to the same collector as a relay fee; it covers the
-            // deployment's gas, so it is named for what it is, the network fee inside it.
-            <>
-              <GasIcon color={c.subtext} size={12} />
-              <Text style={styles.fee}>{t('mobile.fees.activation_included', {fee: `${fmtAmt(v.fee.amount)} ${displaySymbol(v.fee.assetSymbol)}`})}</Text>
-            </>
-          ) : v.fee ? (
+          {/* An activation's fee is its network fee, shown like any other. */}
+          {v.fee ? (
             <>
               <GasIcon color={c.subtext} size={12} />
               <Text style={styles.fee}>
