@@ -29,14 +29,29 @@ const store = new MMKV({id: 'bitty.account-mode'});
 const keyOf = (network: string, wallet: string) => `${network}:${wallet.toLowerCase()}`;
 
 /**
- * Which account every wallet opens on: the general wallet (the key's own address) at first, then
- * whichever the user last switched to on Overview. App-wide, every network alike.
+ * Which account every wallet opens on, app-wide and on every network: whichever the user last
+ * switched to on Overview, and before any switch, decided once on the first launch that has it —
+ * see {firstKind}.
  */
 const defaultStore = new MMKV({id: 'bitty.default-account'});
 const DEFAULT_KEY = 'kind';
 
+/**
+ * The first answer, written down so it is never asked again. A phone that already holds wallets is
+ * an update from a release with smart wallets only: it opens on the smart wallet, where its money
+ * is — the key's own address is usually empty, and opening there read as the balance gone. A new
+ * install (no wallets yet) opens on the general wallet.
+ */
+function firstKind(): AccountKind {
+  const saved = defaultStore.getString(DEFAULT_KEY);
+  if (saved === 'vault' || saved === 'wallet') return saved;
+  const kind: AccountKind = useVaults.getState().vaults.length > 0 ? 'vault' : 'wallet';
+  defaultStore.set(DEFAULT_KEY, kind);
+  return kind;
+}
+
 export const useDefaultAccount = create<{kind: AccountKind; set: (kind: AccountKind) => void}>((set) => ({
-  kind: defaultStore.getString(DEFAULT_KEY) === 'vault' ? 'vault' : 'wallet',
+  kind: firstKind(),
   set: (kind) => {
     defaultStore.set(DEFAULT_KEY, kind);
     // A new default is the answer for every wallet: the switch's earlier per-wallet picks go, so the
