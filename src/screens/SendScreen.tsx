@@ -3,7 +3,7 @@ import React, {useEffect, useMemo, useState} from 'react';
 import {Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View} from 'react-native';
 import {ScanButton} from '@/components/ScanIcon';
 import {QrScanner} from '@/components/QrScanner';
-import {fmtDuration} from '@/components/riskFormat';
+import {fmtWait} from '@/components/riskFormat';
 import {usePayeeAdding} from '@/vault/payees';
 import {softMessage} from '@/core/soft-errors';
 import {SafeAreaView} from 'react-native-safe-area-context';
@@ -29,6 +29,7 @@ import {balanceOfSymbol} from '@/vault/read';
 import {useActiveVaultAddress} from '@/core/active-vault';
 import {fetchWhitelist, sendToWhitelisted, sendWithWhitelist, type WhitelistedRecipient} from '@/vault/payments';
 import {getRiskConfig, RISK_BOUNDS, useAllowancesOff} from '@/vault/risk';
+import {NO_LIMIT} from '@/vault/capabilities';
 import {useCustomTokens} from '@/vault/custom-tokens';
 import {WHITELIST_STATUS} from '@/core/abi';
 import type {Position} from '@/vault/positions';
@@ -172,6 +173,8 @@ export function SendScreen({anyone = false}: {anyone?: boolean} = {}) {
    * a second send the same day can still be refused; the vault's own message says why then.
    */
   const [allowance, setAllowance] = useState<number>(Number(RISK_BOUNDS.sendDailyAllowance.max));
+  // No limit (vault 1.1.1 on, where a new vault starts): a plain send takes any asset, any amount.
+  const [unlimited, setUnlimited] = useState(false);
   // The wait before a saved payee is one, said under "Save to payees".
   const [timelock, setTimelock] = useState<bigint | null>(null);
   useEffect(() => {
@@ -179,6 +182,7 @@ export function SendScreen({anyone = false}: {anyone?: boolean} = {}) {
     let live = true;
     getRiskConfig(vault, network).then((r) => {
       if (live) setAllowance(Number(r.read ? r.sendDailyAllowance : RISK_BOUNDS.sendDailyAllowance.max));
+      if (live) setUnlimited(r.read && r.sendDailyAllowance === NO_LIMIT);
       if (live && r.read) setTimelock(r.timelock);
     });
     return () => {
@@ -219,7 +223,7 @@ export function SendScreen({anyone = false}: {anyone?: boolean} = {}) {
    * send allowance. Anything else — ETH, BTC, a stock, a pasted token — the vault pays only to a
    * whitelisted recipient whose timelock has run out.
    */
-  const plain = (sym: string) => meta(sym)?.kind === 'stable';
+  const plain = (sym: string) => unlimited || meta(sym)?.kind === 'stable';
   /**
    * The coin's yielding position: one that pays out at once when there is one. Lido's ETH (and Tron
    * Stake's TRX) comes out through a queue and a claim days later, so it cannot be withdrawn and sent
@@ -460,7 +464,7 @@ export function SendScreen({anyone = false}: {anyone?: boolean} = {}) {
     : undefined;
   // A plain send carries only stablecoins, each counted at a dollar, as the vault meters them.
   const plainTotal = recipient.lines.reduce((n, l) => n + (plain(l.sym) ? Number(l.amount) || 0 : 0), 0);
-  const overPlain = allowance > 0 && plainTotal > allowance;
+  const overPlain = !unlimited && allowance > 0 && plainTotal > allowance;
   // With plain sends off, every funded card goes as a whitelisted payment — and so does one over the
   // allowance to a saved recipient that is payable, since the address book is not metered by it.
   const viaBook =
@@ -562,8 +566,9 @@ export function SendScreen({anyone = false}: {anyone?: boolean} = {}) {
             <View style={styles.saveRow}>
               <View style={styles.toLine}>
                 <Text style={styles.saveLabel}>{t('mobile.payments.save_to_payees')}</Text>
-                {timelock != null ? (
-                  <Text style={styles.toAddrMuted}>{`${t('mobile.payments.whitelist_wait')} ${fmtDuration(timelock, t)}`}</Text>
+                {/* With no timelock a payee is payable at once: nothing to say. */}
+                {timelock != null && timelock !== 0n ? (
+                  <Text style={styles.toAddrMuted}>{`${t('mobile.payments.whitelist_wait')} ${fmtWait(timelock, t)}`}</Text>
                 ) : null}
               </View>
               <Switch value={!!recipient.needsWhitelist && addGate.allowed} disabled={!addGate.allowed} onValueChange={(v) => patchR({needsWhitelist: v})} />

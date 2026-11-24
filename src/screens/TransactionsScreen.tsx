@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import {useWallet} from '@/wallet/store';
 import {NETWORK_LABEL, useNetwork} from '@/core/network-store';
-import {useActiveVaultAddress} from '@/core/active-vault';
+import {useActiveAccount} from '@/core/account-mode';
 import {useVaults} from '@/core/vault-store';
 import {MultisigWaiting} from '@/components/MultisigWaiting';
 import {useVaultTransactions} from '@/vault/useVaultTransactions';
@@ -571,8 +571,10 @@ export function TransactionsScreen() {
   const styles = useStyles(makeStyles);
   const owner = useWallet((s) => s.address);
   const network = useNetwork((s) => s.network);
-  const vault = useActiveVaultAddress(network);
-  const {ops, loading, error, refresh} = useVaultTransactions(vault, network);
+  // The account in front: the vault's history, or in wallet mode the wallet's.
+  const account = useActiveAccount(network);
+  const vault = account.address;
+  const {ops, loading, error, refresh} = useVaultTransactions(vault, network, account.kind);
   // A multisig vault: what its owners still have to sign is its own category, and the one it opens on.
   const active = useVaults((s) => s.vaults.find((v) => v.index === s.activeIndex));
   const multisig = active?.safe ? active : null;

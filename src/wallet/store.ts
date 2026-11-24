@@ -15,6 +15,7 @@ import * as keyring from './keyring';
 import {learnKeys, vaultSigner} from './rotation';
 import {keyIndexOf, phraseOf, useVaults, type VaultRef} from '@/core/vault-store';
 import {activeVaultAddress} from '@/core/active-vault';
+import {walletAddressOf} from '@/core/account-mode';
 import {useNetwork} from '@/core/network-store';
 import {fetchSafe, safeSigner} from '@/vault/safe';
 import {translate} from '@/i18n';
@@ -62,6 +63,12 @@ interface WalletState {
   wipe: () => Promise<void>;
   /** A fresh signer for a WRITE — re-read from the Keychain so every action is biometric-gated. */
   signer: () => Promise<Signer>;
+  /**
+   * The key itself, for a WRITE in wallet mode (see core/account-mode): the entry's own account
+   * key, or its imported key — never a one-time key the vault was handed to, and never a Safe.
+   * Biometric-gated like {signer}.
+   */
+  walletSigner: () => Promise<LocalAccount>;
   /** Put another vault in front. Free: its owner address was cached when it was added. */
   selectVault: (index: number) => void;
   /**
@@ -186,6 +193,24 @@ export const useWallet = create<WalletState>((set) => ({
     // Every vault on the list was one of the phrases' or keys' just deleted.
     useVaults.getState().reset();
     set({account: null, unlocked: false, address: null, status: 'no-wallet'});
+  },
+
+  walletSigner: async () => {
+    const ref = activeVault();
+    const wallet = walletAddressOf(ref);
+    if (!ref || !wallet) throw new Error('No key for this smart wallet');
+    if (ref.imported) {
+      const account = await keyring.unlockImported(wallet);
+      if (!account) throw new Error('Unlock cancelled');
+      return account;
+    }
+    const root = await keyring.unlockRoot(activePhrase());
+    if (!root) throw new Error('Unlock cancelled');
+    // The account key at this entry's index (signerIndex for a received vault): never a one-time key.
+    const account = keyring.accountAt(root, active());
+    // What the page showed is what signs, or nothing does.
+    if (account.address.toLowerCase() !== wallet.toLowerCase()) throw new Error('This phone’s key does not match the wallet on screen');
+    return account;
   },
 
   signer: async () => {

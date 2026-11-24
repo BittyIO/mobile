@@ -103,6 +103,34 @@ export async function accountEnergy(net: TronChain, address: string): Promise<Tr
   };
 }
 
+/**
+ * Whether `address` is an account on chain yet. Tron creates one on its first incoming TRX or
+ * TRC-20, and charges the SENDER for it: 1 TRX burned on top of the transfer, plus 0.1 TRX for the
+ * bandwidth of a TRX transfer that creates it.
+ */
+export async function accountExists(net: TronChain, address: string): Promise<boolean> {
+  const r = await post<{address?: string}>(net, '/wallet/getaccount', {address: tronHex(address)});
+  return !!r?.address;
+}
+
+/** An account's stake, as the node reports it: what is frozen, and what is unstaking or unlocked. */
+export type TronStake = {
+  /** TRX frozen for ENERGY under Stake 2.0, in sun. */
+  energySun: bigint;
+  /** Each unstake still in Tron's delay or unlocked and not withdrawn: sun, and when it unlocks (ms). */
+  unfreezing: {amountSun: bigint; unlockMs: number}[];
+};
+
+export async function accountStake(net: TronChain, address: string): Promise<TronStake> {
+  type Acc = {frozenV2?: {type?: string; amount?: number}[]; unfrozenV2?: {type?: string; unfreeze_amount?: number; unfreeze_expire_time?: number}[]};
+  const r = await post<Acc>(net, '/wallet/getaccount', {address: tronHex(address)});
+  const energy = (r.frozenV2 ?? []).filter((f) => f.type === 'ENERGY').reduce((n, f) => n + BigInt(f.amount ?? 0), BigInt(0));
+  const unfreezing = (r.unfrozenV2 ?? [])
+    .filter((u) => u.type === 'ENERGY' && (u.unfreeze_amount ?? 0) > 0)
+    .map((u) => ({amountSun: BigInt(u.unfreeze_amount ?? 0), unlockMs: u.unfreeze_expire_time ?? 0}));
+  return {energySun: energy, unfreezing};
+}
+
 /** The node returns some messages hex-encoded. */
 export function hexText(s: string): string {
   if (!/^[0-9a-fA-F]+$/.test(s) || s.length % 2) return s;

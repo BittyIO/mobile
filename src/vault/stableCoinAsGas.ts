@@ -6,7 +6,9 @@
  * Changing the config is itself a relayed (gasless) write — a fresh activated vault already relays.
  */
 import {apiUrl, NATIVE, publicClientFor, type Network} from '@/core/chain';
-import {VAULT_STABLE_COIN_AS_GAS_ABI} from '@/core/abi';
+import {VAULT_STABLE_COIN_AS_GAS_ABI, VAULT_TOKEN_AS_GAS_NO_CAP_ABI} from '@/core/abi';
+import {NO_PER_OP_CAP_SINCE, versionAtLeast} from './capabilities';
+import {runningVaultVersion} from './vault-abi';
 import {bornVault, WETH_GAS_VERSION} from './activate';
 import {relayVaultWrite} from './relay';
 import {parseUnits, zeroAddress, type Address, type Hex} from 'viem';
@@ -21,13 +23,14 @@ import {useFeeFloor} from './useFeeFloor';
 
 /**
  * `dailyLimit` and `maxFeePerOp` are whole dollars (the contract's uint64: 100 = $100/day, 10 = $10 per
- * operation; the vault reports the system default when the owner has not set a value). `remaining` and
+ * operation; the vault reports the system default when the owner has not set a value). `maxFeePerOp`
+ * is null from vault {NO_PER_OP_CAP_SINCE}, which has no per-operation cap. `remaining` and
  * `usedToday` are 18-decimal dollar amounts for the current UTC day.
  */
 export type StableCoinAsGasConfig = {
   stableCoins: string[]; // allowlist; empty = any coin allowed
   dailyLimit: bigint;
-  maxFeePerOp: bigint;
+  maxFeePerOp: bigint | null;
   remaining: bigint;
   usedToday: bigint;
   configured: boolean; // relaying actually on (dailyLimit > 0)
@@ -37,6 +40,19 @@ export type StableCoinAsGasConfig = {
 /** The contract's ceilings for the two caps (Constants.sol SYSTEM_DAILY_MAX_GAS_BUDGET / SYSTEM_MAX_FEE_PER_OP). */
 export const STABLE_COIN_AS_GAS_MAX_DAILY = 100;
 export const STABLE_COIN_AS_GAS_MAX_PER_OP = 10;
+
+/** {NO_PER_OP_CAP_SINCE} as the vault's own number (major * 1e6 + minor * 1e3 + patch). */
+const NO_PER_OP_CAP_VERSION = BigInt(1_001_001);
+
+/**
+ * Whether the vault (or, not deployed yet, the release it will be born on) has the per-operation fee
+ * cap: every release before {NO_PER_OP_CAP_SINCE}. An unknown release is taken for the older one,
+ * which is every vault deployed before 1.2.0.
+ */
+export async function hasPerOpCap(vault: Address, network: Network): Promise<boolean> {
+  const version = await runningVaultVersion(vault, network).catch(() => null);
+  return !versionAtLeast(version, NO_PER_OP_CAP_SINCE);
+}
 
 /**
  * What a relay actually costs, measured rather than guessed: an L2 relay runs to cents and a
@@ -57,7 +73,7 @@ async function bornConfig(network: Network): Promise<StableCoinAsGasConfig> {
   return {
     stableCoins: [],
     dailyLimit: daily,
-    maxFeePerOp: BigInt(STABLE_COIN_AS_GAS_MAX_PER_OP),
+    maxFeePerOp: born && born.version >= NO_PER_OP_CAP_VERSION ? null : BigInt(STABLE_COIN_AS_GAS_MAX_PER_OP),
     remaining: daily * BigInt(10) ** BigInt(18),
     usedToday: BigInt(0),
     configured: true,
@@ -73,22 +89,32 @@ export async function getStableCoinAsGasConfig(
     const client = publicClientFor(network);
     const code = await client.getCode({address: vault});
     if (!code || code === '0x') return await bornConfig(network);
-    const names = await stableCoinAsGasFunctionNames(vault, network);
-    let cfg: readonly [readonly Address[], bigint, bigint];
+    const [names, capped] = await Promise.all([stableCoinAsGasFunctionNames(vault, network), hasPerOpCap(vault, network)]);
+    let cfg: readonly [readonly Address[], bigint, bigint | null];
     let remaining: bigint;
-    try {
-      [cfg, remaining] = await client.multicall({
-        contracts: [
-          {address: vault, abi: VAULT_STABLE_COIN_AS_GAS_ABI, functionName: names.config},
-          {address: vault, abi: VAULT_STABLE_COIN_AS_GAS_ABI, functionName: 'gasBudgetRemaining'},
-        ] as const,
-        allowFailure: false,
-      });
-    } catch {
-      [cfg, remaining] = await Promise.all([
-        client.readContract({address: vault, abi: VAULT_STABLE_COIN_AS_GAS_ABI, functionName: names.config}),
-        client.readContract({address: vault, abi: VAULT_STABLE_COIN_AS_GAS_ABI, functionName: 'gasBudgetRemaining'}),
+    if (!capped) {
+      // 1.1.1 on: two values, no per-operation cap.
+      const [[assets, daily], left] = await Promise.all([
+        client.readContract({address: vault, abi: VAULT_TOKEN_AS_GAS_NO_CAP_ABI, functionName: 'tokenAsGasConfig'}),
+        client.readContract({address: vault, abi: VAULT_TOKEN_AS_GAS_NO_CAP_ABI, functionName: 'gasBudgetRemaining'}),
       ]);
+      cfg = [assets, daily, null];
+      remaining = left;
+    } else {
+      try {
+        [cfg, remaining] = await client.multicall({
+          contracts: [
+            {address: vault, abi: VAULT_STABLE_COIN_AS_GAS_ABI, functionName: names.config},
+            {address: vault, abi: VAULT_STABLE_COIN_AS_GAS_ABI, functionName: 'gasBudgetRemaining'},
+          ] as const,
+          allowFailure: false,
+        });
+      } catch {
+        [cfg, remaining] = await Promise.all([
+          client.readContract({address: vault, abi: VAULT_STABLE_COIN_AS_GAS_ABI, functionName: names.config}),
+          client.readContract({address: vault, abi: VAULT_STABLE_COIN_AS_GAS_ABI, functionName: 'gasBudgetRemaining'}),
+        ]);
+      }
     }
     const [stableCoins, dailyLimit, maxFeePerOp] = cfg;
     const limit18 = dailyLimit * BigInt(10) ** BigInt(18);
@@ -110,23 +136,38 @@ export async function getStableCoinAsGasConfig(
   }
 }
 
-/** Set the stable-coin allowlist (empty = any coin). Keeps the existing daily/per-op limits. */
+/**
+ * Set the stable-coin allowlist (empty = any coin). Keeps the existing daily/per-op limits. From
+ * vault {NO_PER_OP_CAP_SINCE} there is no per-op cap, and `maxFeePerOp` is not sent.
+ */
 export async function setStableCoinAsGasCoins(o: {
   account: Parameters<typeof relayVaultWrite>[0]['account'];
   vault: Address;
   network: Network;
   coins: Address[];
   dailyLimit: bigint;
-  maxFeePerOp: bigint;
+  maxFeePerOp: bigint | null;
   stableCoin: Address;
 }): Promise<Hex> {
+  if (!(await hasPerOpCap(o.vault, o.network))) {
+    const {hash} = await relayVaultWrite({
+      account: o.account,
+      vault: o.vault,
+      network: o.network,
+      abi: VAULT_TOKEN_AS_GAS_NO_CAP_ABI,
+      functionName: 'setTokenAsGas',
+      args: [o.coins, o.dailyLimit],
+      stableCoin: o.stableCoin,
+    });
+    return hash;
+  }
   const {hash} = await relayVaultWrite({
     account: o.account,
     vault: o.vault,
     network: o.network,
     abi: VAULT_STABLE_COIN_AS_GAS_ABI,
     functionName: (await stableCoinAsGasFunctionNames(o.vault, o.network)).set,
-    args: [o.coins, o.dailyLimit, o.maxFeePerOp],
+    args: [o.coins, o.dailyLimit, o.maxFeePerOp ?? BigInt(STABLE_COIN_AS_GAS_MAX_PER_OP)],
     stableCoin: o.stableCoin,
   });
   return hash;
@@ -158,10 +199,10 @@ export async function setStableCoinAsGasLimits(o: {
   network: Network;
   coins: Address[];
   dailyLimit: number;
-  maxFeePerOp: number;
+  maxFeePerOp: number | null;
   stableCoin: Address;
 }): Promise<Hex> {
-  return setStableCoinAsGasCoins({...o, dailyLimit: BigInt(o.dailyLimit), maxFeePerOp: BigInt(o.maxFeePerOp)});
+  return setStableCoinAsGasCoins({...o, dailyLimit: BigInt(o.dailyLimit), maxFeePerOp: o.maxFeePerOp == null ? null : BigInt(o.maxFeePerOp)});
 }
 
 /** Tried in this order until the owner drags their own: the relayer's own first choice, then the rest. */

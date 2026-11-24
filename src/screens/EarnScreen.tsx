@@ -189,18 +189,18 @@ export function EarnScreen() {
   // second pull.
   const lidoAdapter = queuedStakeAdapter(network)?.protocol ?? null;
   const [lidoQueue, setLidoQueue] = useState<{key: string; v: LidoUnstake} | null>(null);
-  const queueKey = bal.vault && lidoAdapter ? `${network}:${bal.vault.toLowerCase()}` : '';
+  const queueKey = bal.readAt && lidoAdapter ? `${network}:${bal.readAt.toLowerCase()}` : '';
   useEffect(() => {
-    if (!bal.vault || !lidoAdapter) return;
+    if (!bal.readAt || !lidoAdapter) return;
     let live = true;
-    const key = `${network}:${bal.vault.toLowerCase()}`;
-    getLidoUnstake(bal.vault as Address, lidoAdapter, network)
+    const key = `${network}:${bal.readAt.toLowerCase()}`;
+    getLidoUnstake(bal.readAt as Address, lidoAdapter, network)
       .then((v) => live && setLidoQueue({key, v}))
       .catch(() => live && setLidoQueue((q) => (q?.key === key ? q : {key, v: NO_UNSTAKE})));
     return () => {
       live = false;
     };
-  }, [bal.vault, network, lidoAdapter, pos.positions]);
+  }, [bal.readAt, network, lidoAdapter, pos.positions]);
   const queueFor = (route: Route): {unstaking: string; claimable: string} | null => {
     if (!lidoAdapter || route.protocol.toLowerCase() !== lidoAdapter.toLowerCase()) return null;
     if (!lidoQueue || lidoQueue.key !== queueKey) return null;
@@ -335,10 +335,10 @@ export function EarnScreen() {
      */
     setApyTick((n) => n + 1);
     setPulled(true);
-    if (!bal.vault) return;
+    if (!bal.readAt) return;
     pos.refresh();
     flows.refresh();
-  }, [pos, flows, bal.vault]);
+  }, [pos, flows, bal.readAt]);
   useEffect(() => {
     if (!anyLoading) setPulled(false);
   }, [anyLoading]);

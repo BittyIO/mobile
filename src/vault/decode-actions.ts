@@ -53,6 +53,8 @@ const VAULT_ABI = parseAbi([
   // a fee-coin or cap change was stored by selector and shown as a bare 'Transaction'; a row stored
   // that way is re-decoded on its next read (see actionsForTxs).
   'function setTokenAsGas(address[] assets, uint64 dailyLimit, uint64 maxFeePerOp)',
+  // Vault 1.1.1 on (deployed as 1.2.0): no per-operation cap.
+  'function setTokenAsGas(address[] assets, uint64 dailyLimit)',
   'function disableTokenAsGas()',
   'function wrapNative()',
   'function marketSell(address ammProtocol, address sellToken, uint256 sellAmount, address buyToken, uint256 buyAmountMin, bytes path)',

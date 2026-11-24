@@ -1,5 +1,5 @@
 import React from 'react';
-import {Pressable, StyleSheet, Switch, Text, View} from 'react-native';
+import {ActivityIndicator, Pressable, StyleSheet, Switch, Text, View} from 'react-native';
 import {SettingsIcon, type SettingsIconName} from '@/components/SettingsIcon';
 import {InfoIcon} from '@/components/TradeMenu';
 import {useColors, useStyles, type Colors} from '@/theme';
@@ -97,9 +97,15 @@ export function OptionRow({
   disabled,
   onPress,
   last,
+  leading,
+  loading,
 }: {
   title: string;
   sub?: string;
+  /** A mark of the choice's own before its title (a Guard level's shield). */
+  leading?: React.ReactNode;
+  /** A spinner where the mark goes: this choice is being written and not on chain yet. */
+  loading?: boolean;
   checked?: boolean;
   /** This choice's write is in flight. */
   busy?: boolean;
@@ -110,13 +116,20 @@ export function OptionRow({
   const styles = useStyles(makeStyles);
   return (
     <Pressable style={[styles.row, !last && styles.rowDivider]} onPress={onPress} disabled={disabled}>
+      {leading}
       <View style={styles.rowText}>
         <Text style={[styles.rowTitle, disabled && !checked && styles.rowTitleOff]}>{title}</Text>
         {sub ? <Text style={styles.rowSub}>{sub}</Text> : null}
       </View>
       {/* The mark is always laid out and only shown when chosen: it is a little taller than the
           title, so adding and removing it made the row change height as the choice moved. */}
-      {busy ? <Text style={styles.rowValue}>…</Text> : <Text style={[styles.check, !checked && styles.checkHidden]}>✓</Text>}
+      {loading ? (
+        <ActivityIndicator size="small" />
+      ) : busy ? (
+        <Text style={styles.rowValue}>…</Text>
+      ) : (
+        <Text style={[styles.check, !checked && styles.checkHidden]}>✓</Text>
+      )}
     </Pressable>
   );
 }

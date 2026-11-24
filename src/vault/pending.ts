@@ -14,7 +14,7 @@
 import {create} from 'zustand';
 import {MMKV} from 'react-native-mmkv';
 import {isTronNetwork, publicClientFor, type Network} from '@/core/chain';
-import {activeVaultAddress} from '@/core/active-vault';
+import {activeAccount} from '@/core/account-mode';
 
 /**
  * `dropped` is a transaction the chain will never include: the relayer's nonce was consumed by a
@@ -124,7 +124,9 @@ export const usePending = create<State>((set, get) => ({
      * would eventually get wrong. Read at RECORD time, so switching vaults afterwards cannot
      * change whose a record is.
      */
-    const vault = activeVaultAddress(tx.network)?.toLowerCase();
+    // The ACCOUNT in front (core/account-mode): the vault, or in wallet mode the wallet — a wallet's
+    // send must not be listed in its vault's feeds.
+    const vault = activeAccount(tx.network).address?.toLowerCase();
     const next = [
       {...tx, vault: tx.vault ?? vault, submittedAt: Date.now(), status: 'pending' as const},
       ...get().txs.filter((t) => t.hash !== tx.hash),

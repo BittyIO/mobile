@@ -13,6 +13,11 @@ import {cancelOwnershipTransfer} from '@/vault/ownership';
 import {useVaultWrite} from '@/components/useVaultWrite';
 import {OptionRow, SettingsGroup, SettingsRow} from '@/components/SettingsRow';
 import {RISK_TITLE, fmtRiskValue} from '@/components/riskFormat';
+import {isOpenRiskVersion} from '@/vault/risk';
+import {useVaultGate} from '@/vault/gate';
+import {valuesInForce, type RiskValues} from '@/core/safety-levels';
+import {guardLevelOf, guardShieldOf} from '@/core/new-vault-defaults';
+import {GuardShield} from '@/components/GuardShield';
 import {PERM_ROWS} from '@/components/useAssetManagerRow';
 import {Sheet} from '@/components/Sheet';
 import {InfoIcon} from '@/components/TradeMenu';
@@ -128,6 +133,14 @@ export function PendingChangesScreen() {
   const [timelock, setTimelock] = useState(0);
   // Whether `timelock` has been read: 0 until then, which would read as no wait at all.
   const [timelockRead, setTimelockRead] = useState(false);
+  // The two daily limits, beside the timelock: Guard holds all three.
+  const [limits, setLimits] = useState<RiskValues | null>(null);
+  const guardOpen = isOpenRiskVersion(useVaultGate().vaultVersion);
+  const inForce = {
+    timelock: BigInt(timelock),
+    sendDailyAllowance: limits?.sendDailyAllowance ?? 0n,
+    marketTradeDailyLossAllowance: limits?.marketTradeDailyLossAllowance ?? 0n,
+  };
   // What already went through: `undefined` while the first read is out, `null` when the server could
   // not say, else the list (empty when nothing has gone through).
   const [history, setHistory] = useState<TimelockHistoryItem[] | null | undefined>(undefined);
@@ -143,6 +156,7 @@ export function PendingChangesScreen() {
       getRiskConfig(vault, network).then((r) => {
         setTimelock(Number(r.timelock));
         setTimelockRead(r.read);
+        setLimits(valuesInForce(r));
       }),
       fetchTimelockHistory(vault, network).then(setHistory),
     ]);
@@ -244,17 +258,23 @@ export function PendingChangesScreen() {
       style={styles.container}
       contentContainerStyle={styles.body}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} tintColor={c.text} colors={[c.accent]} />}>
-      {/* The wait itself, first: everything below is sitting it out, so this is the number the page is
-          about. A tap opens the same editor as Security › Timelock, and it comes back here on return. */}
-      <SettingsGroup label={t('mobile.vault.current_timelock')}>
-        <SettingsRow
-          icon="timelock"
-          title={t(RISK_TITLE.timelock)}
-          value={timelockRead ? fmtRiskValue('timelock', BigInt(timelock), t) : undefined}
-          onPress={() => nav.navigate('VaultRiskValue', {field: 'timelock'})}
-          last
-        />
-      </SettingsGroup>
+      {/* The level first: the three numbers below set in one tap (core/new-vault-defaults). Only on a
+          vault born open, where level 0 — no timelock, no limits — is a value the vault takes. */}
+      {guardOpen && timelockRead && limits ? (
+        <SettingsGroup>
+          {/* Just the level in force here; the three to choose from are on a page of their own. */}
+          <SettingsRow
+            icon="guard"
+            leading={<GuardShield level={guardShieldOf(inForce)} size={29} />}
+            title={t('mobile.vault.guard_level')}
+            // The level under its heading; on the right the number everything below is waiting out.
+            sub={t(`mobile.vault.guard_level_${guardLevelOf(inForce)}`)}
+            value={`${t(RISK_TITLE.timelock)} ${fmtRiskValue('timelock', inForce.timelock, t)}`}
+            onPress={() => nav.navigate('GuardLevel')}
+            last
+          />
+        </SettingsGroup>
+      ) : null}
       {items === null || items.length === 0 ? (
         // An empty card rather than a line floating on its own: the page has the same shape
         // with nothing waiting as with something, and the answer sits where the changes would.

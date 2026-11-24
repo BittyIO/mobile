@@ -1,4 +1,6 @@
 import {useTransparentHeaderInset} from '@/components/header-inset';
+import {useWalletMode} from '@/core/account-mode';
+import {useNetwork} from '@/core/network-store';
 import {useBottomTabBarHeight} from '@react-navigation/bottom-tabs';
 import React, {useState} from 'react';
 import {Alert, ScrollView, StyleSheet, Text, View} from 'react-native';
@@ -63,6 +65,7 @@ export function SettingsScreen() {
   const headerHeight = useTransparentHeaderInset();
   const tabBarHeight = useBottomTabBarHeight();
   const styles = useStyles(makeStyles);
+  const walletOn = useWalletMode(useNetwork((s) => s.network));
   const {appearance, setAppearance} = useAppearance();
   const c = useColors();
 
@@ -111,7 +114,9 @@ export function SettingsScreen() {
       contentOffset={{x: 0, y: -headerHeight}}
       scrollIndicatorInsets={{top: headerHeight}}
       automaticallyAdjustContentInsets={false}>
-      {/* The vault's own settings. */}
+      {/* The vault's own settings. None in wallet mode: a wallet pays its own fee in the chain's coin
+          and has no guard, so neither page has anything to say about it. */}
+      {walletOn ? null : (
       <View style={styles.group}>
         {/* One row for the whole subject: which coins a fee may be billed to, and the float
             that is never spent. They were two rows opening two sheets, and each left the
@@ -126,6 +131,7 @@ export function SettingsScreen() {
             current. */}
         <Row icon="security" title={t('mobile.app.security')} onPress={() => nav.navigate('VaultSecurity')} last />
       </View>
+      )}
 
       <View style={styles.group}>
         <Row icon="language" title={t('mobile.settings.language')} value={languageLabel(language)} onPress={pickLanguage} />

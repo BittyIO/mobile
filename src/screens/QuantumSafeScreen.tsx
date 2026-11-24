@@ -240,7 +240,7 @@ export function QuantumSafeScreen() {
             <View key={n} style={styles.note}>
               <NoteIcon name={n} color={n === 'elsewhere' || n === 'networks' ? c.danger : c.accent} />
               <Text style={[styles.noteText, (n === 'elsewhere' || n === 'networks') && styles.noteWarn]}>
-                {t(`mobile.quantum.note_${n}`, {
+                {t(n === 'timelock' && status?.timelock === 0n ? 'mobile.quantum.note_timelock_none' : `mobile.quantum.note_${n}`, {
                   time: status?.timelock != null ? fmtRiskValue('timelock', status.timelock, t) : '—',
                 })}
               </Text>

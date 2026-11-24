@@ -210,6 +210,9 @@ function activationReverted(e: unknown): ActivationCallReverted {
  */
 export const ACTIVATION_FEE_CAP_USD = 10;
 
+/** The first release without that cap (1.1.1, deployed as 1.2.0), as the vault's own number. */
+const NO_PER_OP_CAP_VERSION = BigInt(1_001_001);
+
 /**
  * Activation would cost the vault more than {ACTIVATION_FEE_CAP_USD}: gas is high, and nothing about
  * the vault can change that. It used to reach the user as "your vault needs to be activated first;
@@ -340,7 +343,11 @@ export async function priceActivation(o: {
   // Over the vault's per-operation cap the activation cannot be paid, however the vault is funded:
   // said now, in dollars, before anything is signed — not as the relayer's refusal afterwards.
   const feeUsd = weth ? (Number(feeAmount) / 10 ** NATIVE[o.network].decimals) * ethUsd : Number(feeAmount) / 10 ** Number(decimals);
-  if (o.capped !== false && feeUsd > ACTIVATION_FEE_CAP_USD) throw new ActivationFeeTooHigh(feeUsd);
+  // From vault 1.1.1 (deployed as 1.2.0) there is no per-operation cap: asked only when it would bite.
+  if (o.capped !== false && feeUsd > ACTIVATION_FEE_CAP_USD) {
+    const born = await bornVault(o.network);
+    if (!born || born.version < NO_PER_OP_CAP_VERSION) throw new ActivationFeeTooHigh(feeUsd);
+  }
   const feeNative = gasUnits * gasPrice;
   return {
     factory,

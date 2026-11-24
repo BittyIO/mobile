@@ -4,13 +4,17 @@ import type {Address} from 'viem';
 import {isTronNetwork, type Network} from '@/core/chain';
 import {fetchPositions, fetchSkyPosition, type Position} from './positions';
 import {fetchTronStakePosition} from './tron-stake';
+import {isWalletAddress} from '@/core/account-mode';
 
 /**
  * The served positions, or on Tron the chain's: the server indexes no Tron vault, so there the one
  * position there can be (TRON Stake) is read from the vault's clone directly.
  */
 const readPositions = (vault: Address, network: Network, fresh: boolean): Promise<Position[]> =>
-  isTronNetwork(network)
+  // A wallet's (core/account-mode) are its own, read from the chain: the server indexes vaults only.
+  isWalletAddress(vault)
+    ? (require('@/wallet/earn') as typeof import('@/wallet/earn')).readWalletPositions(vault, network)
+    : isTronNetwork(network)
     ? fetchTronStakePosition(vault, network).then((p) => (p ? [p] : []))
     : fetchPositions(vault, network, fresh);
 import {usePending} from './pending';
@@ -48,8 +52,18 @@ const bumpEpoch = (key: string) => useEpoch.setState((s) => ({byKey: {...s.byKey
  * longer than the server's own time limit, and making the visible read depend on it turned every
  * post-deposit refresh into an empty list — which is what showed a funded Sky position as 0.
  */
+/** One empty list, so a screen's memo on `positions` does not re-run for a new [] every render. */
+const NONE: Position[] = [];
+
 export function useVaultPositions(vault: Address | null, network: Network): State {
-  const [positions, setPositions] = useState<Position[]>([]);
+  /**
+   * The positions, with the address they were read for. A list belongs to one address: switching
+   * to another (another vault, or the wallet — core/account-mode) must not show the last one's
+   * positions under it while the new read is out, and "keep the last good answer on a failed read"
+   * below only ever means this address's last answer. Without the key the vault's Earn positions
+   * sat under the wallet's total and then dropped out: a figure that showed, then went to 0.
+   */
+  const [held, setHeld] = useState<{key: string | null; list: Position[]}>({key: null, list: []});
   const [loading, setLoading] = useState(false);
   // Which vault the last finished read was for, so a switch counts as not loaded yet.
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
@@ -78,7 +92,7 @@ export function useVaultPositions(vault: Address | null, network: Network): Stat
 
   useEffect(() => {
     if (!vault) {
-      setPositions([]);
+      setHeld({key: null, list: []});
       /**
        * The flag too, not just the data.
        *
@@ -131,7 +145,7 @@ export function useVaultPositions(vault: Address | null, network: Network): Stat
           setError(apiError);
           return;
         }
-        setPositions(merged);
+        setHeld({key: forKey, list: merged});
         setError(null);
       })
       .finally(() => {
@@ -143,7 +157,7 @@ export function useVaultPositions(vault: Address | null, network: Network): Stat
     // After a write, ask the server for a chain re-read too, and take it if it answers in time.
     if (nonce > 0) {
       readPositions(vault, network, true)
-        .then((fresh) => live && setPositions(merge(fresh)))
+        .then((fresh) => live && setHeld({key: forKey, list: merge(fresh)}))
         .catch(() => {});
     }
 
@@ -152,5 +166,6 @@ export function useVaultPositions(vault: Address | null, network: Network): Stat
     };
   }, [vault, network, nonce]);
 
+  const positions = held.key === loadKey ? held.list : NONE;
   return {positions, loading, loaded: loadKey != null && loadedFor === loadKey, error, refresh};
 }

@@ -1,4 +1,5 @@
 import type {RiskConfig, RiskField} from '@/vault/risk';
+import {NO_LIMIT} from '@/vault/capabilities';
 
 type T = (key: string, params?: Record<string, string | number>) => string;
 
@@ -21,8 +22,15 @@ export function riskWhyKey(field: RiskField, bridges = false): string {
   return `${RISK_TITLE[field]}_why`;
 }
 
-/** The explanation under a risk field. Every number is bounded; an allowance's 0 is {riskZeroHintKey}. */
-export function riskHintKey(field: RiskField, bridges = false): string {
+/**
+ * The explanation under a risk field. Every number is bounded; an allowance's 0 is {riskZeroHintKey}.
+ * `open`: the vault is on 1.1.1 or later, where the timelock may be none and an allowance no limit.
+ */
+export function riskHintKey(field: RiskField, bridges = false, open = false): string {
+  if (open) {
+    if (field === 'timelock') return 'mobile.vault.change_timelock_open_hint';
+    return field === 'sendDailyAllowance' ? 'mobile.vault.send_daily_allowance_open_hint' : 'mobile.vault.daily_loss_allowance_open_hint';
+  }
   if (field === 'marketTradeDailyLossAllowance') return bridges ? `${LOSS_1_1}_hint` : `${RISK_TITLE[field]}_hint`;
   return field === 'timelock' ? 'mobile.vault.change_timelock_bounded_hint' : 'mobile.vault.send_daily_allowance_bounded_hint';
 }
@@ -45,8 +53,17 @@ export function fmtDuration(s: bigint, t: T): string {
   return t('mobile.vault.duration_hours', {n: Number.isInteger(h) ? h : Number(h.toFixed(2))});
 }
 
+/**
+ * How long something waits out the timelock: as {fmtDuration}, but "At once" for none — a vault
+ * from 1.1.1 (deployed as 1.2.0) starts with no timelock, and "Payee after: None" read as never.
+ */
+export function fmtWait(s: bigint, t: T): string {
+  return s === 0n ? t('mobile.vault.no_wait') : fmtDuration(s, t);
+}
+
 /** The send cap, whole USD a day. 0 turns regular sends off, and reads just "Off". */
 export function fmtAllowance(v: bigint, t: T): string {
+  if (v === NO_LIMIT) return t('mobile.vault.no_limit');
   return v === 0n ? t('mobile.vault.protection_off') : `$${Number(v).toLocaleString()}`;
 }
 

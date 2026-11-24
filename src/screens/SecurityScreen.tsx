@@ -73,28 +73,11 @@ export function SecurityScreen() {
       <SettingsGroup>
         <SettingsRow icon="allowlist" title={t('mobile.settings.allow_list')} onPress={() => nav.navigate('VaultAssets')} />
         <SettingsRow icon="whitelist" title={t('mobile.settings.whitelisted_addresses')} onPress={() => nav.navigate('VaultWhitelist')} />
+        {/* Guard: the timelock, the two daily limits, and what is waiting out the timelock. */}
+        <SettingsRow icon="guard" title={t('mobile.vault.guard')} onPress={() => nav.navigate('PendingChanges')} />
         {/* The vault's version and its auto-upgrade switches, the vault's and each protocol's. */}
         {/* The vault's CONTRACT, said as such now that Settings also shows the app's own version. */}
         <SettingsRow icon="upgrade" title={t('mobile.settings.contract_upgrade')} value={version.value} onPress={() => nav.navigate('VaultUpgrade')} last />
-      </SettingsGroup>
-      {/* The vault's risk numbers: the wait in front of every loosening, and what may go to a new
-          address or be lost to market trades in 24 hours (off at $0). */}
-      <SettingsGroup>
-        {/* The timelock: the wait every loosening, new recipient, delegate and owner sits out. */}
-        <SettingsRow icon="timelock" title={t(RISK_TITLE.timelock)} value={riskValue('timelock')} onPress={() => nav.navigate('VaultRiskValue', {field: 'timelock'})} />
-        <SettingsRow
-          icon="sendNew"
-          title={t(RISK_TITLE.sendDailyAllowance)}
-          value={riskValue('sendDailyAllowance')}
-          onPress={() => nav.navigate('VaultRiskValue', {field: 'sendDailyAllowance'})}
-        />
-        <SettingsRow
-          icon="dailyLimit"
-          title={t(RISK_TITLE.marketTradeDailyLossAllowance)}
-          value={riskValue('marketTradeDailyLossAllowance')}
-          onPress={() => nav.navigate('VaultRiskValue', {field: 'marketTradeDailyLossAllowance'})}
-          last
-        />
       </SettingsGroup>
       {/* Who else may act for it, and handing it to another key. */}
       <SettingsGroup>

@@ -1,4 +1,10 @@
 import {displayAddress, parseAddress} from '@/core/address';
+import {useVaults, vaultLabel, type VaultRef} from '@/core/vault-store';
+import {vaultAddressOf} from '@/core/active-vault';
+import {readVaultBalances} from '@/vault/read';
+import {shortAddress} from '@/core/format';
+import {SettingsGroup, SettingsRow} from '@/components/SettingsRow';
+import {NO_LIMIT} from '@/vault/capabilities';
 import React, {useEffect, useState} from 'react';
 import {Alert, Keyboard, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
@@ -9,10 +15,8 @@ import {isPayableAddress, isTokenAddress} from '@/core/asset-catalog';
 import {useNetwork} from '@/core/network-store';
 import {useWallet} from '@/wallet/store';
 import {useActiveVaultAddress} from '@/core/active-vault';
-import {getPendingChanges, getRiskConfig, type RiskConfig} from '@/vault/risk';
-import {publicClientFor} from '@/core/chain';
-import {VAULT_OWNERSHIP_ABI} from '@/core/abi';
-import {fmtAllowance, fmtDuration} from '@/components/riskFormat';
+import {getRiskConfig, type RiskConfig} from '@/vault/risk';
+import {fmtAllowance, fmtWait} from '@/components/riskFormat';
 import {useRecipientNames} from '@/core/recipient-names';
 import {useRecipientPick} from '@/core/recipient-pick';
 import {usePayeeAdding} from '@/vault/payees';
@@ -63,29 +67,6 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
   useEffect(() => {
     if (vault) getRiskConfig(vault, network).then(setRisk);
   }, [vault, network]);
-  /**
-   * The vault's owner and the new owner of a queued handover, lowercase, with this phone's key: no
-   * payee may be one of them, and the vault (1.1.1) refuses adding one. A failed read leaves this
-   * phone's key alone, and the vault still refuses the rest.
-   */
-  const [owners, setOwners] = useState<string[]>([]);
-  useEffect(() => {
-    if (!vault) return;
-    let live = true;
-    Promise.all([
-      publicClientFor(network)
-        .readContract({address: vault, abi: VAULT_OWNERSHIP_ABI, functionName: 'owner'})
-        .catch(() => null),
-      getPendingChanges(vault, network)
-        .then((ps) => ps.flatMap((p) => (p.kind === 'newOwner' ? [p.address] : [])))
-        .catch(() => [] as Address[]),
-    ]).then(([current, next]) => {
-      if (live) setOwners([current as Address | null, ...next].flatMap((a) => (a ? [a.toLowerCase()] : [])));
-    });
-    return () => {
-      live = false;
-    };
-  }, [vault, network]);
   // With sends to new addresses off, a typed address can be paid only if it is already in the book
   // and past its wait — so the book is read to tell.
   const sendsOff = !manage && !!risk?.read && risk.sendDailyAllowance === 0n;
@@ -105,19 +86,38 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
     if (bookOnly && vault) fetchWhitelist(vault, network).then(setBook).catch(() => setBook([]));
   }, [bookOnly, vault, network]);
 
+  /**
+   * The user's other smart wallets holding something on this chain: one tap fills the address and,
+   * as the payee's name, the wallet's own. Empty ones are left out — nothing to move between them yet.
+   */
+  const vaults = useVaults((s) => s.vaults);
+  const [own, setOwn] = useState<{v: VaultRef; address: Address}[]>([]);
+  useEffect(() => {
+    let live = true;
+    const others = vaults.flatMap((v) => {
+      const address = v.hidden ? null : vaultAddressOf(v, network);
+      return address && address.toLowerCase() !== vault?.toLowerCase() ? [{v, address}] : [];
+    });
+    Promise.all(
+      others.map((o) =>
+        readVaultBalances(o.address, network)
+          .then((b) => b.native.raw > 0n || b.tokens.some((x) => x.raw > 0n))
+          .catch(() => false),
+      ),
+    ).then((has) => live && setOwn(others.filter((_, i) => has[i])));
+    return () => {
+      live = false;
+    };
+  }, [vaults, network, vault]);
+  const walletName = (n: number) => t('mobile.account.wallet_n', {n});
+
   const valid = isPayableAddress(draft, network);
   const isToken = isTokenAddress(draft, network);
-  const typed = valid ? parseAddress(network, draft)?.toLowerCase() : undefined;
-  const isOwnerAddress = !!typed && (owners.includes(typed) || typed === owner?.toLowerCase());
-  /** Whether confirming would put the address on the vault's list: here, or with the payment after. */
-  const addsToList = manage || addsOnChain || addToBook;
-  // The owner can be paid once, but never be a payee.
-  const ownerRefused = isOwnerAddress && addsToList;
   const max = addToBook || addsOnChain
     ? t('mobile.payments.max_send_none')
     : risk
-      ? risk.sendDailyAllowance === 0n
-        ? fmtAllowance(0n, t)
+      ? risk.sendDailyAllowance === 0n || risk.sendDailyAllowance === NO_LIMIT
+        ? fmtAllowance(risk.sendDailyAllowance, t)
         : t('mobile.payments.max_send_daily', {value: fmtAllowance(risk.sendDailyAllowance, t)})
       : '…';
 
@@ -130,7 +130,7 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
   const confirm = () => {
     // What was typed, as the 0x… the vault takes: on Tron the T… form is what people paste.
     const to = parseAddress(network, draft);
-    if (!to || ownerRefused) return;
+    if (!to) return;
     const given = nameDraft.trim();
     if (given) setName(network, to, given);
     const listed = book.find((b) => b.recipientAddress.toLowerCase() === to.toLowerCase());
@@ -157,8 +157,10 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
     if (nav.getState().routes.some((r) => r.name === 'Payments')) nav.pop(2);
     else nav.replace('Payments');
   };
-  const canConfirm = valid && !ownerRefused && (!addsOnChain || (write.ready && addGate.allowed));
+  const canConfirm = valid && (!addsOnChain || (write.ready && addGate.allowed));
 
+  // No timelock: a new payee is payable at once, so the Payee after row is left out.
+  const noWait = risk?.timelock === 0n;
   return (
     <ScrollView
       style={styles.flex}
@@ -194,7 +196,26 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
           />
         </View>
         {isToken ? <Text style={styles.warn}>{t('mobile.payments.token_address_warning')}</Text> : null}
-        {ownerRefused ? <Text style={styles.warn}>{t('vault.gate.err_payee_is_owner')}</Text> : null}
+        {own.length > 0 ? (
+          <View style={styles.gap}>
+            <SettingsGroup label={t('mobile.payments.own_wallets')}>
+              {own.map(({v, address}, i) => (
+                <SettingsRow
+                  key={v.index}
+                  icon="vault"
+                  title={vaultLabel(v, walletName)}
+                  sub={shortAddress(displayAddress(network, address))}
+                  chevron={false}
+                  onPress={() => {
+                    setDraft(displayAddress(network, address));
+                    setNameDraft(vaultLabel(v, walletName));
+                  }}
+                  last={i === own.length - 1}
+                />
+              ))}
+            </SettingsGroup>
+          </View>
+        ) : null}
         {/* Adding a payee: one this device does not hold the key to is the safer choice. */}
 
         <View style={[styles.card, styles.gap]}>
@@ -210,17 +231,17 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
                   style={styles.switch}
                 />
               </View>
-              <View style={[styles.row, addToBook && styles.divider]}>
+              <View style={[styles.row, addToBook && noWait === false && styles.divider]}>
                 <Text style={styles.rowLabel}>{t('mobile.payments.max_send')}</Text>
                 <Text style={styles.rowValue}>{max}</Text>
               </View>
             </>
           )}
-          {/* A new whitelist entry waits out the timelock before it can be paid. */}
-          {addToBook || addsOnChain ? (
+          {/* A new whitelist entry waits out the timelock before it can be paid; with none, no row. */}
+          {(addToBook || addsOnChain) && !noWait ? (
             <View style={styles.row}>
               <Text style={styles.rowLabel}>{t('mobile.payments.whitelist_wait')}</Text>
-              <Text style={styles.rowValue}>{risk ? fmtDuration(risk.timelock, t) : '…'}</Text>
+              <Text style={styles.rowValue}>{risk ? fmtWait(risk.timelock, t) : '…'}</Text>
             </View>
           ) : null}
         </View>

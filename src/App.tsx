@@ -6,6 +6,7 @@ import {NavigationContainer, DarkTheme, DefaultTheme} from '@react-navigation/na
 import {navigationRef} from '@/core/open-link';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
+import {VaultOnly} from '@/components/VaultOnly';
 import {useWallet} from '@/wallet/store';
 import {TabIcon, type TabName} from '@/components/TabIcon';
 import {NetworkSwitcher} from '@/components/NetworkSwitcher';
@@ -18,7 +19,6 @@ import {networkLabel, useNetwork} from '@/core/network-store';
 import type {NodeChain} from '@/core/rpc-store';
 import {RISK_TITLE} from '@/components/riskFormat';
 import {ToastHost} from '@/components/Toast';
-import {FeeConfirmHost} from '@/components/FeeConfirm';
 import {resumePending} from '@/vault/pending';
 import {OnboardingScreen} from '@/screens/OnboardingScreen';
 import {LockScreen} from '@/screens/LockScreen';
@@ -73,6 +73,12 @@ export type RootStackParamList = {
   Main: undefined;
   /** Send. `anyone`: Payees › Send to anyone, where the address is typed on the page. */
   Payments: {anyone?: boolean} | undefined;
+  /** Choose wallet: the header's page in wallet mode, as VaultList is in vault mode. */
+  WalletList: undefined;
+  /** Choose wallet › ⋯ › Hidden wallets: the ones taken off the list, to restore. */
+  HiddenWallets: undefined;
+  /** Wallet mode's Send (see core/account-mode): `to` prefilled for "To vault", `symbol` the asset. */
+  WalletSend: {to?: string; symbol?: string} | undefined;
   /** Overview › Payees: the address book, to pay from (a tap opens Send) and add to. */
   Payees: undefined;
   /** Overview › Bridge: moving an asset to the owner's vault on another network. */
@@ -177,6 +183,7 @@ export type RootStackParamList = {
    */
   SelectAsset: {slot: 'base' | 'quote'; selected?: string; exclude?: string};
   VaultSecurity: undefined;
+  GuardLevel: undefined;
   VaultUpgrade: undefined;
   /** Security › Risk settings, Vault lock, Legacy ETH — each a row on the Security page. */
   /** Pick one risk number: presets, or a custom value. */
@@ -253,8 +260,25 @@ const useNoDefi = () => {
   return !NETWORK_FEATURES[network].defi;
 };
 
+/** A pushed screen that only acts on the vault yet, behind the same notice in wallet mode. */
+const vaultOnly = (load: () => React.ComponentType<any>) => {
+  let Screen: React.ComponentType<any> | null = null;
+  return function VaultOnlyScreen(props: any) {
+    Screen ??= load();
+    return (
+      <VaultOnly>
+        <Screen {...props} />
+      </VaultOnly>
+    );
+  };
+};
+const PaymentsGated = vaultOnly(() => require('@/screens/PaymentsScreen').PaymentsScreen);
+const PayeesGated = vaultOnly(() => require('@/screens/SelectRecipientScreen').PayeesScreen);
+
 function EarnTab() {
-  if (useNoDefi()) {
+  // Wallet mode too: the wallet earns in its own name (wallet/earn).
+  const noDefi = useNoDefi();
+  if (noDefi) {
     const {TronUnavailableScreen} = require('@/screens/TronUnavailableScreen');
     return <TronUnavailableScreen feature="earn" />;
   }
@@ -263,7 +287,9 @@ function EarnTab() {
 }
 
 function TradeTab() {
-  if (useNoDefi()) {
+  // Wallet mode too: the wallet trades in its own name (wallet/trade).
+  const noDefi = useNoDefi();
+  if (noDefi) {
     const {TronUnavailableScreen} = require('@/screens/TronUnavailableScreen');
     return <TronUnavailableScreen feature="trade" />;
   }
@@ -384,7 +410,6 @@ export default function App() {
       <Root />
       {/* Above every screen: action confirmations land here, never in a dialog. */}
       {/* The fee confirm sheet for steps outside a screen's own sheet (Tron activation). */}
-      <FeeConfirmHost />
       <ToastHost />
     </SafeAreaProvider>
   );
@@ -450,10 +475,16 @@ function Root() {
           freezeOnBlur: true,
         }}>
         <Stack.Screen name="Main" component={MainTabs} options={MAIN_NATIVE_BAR ? mainBarOptions() : {headerShown: false}} />
-        <Stack.Screen name="Payments" getComponent={() => require('@/screens/PaymentsScreen').PaymentsScreen} options={{title: t('vault.send')}} />
+        <Stack.Screen name="WalletSend" getComponent={() => require('@/screens/WalletSendScreen').WalletSendScreen} options={{title: t('vault.send')}} />
+        <Stack.Screen
+          name="Payments"
+          component={PaymentsGated}
+          // Its own name for each way in: to a chosen payee, or to any address typed here.
+          options={({route}) => ({title: t(route.params?.anyone ? 'mobile.payments.send_anyone' : 'mobile.payments.send_to_payee')})}
+        />
         <Stack.Screen
           name="Payees"
-          getComponent={() => require('@/screens/SelectRecipientScreen').PayeesScreen}
+          component={PayeesGated}
           options={{title: t('vault.send')}}
         />
         {/* Pushed from the Overview's Bridge action; it was a tab of its own. */}
@@ -628,6 +659,7 @@ function Root() {
           getComponent={() => require('@/screens/SelectAssetScreen').SelectAssetScreen}
           options={{title: t('vault.select_asset')}}
         />
+        <Stack.Screen name="GuardLevel" getComponent={() => require('@/screens/GuardLevelScreen').GuardLevelScreen} options={{title: t('mobile.vault.guard_level')}} />
         <Stack.Screen name="VaultSecurity" getComponent={() => require('@/screens/SecurityScreen').SecurityScreen} options={{title: t('mobile.app.security')}} />
         <Stack.Screen name="VaultUpgrade" getComponent={() => require('@/screens/UpgradeScreen').UpgradeScreen} options={{title: t('mobile.settings.contract_upgrade')}} />
         <Stack.Screen
@@ -636,6 +668,8 @@ function Root() {
           options={({route}) => ({title: t(RISK_TITLE[route.params.field])})}
         />
         <Stack.Screen name="VaultList" getComponent={() => require('@/screens/VaultListScreen').VaultListScreen} options={{title: t('mobile.settings.choose_vault')}} />
+        <Stack.Screen name="WalletList" getComponent={() => require('@/screens/WalletListScreen').WalletListScreen} options={{title: t('mobile.account.choose_wallet')}} />
+        <Stack.Screen name="HiddenWallets" getComponent={() => require('@/screens/HiddenWalletsScreen').HiddenWalletsScreen} options={{title: t('mobile.account.hidden_wallets')}} />
         <Stack.Screen name="AddSafeVault" getComponent={() => require('@/screens/AddSafeVaultScreen').AddSafeVaultScreen} options={{title: t('mobile.safe.add_safe_title')}} />
         <Stack.Screen name="SafeVaults" getComponent={() => require('@/screens/SafeVaultsScreen').SafeVaultsScreen} options={{title: t('mobile.safemode.menu')}} />
         <Stack.Screen name="RemovedVaults" getComponent={() => require('@/screens/RemovedVaultsScreen').RemovedVaultsScreen} options={{title: t('mobile.vaults.removed_vaults')}} />
@@ -654,7 +688,7 @@ function Root() {
             ),
           })}
         />
-        <Stack.Screen name="PendingChanges" getComponent={() => require('@/screens/PendingChangesScreen').PendingChangesScreen} options={{title: t('mobile.vault.timelock_page_title')}} />
+        <Stack.Screen name="PendingChanges" getComponent={() => require('@/screens/PendingChangesScreen').PendingChangesScreen} options={{title: t('mobile.vault.guard')}} />
         <Stack.Screen name="VaultOwnership" getComponent={() => require('@/screens/OwnershipScreen').OwnershipScreen} options={{title: t('mobile.vault.ownership')}} />
         <Stack.Screen name="QuantumSafe" getComponent={() => require('@/screens/QuantumSafeScreen').QuantumSafeScreen} options={{title: t('mobile.quantum.title')}} />
         <Stack.Screen name="VaultAssetManager" getComponent={() => require('@/screens/AssetManagerScreen').AssetManagerScreen} options={{title: t('mobile.vault.delegation')}} />
