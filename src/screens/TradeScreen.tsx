@@ -34,7 +34,8 @@ import {useVaultBalances} from '@/vault/useVaultBalances';
 import {useVaultPositions} from '@/vault/useVaultPositions';
 import {positionToken} from '@/vault/position-token';
 import {susdsRate} from '@/vault/yielding';
-import {LIMIT_APP_DATA_HASHES} from '@/core/cow';
+import {LIMIT_APP_DATA_HASHES, cowSupported} from '@/core/cow';
+import {activeAccount, useWalletMode} from '@/core/account-mode';
 import {usePrices} from '@/vault/usePrices';
 import {getFlag, setFlag, getPref, setPref, SHOW_OTHER_ORDERS, LAST_PAIR} from '@/core/prefs';
 import {usdValue, fmtUsd} from '@/core/prices';
@@ -627,6 +628,12 @@ export function TradeScreen() {
   const tradeVault = useActiveVaultAddress(network);
   const allowanceMarketOff = useAllowancesOff(tradeVault, network).marketTrades;
   const vaultGate = useVaultGate();
+  /**
+   * Wallet mode (core/account-mode): the key trades in its own name (wallet/trade) — a market swap
+   * along the vault's own route, a limit order on CoW signed by the key. No vault, so none of its
+   * locks, allowances, fee float or positions apply; TWAP needs a smart account and is the vault's.
+   */
+  const walletOn = useWalletMode(network);
   // A locked vault cancels nothing (nor will the orderbook take an off-chain cancel from it): the
   // Cancel stays, dimmed, and says why and when the order runs out on its own.
   const cancelGate = capability('cancelIntentOrder', vaultGate);
@@ -828,8 +835,8 @@ export function TradeScreen() {
     });
   const lockRefuses = (g: ReturnType<typeof capability>) => !g.allowed && g.reason !== 'market_trade_off';
   const marketGate = marketGateFor(shownSide);
-  const marketLocked = lockRefuses(marketGate);
-  const marketOff = allowanceMarketOff || (lockRefuses(marketGateFor('buy')) && lockRefuses(marketGateFor('sell')));
+  const marketLocked = !walletOn && lockRefuses(marketGate);
+  const marketOff = !walletOn && (allowanceMarketOff || (lockRefuses(marketGateFor('buy')) && lockRefuses(marketGateFor('sell'))));
 
   // Order-form denomination: you always enter the PAY leg. A sell pays the base (e.g. ETH); a buy pays
   // the quote (e.g. USDC). So the Amount field + Max button sit on a DIFFERENT asset per side.
@@ -889,7 +896,22 @@ export function TradeScreen() {
     spendSymbol: spendSym,
     floorUsd: feeFloor,
   });
-  const feeReserve = reserve.keep;
+  /** In wallet mode: only the gas, and only when the chain's coin (shown as its wrapped token) is spent. */
+  const [walletGas, setWalletGas] = useState(0);
+  useEffect(() => {
+    if (!walletOn) return;
+    let live = true;
+    (require('@/wallet/earn') as typeof import('@/wallet/earn'))
+      .estimateWalletGas(network)
+      .then((g) => live && setWalletGas(g * 1.2))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [walletOn, network]);
+  const feeReserve = walletOn ? (spendSym === NATIVE[network].wrapped ? walletGas : 0) : reserve.keep;
+  // What the wallet's own swap costs in gas, in dollars, for the fee line (the estimate, without the margin kept back).
+  const walletFeeUsd = walletOn && walletGas > 0 ? usdValue(walletGas / 1.2, NATIVE[network].wrapped, prices) : null;
   /**
    * The float this order may not touch, as ONE row definition for both source sheets.
    *
@@ -1051,7 +1073,7 @@ export function TradeScreen() {
   const payTokenAddr = spendAsset?.address as Address | undefined;
   const buyTokenAddr = (paysBase ? quoteAsset : base)?.address as Address | undefined;
   useEffect(() => {
-    if (mode === 'Market' || !placeIntent || !owner || !payTokenAddr || !buyTokenAddr) {
+    if (walletOn || mode === 'Market' || !placeIntent || !owner || !payTokenAddr || !buyTokenAddr) {
       setIntentSetup(null);
       return;
     }
@@ -1189,7 +1211,9 @@ export function TradeScreen() {
 
   const refreshOrders = () => {
     if (!owner) return;
-    const vault = activeVaultAddress(network)!;
+    // The wallet's own orders and swaps in wallet mode: CoW lists any owner's.
+    const vault = (walletOn ? activeAccount(network).address : activeVaultAddress(network))!;
+    if (!vault) return;
     fetchRecentOrders(vault, network).then(setOrders).catch(() => setOrders([]));
     // Completed market swaps leave no order record — they're recovered from the vault's transfer
     // feed, which is also where a CoW fill's timestamp comes from.
@@ -1204,6 +1228,7 @@ export function TradeScreen() {
         setFillAt(new Map());
         setCancelAt(new Map());
       });
+    if (walletOn) return setTwaps(new Map());
     fetchTwapSchedules(vault, network)
       .then((rows) => setTwaps(new Map(rows.map((r) => [r.appData.toLowerCase(), r]))))
       .catch(() => setTwaps(new Map()));
@@ -1813,10 +1838,11 @@ export function TradeScreen() {
   // A locked vault fills only orders that BUY a stablecoin (the vault checks when the order fills):
   // selling the base for the quote passes, buying a non-stable base does not.
   const orderBuys = shownSide === 'buy' ? base : quoteAsset;
-  const intentGate = capability('placeIntentOrder', vaultGate, {buysStablecoin: orderBuys ? orderBuys.kind === 'stable' : undefined});
-  const lockedOrder = intentGate.allowed && (vaultGate.lockLevel === 1 || vaultGate.lockLevel === 2);
+  const vaultIntentGate = capability('placeIntentOrder', vaultGate, {buysStablecoin: orderBuys ? orderBuys.kind === 'stable' : undefined});
+  const intentGate: typeof vaultIntentGate = walletOn ? {allowed: true} : vaultIntentGate;
+  const lockedOrder = !walletOn && intentGate.allowed && (vaultGate.lockLevel === 1 || vaultGate.lockLevel === 2);
   // The lock refuses this order: a market one, or one that does not buy a stablecoin.
-  const orderLocked = mode === 'Market' ? marketLocked : !intentGate.allowed;
+  const orderLocked = walletOn ? false : mode === 'Market' ? marketLocked : !intentGate.allowed;
 
   // The same checks onSubmit makes, so the button is disabled rather than erroring on tap.
   /**
@@ -1896,6 +1922,44 @@ export function TradeScreen() {
     // the button an open sheet looked like a tap that did nothing. The badge and the orders list
     // carry it from here, and a failure raises a toast.
     setSheetSide(null);
+    if (walletOn) {
+      try {
+        const wacct = await useWallet.getState().walletSigner();
+        const wallet = activeAccount(network).address;
+        const recv = paysBase ? quoteAsset : base;
+        if (!wallet || !spendAsset || !recv) return tx.done();
+        const sellToken = spendAsset.address as Address;
+        const buyToken = recv.address as Address;
+        const amountIn = parseUnits(amount as `${number}`, spendAsset.decimals);
+        const {walletMarketSell, walletLimitOrder} = require('@/wallet/trade') as typeof import('@/wallet/trade');
+        if (mode === 'Market') {
+          const {hash} = await walletMarketSell({account: wacct, network, wallet, sellToken, buyToken, amountIn, slippageBps: slippage});
+          tx.success(hash);
+        } else if (mode === 'Limit') {
+          const recvNum = Number(receiveInput) > 0 ? Number(receiveInput) : effPrice > 0 && Number(amount) > 0 ? (paysBase ? Number(amount) * effPrice : Number(amount) / effPrice) : 0;
+          if (!(recvNum > 0)) {
+            tx.done();
+            setErr(t('mobile.trade.enter_receive'));
+            setStatus('error');
+            return;
+          }
+          const buyAmount = parseUnits(recvNum.toFixed(Math.min(recv.decimals, 8)) as `${number}`, recv.decimals);
+          await walletLimitOrder({account: wacct, network, wallet, sellToken, buyToken, sellAmount: amountIn, buyAmount, validSeconds: validSec});
+          tx.success();
+        } else {
+          throw new Error(t('mobile.account.vault_only'));
+        }
+        setStatus('done');
+        refreshOrders();
+        for (const ms of [2000, 6000]) setTimeout(refreshOrders, ms);
+      } catch (e) {
+        const msg = String((e as Error)?.message ?? e);
+        tx.error(msg);
+        setErr(msg);
+        setStatus('error');
+      }
+      return;
+    }
     try {
       const acct = await getSigner();
       const vault = activeVaultAddress(network)!;
@@ -2108,6 +2172,21 @@ export function TradeScreen() {
 
   const onCancel = async (o: CowOrder) => {
     if (!owner || !quoteAsset) return;
+    if (walletOn) {
+      setCancelling(o.uid);
+      const tx = showTx(t('mobile.actions.cancel_intent'), network);
+      try {
+        const wacct = await useWallet.getState().walletSigner();
+        await (require('@/wallet/trade') as typeof import('@/wallet/trade')).walletCancelOrders({account: wacct, network, uids: [o.uid as `0x${string}`]});
+        tx.success();
+        markCancelled([o.uid]);
+      } catch (e) {
+        tx.error(String((e as Error)?.message ?? e));
+      } finally {
+        setCancelling(null);
+      }
+      return;
+    }
     if (!intent) return showToast('error', t('mobile.trade.cannot_cancel'), t('mobile.trade.cow_unavailable'));
     setCancelling(o.uid);
     const tx = showTx(t('mobile.actions.cancel_intent'), network);
@@ -2124,6 +2203,21 @@ export function TradeScreen() {
 
   const onCancelAll = async (uids: string[]) => {
     if (!owner || !quoteAsset || uids.length === 0) return;
+    if (walletOn) {
+      setCancellingAll(true);
+      const tx = showTx(t('mobile.actions.cancel_intents', {count: uids.length}), network);
+      try {
+        const wacct = await useWallet.getState().walletSigner();
+        await (require('@/wallet/trade') as typeof import('@/wallet/trade')).walletCancelOrders({account: wacct, network, uids: uids as `0x${string}`[]});
+        tx.success();
+        markCancelled(uids);
+      } catch (e) {
+        tx.error(String((e as Error)?.message ?? e));
+      } finally {
+        setCancellingAll(false);
+      }
+      return;
+    }
     if (!intent) return showToast('error', t('mobile.trade.cannot_cancel'), t('mobile.trade.cow_unavailable'));
     setCancellingAll(true);
     const tx = showTx(t('mobile.actions.cancel_intents', {count: uids.length}), network);
@@ -2488,8 +2582,8 @@ export function TradeScreen() {
   const marketOk = marketable && !marketOff;
   // Limit goes to the intent adapter a new order may be placed on, CoW or (on an older vault, while
   // the guard still runs it) UniswapX; TWAP is a CoW order, offered only with CoW.
-  const intentable = !!placeIntent;
-  const twapable = !!cowIntent;
+  const intentable = walletOn ? cowSupported(network) : !!placeIntent;
+  const twapable = !walletOn && !!cowIntent;
   // Until the catalog has served guard categories, "not marketable" means "not known yet" — demoting
   // the default Market mode to Limit then would stick after the answer turned out to be yes.
   const ammKnown = ammLiquidKnown(network);
@@ -3882,8 +3976,10 @@ export function TradeScreen() {
               color={shownSide === 'buy' ? c.buy : c.sell}
               style={styles.submit}
               gas={feeGas}
-              fee={feeApplies}
-              free={feeFree}
+              // The wallet pays its own gas: no relay fee to quote (a limit order is a signature).
+              fee={walletOn ? mode === 'Market' && walletFeeUsd != null : feeApplies}
+              networkFeeUsd={walletOn && walletFeeUsd != null ? walletFeeUsd : undefined}
+              free={walletOn ? mode !== 'Market' : feeFree}
               locked={orderLocked}
             />
             {mode !== 'Market' && !orderLocked ? <GateHint gate={intentGate} /> : null}

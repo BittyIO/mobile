@@ -24,6 +24,7 @@ import {rpc} from './rpc';
 import {bridge} from './bridge';
 import {phrases} from './phrases';
 import {safemode} from './safemode';
+import {account} from './account';
 
 export const MOBILE_STRINGS: Record<string, MobileTable> = {
   settings,
@@ -45,4 +46,5 @@ export const MOBILE_STRINGS: Record<string, MobileTable> = {
   bridge,
   phrases,
   safemode,
+  account,
 };

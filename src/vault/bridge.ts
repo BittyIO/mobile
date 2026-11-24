@@ -273,6 +273,19 @@ export type BridgeQuote = {
   received: bigint;
   fillSeconds: number;
   data: Hex;
+  /** Across's terms as quoted: what a WALLET's own deposit into the SpokePool passes (wallet/bridge). */
+  across: AcrossTerms;
+};
+
+/** Across's quote, as the SpokePool's `deposit` takes it. */
+export type AcrossTerms = {
+  destinationChainId: bigint;
+  outputToken: Address;
+  outputAmount: bigint;
+  exclusiveRelayer: Address;
+  quoteTimestamp: number;
+  fillDeadline: number;
+  exclusivityParameter: number;
 };
 
 /** Thrown with a translation key under `mobile.bridge.` for a quote the vault would refuse. */
@@ -364,7 +377,7 @@ export async function quoteBridge(
   const least = scaleUp((deposit * BigInt(10_000 - route.maxCostBps)) / 10_000n, inDec, route.outputDecimals);
   if (outputAmount < least || outputAmount === 0n) throw new BridgeQuoteError('cost_too_high');
 
-  const across = {
+  const across: AcrossTerms = {
       destinationChainId: BigInt(CHAIN_ID[route.to]),
       outputToken: route.outputToken,
       outputAmount,
@@ -385,6 +398,7 @@ export async function quoteBridge(
     received: scaleUp(outputAmount, route.outputDecimals, inDec),
     fillSeconds: j.estimatedFillTimeSec ?? 0,
     data,
+    across,
   };
 }
 

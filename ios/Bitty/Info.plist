@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Bitty Vault</string>
+	<string>Bitty Wallet</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -61,7 +61,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Bitty uses the camera to scan address QR codes.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Unlock your Bitty Vault and approve each signature with Face ID.</string>
+	<string>Unlock your Bitty Wallet and approve each signature with Face ID.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

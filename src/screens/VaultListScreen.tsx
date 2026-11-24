@@ -313,10 +313,29 @@ export function VaultListScreen() {
    * the other chain's one put the same address on the page a second time, under another owner.
    */
   const otherChainDup = (v: VaultRef) => !!v.vault && !vaultAddressOf(v, network) && listedAt.has(v.vault.toLowerCase());
+  /**
+   * Two entries at the same address on this chain are one vault: an account's own vault, handed by
+   * "New key after signing" to one of the account's one-time keys, was also added as received — and
+   * since that key's vault is the same derived address on every chain, both rows showed everywhere,
+   * under two names. One row is kept: the one in front, else the account's own entry (it signs
+   * through the one-time key as well), else the first.
+   */
+  const keepAt = new Map<string, number>();
+  for (const v of kept.flatMap((g) => g.listed)) {
+    const at = vaultAddressOf(v, network)?.toLowerCase();
+    if (!at) continue;
+    const cur = vaults.find((x) => x.index === keepAt.get(at));
+    const better = !cur || (v.index === activeIndex) || (cur.index !== activeIndex && !!cur.vault && !v.vault);
+    if (better) keepAt.set(at, v.index);
+  }
+  const sameAddressDup = (v: VaultRef) => {
+    const at = vaultAddressOf(v, network)?.toLowerCase();
+    return !!at && keepAt.get(at) !== v.index;
+  };
   const groups = kept
     .map((g) => ({
       ...g,
-      listed: g.listed.filter((v) => !otherChainDup(v)),
+      listed: g.listed.filter((v) => !otherChainDup(v) && !sameAddressDup(v)),
       received: g.received.filter((f) => !listedAt.has(f.vault.toLowerCase()) && !removedAt.has(f.vault.toLowerCase())),
     }))
     .filter((g) => g.listed.length + g.received.length + g.waiting.length + g.incoming.length > 0);
@@ -444,6 +463,14 @@ export function VaultListScreen() {
 
   /** Put a vault this device's key owns by transfer on the list, on this chain, and choose it. */
   const onAddFound = (f: FoundVault) => {
+    // Already on the list at this address (an account's own vault, now its one-time key's): that row
+    // is the vault — choose it rather than add the same one again under another entry.
+    const listedHere = vaults.find((v) => vaultAddressOf(v, network)?.toLowerCase() === f.vault.toLowerCase());
+    if (listedHere) {
+      selectVault(listedHere.index);
+      nav.goBack();
+      return;
+    }
     const index = useVaults.getState().addReceived(f.vault, network, f.key.index, f.key.address, f.key.phrase);
     // The name it had under its old owner goes with it.
     const name = nameAt(f.vault);

@@ -10,7 +10,6 @@ import {isPayableAddress} from '@/core/asset-catalog';
 import {asShown} from '@/core/format';
 import {getLockLevel, getPendingChanges, getRiskConfig} from '@/vault/risk';
 import {cancelOwnershipTransfer, transferOwnership} from '@/vault/ownership';
-import {fetchWhitelist} from '@/vault/payments';
 import {Button, ConfirmButton} from '@/components/Button';
 import {PendingRow} from '@/components/PendingRow';
 import {QuantumInfoButton, QuantumKeys} from '@/components/QuantumHandover';
@@ -43,8 +42,6 @@ export function OwnershipScreen() {
   const [timelock, setTimelock] = useState<bigint | null>(null);
   const [pending, setPending] = useState<{address: Address; at: number} | null>(null);
   const [locked, setLocked] = useState(false);
-  /** Every payee not yet removed, lowercase: the vault refuses a handover to any of them (1.1.1). */
-  const [payees, setPayees] = useState<string[]>([]);
   const [info, setInfo] = useState(false);
   const [form, setForm] = useState(false);
   const [addr, setAddr] = useState('');
@@ -68,7 +65,6 @@ export function OwnershipScreen() {
         setPending(p && p.kind === 'newOwner' ? {address: p.address, at: Number(p.at)} : null);
       }),
       getLockLevel(vault, network).then((l) => setLocked(l !== 0)),
-      fetchWhitelist(vault, network).then((b) => setPayees(b.map((e) => e.recipientAddress.toLowerCase()))),
     ]).then(() => undefined);
   }, [vault, network]);
   useFocusEffect(useCallback(() => void load(), [load]));
@@ -90,10 +86,7 @@ export function OwnershipScreen() {
   // Not the key in charge now, not the vault itself, not a token: each would strand the vault.
   const parsed = parseAddress(network, addr);
   const lc = parsed?.toLowerCase() ?? '';
-  // Nor a payee: no payee may own the vault, so the vault refuses it until the entry is removed.
-  const isPayee = !!parsed && payees.includes(lc);
-  const valid =
-    !!parsed && isPayableAddress(addr.trim(), network) && lc !== owner?.toLowerCase() && lc !== vault?.toLowerCase() && !isPayee;
+  const valid = !!parsed && isPayableAddress(addr.trim(), network) && lc !== owner?.toLowerCase() && lc !== vault?.toLowerCase();
   const bad = addr.trim().length > 0 && !valid;
   // Once a handover has run, this key is no longer the owner and the vault would refuse it anything.
   // On quantum-safe keys the owner is one of this phrase's one-time keys, and still this phone's.
@@ -185,9 +178,7 @@ export function OwnershipScreen() {
             value={addr}
             onChangeText={setAddr}
           />
-          {bad ? (
-            <Text style={styles.err}>{t(isPayee ? 'vault.gate.err_new_owner_is_payee' : 'mobile.vault.transfer_bad_address')}</Text>
-          ) : null}
+          {bad ? <Text style={styles.err}>{t('mobile.vault.transfer_bad_address')}</Text> : null}
           <Text style={styles.warn}>{t('mobile.vault.transfer_ownership_confirm')}</Text>
           <ConfirmButton onPress={transfer} gas={relayGasFor({})} disabled={!canTransfer} />
         </View>

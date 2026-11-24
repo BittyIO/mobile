@@ -11,7 +11,7 @@ type State = {
 };
 
 /** The vault's transaction history (grouped by tx). `refresh()` re-fetches. */
-export function useVaultTransactions(vault: Address | null, network: Network): State {
+export function useVaultTransactions(vault: Address | null, network: Network, kind: 'vault' | 'wallet' = 'vault'): State {
   const [ops, setOps] = useState<Operation[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,14 +26,14 @@ export function useVaultTransactions(vault: Address | null, network: Network): S
     let live = true;
     setLoading(true);
     setError(null);
-    fetchTransactions(vault, network)
+    fetchTransactions(vault, network, kind)
       .then((o) => live && setOps(o))
       .catch((e) => live && setError(String((e as Error)?.message ?? e)))
       .finally(() => live && setLoading(false));
     return () => {
       live = false;
     };
-  }, [vault, network, nonce]);
+  }, [vault, network, kind, nonce]);
 
   return {ops, loading, error, refresh};
 }

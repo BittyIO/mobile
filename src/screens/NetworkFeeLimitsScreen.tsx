@@ -79,10 +79,16 @@ export function NetworkFeeLimitsScreen() {
 
   // Before activation the vault starts on the system defaults; nothing is writable until it exists.
   const preActivation = activated === false;
-  const current = (f: Field): number | null =>
-    preActivation ? (f === 'dailyLimit' ? STABLE_COIN_AS_GAS_MAX_DAILY : STABLE_COIN_AS_GAS_MAX_PER_OP) : cfg ? Number(cfg[f]) : null;
+  // From vault 1.1.1 (deployed as 1.2.0) there is no per-operation cap: only the daily limit is left.
+  const noPerOpCap = cfg != null && cfg.maxFeePerOp === null;
+  const fields: Field[] = noPerOpCap ? ['dailyLimit'] : FIELDS;
+  const current = (f: Field): number | null => {
+    if (preActivation && !(f === 'maxFeePerOp' && noPerOpCap)) return f === 'dailyLimit' ? STABLE_COIN_AS_GAS_MAX_DAILY : STABLE_COIN_AS_GAS_MAX_PER_OP;
+    const v = cfg ? cfg[f] : null;
+    return v == null ? null : Number(v);
+  };
   const value = (f: Field): number | null => draft[f] ?? current(f);
-  const dirty = FIELDS.some((f) => draft[f] !== undefined && draft[f] !== current(f));
+  const dirty = fields.some((f) => draft[f] !== undefined && draft[f] !== current(f));
   // A lock freezes the fee limits as it does every other setting (vault/gate).
   const gasGate = useCapability('setTokenAsGas');
   const vaultLocked = useLockLevel() > 0;
@@ -93,9 +99,9 @@ export function NetworkFeeLimitsScreen() {
 
   const save = () => {
     if (!cfg) return;
-    const maxFeePerOp = value('maxFeePerOp') ?? Number(cfg.maxFeePerOp);
+    const maxFeePerOp = noPerOpCap ? null : value('maxFeePerOp') ?? Number(cfg.maxFeePerOp);
     const dailyLimit = value('dailyLimit') ?? Number(cfg.dailyLimit);
-    const what = FIELDS.filter((f) => draft[f] !== undefined && draft[f] !== current(f))
+    const what = fields.filter((f) => draft[f] !== undefined && draft[f] !== current(f))
       .map((f) => `${t(TITLE[f])}: $${current(f)} → $${value(f)}`)
       .join('\n');
     run(
@@ -134,7 +140,7 @@ export function NetworkFeeLimitsScreen() {
   return (
     <View style={styles.fill}>
       <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
-        <View style={styles.group}>{FIELDS.map((f, i) => row(f, i === FIELDS.length - 1))}</View>
+        <View style={styles.group}>{fields.map((f, i) => row(f, i === fields.length - 1))}</View>
         <Button title={t('vault.save')} onPress={save} loading={busy === 'save'} disabled={!dirty || !ready || locked} locked={!gasGate.allowed} />
         {vaultLocked ? null : <GateHint gate={gasGate} />}
         <PickerSheet

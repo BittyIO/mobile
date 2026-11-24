@@ -67,6 +67,9 @@ export const queueSymbol = (network: Network) => NATIVE[network].symbol;
 
 /** The vault's open requests with one Lido adapter, split into still-queued and claimable. */
 export async function getLidoUnstake(vault: Address, protocol: Address, network: Network): Promise<LidoUnstake> {
+  // A wallet's own queue (core/account-mode): Lido's requests in its name, or Tron's unstakes.
+  const {isWalletAddress} = require('@/core/account-mode') as typeof import('@/core/account-mode');
+  if (isWalletAddress(vault)) return (require('@/wallet/earn') as typeof import('@/wallet/earn')).walletUnstake(vault, protocol, network);
   if (isTronNetwork(network)) return getTronUnstake(vault, protocol, network);
   const unsteth = UNSTETH_ADDRESS[network];
   if (!unsteth) return NO_UNSTAKE;
@@ -140,4 +143,19 @@ export async function fetchLidoEta(network: Network, ids: bigint[]): Promise<{st
     if (Number.isFinite(fin)) end = Math.max(end, fin / 1000);
   }
   return Number.isFinite(start) && end > start ? {start, end} : null;
+}
+
+/**
+ * How long a withdrawal requested NOW is expected to wait before it can be claimed, in seconds:
+ * Lido's own estimate for a new request (`/v2/request-time/calculate`), which moves with the queue
+ * and validator exits. Null where Lido gives none (another chain, the API down).
+ */
+export async function fetchLidoWait(network: Network): Promise<number | null> {
+  const base = WQ_API[network];
+  if (!base) return null;
+  const res = await fetch(`${base}/v2/request-time/calculate`);
+  if (!res.ok) return null;
+  const body = (await res.json()) as {requestInfo?: {finalizationIn?: number}};
+  const ms = body.requestInfo?.finalizationIn;
+  return typeof ms === 'number' && ms > 0 ? ms / 1000 : null;
 }

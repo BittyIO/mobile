@@ -23,10 +23,11 @@ const NEW_VAULT: RiskValues = {timelock: DAY, sendDailyAllowance: 0n, marketTrad
  * shown as what it will start on. An allowance of 0 that was read is real: the owner turned regular
  * sends or market trading off. A timelock never set reads 0 and means the vault's 1 day.
  */
-export function valuesInForce(r: RiskValues & {read: boolean}): RiskValues {
+export function valuesInForce(r: RiskValues & {read: boolean; open?: boolean}): RiskValues {
   if (!r.read) return {...NEW_VAULT};
   return {
-    timelock: r.timelock || NEW_VAULT.timelock,
+    // From vault 1.1.1 a timelock of 0 is the owner's (or the open start's), not an unset 1 day.
+    timelock: r.open ? r.timelock : r.timelock || NEW_VAULT.timelock,
     sendDailyAllowance: r.sendDailyAllowance,
     marketTradeDailyLossAllowance: r.marketTradeDailyLossAllowance,
   };

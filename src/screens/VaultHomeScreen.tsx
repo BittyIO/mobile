@@ -1,4 +1,4 @@
-import {isTestnet, isTronNetwork, NATIVE, NETWORK_FEATURES} from '@/core/chain';
+import {isTronNetwork, NATIVE, NETWORK_FEATURES} from '@/core/chain';
 import {acrossServes} from '@/vault/bridge';
 import {FIT} from '@/core/text-scale';
 import {useTransparentHeaderInset} from '@/components/header-inset';
@@ -14,7 +14,6 @@ import {ProtocolIcon} from '@/components/ProtocolIcon';
 import {TokenIcon} from '@/components/TokenIcon';
 import {HoldingRow, MASK} from '@/components/HoldingRow';
 import {Amount} from '@/components/Amount';
-import {ActivateBanner} from '@/components/ActivateBanner';
 import {Sheet} from '@/components/Sheet';
 import type {PieSlice} from '@/components/PortfolioPie';
 import {useNetwork} from '@/core/network-store';
@@ -32,7 +31,8 @@ import {useMarketStats, type MarketStat, type MarketStatMap} from '@/vault/useMa
 import {usdValue, fmtValue} from '@/core/prices';
 import {fmtNum, displaySymbol, shortAddress} from '@/core/format';
 import {CopyAddress} from '@/components/CopyAddress';
-import {useActiveVaultAddress} from '@/core/active-vault';
+import {useActiveAccount} from '@/core/account-mode';
+import {AccountSwitch} from '@/components/AccountSwitch';
 
 import {currentCatalog, useAssetCatalog, useCatalogSettled} from '@/core/asset-catalog';
 import {assetCategory, type AssetCategory} from '@/core/assets';
@@ -40,6 +40,7 @@ import {isAssetsList, unnamedListLabel, useFavorites, useWatchLists, watchListLa
 import {getFlag, setFlag, getPref, setPref, HIDE_BALANCES, FEE_TIP_DISMISSED, feeTipSeenKey} from '@/core/prefs';
 import {GasIcon} from '@/components/GasIcon';
 import {useHasPayees} from '@/vault/payees';
+import {useGuardLevel} from '@/vault/guard';
 import {useVaults} from '@/core/vault-store';
 import {useMultisigToSign} from '@/components/MultisigWaiting';
 import {useWatchDraft} from '@/core/watch-draft';
@@ -71,7 +72,7 @@ export function EyeIcon({off, color, size = 20}: {off: boolean; color: string; s
 }
 
 /** Payees (address book) / Bridge / Send / Receive / History (clock) / Pending (hourglass) action icons. */
-function ActionIcon({name, color, size = 22}: {name: 'payees' | 'bridge' | 'send' | 'receive' | 'history' | 'pending'; color: string; size?: number}) {
+function ActionIcon({name, color, size = 22}: {name: 'payees' | 'bridge' | 'send' | 'receive' | 'history' | 'guard'; color: string; size?: number}) {
   const c = {stroke: color, strokeWidth: 2.2, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const};
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
@@ -104,13 +105,12 @@ function ActionIcon({name, color, size = 22}: {name: 'payees' | 'bridge' | 'send
           <Path d="M17 7L7 17" {...c} />
           <Path d="M16 17H7V8" {...c} />
         </>
-      ) : name === 'pending' ? (
-        // Pending: what is waiting out the timelock (lucide hourglass, as on the web).
+      ) : name === 'guard' ? (
+        // Guard: the timelock, the two daily limits and what is waiting out the timelock (lucide
+        // shield-check, the smart wallet's own mark at the top left).
         <>
-          <Path d="M5 22h14" {...c} />
-          <Path d="M5 2h14" {...c} />
-          <Path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22" {...c} />
-          <Path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2" {...c} />
+          <Path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" {...c} />
+          <Path d="m9 12 2 2 4-4" {...c} />
         </>
       ) : (
         <>
@@ -429,7 +429,8 @@ export function VaultHomeScreen() {
   const styles = useStyles(makeStyles);
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const network = useNetwork((s) => s.network);
-  const vaultAddress = useActiveVaultAddress(network);
+  const account = useActiveAccount(network);
+  const walletOn = account.kind === 'wallet';
   const bal = useVaultBalances(network);
   // What the page shows is read where the balances were (`readAt`); what it does goes to `bal.vault`.
   const pos = useVaultPositions(bal.readAt, network);
@@ -440,6 +441,8 @@ export function VaultHomeScreen() {
   // Bumped by a pull: the badges below read again with it.
   const [badgeNonce, setBadgeNonce] = useState(0);
   const hasPayees = useHasPayees(bal.vault, network, badgeNonce);
+  // Guard level 0 (no timelock): Guard gets a red dot, as Send does with no payees.
+  const noTimelock = useGuardLevel(bal.vault, network, badgeNonce) === 0;
   // A multisig vault: requests waiting on this phone's signature, counted on Transactions.
   const activeRef = useVaults((s) => s.vaults.find((v) => v.index === s.activeIndex));
   const toSign = useMultisigToSign(activeRef, network, badgeNonce);
@@ -778,11 +781,16 @@ export function VaultHomeScreen() {
    * funded. TRX shows again the moment the vault holds any.
    */
   const hideEmptyNative = (r: Row) => isTronNetwork(network) && r.symbol === NATIVE[network].wrapped && r.total === 0;
+  /**
+   * Empty rows Assets leaves off by default: WBTC in either account, and ETH too in the smart wallet
+   * (the vault), which is funded in dollars and pays its fees from them. Held, they show as always.
+   */
+  const hideEmptyDefault = (r: Row) => r.total === 0 && (r.symbol === 'WBTC' || (!walletOn && r.symbol === 'WETH'));
   const rowsForList = (listId: string): Row[] => {
     const held = isAssetsList(listId);
     const starred = new Set(watch.lists.find((l) => l.id === listId)?.symbols ?? []);
     const visible = held
-      ? rows.filter((r) => (starred.has(r.symbol) && !hideEmptyNative(r)) || r.total > 0)
+      ? rows.filter((r) => (starred.has(r.symbol) && !hideEmptyNative(r) && !hideEmptyDefault(r)) || r.total > 0)
       : rows.filter((r) => starred.has(r.symbol));
     // A list of the user's own keeps the order they dragged it into: they chose what is on it,
     // so they choose the sequence, and it shows no balance to sort by anyway.
@@ -1020,10 +1028,10 @@ export function VaultHomeScreen() {
         </View>
       ) : null}
       {/* A Tron vault not activated yet: activation is its own step, before anything else. */}
-      <ActivateBanner onActivated={onRefresh} />
+      {/* Activation is the vault's: a wallet is an address already. */}
       <View style={styles.heroCard}>
         {/* The figure itself heads the card, no label over it: the pie beside it breaks it down,
-            the eye at the far end masks it. A testnet's figures are test money, said beside it. */}
+            the eye at the far end masks it. */}
         <View style={styles.totalHeader}>
           <View style={styles.totalRow}>
             {hidden ? (
@@ -1054,33 +1062,37 @@ export function VaultHomeScreen() {
             </Pressable>
           </View>
           <View style={styles.totalLabelRow}>
-            {isTestnet(network) ? <Text style={styles.testnet}>{t('mobile.app.testnet')}</Text> : null}
             <Pressable onPress={toggleHidden} hitSlop={10}>
               <EyeIcon off={hidden} color={c.subtext} />
             </Pressable>
           </View>
         </View>
-        {/* The vault's address on this network (T… on Tron), under the figure; tap copies it. The
-            header leaves it out on this tab so it is not shown twice. */}
-        {vaultAddress ? (
-          <View style={styles.addressRow}>
-            <CopyAddress address={vaultAddress} label={shortAddress(vaultAddress)} textStyle={styles.address} iconSize={13} />
-          </View>
-        ) : null}
+        {/* The address of the account in front on this network (T… on Tron), under the figure; tap
+            copies it. The vault / wallet switch at its other end. The only place the address is shown:
+            the header carries the vault's name alone. */}
+        <View style={styles.addressRow}>
+          {account.address ? <CopyAddress address={account.address} label={shortAddress(account.address)} textStyle={styles.address} iconSize={13} /> : <View />}
+          <AccountSwitch network={network} />
+        </View>
         <View style={styles.actions}>
           {/* Payees first: sending starts from whom to pay. Bridge after it, where the network has one
               (Across does not serve Tron). */}
           {([
-            {label: t('vault.send'), icon: 'payees', onPress: () => nav.navigate('Payees')},
+            // The wallet sends as any wallet does — to an address, no payee book (its Send page offers
+            // the vault's own address as a one-tap recipient); the vault pays from its book.
+            walletOn
+              ? {label: t('vault.send'), icon: 'send' as const, onPress: () => nav.navigate('WalletSend')}
+              : {label: t('vault.send'), icon: 'payees' as const, onPress: () => nav.navigate('Payees')},
             // Wherever Across serves the network: Tron mainnet too (USDT), not Nile, which has no SpokePool.
             ...(acrossServes(network) ? [{label: t('mobile.bridge.tab'), icon: 'bridge' as const, onPress: () => nav.navigate('Bridge')}] : []),
             {label: t('mobile.app.transactions'), icon: 'history', onPress: () => nav.navigate('Transactions')},
-            {label: t('mobile.vault.timelock_page'), icon: 'pending', onPress: () => nav.navigate('PendingChanges')},
+            // The vault's waiting changes: a wallet has none.
+            ...(walletOn ? [] : [{label: t('mobile.vault.guard'), icon: 'guard' as const, onPress: () => nav.navigate('PendingChanges')}]),
           ] as const).map((a) => (
             <Pressable key={a.icon} style={styles.action} onPress={a.onPress}>
               <View style={styles.actionCircle}>
                 <ActionIcon name={a.icon} color={c.accent} />
-                {a.icon === 'pending' && pendingCount > 0 ? (
+                {a.icon === 'guard' && pendingCount > 0 ? (
                   <View style={styles.actionBadge}>
                     <Text style={styles.actionBadgeText}>{pendingCount}</Text>
                   </View>
@@ -1093,6 +1105,7 @@ export function VaultHomeScreen() {
                 {/* No payee yet, added or on its way: a dot until there is one, since a new payee
                     takes the vault's waiting period before it can be paid freely. */}
                 {a.icon === 'payees' && hasPayees === false ? <View style={styles.actionDot} /> : null}
+                {a.icon === 'guard' && noTimelock && pendingCount === 0 ? <View style={styles.actionDot} /> : null}
               </View>
               <Text style={styles.actionLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
                 {a.label}
@@ -1231,9 +1244,8 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   totalHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
   address: {color: c.subtext, fontSize: 13},
   // Clear of the figure above it: the card's own 6 alone left the two reading as one block.
-  addressRow: {flexDirection: 'row', marginTop: 6},
+  addressRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 6},
   totalLabelRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
-  testnet: {color: c.warning, backgroundColor: c.warningSoft, fontSize: 12, fontWeight: '700', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, overflow: 'hidden'},
   totalValue: {color: c.text, fontSize: 34, fontWeight: '800'},
   totalLoading: {height: 41, justifyContent: 'center'},
   actions: {flexDirection: 'row', justifyContent: 'space-around', marginTop: 16, paddingTop: 18, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border},

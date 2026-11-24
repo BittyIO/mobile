@@ -103,6 +103,20 @@ export const VAULT_STABLE_COIN_AS_GAS_ABI = parseAbi([
 ]);
 
 /**
+ * The same entry points from vault 1.1.1 (first deployed as 1.2.0), which dropped the per-operation
+ * fee cap: `setTokenAsGas` takes the coins and the daily limit only, and `tokenAsGasConfig` returns
+ * those two. Kept apart rather than overloaded, since the name is the same and the shape is not:
+ * the old 3-value read decodes a 1.2.0 answer without failing, into a nonsense third number.
+ */
+export const VAULT_TOKEN_AS_GAS_NO_CAP_ABI = parseAbi([
+  'function setTokenAsGas(address[] assets,uint64 dailyLimit)',
+  'function disableTokenAsGas()',
+  'function tokenAsGasConfig() view returns (address[] assets,uint256 dailyLimit)',
+  'function gasWrappedAddress() view returns (address)',
+  'function gasBudgetRemaining() view returns (uint256)',
+]);
+
+/**
  * Auto-yield (v1.0.x): a per-asset default route — idle balances of `asset` are swept into `protocol`
  * by the keeper. `protocol` = zero address clears the route. `getAutoYieldings` reads them back.
  */
@@ -227,6 +241,16 @@ export const VAULT_RISK_ABI = parseAbi([
   'function foreverLock(uint256 escapeRecipientId)',
   'function wrapNative()',
   'function autoYield(address asset)',
+]);
+
+/**
+ * `pendingChanges()` from vault 1.1.1 (first deployed as 1.2.0): the per-operation fee cap's two
+ * fields are gone, and the bridge turn-on time follows the gas budget. A static struct, so the
+ * older shape cannot read it: the fields after the gas budget would shift by two.
+ */
+export const VAULT_PENDING_NO_CAP_ABI = parseAbi([
+  'struct PendingChanges { uint8 lockLevel; address newOwner; uint64 newOwnerReadyAt; address newAssetManager; uint64 newAssetManagerAt; uint32 newAssetManagerPerms; uint64 timelock; uint64 timelockAt; uint64 sendDailyAllowance; uint64 sendDailyAllowanceAt; uint64 marketTradeDailyLossAllowance; uint64 marketTradeDailyLossAllowanceAt; uint64 gasBudgetDaily; uint64 gasBudgetDailyAt; uint64 bridgeEnableAt; }',
+  'function pendingChanges() view returns (PendingChanges changes)',
 ]);
 
 /**

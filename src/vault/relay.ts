@@ -25,6 +25,7 @@ import {translate} from '@/i18n';
 import {useLanguage} from '@/core/language-store';
 import {SafeSignaturePending} from './safe';
 import {assertCanWrite, nameRevert} from './vault-abi';
+import {readPendingChanges} from './pending-changes';
 import {lendingPoolRevert} from './lending-reserve';
 import {assertVaultAccepts} from './presend';
 import {upgradeSent, withAutoUpgrades} from './auto-upgrade';
@@ -118,7 +119,7 @@ async function readForwarder(
     }
     await new Promise((r) => setTimeout(r, 1500));
   }
-  throw new Error('Vault not ready yet — it may still be deploying. Try again in a moment.');
+  throw new Error('Smart wallet not ready yet — it may still be deploying. Try again in a moment.');
 }
 
 /**
@@ -232,11 +233,6 @@ async function relayEncodedNow(given: EncodedWrite): Promise<RelayResult> {
   // Every vault write passes here, so this is where a vault on a release newer than this build is
   // stopped — before a signature is asked for.
   await assertCanWrite(vault, network);
-  // On Tron activation is its own step, from the Overview's banner (components/ActivateBanner):
-  // nothing else rides on it, so its fee is the deployment's alone. Refused before anything is signed.
-  if (isTronNetwork(network) && given.activationCalls.length > 0 && !(await isActivated(vault, network))) {
-    throw new Error(t('mobile.home.activate_first'));
-  }
   // A lock made since the screen last looked: say so before anything is signed or paid for.
   const lockLevel = await assertVaultAccepts(vault, network, given.activationCalls);
   // The vault's and its protocols' upgrades ride in front, when Auto upgrade is on. Once: a retry
@@ -325,8 +321,7 @@ async function withHandover(opts: EncodedWrite): Promise<EncodedWrite> {
   const client = publicClientFor(opts.network);
   // Asked again here, after the write queue: a write started alongside this one may have queued a
   // handover since the signer looked, and queueing a second would start the wait over.
-  const waiting = await client
-    .readContract({address: opts.vault, abi: VAULT_RISK_ABI, functionName: 'pendingChanges'})
+  const waiting = await readPendingChanges(opts.vault, opts.network)
     .then((p) => p.newOwnerReadyAt > 0n)
     .catch(() => false);
   if (waiting) return {...opts, noRotate: true};
@@ -606,34 +601,6 @@ function withCode(message: string, reason?: string, code?: string): string {
   return tail ? `${message}\n\n${tail.slice(0, 140)}` : message;
 }
 
-/**
- * Activate the vault and do nothing else: an empty `calls` batch, so the fee is the deployment's
- * alone. Goes through the same queue, payer choice and fallbacks as every write — the relayer
- * billing the vault, or the owner key paying with Pay from owner — and never rotates the key.
- * On Tron the Overview offers this on its own (components/ActivateBanner).
- */
-export async function activateVaultOnly(opts: {account: Signer; vault: Address; network: Network; stableCoin: Address}): Promise<RelayResult> {
-  if (await isActivated(opts.vault, opts.network)) throw new Error('This vault is already activated.');
-  return relayEncoded({...opts, data: '0x', activationCalls: [], noRotate: true});
-}
-
-/**
- * On Tron, the vault's plain TRX wrapped first, in the same transaction.
- *
- * On an EVM chain the vault wraps ETH the moment it arrives (its receive()), so it never holds any.
- * A plain TRX transfer on Tron runs no contract code, so TRX sent to the vault stays unwrapped, while
- * the balance counts it as WTRX (see {readVaultBalances}) and every action spends WTRX: a stake of
- * more than the WTRX actually held was refused. `wrapNative()` (open to anyone, a no-op at zero)
- * goes in front whenever there is TRX to wrap, so the TRX is the WTRX the balance already shows.
- */
-async function wrapNativeFirst(network: Network, vault: Address, datas: Hex[]): Promise<Hex[]> {
-  if (!isTronNetwork(network)) return datas;
-  const native = await publicClientFor(network)
-    .getBalance({address: vault})
-    .catch(() => 0n);
-  return native > 0n ? [encodeCall({abi: VAULT_RISK_ABI, functionName: 'wrapNative'}), ...datas] : datas;
-}
-
 /** One call, or a multicall of several. */
 const asOneCall = (datas: Hex[]): Hex =>
   datas.length === 1 ? datas[0] : encodeCall({abi: VAULT_MULTICALL_ABI, functionName: 'multicall', args: [datas]});
@@ -678,7 +645,7 @@ export async function relayVaultWrite(opts: {
    */
   upgradeVault?: boolean;
 }): Promise<RelayResult> {
-  const datas = await wrapNativeFirst(opts.network, opts.vault, [encodeCall({abi: opts.abi, functionName: opts.functionName, args: opts.args})]);
+  const datas = [encodeCall({abi: opts.abi, functionName: opts.functionName, args: opts.args})];
   return relayEncoded({
     account: opts.account,
     vault: opts.vault,
@@ -713,7 +680,7 @@ export async function relayVaultMulticall(opts: {
   /** See {relayVaultWrite}. */
   upgradeVault?: boolean;
 }): Promise<RelayResult> {
-  const datas = await wrapNativeFirst(opts.network, opts.vault, opts.calls.map(encodeCall));
+  const datas = opts.calls.map(encodeCall);
   return relayEncoded({
     account: opts.account,
     vault: opts.vault,

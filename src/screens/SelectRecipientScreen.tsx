@@ -1,4 +1,8 @@
 import {asShown} from '@/core/format';
+import {Button} from '@/components/Button';
+import {Sheet} from '@/components/Sheet';
+import {InfoIcon} from '@/components/TradeMenu';
+import {NO_LIMIT} from '@/vault/capabilities';
 import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {useTransparentHeaderInset} from '@/components/header-inset';
 import Svg, {Path} from 'react-native-svg';
@@ -95,6 +99,7 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
     if (settled > 0) setReload((n) => n + 1);
   }, [settled]);
   const [risk, setRisk] = useState<RiskConfig | null>(null);
+  const [whyOpen, setWhyOpen] = useState(false);
   useEffect(() => {
     if (vault) getRiskConfig(vault, network).then(setRisk);
   }, [vault, network]);
@@ -290,7 +295,11 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
   const waiting = book.filter(isPending);
   // Off says just that: "Off per 24 hours" would read as a limit.
   const sendsToNewOff = !!risk?.read && risk.sendDailyAllowance === 0n;
-  const allowance = !risk ? null : risk.sendDailyAllowance === 0n ? fmtAllowance(0n, t) : t('mobile.payments.max_send_daily', {value: fmtAllowance(risk.sendDailyAllowance, t)});
+  const allowance = !risk
+    ? null
+    : risk.sendDailyAllowance === 0n || risk.sendDailyAllowance === NO_LIMIT
+      ? fmtAllowance(risk.sendDailyAllowance, t)
+      : t('mobile.payments.max_send_daily', {value: fmtAllowance(risk.sendDailyAllowance, t)});
   const whitelisted = (a: string) => live.some((b) => b.recipientAddress.toLowerCase() === a.toLowerCase());
 
   /** One card of book entries, or its loading / empty state. */
@@ -424,6 +433,17 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
       <View style={styles.sectionRow}>
         <Text style={styles.sectionTitle}>{t(payees ? 'mobile.payments.send_to_payee' : 'mobile.payments.whitelisted_book')}</Text>
         {newButton(styles.sectionAdd)}
+        {/* Why a payee is worth the wait — what keeps a thief from emptying the vault — behind an ⓘ. */}
+        {payees ? (
+          <Pressable
+            onPress={() => setWhyOpen(true)}
+            hitSlop={10}
+            style={styles.sectionAdd}
+            accessibilityRole="button"
+            accessibilityLabel={t('mobile.payments.send_to_payee')}>
+            <InfoIcon color={c.accent} size={20} />
+          </Pressable>
+        ) : null}
         <Text style={styles.sectionLimit}>{t('mobile.payments.send_no_limit')}</Text>
       </View>
       {group(live, t('mobile.payments.book_empty_title'))}
@@ -433,7 +453,13 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
       {payees && risk?.read ? (() => {
         const none = !loading && book.every((b) => b.status === WHITELIST_STATUS.voided);
         const MARK = '\u0000';
-        const [before, after = ''] = t(none ? 'mobile.payments.payees_first' : 'mobile.payments.payee_wait', {time: MARK}).split(MARK);
+        // No timelock (where a 1.2.0 vault starts): a new payee is payable at once, and the blue words
+        // say "no timelock" rather than a wait of "None".
+        const instant = risk.timelock === 0n;
+        const key = instant
+          ? none ? 'mobile.payments.payees_first_instant' : 'mobile.payments.payee_instant'
+          : none ? 'mobile.payments.payees_first' : 'mobile.payments.payee_wait';
+        const [before, after = ''] = t(key, {time: MARK}).split(MARK);
         return (
           <>
           <View style={styles.firstNote}>
@@ -441,13 +467,11 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
             <Text style={styles.firstText}>
               {before}
               <Text style={styles.firstLink} onPress={() => nav.navigate('VaultRiskValue', {field: 'timelock'})} suppressHighlighting>
-                {fmtDuration(risk.timelock, t)}
+                {instant ? t('mobile.vault.no_timelock') : fmtDuration(risk.timelock, t)}
               </Text>
               {after}
             </Text>
           </View>
-          {/* With none yet, why a payee is worth the wait: it is what keeps a thief from emptying the vault. */}
-          {none ? <Text style={[styles.firstText, styles.firstWhy]}>{t('mobile.payments.payees_why')}</Text> : null}
           </>
         );
       })() : null}
@@ -468,13 +492,11 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
       {/* Overview › Payees: no address section. With send to anyone on (and the vault not locked),
           one button to pay an address that is not a payee, held to the daily allowance. */}
       {payees && risk?.read && !sendsToNewOff && !lockedSends ? (
-        <Pressable
-          style={({pressed}) => [styles.anyone, pressed && styles.pressed]}
-          onPress={() => nav.navigate('Payments', {anyone: true})}
-          accessibilityRole="button">
-          <Text style={styles.anyoneText}>{t('mobile.payments.send_anyone')}</Text>
-          {allowance ? <Text style={styles.anyoneSub}>{allowance}</Text> : null}
-        </Pressable>
+        <View style={styles.anyone}>
+          {/* The app's own button; the allowance below it only when there is one (not no limit). */}
+          <Button title={t('mobile.payments.send_anyone')} onPress={() => nav.navigate('Payments', {anyone: true})} />
+          {allowance && risk.sendDailyAllowance !== NO_LIMIT ? <Text style={styles.anyoneSub}>{allowance}</Text> : null}
+        </View>
       ) : null}
       {payees ? null : (
       <>
@@ -553,6 +575,9 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
         </>
       ) : null}
       {sheet}
+      <Sheet visible={whyOpen} title={t('mobile.payments.send_to_payee')} onClose={() => setWhyOpen(false)}>
+        <Text style={styles.whyText}>{t('mobile.payments.payees_why')}</Text>
+      </Sheet>
     </ScrollView>
   );
 }
@@ -595,6 +620,7 @@ const makeStyles = (c: Colors) =>
     headerText: {minHeight: 44, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center'},
     // The + after the Payees title: the title's line, not the header's 44.
     sectionAdd: {alignSelf: 'center', marginVertical: -4},
+    whyText: {color: c.text, fontSize: 15, lineHeight: 22, paddingHorizontal: 4, paddingBottom: 24},
     flexText: {flex: 1},
     link: {color: c.accent, fontSize: 15, fontWeight: '600'},
     addrMuted: {color: c.subtext, fontSize: 13, fontVariant: ['tabular-nums']},
@@ -603,14 +629,12 @@ const makeStyles = (c: Colors) =>
     emptyText: {color: c.subtext, fontSize: 15},
     centered: {justifyContent: 'center'},
     hidden: {opacity: 0},
-    anyone: {marginTop: 24, minHeight: 52, borderRadius: 16, backgroundColor: c.accentSoft, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, gap: 2},
-    anyoneText: {color: c.accent, fontSize: 16, fontWeight: '600'},
-    anyoneSub: {color: c.subtext, fontSize: 12},
+    anyone: {marginTop: 24, gap: 8},
+    anyoneSub: {color: c.subtext, fontSize: 13, textAlign: 'center'},
     firstNote: {flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingHorizontal: 4, paddingTop: 10},
     firstDot: {width: 8, height: 8, borderRadius: 4, backgroundColor: c.danger, marginTop: 5},
     firstText: {flex: 1, color: c.subtext, fontSize: 13, lineHeight: 18},
     firstLink: {color: c.accent, fontWeight: '600'},
-    firstWhy: {flex: 0, paddingLeft: 20, paddingRight: 4, paddingTop: 8},
     manageNotice: {marginHorizontal: 16, marginBottom: 8},
     remove: {width: 28, height: 28, borderRadius: 14, backgroundColor: c.neutralSoft, alignItems: 'center', justifyContent: 'center'},
     removeText: {color: c.subtext, fontSize: 13, fontWeight: '700'},

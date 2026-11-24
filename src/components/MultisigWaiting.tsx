@@ -42,6 +42,7 @@ const KNOWN_CALLS = parseAbi([
   'function setStableCoinAsGas(address[] stableCoins,uint64 dailyLimit,uint64 maxFeePerOp)',
   'function disableStableCoinAsGas()',
   'function setTokenAsGas(address[] assets,uint64 dailyLimit,uint64 maxFeePerOp)',
+  'function setTokenAsGas(address[] assets,uint64 dailyLimit)',
   'function disableTokenAsGas()',
   'function setAssetManager(address assetManager,uint64 expiresAt,uint32 permissions)',
   'function emergencyLock()',

@@ -1,5 +1,5 @@
 import type {Address} from 'viem';
-import type {Network} from '@/core/chain';
+import {isTronNetwork, type Network} from '@/core/chain';
 import {useNetwork} from '@/core/network-store';
 import {useVaults, type VaultRef} from '@/core/vault-store';
 import {ownerVaultAddress} from '@/vault/read';
@@ -13,7 +13,8 @@ import {ownerVaultAddress} from '@/vault/read';
  * was received on; anywhere else it is null.
  */
 export function vaultAddressOf(v: VaultRef | undefined, network: Network): Address | null {
-  if (!v) return null;
+  // Tron has no smart wallet: only the general wallet, the key's own address.
+  if (!v || isTronNetwork(network)) return null;
   if (v.vault) {
     if (v.network === network) return v.vault;
     // Added as received, but it is its own key's vault, the one the factory derives from that key

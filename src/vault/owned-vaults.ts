@@ -17,7 +17,7 @@ import {IMPORTED_SECTION, keyIndexOf, phraseOf, type VaultRef} from '@/core/vaul
 import {isKeyOf, keyPathOf, useRotationStore} from '@/wallet/rotation-store';
 import {vaultAddressOf} from '@/core/active-vault';
 import {vaultGuard} from '@/core/vault-contracts';
-import {VAULT_RISK_ABI} from '@/core/abi';
+import {readPendingChanges} from './pending-changes';
 import {predictVaultAddressOn, vaultProxyRuntimeCode} from '@/core/predict-vault';
 
 const OWNER_ABI = parseAbi(['function owner() view returns (address)']);
@@ -50,7 +50,7 @@ export async function isGenuineVaultFor(network: Network, vault: Address, key: A
       const owner = await client.readContract({address: vault, abi: OWNER_ABI, functionName: 'owner'});
       return owner.toLowerCase() === key.toLowerCase();
     }
-    const p = await client.readContract({address: vault, abi: VAULT_RISK_ABI, functionName: 'pendingChanges'});
+    const p = await readPendingChanges(vault, network);
     return p.newOwnerReadyAt > 0n && p.newOwner.toLowerCase() === key.toLowerCase();
   } catch {
     return false;

@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View} from 'react-native';
 import type {RouteProp} from '@react-navigation/native';
 import {useNavigation, useRoute} from '@react-navigation/native';
@@ -38,6 +38,9 @@ import {useT} from '@/i18n';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {activeVaultAddress} from '@/core/active-vault';
 import {useCapability} from '@/vault/gate';
+import {NATIVE} from '@/core/chain';
+import {usdValue} from '@/core/prices';
+import {usePrices} from '@/vault/usePrices';
 
 /**
  * Deposit / Withdraw. `route.params.mode` picks the action. When protocol+asset are passed (a
@@ -126,7 +129,28 @@ export function EarnActionScreen() {
    * Only ever bites on the coin the float is held in: anything else deposits in full. A withdrawal
    * is untouched — it brings the coin BACK, so there is nothing to protect.
    */
-  const reserve = resolveFeeReserve({
+  /**
+   * Wallet mode (core/account-mode): the key deposits in its own name (wallet/earn) and pays its own
+   * gas in the chain's coin, so no relay float is kept back — only that gas, and only when the coin
+   * itself (shown as its wrapped token) is what goes in.
+   */
+  const walletOn = bal.kind === 'wallet';
+  const [walletGas, setWalletGas] = useState<number | null>(null);
+  useEffect(() => {
+    setWalletGas(null);
+    if (!walletOn) return;
+    let live = true;
+    const {estimateWalletGas} = require('@/wallet/earn') as typeof import('@/wallet/earn');
+    estimateWalletGas(network)
+      .then((g: number) => live && setWalletGas(g))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [walletOn, network]);
+  const spendsCoin = targetSymbol === NATIVE[network].wrapped;
+  const walletKeep = walletOn && isDeposit && spendsCoin ? (walletGas ?? 0) * 1.2 : 0;
+  const vaultReserve = resolveFeeReserve({
     network,
     vault: bal.vault,
     heldStables: [
@@ -139,6 +163,7 @@ export function EarnActionScreen() {
     spendSymbol: isDeposit ? targetSymbol : undefined,
     floorUsd: feeFloor,
   });
+  const reserve = walletOn ? {coin: walletKeep > 0 ? targetSymbol : null, size: walletKeep, keep: walletKeep} : vaultReserve;
   const freeBal = isDeposit ? floor6(Number(balanceOfSymbol(bal.balances, targetSymbol) || 0)) : 0;
   /**
    * What there is to deposit of ONE coin: its balance, less the float if it is the coin holding it.
@@ -241,7 +266,7 @@ export function EarnActionScreen() {
     : params.max;
   // A lock pauses deposits; a withdrawal always goes through — value may always come home.
   const depositGate = useCapability('deposit');
-  const gateBlocked = isDeposit && !depositGate.allowed;
+  const gateBlocked = isDeposit && !walletOn && !depositGate.allowed;
   /**
    * The lending pool's own state, read before signing: a frozen reserve still pays out, so only a
    * deposit is refused; a paused or inactive one refuses both. Null for Sky and Lido, which have no
@@ -262,6 +287,8 @@ export function EarnActionScreen() {
     unlocked && !!owner && !!protocol && !!targetAsset && !!feeCoin && Number(amount) > 0 && status !== 'busy' && !exceedsMax(amount, max);
 
   const nav = useNavigation();
+  const nativePrices = usePrices(network, 0, useMemo(() => [NATIVE[network].wrapped], [network]));
+  const walletFeeUsd = walletOn && walletGas != null ? usdValue(walletGas, NATIVE[network].wrapped, nativePrices) : null;
   const amountCaret = useEndCaret(amount);
   const hasMax = max != null && max !== '' && Number(max) > 0;
   const over = exceedsMax(amount, max);
@@ -311,6 +338,7 @@ export function EarnActionScreen() {
   const [feeGas, setFeeGas] = useState<bigint>(modelGas);
   useEffect(() => {
     setFeeGas(modelGas);
+    if (walletOn) return;
     const vault = activeVaultAddress(network);
     if (!vault || !owner || !protocol || !targetAsset || !(Number(amount) > 0)) return;
     let raw: bigint;
@@ -354,6 +382,43 @@ export function EarnActionScreen() {
      * the badge and a toast carry the rest.
      */
     let tx: ReturnType<typeof showTx> | null = null;
+    if (walletOn) {
+      try {
+        const account = await useWallet.getState().walletSigner();
+        const wallet = bal.wallet;
+        const meta = catalog.find((a) => a.address.toLowerCase() === targetAsset.toLowerCase());
+        if (!wallet || !meta) throw new Error('No wallet');
+        tx = showTx(
+          t(isDeposit ? 'mobile.actions.deposit_amount' : 'mobile.actions.withdraw_amount', {
+            amount: `${fmtShort(Number(amount))} ${displaySymbol(targetSymbol)}`,
+          }),
+          network,
+        );
+        nav.goBack();
+        const {walletEarn} = require('@/wallet/earn') as typeof import('@/wallet/earn');
+        const category = protocolMeta(network, protocol).category;
+        const {hash} = await walletEarn({
+          account,
+          network,
+          route: {protocol, name: protocolMeta(network, protocol).name, asset: meta, kind: category === 'lending' ? 'lending' : 'staking'},
+          wallet,
+          mode: isDeposit ? 'deposit' : 'withdraw',
+          raw: parseUnits(amount, targetDecimals),
+          // The whole position: withdrawn in full, interest to the last unit included.
+          all: !isDeposit && !!params.max && Number(amount) >= Number(params.max),
+        });
+        tx.success(hash);
+        setStatus('done');
+      } catch (e) {
+        const raw = String((e as Error)?.message ?? e);
+        const pool = lendingPoolRevert(raw);
+        const msg = pool ? t(pool) : raw;
+        tx?.error(msg);
+        setErr(msg);
+        setStatus('error');
+      }
+      return;
+    }
     try {
       const acct = await getSigner();
       // Formatted, not the raw field: see the Trade screen's `payLeg`.
@@ -558,7 +623,11 @@ export function EarnActionScreen() {
             Pinned to the bottom it floated a long way from the thing it confirms, and in a short
             sheet it collided with it. */}
         {/* A lock refuses a deposit; a withdrawal still goes through. */}
-        <ConfirmButton onPress={onSubmit} disabled={!canSubmit} gas={feeGas} style={styles.submit} locked={isDeposit && !depositGate.allowed} />
+        {walletOn ? (
+          <ConfirmButton onPress={onSubmit} disabled={!canSubmit} style={styles.submit} fee={walletFeeUsd != null} networkFeeUsd={walletFeeUsd ?? undefined} />
+        ) : (
+          <ConfirmButton onPress={onSubmit} disabled={!canSubmit} gas={feeGas} style={styles.submit} locked={isDeposit && !depositGate.allowed} />
+        )}
       </ScrollView>
       {/* Inside the form sheet, like the order form's own pickers: presented from outside it, a
           sheet opens behind the one being looked at. */}

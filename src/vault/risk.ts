@@ -16,6 +16,11 @@
  *  anything outside the bounds.
  *  Each setter writes only its field (the others go in as UNCHANGED = type(uint256).max).
  *
+ *  From vault {OPEN_RISK_SINCE} (deployed as 1.2.0) a vault starts OPEN: a timelock of 0 and no
+ *  limit ({NO_LIMIT}) on either allowance, which the owner tightens by setting numbers. The timelock
+ *  is then 0 or 1 to 30 days, an allowance 0 to {MAX_DAILY_ALLOWANCE} or no limit, and a timelock
+ *  above 0 needs both allowances to be numbers (see {riskBoundsFor}).
+ *
  *  The locks, which the risk numbers exist to serve:
  *   - emergencyLock(): freeze the risk surface where it stands. Instant, reversible. For the moment
  *     the owner believes the key is in someone else's hands: money then reaches only what was
@@ -35,6 +40,8 @@ import {VAULT_RISK_ABI, WHITELIST_STATUS} from '@/core/abi';
 import {runningVaultVersion} from './vault-abi';
 import {bornVault, NEW_VAULT_DEFAULTS_VERSION, NEW_VAULT_LOSS_ALLOWANCE} from './activate';
 import {relayVaultWrite} from './relay';
+import {MAX_DAILY_ALLOWANCE, NO_LIMIT, OPEN_RISK_SINCE, versionAtLeast} from './capabilities';
+import {readPendingChanges} from './pending-changes';
 import {fetchWhitelist} from './payments';
 
 type Acct = Parameters<typeof relayVaultWrite>[0]['account'];
@@ -51,6 +58,27 @@ export const RISK_BOUNDS: Record<'timelock' | 'sendDailyAllowance' | 'marketTrad
   sendDailyAllowance: {min: 1n, max: 10_000n},
   marketTradeDailyLossAllowance: {min: 1n, max: 10_000n},
 };
+
+/** {OPEN_RISK_SINCE} as the vault's own number. */
+const OPEN_RISK_VERSION = BigInt(1_001_001);
+
+/** Whether a vault on `version` starts open and takes a 0 timelock and no-limit allowances. */
+export const isOpenRiskVersion = (version: string | null | undefined): boolean => versionAtLeast(version, OPEN_RISK_SINCE);
+
+/**
+ * What a vault on `version` accepts: {RISK_BOUNDS} before {OPEN_RISK_SINCE}; from it, a timelock
+ * of 0 as well (min 0, though 1 to 23 hours stay refused), and allowances up to
+ * {MAX_DAILY_ALLOWANCE}, with {NO_LIMIT} beside them.
+ */
+export function riskBoundsFor(version: string | null | undefined, field: RiskField): {min: bigint; max: bigint} {
+  if (!isOpenRiskVersion(version)) return RISK_BOUNDS[field];
+  return field === 'timelock' ? {min: 0n, max: RISK_BOUNDS.timelock.max} : {min: 0n, max: MAX_DAILY_ALLOWANCE};
+}
+
+/** Whether `value` is one the vault refuses for `field`, on an open release, under TimelockNeedsLimits. */
+export function needsLimits(values: Record<RiskField, bigint>): boolean {
+  return values.timelock > 0n && (values.sendDailyAllowance === NO_LIMIT || values.marketTradeDailyLossAllowance === NO_LIMIT);
+}
 
 /** The first vault release that accepts an allowance of 0 (regular sends or market trading off). */
 export const ZERO_ALLOWANCE_SINCE = '1.0.5';
@@ -71,6 +99,11 @@ export type RiskConfig = {
    * born on that release or later reads what it will start with, since nothing else can set it.
    */
   read: boolean;
+  /**
+   * The vault (or, not activated yet, the release it will be born on) is {OPEN_RISK_SINCE} or
+   * later: a timelock of 0 is real rather than unset, and an allowance may read {NO_LIMIT}.
+   */
+  open?: boolean;
   timelock: bigint; // seconds
   /** Whole USD regular sends may move per day; 0 = regular sends are off. */
   sendDailyAllowance: bigint;
@@ -103,6 +136,9 @@ async function bornRisk(vault: Address, network: Network): Promise<RiskConfig | 
     if (code && code !== '0x') return null;
     const born = await bornVault(network);
     if (!born || born.version < NEW_VAULT_DEFAULTS_VERSION) return null;
+    // From 1.1.1 a vault is born open: no timelock and no limit on either allowance.
+    if (born.version >= OPEN_RISK_VERSION)
+      return {read: true, open: true, timelock: 0n, sendDailyAllowance: NO_LIMIT, marketTradeDailyLossAllowance: NO_LIMIT, pending: {}};
     return {
       read: true,
       timelock: RISK_BOUNDS.timelock.min,
@@ -122,17 +158,18 @@ async function bornRisk(vault: Address, network: Network): Promise<RiskConfig | 
 export async function getRiskConfig(vault: Address, network: Network): Promise<RiskConfig> {
   try {
     const client = publicClientFor(network);
-    const [[timelock, sendDailyAllowance, marketTradeDailyLossAllowance], changes] = await Promise.all([
+    const [[timelock, sendDailyAllowance, marketTradeDailyLossAllowance], changes, version] = await Promise.all([
       client.readContract({address: vault, abi: VAULT_RISK_ABI, functionName: 'riskSettings'}),
       // The pending read is extra information, never a reason to show nothing.
-      client.readContract({address: vault, abi: VAULT_RISK_ABI, functionName: 'pendingChanges'}).catch(() => null),
+      readPendingChanges(vault, network).catch(() => null),
+      runningVaultVersion(vault, network).catch(() => null),
     ]);
     const pending: RiskConfig['pending'] = {};
     if (changes?.timelockAt) pending.timelock = {value: changes.timelock, at: changes.timelockAt};
     if (changes?.sendDailyAllowanceAt) pending.sendDailyAllowance = {value: changes.sendDailyAllowance, at: changes.sendDailyAllowanceAt};
     if (changes?.marketTradeDailyLossAllowanceAt)
       pending.marketTradeDailyLossAllowance = {value: changes.marketTradeDailyLossAllowance, at: changes.marketTradeDailyLossAllowanceAt};
-    return {read: true, timelock, sendDailyAllowance, marketTradeDailyLossAllowance, pending};
+    return {read: true, open: isOpenRiskVersion(version), timelock, sendDailyAllowance, marketTradeDailyLossAllowance, pending};
   } catch {
     return (await bornRisk(vault, network)) ?? zeroRisk();
   }
@@ -314,9 +351,7 @@ export type PendingChange =
  */
 export async function getPendingChanges(vault: Address, network: Network): Promise<PendingChange[]> {
   const [p, book] = await Promise.all([
-    publicClientFor(network)
-      .readContract({address: vault, abi: VAULT_RISK_ABI, functionName: 'pendingChanges'})
-      .catch(() => null),
+    readPendingChanges(vault, network).catch(() => null),
     fetchWhitelist(vault, network),
   ]);
   const out: PendingChange[] = [];
@@ -369,7 +404,7 @@ async function currentLimits(
   if (r) [out.timelock, out.sendDailyAllowance, out.marketTradeDailyLossAllowance] = r;
   if (g) {
     out.gasBudgetDaily = g.dailyLimit;
-    out.maxFeePerOp = g.maxFeePerOp;
+    if (g.maxFeePerOp != null) out.maxFeePerOp = g.maxFeePerOp;
   }
   return out;
 }

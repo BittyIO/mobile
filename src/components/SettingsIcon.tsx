@@ -19,6 +19,7 @@ export type SettingsIconName =
   | 'lockForever'
   | 'eth'
   | 'timelock'
+  | 'guard'
   | 'autoYield'
   | 'delegation'
   | 'ownership'
@@ -59,6 +60,7 @@ const TINT: Record<SettingsIconName, string> = {
   lockForever: '#FF3B30',
   eth: '#627EEA',
   timelock: '#5856D6',
+  guard: '#0E85FF',
   autoYield: '#34C759',
   delegation: '#0E85FF',
   // The key in control of the vault: its own colour, so it never reads as the asset manager.
@@ -153,6 +155,12 @@ export function SettingsIcon({name, size = 29, round = false}: {name: SettingsIc
         ) : name === 'lockForever' ? (
           // lucide Infinity: no lock at all, because there is no key that opens it — forever.
           <Path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 0 0 0-8c-2 0-4 1.33-6 4Z" {...c} />
+        ) : name === 'guard' ? (
+          // lucide shield-check: Guard, the smart wallet's theft protection — the top-left mark.
+          <>
+            <Path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" {...c} />
+            <Path d="m9 12 2 2 4-4" {...c} />
+          </>
         ) : name === 'whitelist' ? (
           // lucide BookUser: the address book.
           <>

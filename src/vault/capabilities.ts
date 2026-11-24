@@ -35,6 +35,29 @@ export const STRICT_GATES_SINCE = '1.0.6';
  */
 export const LOCKED_SALE_SINCE = '1.0.7';
 
+/**
+ * The first vault release without the per-operation fee cap: `setTokenAsGas(assets, dailyLimit)`,
+ * a two-value `tokenAsGasConfig`, and a `pendingChanges` without the cap's pair. 1.1.1 was never
+ * deployed; 1.2.0 is the first release that carries it.
+ */
+export const NO_PER_OP_CAP_SINCE = '1.1.1';
+
+/**
+ * The first vault release that starts OPEN and can be set back to it: an unset timelock reads 0 and
+ * an unset allowance reads no limit ({NO_LIMIT}), a timelock may be 0, and either allowance may be
+ * set to no limit or to anything up to {MAX_DAILY_ALLOWANCE}. With no limit, a regular send takes
+ * any asset and any amount, and trades and bridges are not priced. Above 0, a timelock needs both
+ * allowances to be numbers (TimelockNeedsLimits). Also from it, a daily loss allowance of 0 turns
+ * intent orders off, as it does market trades.
+ */
+export const OPEN_RISK_SINCE = '1.1.1';
+
+/** An allowance of no limit (the vault's `NO_LIMIT`, type(uint64).max - 1), from {OPEN_RISK_SINCE}. */
+export const NO_LIMIT = (1n << 64n) - 2n;
+
+/** The highest allowance a number may be from {OPEN_RISK_SINCE} (`MAX_DAILY_ALLOWANCE`), whole USD. */
+export const MAX_DAILY_ALLOWANCE = 1_000_000n;
+
 /** Whether `version` ("1.0.6") is `since` or later. Unknown (null) is not. */
 export function versionAtLeast(version: string | null | undefined, since: string): boolean {
   if (!version) return false;
@@ -224,8 +247,10 @@ export function capability(
       return state.marketTradeOff ? refuse('market_trade_off') : ALLOWED;
     case 'placeIntentOrder':
       // Checked when the order FILLS: a locked vault fills only orders that buy a stablecoin.
-      return level !== 0 && opts.buysStablecoin === false
-        ? refuse('stablecoin_buy_only')
+      if (level !== 0 && opts.buysStablecoin === false) return refuse('stablecoin_buy_only');
+      // From 1.1.1 a daily loss allowance of 0 turns intent orders off, as it does market trades.
+      return state.marketTradeOff && versionAtLeast(state.vaultVersion, OPEN_RISK_SINCE)
+        ? refuse('market_trade_off')
         : ALLOWED;
   }
 
@@ -347,6 +372,8 @@ export const REVERT_REASON: Record<string, string> = {
   BridgeOutputTooLow: 'err_bridge_cost',
   BridgeFeeTooHigh: 'err_bridge_cost',
   BridgeAmountZero: 'err_bridge_cost',
+  // Vault 1.1.1 (deployed as 1.2.0): a timelock above 0 with an allowance at no limit.
+  TimelockNeedsLimits: 'err_timelock_needs_limits',
 };
 
 /** The error names in REVERT_REASON with their argument types, for selector matching. */

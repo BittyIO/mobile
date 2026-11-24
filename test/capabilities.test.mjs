@@ -183,3 +183,11 @@ test("from 1.0.7 a lock leaves the manager nothing to do", () => {
   assert.equal(verdict(capability("marketTrade", mgr(0))), OK);
   assert.equal(verdict(capability("withdraw", mgr(1, "1.0.6"))), OK);
 });
+
+test("from 1.1.1 a daily loss allowance of 0 turns intent orders off too", () => {
+  const owner = (vaultVersion, extra = {}) => ({ lockLevel: 0, role: "owner", vaultVersion, ...extra });
+  assert.equal(verdict(capability("placeIntentOrder", owner("1.2.0", { marketTradeOff: true }))), "market_trade_off");
+  assert.equal(verdict(capability("placeIntentOrder", owner("1.2.0"))), OK);
+  // Before it, the loss allowance does not meter intent orders.
+  assert.equal(verdict(capability("placeIntentOrder", owner("1.1.0", { marketTradeOff: true }))), OK);
+});

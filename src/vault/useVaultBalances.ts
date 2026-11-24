@@ -3,16 +3,22 @@ import {useFocusEffect} from '@react-navigation/native';
 import {create} from 'zustand';
 import type {Address} from 'viem';
 import {isTronNetwork, type Network} from '@/core/chain';
-import {useWallet} from '@/wallet/store';
 import {catalogVersionNow, fetchCatalog, useCatalogVersion} from '@/core/asset-catalog';
 import {usePending} from '@/vault/pending';
 import {readVaultBalances, type VaultBalances} from './read';
-import {useActiveVaultAddress} from '@/core/active-vault';
+import {useActiveAccount, type AccountKind} from '@/core/account-mode';
 import {useVaults} from '@/core/vault-store';
 
 type State = {
-  /** The vault in front on this chain: the one to act on. */
+  /** Which account is in front: the vault, or the wallet (see core/account-mode). */
+  kind: AccountKind;
+  /**
+   * The vault in front on this chain: the one to act on. Null in wallet mode, so nothing that acts
+   * on a vault acts on one the page is not showing.
+   */
   vault: Address | null;
+  /** The wallet in front, in wallet mode: the address to act from. Null in vault mode. */
+  wallet: Address | null;
   /**
    * The address the balances were read at: the vault's own, or for one received on another chain
    * its address there (see `elsewhereAt`), read but never acted on. What a screen waits on.
@@ -137,8 +143,9 @@ usePending.subscribe((s) => {
  * first read resolves.
  */
 export function useVaultBalances(network: Network): State {
-  const owner = useWallet((s) => s.address);
-  const active = useActiveVaultAddress(network);
+  const account = useActiveAccount(network);
+  const wallet = account.kind === 'wallet' ? account.wallet : null;
+  const active = account.kind === 'vault' ? account.vault : null;
   /**
    * The vault in front was received on another chain, and has no vault of its own on this one. Its
    * address is still an address here, and anything sent to it is there whether or not a vault was
@@ -146,11 +153,12 @@ export function useVaultBalances(network: Network): State {
    * screen waited on one that was never made. An EVM address only: Tron's are not the same.
    */
   const elsewhereAt = useVaults((s) => {
-    if (active || isTronNetwork(network)) return null;
+    if (active || wallet || isTronNetwork(network)) return null;
     const v = s.vaults.find((x) => x.index === s.activeIndex);
     return v?.vault && v.network && v.network !== network ? v.vault : null;
   });
-  const vault = active ?? elsewhereAt;
+  // In wallet mode the wallet's own balances: the same read, at the key's address.
+  const vault = wallet ?? active ?? elsewhereAt;
   const key = vault ? keyFor(network, vault) : '';
   const entry = useStore((s) => (key ? s.byKey[key] : undefined));
   const catalogVersion = useCatalogVersion();
@@ -179,7 +187,9 @@ export function useVaultBalances(network: Network): State {
   return {
     // Only a vault of this chain's own is one to act on; the address read for one received elsewhere
     // (see `elsewhereAt`) is for its balance alone.
+    kind: account.kind,
     vault: active,
+    wallet,
     readAt: vault,
     balances: entry?.balances ?? null,
     // No vault means no request was started, so nothing is loading — the flag has to say so, or a

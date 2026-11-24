@@ -4,7 +4,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
-import {formatUnits, parseUnits, type Address, type Hex} from 'viem';
+import {formatUnits, parseUnits, zeroAddress, type Address, type Hex} from 'viem';
 import Svg, {Path} from 'react-native-svg';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
@@ -35,13 +35,17 @@ import {usePrices} from '@/vault/usePrices';
 import {worthShowing} from '@/core/prices';
 import {isQueuedStake} from '@/vault/lido';
 import {balanceOfSymbol} from '@/vault/read';
-import {relayGasFor} from '@/vault/fee-quote';
+import {quoteRelayFeeUsd, relayGasFor} from '@/vault/fee-quote';
 import {useFeeFloor} from '@/vault/useFeeFloor';
 import {feeCoinForSpend, feeWeth, reserveHeld, resolveFeeReserve, useWethFeeCoin} from '@/vault/stableCoinAsGas';
 import {gateReasonKey, useCapability} from '@/vault/gate';
 import {versionAtLeast} from '@/vault/capabilities';
 import {runningVaultVersion} from '@/vault/vault-abi';
 import {CopyButton} from '@/components/CopyButton';
+import {useActiveAccount} from '@/core/account-mode';
+import {usdValue} from '@/core/prices';
+import {bridgeFromWallet, walletBridgeCost} from '@/wallet/bridge';
+import {recordSent} from '@/wallet/sent-log';
 import {
   BRIDGE_FEE_BPS,
   BRIDGE_PROTOCOL_NAME,
@@ -89,7 +93,14 @@ export function BridgeScreen() {
   const network = useNetwork((s) => s.network);
   const setNetwork = useNetwork((s) => s.setNetwork);
   const listed = useNetworks();
-  const vault = useActiveVaultAddress(network);
+  /**
+   * Wallet mode (core/account-mode): the key bridges its own coins to its own address on the other
+   * network (wallet/bridge) — no vault, so none of its switch, release, positions or fee float.
+   */
+  const active = useActiveAccount(network);
+  const walletOn = active.kind === 'wallet';
+  const activeVault = useActiveVaultAddress(network);
+  const vault = walletOn ? null : activeVault;
   const owner = useWallet((s) => s.address);
   const getSigner = useWallet((s) => s.signer);
   const assets = useAssetCatalog(network);
@@ -317,7 +328,25 @@ export function BridgeScreen() {
    * what this operation will be billed ({useFeeFloor}). Nothing of this coin is held back when the
    * vault pays its fees in another one.
    */
-  const feeFloor = useFeeFloor(network);
+  const worstFloor = useFeeFloor(network);
+  /**
+   * What THIS bridge will be billed — a swap, plus a withdrawal per position it may draw on — with a
+   * fifth more as gas moves. The fee floor prices the worst operation there is (a swap, two
+   * withdrawals and a first setup), which on Tron's energy prices came to about $15 and held that
+   * much back from Max. Zero when the owner pays; the worst case until this quote lands.
+   */
+  const [bridgeFeeUsd, setBridgeFeeUsd] = useState<number | null>(null);
+  const movableCount = route ? movableFor(route).length : 0;
+  useEffect(() => {
+    setBridgeFeeUsd(null);
+    if (walletOn) return;
+    let live = true;
+    quoteRelayFeeUsd(network, relayGasFor({swap: 1, withdraw: movableCount})).then((v) => live && v != null && v > 0 && setBridgeFeeUsd(v * 1.2));
+    return () => {
+      live = false;
+    };
+  }, [network, walletOn, movableCount]);
+  const feeFloor = worstFloor === 0 ? 0 : bridgeFeeUsd != null ? Math.min(bridgeFeeUsd, worstFloor) : worstFloor;
   const weth = useWethFeeCoin(network, vault);
   const reserve = resolveFeeReserve({
     network,
@@ -330,18 +359,38 @@ export function BridgeScreen() {
     floorUsd: feeFloor,
   });
   const freeRaw = route ? toRaw(balanceOfSymbol(bal.balances, route.asset.symbol) || '0') : 0n;
-  const keepRaw = numRaw(reserve.keep);
+  /**
+   * What the wallet pays the chain for this bridge, in its coin: held back from Max when the coin
+   * itself is what crosses (a sixth more, as the price moves), and the fee line's figure.
+   */
+  const [walletCost, setWalletCost] = useState<bigint | null>(null);
+  useEffect(() => {
+    setWalletCost(null);
+    if (!walletOn || !route) return;
+    let live = true;
+    walletBridgeCost(network, route.native)
+      .then((c2) => live && setWalletCost(c2))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [walletOn, network, route?.native, route]);
+  const nativePrices = usePrices(network, 0, useMemo(() => [NATIVE[network].wrapped], [network]));
+  const walletFeeUsd = walletOn && walletCost != null ? usdValue(Number(formatUnits(walletCost, NATIVE[network].decimals)), NATIVE[network].wrapped, nativePrices) : null;
+  const walletKeep = walletOn && route?.native && walletCost ? walletCost + walletCost / 6n : 0n;
+  const keepRaw = walletOn ? walletKeep : numRaw(reserve.keep);
   /** What the float actually holds of the free balance: never more than there is. */
   const heldRaw = keepRaw < freeRaw ? keepRaw : freeRaw;
   /** This bridge's own fee, in the coin: what stays behind even when the reserve is taken. */
   const coinUsd = reserve.coin?.toUpperCase() === feeWeth(network) ? weth?.usd ?? 0 : 1;
-  const feeNowRaw = reserve.keep > 0 && coinUsd > 0 ? numRaw(feeFloor / coinUsd) : 0n;
+  const feeNowRaw = !walletOn && reserve.keep > 0 && coinUsd > 0 ? numRaw(feeFloor / coinUsd) : 0n;
   const posOf = (key: string) => movable.find((p) => p.protocol === key);
   /** The most each source can put in, in the coin's smallest unit. */
   const capRaw = (key: string): bigint =>
     !route ? 0n : key === 'free' ? big(freeRaw - keepRaw) : key === 'reserve' ? big(heldRaw - feeNowRaw) : toRaw(posOf(key)?.formatted ?? '0');
   /** Every source of this coin, in the order a typed amount fills them: free, the positions, the reserve last. */
-  const sourceKeys = route ? ['free', ...movable.map((p) => p.protocol as string), ...(heldRaw > 0n ? ['reserve'] : [])] : ['free'];
+  // A wallet has no float to offer as a source: what is held back of its coin is gas.
+  const sourceKeys = route ? ['free', ...movable.map((p) => p.protocol as string), ...(heldRaw > 0n && !walletOn ? ['reserve'] : [])] : ['free'];
   const sourceKey = sourceKeys.join(',');
   /** Ticked to begin with: the free balance, or the positions when the free balance is only dust. */
   const defaultOn = (): Record<string, boolean> => {
@@ -425,6 +474,8 @@ export function BridgeScreen() {
   const [recipient, setRecipient] = useState<Address | null>(null);
   useEffect(() => {
     setRecipient(null);
+    // The wallet's own address over there: the same key, the same 20 bytes (on Tron written T…).
+    if (walletOn) return setRecipient(bi && to && active.address ? active.address : null);
     if (!bi || !to || !vault || !owner) return;
     let live = true;
     bridgeRecipient(network, bi.adapter, vault, to, owner as Address)
@@ -433,7 +484,7 @@ export function BridgeScreen() {
     return () => {
       live = false;
     };
-  }, [bi, to, vault, owner, network]);
+  }, [bi, to, vault, owner, network, walletOn, active.address]);
   const [quote, setQuote] = useState<BridgeQuote | null>(null);
   const [quoteNonce, setQuoteNonce] = useState(0);
   const [quoteErr, setQuoteErr] = useState<BridgeQuoteError | null>(null);
@@ -446,7 +497,7 @@ export function BridgeScreen() {
     let live = true;
     setQuoting(true);
     const timer = setTimeout(() => {
-      quoteBridge(network, route, raw, recipient, bridgeOriginOwner(network, route.to, owner as Address))
+      quoteBridge(network, route, raw, recipient, walletOn ? zeroAddress : bridgeOriginOwner(network, route.to, owner as Address))
         .then((q) => live && setQuote(q))
         .catch((e) => live && setQuoteErr(e instanceof BridgeQuoteError ? e : new BridgeQuoteError('quote_failed')))
         .finally(() => live && setQuoting(false));
@@ -470,7 +521,34 @@ export function BridgeScreen() {
     return {coin: (other ?? stables[0])?.address, pin: !!other && other.address !== stables[0]?.address};
   };
 
+  const doBridgeWallet = async () => {
+    const from = active.address;
+    if (!bi || !route || !quote || !from) return;
+    const title = `${t('mobile.bridge.tab')} ${fmtNum(Number(amount))} ${symOf(route)} → ${label(route.to)}`;
+    const tx = showTx(title, network);
+    try {
+      const account = await useWallet.getState().walletSigner();
+      const {hash} = await bridgeFromWallet({account, network, info: bi, route, quote, wallet: from});
+      recordSent({
+        hash,
+        network,
+        from,
+        to: bi.spokePool,
+        symbol: symOf(route),
+        token: route.native ? null : route.asset.address,
+        amount: formatUnits(quote.amount, dec),
+      });
+      tx.success(hash);
+      setAmount('');
+      resetFunding();
+      bal.refresh();
+    } catch (e) {
+      tx.error(String((e as Error)?.message ?? e));
+    }
+  };
+
   const doBridge = async (upgradeVault = false) => {
+    if (walletOn) return doBridgeWallet();
     if (!bi || !route || !quote || !vault) return;
     const bill = billFor(route);
     if (!bill.coin) return;
@@ -584,11 +662,12 @@ export function BridgeScreen() {
       })
     : null;
   // Off as the vault reads now, but an upgrade rides in front: the build it lands on decides, and it has the bridge on.
-  const on = !!settings?.enabled || upgradeRides || askUpgrade || stuck;
+  const on = walletOn || !!settings?.enabled || upgradeRides || askUpgrade || stuck;
   // The daily loss limit at $0 refuses a bridge (its cost counts against the limit): say so in the
   // bridge's words, not the market trade's the shared reason is named for.
-  const lossOff = !gate.allowed && gate.reason === 'market_trade_off';
-  const blocked = gate.allowed ? null : lossOff ? 'loss_off' : t(gateReasonKey(gate)!);
+  // The vault's guard rules the vault's bridge; a wallet answers to no guard.
+  const lossOff = !walletOn && !gate.allowed && gate.reason === 'market_trade_off';
+  const blocked = walletOn || gate.allowed ? null : lossOff ? 'loss_off' : t(gateReasonKey(gate)!);
   // "Daily loss limit" in the sentence is a link to its own page in Risk settings.
   const lossOffLine = () => {
     const limit = t('mobile.vault.market_trade_loss_allowance');
@@ -629,7 +708,7 @@ export function BridgeScreen() {
             {/* Picked here or in the header's switcher: both are the app's network. */}
             <NetPill network={network} name={label(network)} onPress={() => setPicker('from')} styles={styles} />
             {/* The vault it leaves, after its network. */}
-            {vault ? <VaultAddr address={vault} styles={styles} /> : null}
+            {vault ? <VaultAddr address={vault} styles={styles} /> : walletOn && active.address ? <VaultAddr address={active.address} styles={styles} /> : null}
           </View>
           {/* Trade's field: what the ticked sources hold above it (tapped, it is Max), the amount, Max
               or clear, and the coin's pill, which opens where it comes from. */}
@@ -736,7 +815,12 @@ export function BridgeScreen() {
               </Text>
               {quote && route && quote.fee > 0n ? <Text style={styles.feeValue}>{`${fmtRaw(quote.fee)} ${symOf(route)}`}</Text> : null}
             </View>
-            <ConfirmButton onPress={confirm} disabled={!quote || over || !!blocked || stuck} gas={bridgeGas} locked={!gate.allowed && gate.reason !== 'market_trade_off'} />
+            {walletOn ? (
+              // The wallet's own gas, in its coin: the fee transfer, the approval or unwrap, the deposit.
+              <ConfirmButton onPress={confirm} disabled={!quote || over} fee={walletFeeUsd != null} networkFeeUsd={walletFeeUsd ?? undefined} />
+            ) : (
+              <ConfirmButton onPress={confirm} disabled={!quote || over || !!blocked || stuck} gas={bridgeGas} locked={!gate.allowed && gate.reason !== 'market_trade_off'} />
+            )}
           </View>
         ) : null}
       </ScrollView>

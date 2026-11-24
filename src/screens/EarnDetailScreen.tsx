@@ -31,6 +31,7 @@ import {usePending} from '@/vault/pending';
 import {
   claimLido,
   fetchLidoEta,
+  fetchLidoWait,
   getLidoUnstake,
   isQueuedStake,
   NO_UNSTAKE,
@@ -73,7 +74,10 @@ export function EarnDetailScreen() {
   const getSigner = useWallet((s) => s.signer);
   const c = useColors();
   const bal = useVaultBalances(network);
-  const pos = useVaultPositions(bal.vault, network);
+  // In wallet mode (core/account-mode) the wallet's own positions and queue; the vault's ledgers,
+  // yield fee and Auto-Yield are the vault's alone.
+  const walletOn = bal.kind === 'wallet';
+  const pos = useVaultPositions(bal.readAt, network);
   const flows = useFlows(bal.vault, network);
 
   /**
@@ -154,9 +158,9 @@ export function EarnDetailScreen() {
   // A lock pauses deposits and the auto route; withdrawing and claiming stay open.
   const depositGate = useCapability('deposit');
   const lockLevel = useLockLevel();
-  const depositLocked = lockLevel > 0 && !depositGate.allowed;
+  const depositLocked = !walletOn && lockLevel > 0 && !depositGate.allowed;
   const autoGate = useCapability('setAutoYielding');
-  const canDeposit = depositGate.allowed && free != null && Number(free) > 0;
+  const canDeposit = (walletOn || depositGate.allowed) && free != null && Number(free) > 0;
   /**
    * What the position has made: its balance now, less the principal the flow ledger says went in.
    * Null until both the position and the ledger have landed — a zero there would read as "earned
@@ -311,13 +315,33 @@ export function EarnDetailScreen() {
   const unstakeDays = tronUnstakeDays(network);
   const unstakeWait = unstakeDays === 1 ? t('mobile.earn.unstake_wait_one') : t('mobile.earn.unstake_wait', {n: unstakeDays});
   const energy = useOwnerEnergy(network, pos.positions);
+  // Lido's expected wait for a withdrawal asked for now, before anything is queued: what a withdraw
+  // commits to. Rounded to whole days (it is an estimate that moves with the queue), hours below one.
+  const [lidoWait, setLidoWait] = useState<number | null>(null);
+  useEffect(() => {
+    let live = true;
+    setLidoWait(null);
+    if (!isLido || isTronStake) return;
+    fetchLidoWait(network)
+      .then((w) => live && setLidoWait(w))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [isLido, isTronStake, network]);
+  const lidoWaitText =
+    lidoWait == null
+      ? null
+      : lidoWait >= 86_400
+        ? `~${Math.round(lidoWait / 86_400) === 1 ? t('mobile.earn.unstake_wait_one') : t('mobile.earn.unstake_wait', {n: Math.round(lidoWait / 86_400)})}`
+        : `~${leftUnit(lidoWait, t).join(' ')}`;
   const [unstake, setUnstake] = useState<LidoUnstake>(NO_UNSTAKE);
   const loadUnstake = useCallback(() => {
-    if (!isLido || !bal.vault) return;
-    getLidoUnstake(bal.vault, protocol as Address, network)
+    if (!isLido || !bal.readAt) return;
+    getLidoUnstake(bal.readAt, protocol as Address, network)
       .then(setUnstake)
       .catch(() => {});
-  }, [isLido, bal.vault, protocol, network]);
+  }, [isLido, bal.readAt, protocol, network]);
   // Again with every pull, and after a withdraw (this page is where that form returns to).
   useEffect(loadUnstake, [loadUnstake, pos.positions]);
   // Lido's estimate for what is still queued, and a clock for its ring (a minute is plenty: it is
@@ -350,6 +374,22 @@ export function EarnDetailScreen() {
     loadUnstake();
     bal.refresh();
   });
+  /** The wallet claims in its own name: Lido's finalized requests, or Tron's unlocked TRX. */
+  const claimFromWallet = async () => {
+    const tx = showTx(`${t('vault.claim')} · ${fmtEth(unstake.claimable)} ${queueSym}`, network);
+    try {
+      const account = await useWallet.getState().walletSigner();
+      const {walletClaim} = require('@/wallet/earn') as typeof import('@/wallet/earn');
+      const {hash} = await walletClaim({account, network, protocol: protocol as Address, ids: unstake.claimableIds});
+      tx.success(hash);
+      setTimeout(() => {
+        loadUnstake();
+        bal.refresh();
+      }, 6000);
+    } catch (e) {
+      tx.error(String((e as Error)?.message ?? e));
+    }
+  };
   // The queue pays back the native coin: ETH for Lido, TRX for TRON Stake.
   const fmtEth = (wei: bigint) => fmtNum(Number(formatUnits(wei, queueUnits(network))));
   const queueSym = queueSymbol(network);
@@ -447,6 +487,8 @@ export function EarnDetailScreen() {
         <View style={styles.card}>
           {/* Tron's own unstake delay on this network, before the amounts it applies to. */}
           {isTronStake ? <Row label={t('mobile.earn.unstake_wait_label')} value={unstakeWait} /> : null}
+          {/* Lido's: its own current estimate for a new withdrawal. */}
+          {!isTronStake && lidoWaitText ? <Row label={t('mobile.earn.unstake_wait_label')} value={lidoWaitText} /> : null}
           <View style={styles.row}>
             <Text style={styles.rowLabel}>{t('vault.unstaking')}</Text>
             <View style={styles.claimRight}>
@@ -475,13 +517,15 @@ export function EarnDetailScreen() {
                 <Amount v={`${fmtEth(unstake.claimable)} ${queueSym}`} size={15} color={unstake.claimable > 0n ? c.success : undefined} />
               </Text>
               <Pressable
-                style={({pressed}) => [styles.claimBtn, (!claim.ready || unstake.claimableIds.length === 0) && styles.btnFaded, pressed && styles.pressed]}
-                disabled={!claim.ready || unstake.claimableIds.length === 0}
+                style={({pressed}) => [styles.claimBtn, ((!walletOn && !claim.ready) || unstake.claimableIds.length === 0) && styles.btnFaded, pressed && styles.pressed]}
+                disabled={(!walletOn && !claim.ready) || unstake.claimableIds.length === 0}
                 hitSlop={6}
                 onPress={() =>
-                  claim.run('claim', `${t('vault.claim')} · ${fmtEth(unstake.claimable)} ${queueSym}`, (b) =>
-                    claimLido({...b, protocol: protocol as Address, ids: unstake.claimableIds}),
-                  )
+                  walletOn
+                    ? claimFromWallet()
+                    : claim.run('claim', `${t('vault.claim')} · ${fmtEth(unstake.claimable)} ${queueSym}`, (b) =>
+                        claimLido({...b, protocol: protocol as Address, ids: unstake.claimableIds}),
+                      )
                 }>
                 <Text style={styles.claimText}>{t('vault.claim')}</Text>
               </Pressable>
@@ -490,7 +534,7 @@ export function EarnDetailScreen() {
         </View>
       ) : null}
 
-      {isTronStake ? null : (
+      {isTronStake || walletOn ? null : (
       <View style={styles.card}>
         <View style={styles.autoRow}>
           <Text style={styles.autoLabel}>{autoLabel}</Text>
@@ -549,7 +593,7 @@ export function EarnDetailScreen() {
           </View>
         </Pressable>
       </View>
-      {depositLocked ? null : <GateHint gate={depositGate} />}
+      {depositLocked || walletOn ? null : <GateHint gate={depositGate} />}
       {sheet}
       {claim.sheet}
       <Sheet visible={feeInfo} title={t('mobile.trade.bitty_fee')} onClose={() => setFeeInfo(false)}>
