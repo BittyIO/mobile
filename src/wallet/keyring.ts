@@ -183,14 +183,17 @@ async function assertCanProtect(): Promise<void> {
 }
 
 /**
- * Android: a secret saved before the storage was pinned may sit in the no-auth store. Once a biometric
- * is enrolled, move it behind one. Best effort — the read already succeeded, so a failure here only
- * leaves things as they were.
+ * Android: a secret saved before the storage was pinned may sit in the no-auth store, where it reads
+ * with no prompt at all. It is never handed out from there: it is moved behind a biometric first and
+ * read back through the prompt, and only that copy is returned. With no biometric enrolled putBio
+ * throws BiometricsRequiredError; a failed move throws too; a cancelled prompt, or a copy that still
+ * comes back unprotected, is null. Either way the wallet stays locked — fail closed.
  */
-async function upgradeIfUnprotected(creds: {storage?: string; username: string; password: string}, options: Keychain.SetOptions): Promise<void> {
-  if (Platform.OS !== 'android' || creds.storage !== Keychain.STORAGE_TYPE.AES_GCM_NO_AUTH) return;
-  if (!(await Keychain.getSupportedBiometryType().catch(() => null))) return;
-  await Keychain.setGenericPassword(creds.username, creds.password, options).catch(() => false);
+async function protectThenRead(service: string, creds: {username: string; password: string}, prompt: string): Promise<string | null> {
+  await putBio(service, creds.username, creds.password);
+  const moved = await Keychain.getGenericPassword({service, authenticationPrompt: {title: prompt}}).catch(() => false as const);
+  if (!moved || moved.storage === Keychain.STORAGE_TYPE.AES_GCM_NO_AUTH || isLegacySealed(moved.password)) return null;
+  return moved.password;
 }
 
 /**
@@ -272,7 +275,8 @@ async function readSecret(prompt: string, service = SERVICE): Promise<string | n
     authenticationPrompt: {title: prompt},
   }).catch(() => false as const);
   if (creds && !isLegacySealed(creds.password)) {
-    await upgradeIfUnprotected(creds, {...SECURE, service});
+    // Read from the no-auth store: no biometric was asked for, so this copy is not the answer.
+    if (Platform.OS === 'android' && creds.storage === Keychain.STORAGE_TYPE.AES_GCM_NO_AUTH) return protectThenRead(service, creds, prompt);
     await resaveUnderCurrentSet(service, creds);
     return creds.password;
   }
@@ -287,7 +291,7 @@ async function readSecret(prompt: string, service = SERVICE): Promise<string | n
   await putBio(service, plain.username, plain.password);
   await Keychain.resetGenericPassword({service: legacyOpenService(service)}).catch(() => false);
   const moved = await Keychain.getGenericPassword({service, authenticationPrompt: {title: prompt}}).catch(() => false as const);
-  return moved ? moved.password : null;
+  return moved && moved.storage !== Keychain.STORAGE_TYPE.AES_GCM_NO_AUTH ? moved.password : null;
 }
 
 /**

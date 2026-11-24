@@ -4,7 +4,7 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import {Button} from '@/components/Button';
 import {useWallet} from '@/wallet/store';
 import {alertIfBiometricsRequired} from '@/components/biometrics-alert';
-import {deviceCompromised} from '@/core/device-security';
+import {deviceSecurityState} from '@/core/device-security';
 import {useT} from '@/i18n';
 import {useStyles, type Colors} from '@/theme';
 
@@ -26,11 +26,16 @@ export function LockScreen() {
     inFlight.current = true;
     setBusy(true);
     try {
-      if (!compromiseAck.current && (await deviceCompromised())) {
+      const state = compromiseAck.current ? 'ok' : await deviceSecurityState();
+      // Compromised, or the check could not run at all (the module missing from this build, or it
+      // failed): either way the device is not known to be safe, so the owner decides — never a silent pass.
+      if (state !== 'ok') {
         const proceed = await new Promise<boolean>((resolve) => {
           Alert.alert(
-            'This device looks compromised',
-            'Bitty detected a jailbreak or debugger. On such a device your seed phrase can be stolen when you unlock. Continue only if you trust this device.',
+            state === 'compromised' ? 'This device looks compromised' : 'Device check unavailable',
+            state === 'compromised'
+              ? 'Bitty detected a jailbreak or debugger. On such a device your seed phrase can be stolen when you unlock. Continue only if you trust this device.'
+              : 'Bitty could not check this device for a jailbreak or debugger, so that protection is off. Continue only if you trust this device.',
             [
               {text: 'Cancel', style: 'cancel', onPress: () => resolve(false)},
               {text: 'Continue anyway', style: 'destructive', onPress: () => resolve(true)},

@@ -34,14 +34,19 @@ export const deviceSecurityNativeReady = !!Native;
 
 /**
  * Whether this device looks jailbroken or a debugger/instrumentation is attached — either means the
- * OS can no longer protect the key. Returns false ("can't tell") until the native module is built in.
+ * OS can no longer protect the key. 'unavailable' when the check cannot run: the native module is
+ * missing from the build (a packaging or registration failure) or it threw. That is said out loud
+ * (see LockScreen) rather than read as "not compromised", so a broken build does not silently turn
+ * the protection off.
  */
-export async function deviceCompromised(): Promise<boolean> {
-  if (!Native) return false;
+export type DeviceSecurityState = 'ok' | 'compromised' | 'unavailable';
+
+export async function deviceSecurityState(): Promise<DeviceSecurityState> {
+  if (!Native) return 'unavailable';
   try {
-    return await Native.isCompromised();
+    return (await Native.isCompromised()) ? 'compromised' : 'ok';
   } catch {
-    return false;
+    return 'unavailable';
   }
 }
 
