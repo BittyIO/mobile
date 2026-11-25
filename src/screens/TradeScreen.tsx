@@ -626,7 +626,8 @@ export function TradeScreen() {
   const [mode, setMode] = useState<Mode>('Market');
   // Market trade slippage in 24 hours at $0: the owner turned market trading off (see `marketOk`).
   const tradeVault = useActiveVaultAddress(network);
-  const allowanceMarketOff = useAllowancesOff(tradeVault, network).marketTrades;
+  const allowances = useAllowancesOff(tradeVault, network);
+  const allowanceMarketOff = allowances.marketTrades;
   const vaultGate = useVaultGate();
   /**
    * Wallet mode (core/account-mode): the key trades in its own name (wallet/trade) — a market swap
@@ -1125,7 +1126,10 @@ export function TradeScreen() {
   // Whether BOTH legs are flagged AMM-liquid by the guard. The tokenized stocks are not: a pool may
   // exist for one, but with too little depth to price anything — CRCL's 1% pool quotes ~8% under the
   // market. So for those pairs the pool is ignored entirely, here and in the mode switch.
-  const pairAmmLiquid = isAmmLiquid(network, baseSym) && isAmmLiquid(network, quoteSym);
+  // A token with no price feed needs one only where the trade is priced: a vault with a loss limit.
+  // With no limit, or in wallet mode, the pool and the slippage bound are enough.
+  const feedless = walletOn || allowances.marketUnlimited;
+  const pairAmmLiquid = isAmmLiquid(network, baseSym, {feedless}) && isAmmLiquid(network, quoteSym, {feedless});
 
   // Live Uniswap pool price (quote per 1 base) for THIS network's pool — the price the market swap
   // executes at. Re-quoted whenever the pair or network changes.

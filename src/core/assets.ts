@@ -181,14 +181,16 @@ const ASSET_AMM_LIQUID = 4;
  * web and drifted from the guard twice. Before the catalog answers this is false; the Trade
  * screen waits for {ammLiquidKnown} before it treats that as "no".
  */
-export function isAmmLiquid(network: Network, symbolOrAddress: string): boolean {
+export function isAmmLiquid(network: Network, symbolOrAddress: string, o?: {feedless?: boolean}): boolean {
   const a = knownAssets(network).find(
     (x) => x.symbol === symbolOrAddress || x.address.toLowerCase() === symbolOrAddress.toLowerCase(),
   );
-  // The vault values a non-stable leg off the guard's price feed and reverts without one, so an
-  // asset flagged liquid with no feed is not market-tradeable either. Unknown
-  // (an older server) is not "no".
-  return a?.guardCategory != null && (a.guardCategory & ASSET_AMM_LIQUID) !== 0 && a.priced !== false;
+  // A vault with a market loss limit values each non-stable leg off the guard's price feed and
+  // reverts without one, so there an asset flagged liquid with no feed is not market-tradeable.
+  // `feedless`: the trade is not priced — a vault with no loss limit (from 1.1.1, which swaps on the
+  // slippage bound alone) or the wallet's own swap — so the pool is all it needs. Unknown (an older
+  // server) is not "no".
+  return a?.guardCategory != null && (a.guardCategory & ASSET_AMM_LIQUID) !== 0 && (o?.feedless || a.priced !== false);
 }
 
 /** Whether the catalog has delivered guard categories for this network yet. */
