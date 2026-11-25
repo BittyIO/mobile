@@ -135,11 +135,11 @@
       "err_payee_exists": "Địa chỉ này đã có trong danh sách người nhận của bạn.",
       "err_gas_budget": "Ngân sách phí mạng hôm nay đã hết.",
       "err_price_unavailable": "Nguồn giá hiện không khả dụng. Hãy thử lại sau ít phút.",
-      "err_bridge_off": "Cầu nối của ví thông minh này đang tắt hoặc vẫn chờ khóa thời gian.",
+      "err_bridge_off": "Cầu nối của ví thông minh này đang tắt hoặc vẫn chờ độ trễ bảo mật.",
       "err_bridge_route": "Không thể chuyển tài sản này qua tuyến này.",
       "err_bridge_cost": "Báo giá đã vượt mức tuyến này cho phép. Hãy lấy báo giá mới rồi thử lại.",
       "err_daily_loss": "Việc này sẽ vượt hạn mức lỗ hôm nay.",
-      "err_timelock_needs_limits": "Khóa thời gian yêu cầu cả hai hạn mức hằng ngày là số tiền, không phải không giới hạn."
+      "err_timelock_needs_limits": "Độ trễ bảo mật yêu cầu cả hai hạn mức hằng ngày là số tiền, không phải không giới hạn."
     }
   }
 }

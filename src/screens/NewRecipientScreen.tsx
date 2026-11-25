@@ -12,7 +12,15 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {Address} from 'viem';
 import type {RootStackParamList} from '@/App';
 import {isPayableAddress, isTokenAddress} from '@/core/asset-catalog';
-import {useNetwork} from '@/core/network-store';
+import {NETWORKS, networkLabel, useNetwork} from '@/core/network-store';
+import {CHAIN_ID, isTestnet, isTronNetwork, type Network} from '@/core/chain';
+import {BRIDGE_TO_SINCE, versionAtLeast} from '@/vault/capabilities';
+import {runningVaultVersion} from '@/vault/vault-abi';
+import {plannedVaultUpgrade} from '@/vault/auto-upgrade';
+import {acrossServes} from '@/vault/bridge';
+import {Sheet} from '@/components/Sheet';
+import {NetworkIcon} from '@/components/NetworkSwitcher';
+import Svg, {Circle, Path} from 'react-native-svg';
 import {useWallet} from '@/wallet/store';
 import {useActiveVaultAddress} from '@/core/active-vault';
 import {getRiskConfig, type RiskConfig} from '@/vault/risk';
@@ -23,7 +31,7 @@ import {usePayeeAdding} from '@/vault/payees';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 import {useVaultWrite} from '@/components/useVaultWrite';
-import {addWhitelisted, fetchWhitelist, type WhitelistedRecipient} from '@/vault/payments';
+import {addWhitelisted, addWhitelistedOn, fetchWhitelist, type WhitelistedRecipient} from '@/vault/payments';
 import {WHITELIST_STATUS} from '@/core/abi';
 import {GateHint, LockIcon, useLockLevel} from '@/components/LockNotice';
 import {useCapability} from '@/vault/gate';
@@ -58,6 +66,23 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
   const setName = useRecipientNames((st) => st.setName);
 
   const [draft, setDraft] = useState('');
+  /**
+   * Where the payee is paid (vault 1.2.1, managing the book only): on this network, the same
+   * address on every EVM network, or on one other network, paid there only by a bridge.
+   */
+  const [onChain, setOnChain] = useState<'here' | 'evm' | Network>('here');
+  const [chainPicker, setChainPicker] = useState(false);
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    if (manage && vault) runningVaultVersion(vault, network).then(setVersion);
+  }, [manage, vault, network]);
+  const planned = vault ? plannedVaultUpgrade(vault, network) : null;
+  const onOthers = manage && (versionAtLeast(version, BRIDGE_TO_SINCE) || (!!planned && versionAtLeast(planned, BRIDGE_TO_SINCE)));
+  const otherNets = NETWORKS.filter((n) => n !== network && acrossServes(n) && isTestnet(n) === isTestnet(network));
+  /** The network the address is written for: this one, or the other network picked. */
+  const addrNet: Network = onChain === 'here' || onChain === 'evm' ? network : onChain;
+  const chainName = (v: 'here' | 'evm' | Network) =>
+    v === 'here' ? networkLabel(network, t) : v === 'evm' ? t('mobile.payments.chain_all_evm') : networkLabel(v, t);
   const [scanning, setScanning] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
   // On by default: a vault with new-payment protection refuses an address it has never seen, and
@@ -111,8 +136,9 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
   }, [vaults, network, vault]);
   const walletName = (n: number) => t('mobile.account.wallet_n', {n});
 
-  const valid = isPayableAddress(draft, network);
-  const isToken = isTokenAddress(draft, network);
+  const isSelf = onChain !== 'here' && !!vault && parseAddress(addrNet, draft)?.toLowerCase() === vault.toLowerCase();
+  const valid = isPayableAddress(draft, addrNet) && !isSelf;
+  const isToken = isTokenAddress(draft, addrNet);
   const max = addToBook || addsOnChain
     ? t('mobile.payments.max_send_none')
     : risk
@@ -129,10 +155,15 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
   });
   const confirm = () => {
     // What was typed, as the 0x… the vault takes: on Tron the T… form is what people paste.
-    const to = parseAddress(network, draft);
+    const to = parseAddress(addrNet, draft);
     if (!to) return;
     const given = nameDraft.trim();
-    if (given) setName(network, to, given);
+    if (given) setName(addrNet, to, given);
+    if (manage && onChain !== 'here') {
+      const chain = onChain === 'evm' ? ('evm' as const) : CHAIN_ID[onChain];
+      write.run('add', `${t('vault.add')} · ${t('vault.address_book')}`, (base) => addWhitelistedOn({...base, chain, recipient: to}));
+      return;
+    }
     const listed = book.find((b) => b.recipientAddress.toLowerCase() === to.toLowerCase());
     if (manage || (addsOnChain && !listed)) {
       write.run('add', `${t('vault.add')} · ${t('vault.address_book')}`, (base) =>
@@ -194,7 +225,27 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
             value={nameDraft}
             onChangeText={setNameDraft}
           />
+          {onOthers ? (
+            <Pressable
+              style={({pressed}) => [styles.netRow, pressed && styles.pressed]}
+              onPress={() => (Keyboard.dismiss(), setChainPicker(true))}
+              accessibilityRole="button">
+              <Text style={styles.rowLabel}>{t('mobile.payments.payee_network')}</Text>
+              <Text style={styles.rowValue} numberOfLines={1}>
+                {chainName(onChain)}
+              </Text>
+              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+                <Path d="M9 6l6 6-6 6" stroke={c.subtext} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+            </Pressable>
+          ) : null}
         </View>
+        {onOthers && onChain !== 'here' ? (
+          <Text style={styles.note}>
+            {t(onChain === 'evm' ? 'mobile.payments.chain_all_evm_note' : 'mobile.payments.chain_other_note', {network: chainName(onChain)})}
+          </Text>
+        ) : null}
+        {isSelf ? <Text style={styles.warn}>{t('mobile.payments.payee_is_vault')}</Text> : null}
         {isToken ? <Text style={styles.warn}>{t('mobile.payments.token_address_warning')}</Text> : null}
         {own.length > 0 ? (
           <View style={styles.gap}>
@@ -258,11 +309,41 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
         {addsOnChain && !lockedHere ? <GateHint gate={addGate} style={styles.gap} /> : null}
       </Pressable>
       {write.sheet}
+      <Sheet visible={chainPicker} title={t('mobile.payments.payee_network')} onClose={() => setChainPicker(false)}>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          {([
+            'here',
+            // The same address on every EVM network: not from Tron, whose addresses are its own.
+            ...(isTronNetwork(network) ? [] : (['evm'] as const)),
+            ...otherNets,
+          ] as ('here' | 'evm' | Network)[]).map((v) => (
+            <Pressable
+              key={v}
+              style={({pressed}) => [styles.pickRow, pressed && styles.pressed]}
+              onPress={() => {
+                setOnChain(v);
+                setChainPicker(false);
+              }}>
+              {/* Every EVM network is no one network: a globe, not this network's mark. */}
+              {v === 'evm' ? <AllNetsIcon color={c.subtext} bg={c.neutralSoft} /> : <NetworkIcon network={v === 'here' ? network : v} size={30} />}
+              <View style={styles.pickCol}>
+                <Text style={styles.pickLabel}>{chainName(v)}</Text>
+                {v === 'here' ? <Text style={styles.pickSub}>{t('mobile.payments.chain_here_sub')}</Text> : null}
+              </View>
+              {onChain === v ? (
+                <Svg width={18} height={18} viewBox="0 0 24 24">
+                  <Path d="M20 6 9 17l-5-5" stroke={c.accent} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                </Svg>
+              ) : null}
+            </Pressable>
+          ))}
+        </ScrollView>
+      </Sheet>
       <QrScanner
         visible={scanning}
         onScan={(a) => {
           setScanning(false);
-          setDraft(displayAddress(network, a));
+          setDraft(displayAddress(addrNet, a));
         }}
         onClose={() => setScanning(false)}
       />
@@ -296,4 +377,22 @@ const makeStyles = (c: Colors) =>
     useText: {color: '#fff', fontSize: 15, fontWeight: '700'},
     useTextOff: {color: c.subtext},
     pressed: {opacity: 0.6},
+    netRow: {flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 52, paddingHorizontal: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border},
+    note: {color: c.subtext, fontSize: 12, lineHeight: 17, marginTop: 6, paddingHorizontal: 16},
+    pickRow: {flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 4},
+    pickCol: {flex: 1, minWidth: 0, gap: 2},
+    pickLabel: {color: c.text, fontSize: 16, fontWeight: '600'},
+    pickSub: {color: c.subtext, fontSize: 13},
   });
+
+/** "All EVM networks": a globe in a disc the size of a network icon. */
+function AllNetsIcon({color, bg}: {color: string; bg: string}) {
+  return (
+    <View style={{width: 30, height: 30, borderRadius: 15, backgroundColor: bg, alignItems: 'center', justifyContent: 'center'}}>
+      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+        <Circle cx={12} cy={12} r={9} stroke={color} strokeWidth={1.8} />
+        <Path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z" stroke={color} strokeWidth={1.8} strokeLinejoin="round" />
+      </Svg>
+    </View>
+  );
+}

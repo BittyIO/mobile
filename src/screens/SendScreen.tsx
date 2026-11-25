@@ -259,9 +259,22 @@ export function SendScreen({anyone = false}: {anyone?: boolean} = {}) {
   };
   /** Every coin the send pays out, so the float can sit in a coin it does not touch. */
   const spentSyms = recipient.lines.filter((l) => Number(l.amount) > 0).map((l) => l.sym);
+  /**
+   * A fee coin the vault holds in a yield or lending position, worth at least a fee: when nothing
+   * free can pay, a little of it comes out in the same transaction (vault/fee-from-position), so no
+   * reserve need be set aside from the free balance, and none is shown. Lido's is not counted: its
+   * withdrawal is a queue.
+   */
+  const feeInPosition = pos.positions.some((p) => {
+    if (isQueuedStake(p.protocolName)) return false;
+    const usd = meta(p.symbol)?.kind === 'stable' ? 1 : weth && p.symbol === feeWeth(network) ? weth.usd : 0;
+    return Number(p.formatted) * usd >= Math.max(feeFloor, 1);
+  });
   /** The reserve this coin carries, in tokens: its size when it is the reserve coin, else 0. */
   const reserveSize = (sym: string): number =>
-    resolveFeeReserve({
+    feeInPosition
+      ? 0
+      : resolveFeeReserve({
       network,
       vault: bal.vault,
       heldStables: [

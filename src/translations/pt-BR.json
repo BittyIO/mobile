@@ -139,7 +139,7 @@
       "err_bridge_route": "Este ativo não pode passar por esta rota.",
       "err_bridge_cost": "A cotação passou do que esta rota permite. Peça uma nova cotação e tente de novo.",
       "err_daily_loss": "Isso passaria do limite de perda de hoje.",
-      "err_timelock_needs_limits": "Um timelock exige que os dois limites diários sejam valores, não sem limite."
+      "err_timelock_needs_limits": "Um atraso de segurança exige que os dois limites diários sejam valores, não sem limite."
     }
   }
 }

@@ -20,6 +20,7 @@ import {displayAddress} from '@/core/address';
 import {formatNative, OwnerGasShort, ownerEthBalance, sendFromOwner} from './direct';
 import {feePayerFor, type FeePayer} from '@/core/fee-payer-store';
 import {feeCoinOrder} from '@/core/prefs';
+import {withFeeFromPosition} from './fee-from-position';
 import {knownAssets} from '@/core/assets';
 import {translate} from '@/i18n';
 import {useLanguage} from '@/core/language-store';
@@ -161,7 +162,12 @@ type EncodedWrite = {
  * The vault refused to pay the relayer — no fee coin it can charge, its budget spent, relaying off.
  * Nothing was sent. The one class of relay failure the owner's own ETH can get past.
  */
-export class VaultFeeRefused extends Error {}
+export class VaultFeeRefused extends Error {
+  /** The relayer's reason, when it was the relayer that refused. */
+  constructor(message: string, readonly reason?: string) {
+    super(message);
+  }
+}
 
 /** The vault cannot pay because gas is over its per-operation cap (see activate's {ActivationFeeTooHigh}). */
 class GasTooHigh extends VaultFeeRefused {}
@@ -264,7 +270,20 @@ async function relayEncodedNow(given: EncodedWrite): Promise<RelayResult> {
   }
   try {
     return await viaRelayer(opts);
-  } catch (e) {
+  } catch (first) {
+    let e = first;
+    // No fee coin free, but one in a yield route or lent out: a little of it comes out in front of
+    // the operation, in the same transaction, and pays the fee. See vault/fee-from-position.
+    if (e instanceof VaultFeeRefused && e.reason === 'insufficient-liquid-balance') {
+      const funded = await withFeeFromPosition({vault, network, from: account.address, data: opts.data}).catch(() => null);
+      if (funded) {
+        try {
+          return await viaRelayer({...opts, data: funded.data, stableCoin: funded.feeCoin, pinFee: true});
+        } catch (again) {
+          e = again;
+        }
+      }
+    }
     if (
       !asked &&
       !rotating &&
@@ -472,7 +491,7 @@ export async function submitForwardRequest(o: {
   if (res.ok && !json) return recoverLostRelay(o.network, o.request, sentAt);
   if (json?.reason === 'simulation-failed') json.code = (await innerRevert(o.network, o.request)) ?? json.code;
   const message = relayError(json, res.status);
-  throw FEE_REFUSALS.has(json?.reason ?? '') ? new VaultFeeRefused(message) : new Error(message);
+  throw FEE_REFUSALS.has(json?.reason ?? '') ? new VaultFeeRefused(message, json?.reason) : new Error(message);
 }
 
 /**

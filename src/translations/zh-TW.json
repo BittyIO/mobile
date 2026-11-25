@@ -1473,11 +1473,11 @@
       "err_payee_exists": "此地址已經是你的收款人。",
       "err_gas_budget": "今日的網路費用預算已用完。",
       "err_price_unavailable": "價格資料暫時無法取得，請稍後重試。",
-      "err_bridge_off": "此智慧錢包的跨鏈未開啟，或仍在等待時間鎖。",
+      "err_bridge_off": "此智慧錢包的跨鏈未開啟，或仍在等待安全延遲。",
       "err_bridge_route": "此資產無法透過這條路線跨鏈。",
       "err_bridge_cost": "跨鏈報價超出了此路線允許的範圍。請重新取得報價後再試。",
       "err_daily_loss": "這會超出今天的損失額度。",
-      "err_timelock_needs_limits": "設定時間鎖需要兩個每日限額都是金額，不能是無限制。"
+      "err_timelock_needs_limits": "設定安全延遲需要兩個每日限額都是金額，不能是無限制。"
     }
   },
   "matrica": {

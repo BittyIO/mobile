@@ -38,7 +38,15 @@ export function bridgeFeeRecipient(network: Network, adapter: Address): Promise<
 const wrappedOf = (network: Network) => knownAssets(network).find((a) => a.symbol === NATIVE[network].wrapped);
 
 /** Every transaction the wallet sends for this bridge, in order. */
-export async function walletBridgeCalls(o: {network: Network; info: BridgeInfo; route: BridgeRoute; quote: BridgeQuote; wallet: Address}): Promise<WalletCall[]> {
+export async function walletBridgeCalls(o: {
+  network: Network;
+  info: BridgeInfo;
+  route: BridgeRoute;
+  quote: BridgeQuote;
+  wallet: Address;
+  /** Who is paid on the other side: the wallet's own address there unless another is named. */
+  recipient?: Address;
+}): Promise<WalletCall[]> {
   const {network, info, route, quote, wallet} = o;
   const deposit = quote.amount - quote.fee;
   const feeTo = await bridgeFeeRecipient(network, info.adapter);
@@ -63,7 +71,7 @@ export async function walletBridgeCalls(o: {network: Network; info: BridgeInfo; 
       functionName: 'deposit',
       args: [
         b32(wallet),
-        b32(wallet),
+        b32(o.recipient ?? wallet),
         b32(route.inputToken),
         b32(a.outputToken),
         deposit,
@@ -81,7 +89,15 @@ export async function walletBridgeCalls(o: {network: Network; info: BridgeInfo; 
 }
 
 /** Bridge from the wallet: every step, in order. Resolves with the deposit's hash. */
-export async function bridgeFromWallet(o: {account: Signer; network: Network; info: BridgeInfo; route: BridgeRoute; quote: BridgeQuote; wallet: Address}): Promise<{hash: Hex}> {
+export async function bridgeFromWallet(o: {
+  account: Signer;
+  network: Network;
+  info: BridgeInfo;
+  route: BridgeRoute;
+  quote: BridgeQuote;
+  wallet: Address;
+  recipient?: Address;
+}): Promise<{hash: Hex}> {
   const calls = await walletBridgeCalls(o);
   return sendWalletCalls({account: o.account, network: o.network, calls});
 }

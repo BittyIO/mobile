@@ -1449,11 +1449,11 @@
       "err_payee_exists": "This address is already one of your payees.",
       "err_gas_budget": "Today's network fee budget is used up.",
       "err_price_unavailable": "A price feed isn't available right now. Try again shortly.",
-      "err_bridge_off": "The bridge is off for this smart wallet, or still waiting out its timelock.",
+      "err_bridge_off": "The bridge is off for this smart wallet, or still waiting out its security delay.",
       "err_bridge_route": "This asset can't be bridged on this route.",
       "err_bridge_cost": "The bridge quote moved past what this route allows. Get a new quote and try again.",
       "err_daily_loss": "This would go over your daily loss limit.",
-      "err_timelock_needs_limits": "A timelock needs both daily limits to be amounts, not no limit."
+      "err_timelock_needs_limits": "A security delay needs both daily limits to be amounts, not no limit."
     }
   },
   "matrica": {

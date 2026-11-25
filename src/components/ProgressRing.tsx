@@ -20,6 +20,11 @@ export function leftUnit(left: number, t: T): [number, string] {
  * seconds alone in the last minute. One unit alone jumped from "1 hours" straight to "59 min".
  */
 export function leftUnits(left: number, t: T): [number, string][] {
+  // A zero second unit says nothing: a 1-day wait is "1d", not "1d 0h".
+  return twoUnits(left, t).filter(([n], i) => i === 0 || n > 0);
+}
+
+function twoUnits(left: number, t: T): [number, string][] {
   const s = Math.max(0, Math.floor(left));
   if (s >= 86_400) return [[Math.floor(s / 86_400), t('mobile.vault.unit_d')], [Math.floor((s % 86_400) / 3600), t('mobile.vault.unit_h')]];
   if (s >= 3600) return [[Math.floor(s / 3600), t('mobile.vault.unit_h')], [Math.floor((s % 3600) / 60), t('mobile.vault.unit_m')]];
@@ -40,14 +45,15 @@ export function waitDone(at: number, now: number, length: number): number {
  * `calm` keeps it blue to the end: for an ESTIMATE (Lido's queue), where nothing shuts and red
  * would claim a deadline there is not.
  */
-export function ProgressRing({done, left, size = 56, calm = false}: {done: number; left: number; size?: number; calm?: boolean}) {
+export function ProgressRing({done, left, size = 56, calm = false, tint}: {done: number; left: number; size?: number; calm?: boolean; tint?: string}) {
   const {t} = useT();
   const c = useColors();
   const styles = useStyles(makeStyles);
   const stroke = size >= 40 ? 5 : 2.5;
   const r = (size - stroke) / 2;
   const len = 2 * Math.PI * r;
-  const color = done >= 0.9 && !calm ? c.danger : c.accent;
+  // `tint` overrides both: a finished wait in the history is the success colour, never a deadline.
+  const color = tint ?? (done >= 0.9 && !calm ? c.danger : c.accent);
   const parts = leftUnits(left, t);
   return (
     <View style={[styles.ring, {width: size, height: size}]}>

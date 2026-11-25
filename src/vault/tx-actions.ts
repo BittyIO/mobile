@@ -174,6 +174,7 @@ const ACTION_CATEGORY: Record<string, ActionCategory> = {
   removeScheduledPayments: 'send',
   payScheduled: 'send',
   addWhitelistedRecipient: 'send',
+  addWhitelistedRecipientOn: 'send',
   removeWhitelistedRecipients: 'send',
   proposeSend: 'send',
   approveSend: 'send',
@@ -550,6 +551,16 @@ export function describeActions(
         out.push(k('bridge', {network: to ? NETWORK_LABEL[to] : '?'}));
         break;
       }
+      // Vault 1.2.1: to someone else's address, or to a payee, on another network.
+      case 'bridgeTo':
+      case 'bridgeToWhitelistedRecipient': {
+        const chainId = Number(g.destinationChainId);
+        const to = (Object.keys(CHAIN_ID) as Network[]).find((n) => CHAIN_ID[n] === chainId) ?? bridgeDestination(g);
+        out.push(k('bridge', {network: to ? NETWORK_LABEL[to] : '?'}));
+        if (a.name === 'bridgeTo') out.push(addr(`0x${String(g.recipient ?? '').slice(-40)}`));
+        else out.push(k('recipient_id', {id: String(g.id)}));
+        break;
+      }
       case 'setBridgeEnabled':
         out.push(k(String(g.enabled) === 'true' ? 'bridge_on' : 'bridge_off'));
         break;
@@ -569,6 +580,9 @@ export function describeActions(
       case 'sendAndAddWhitelistedRecipient':
       case 'batchSendAndAddWhitelistedRecipient':
         out.push(k('recipient_added'), addr(String(g.recipient)));
+        break;
+      case 'addWhitelistedRecipientOn':
+        out.push(k('recipient_added'), addr(`0x${String(g.recipient ?? '').slice(-40)}`));
         break;
       case 'removeWhitelistedRecipients':
         out.push(k('recipient_removed'), ...list(g.ids).map((id) => k('recipient_id', {id})));

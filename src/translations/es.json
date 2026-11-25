@@ -1473,11 +1473,11 @@
       "err_payee_exists": "Esta dirección ya es uno de tus beneficiarios.",
       "err_gas_budget": "Se agotó el presupuesto de comisiones de red de hoy.",
       "err_price_unavailable": "Un feed de precios no está disponible ahora. Inténtalo de nuevo en breve.",
-      "err_bridge_off": "El puente está desactivado en esta billetera inteligente o aún espera su bloqueo temporal.",
+      "err_bridge_off": "El puente está desactivado en esta billetera inteligente o aún espera su retraso de seguridad.",
       "err_bridge_route": "Este activo no puede pasar por esta ruta.",
       "err_bridge_cost": "La cotización superó lo que permite esta ruta. Pide una nueva y vuelve a intentarlo.",
       "err_daily_loss": "Esto superaría el límite de pérdida de hoy.",
-      "err_timelock_needs_limits": "Un bloqueo temporal requiere que ambos límites diarios sean importes, no sin límite."
+      "err_timelock_needs_limits": "Un retraso de seguridad requiere que ambos límites diarios sean importes, no sin límite."
     }
   },
   "matrica": {

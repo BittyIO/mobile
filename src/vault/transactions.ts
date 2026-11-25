@@ -125,6 +125,29 @@ export async function fetchTransactions(
     order.push(a.txHash);
     have.add(a.txHash.toLowerCase());
   }
+  /**
+   * The same for a bridge out: the vault's Across deposit, drawn from Across's record until the
+   * server has indexed the transaction (minutes behind on BNB Chain), so a bridge just sent shows
+   * at once. What crossed, as Across has it (Bitty's fee already off); the server's row replaces it.
+   */
+  for (const d of arrivals.departureRows) {
+    const asset = listed.get(d.token.toLowerCase());
+    if (!asset || have.has(bridgeTxKey(d.txHash))) continue;
+    const leg: TransferRow = {
+      txHash: d.txHash,
+      direction: 'out',
+      counterparty: d.recipient,
+      amount: formatUnits(BigInt(d.amount), asset.decimals),
+      assetSymbol: asset.symbol,
+      assetAddress: asset.address,
+      category: 'erc20',
+      blockNum: d.blockNum,
+      timestamp: d.timestamp,
+    };
+    map.set(d.txHash, {txHash: d.txHash, timestamp: d.timestamp, blockNum: d.blockNum, legs: [leg], actions: []});
+    order.push(d.txHash);
+    have.add(bridgeTxKey(d.txHash));
+  }
   // Across's deliveries into the vault are named as bridges, not as payments received.
   for (const op of map.values()) {
     op.bridgedFrom = arrivals.arrivals.get(bridgeTxKey(op.txHash));

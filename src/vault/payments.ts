@@ -5,7 +5,7 @@
  * Scheduled payments and the operator-proposed-send flow are GONE: the vault redesign removed both
  * from the contract, so the functions that drove those screens went with the screens.
  */
-import {maxUint256, parseUnits, type Address, type Hex} from 'viem';
+import {decodeAbiParameters, encodeFunctionData, maxUint256, pad, parseAbi, parseUnits, type Address, type Hex} from 'viem';
 import type {Signer} from '@/wallet/signer';
 import {apiFetch, apiUrl, publicClientFor, type Network} from '@/core/chain';
 import {VAULT_PAYMENTS_ABI, VAULT_RISK_ABI, WHITELIST_STATUS} from '@/core/abi';
@@ -130,6 +130,9 @@ export async function sendWithWhitelist(o: {
 
 // ---- Whitelist / address book ----
 
+/** Vault 1.2.1: a payee on another network, or on every EVM network. */
+const VAULT_PAYEE_ON_ABI = parseAbi(['function addWhitelistedRecipientOn(uint256 chainId, bytes32 recipient) returns (uint256 id)']);
+
 /**
  * An address-book entry. It is read from the vault itself and carries what the contract says about
  * it: its `status` (WHITELIST_STATUS), when it becomes payable, and when a queued removal lands (unix
@@ -138,11 +141,30 @@ export async function sendWithWhitelist(o: {
  */
 export type WhitelistedRecipient = {
   id: string;
+  /** The address as 20 bytes (for a Tron entry, its 0x form; see {chain}). */
   recipientAddress: string;
   status?: number;
   effectiveAt?: number;
   removeAt?: number;
+  /**
+   * Where the entry is paid (vault 1.2.1, `addWhitelistedRecipientOn`): 'here' on this chain only,
+   * 'evm' the same address on this chain and on every EVM chain a bridge reaches, or another chain's
+   * id, paid only by a bridge there. Every entry before 1.2.1 is 'here'.
+   */
+  chain: PayeeChain;
 };
+
+/** See {WhitelistedRecipient.chain}. */
+export type PayeeChain = 'here' | 'evm' | number;
+
+/** The vault's `ANY_EVM_CHAIN`: an entry on every EVM chain. */
+export const ANY_EVM_CHAIN = maxUint256;
+
+/** Whether a send on this chain may pay the entry (one here, or on every EVM chain). */
+export const paidHere = (b: WhitelistedRecipient): boolean => b.chain === 'here' || b.chain === 'evm';
+
+/** The 32 bytes the vault takes for an address on another chain: the 20-byte address left-padded. */
+export const recipientB32 = (a: Address): Hex => pad(a, {size: 32});
 
 /** The call that writes `recipient` into the book. */
 function addRecipientCall(recipient: Address): VaultCall {
@@ -167,6 +189,35 @@ export async function addWhitelisted(o: {
     abi: call.abi,
     functionName: call.functionName,
     args: call.args,
+    stableCoin: o.stableCoin,
+    pinFee: o.pinFee,
+  });
+  return hash;
+}
+
+/**
+ * Add a payee on another network, or on every EVM network (vault 1.2.1). An entry on one other
+ * network is paid only by a bridge there; one on every EVM network is paid here as any entry, and
+ * by a bridge to any EVM network. The same wait and lock rules as one here.
+ */
+export async function addWhitelistedOn(o: {
+  account: Signer;
+  vault: Address;
+  network: Network;
+  /** 'evm' for every EVM network, or the other network's chain id. */
+  chain: 'evm' | number;
+  /** Its address there, as 20 bytes (a Tron address in its 0x form). */
+  recipient: Address;
+  stableCoin: Address;
+  pinFee?: boolean;
+}): Promise<Hex> {
+  const {hash} = await relayVaultWrite({
+    account: o.account,
+    vault: o.vault,
+    network: o.network,
+    abi: VAULT_PAYEE_ON_ABI,
+    functionName: 'addWhitelistedRecipientOn',
+    args: [o.chain === 'evm' ? ANY_EVM_CHAIN : BigInt(o.chain), recipientB32(o.recipient)],
     stableCoin: o.stableCoin,
     pinFee: o.pinFee,
   });
@@ -233,29 +284,78 @@ export async function sendToWhitelisted(o: {
  * call, with removed entries left out. The server's list is the fallback, only when the chain cannot
  * be reached.
  */
-export async function fetchWhitelist(vault: Address, network: Network): Promise<WhitelistedRecipient[]> {
+export async function fetchWhitelist(
+  vault: Address,
+  network: Network,
+  /** Every entry, those on other networks too; otherwise only the ones a send here may pay. */
+  opts: {all?: boolean} = {},
+): Promise<WhitelistedRecipient[]> {
   // From the vault only, never the server: these are the addresses money may leave to, so a list a
   // compromised server supplied could steer a payment. A failed read shows an empty book, not a
   // stand-in.
   try {
-    const [, entries] = await publicClientFor(network).readContract({
-      address: vault,
-      abi: VAULT_PAYMENTS_ABI,
-      functionName: 'getWhitelist',
-      args: [1n, maxUint256],
-    });
-    return entries
-      .filter((e) => e.status !== WHITELIST_STATUS.removed)
-      .map((e) => ({
-        id: e.id.toString(),
-        recipientAddress: e.recipient,
-        status: e.status,
-        effectiveAt: Number(e.effectiveAt),
-        removeAt: Number(e.removeAt),
-      }));
+    const rows = await readWhitelist(vault, network);
+    const book = rows.filter((e) => e.status !== WHITELIST_STATUS.removed);
+    return opts.all ? book : book.filter(paidHere);
   } catch {
     return [];
   }
+}
+
+const ENTRY_V1 = [
+  {name: 'id', type: 'uint256'},
+  {name: 'recipient', type: 'address'},
+  {name: 'effectiveAt', type: 'uint64'},
+  {name: 'removeAt', type: 'uint64'},
+  {name: 'status', type: 'uint8'},
+] as const;
+/** From vault 1.2.1 each entry also says where it is paid: its chain, and its address there in 32 bytes. */
+const ENTRY_V2 = [...ENTRY_V1, {name: 'chainId', type: 'uint256'}, {name: 'account', type: 'bytes32'}] as const;
+const whitelistOut = (entry: readonly {name: string; type: string}[]) =>
+  [{type: 'uint256'}, {type: 'tuple[]', components: entry}] as const;
+
+/**
+ * `getWhitelist`, decoded by the width of what came back rather than by the release number: 1.2.1
+ * added two words to every entry, and an entry decoded with the wrong width is not an error but
+ * garbage. Five words an entry is the old layout, seven the new; an empty book is either.
+ */
+async function readWhitelist(vault: Address, network: Network): Promise<WhitelistedRecipient[]> {
+  const data = encodeFunctionData({abi: VAULT_PAYMENTS_ABI, functionName: 'getWhitelist', args: [1n, maxUint256]});
+  const res = await publicClientFor(network).call({to: vault, data});
+  const out = res.data;
+  if (!out || out === '0x') throw new Error('getWhitelist: no data');
+  const words = (out.length - 2) / 64;
+  // lastId, the array's offset, its length; then the entries, each a fixed number of words.
+  const n = Number(BigInt(`0x${out.slice(2 + 128, 2 + 192)}`));
+  if (n === 0) return [];
+  const width = (words - 3) / n;
+  if (width === 7) {
+    const [, entries] = decodeAbiParameters(whitelistOut(ENTRY_V2), out) as unknown as [
+      bigint,
+      {id: bigint; recipient: Address; effectiveAt: bigint; removeAt: bigint; status: number; chainId: bigint; account: Hex}[],
+    ];
+    return entries.map((e) => ({
+      id: e.id.toString(),
+      recipientAddress: e.recipient,
+      status: e.status,
+      effectiveAt: Number(e.effectiveAt),
+      removeAt: Number(e.removeAt),
+      chain: e.chainId === 0n ? 'here' : e.chainId === ANY_EVM_CHAIN ? 'evm' : Number(e.chainId),
+    }));
+  }
+  if (width !== 5) throw new Error(`getWhitelist: unexpected entry width ${width}`);
+  const [, entries] = decodeAbiParameters(whitelistOut(ENTRY_V1), out) as unknown as [
+    bigint,
+    {id: bigint; recipient: Address; effectiveAt: bigint; removeAt: bigint; status: number}[],
+  ];
+  return entries.map((e) => ({
+    id: e.id.toString(),
+    recipientAddress: e.recipient,
+    status: e.status,
+    effectiveAt: Number(e.effectiveAt),
+    removeAt: Number(e.removeAt),
+    chain: 'here' as const,
+  }));
 }
 
 /**

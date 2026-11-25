@@ -12,10 +12,12 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {Address} from 'viem';
 import type {RootStackParamList} from '@/App';
 import {useVaults, vaultLabel} from '@/core/vault-store';
-import {useNetwork} from '@/core/network-store';
+import {networkLabel, useNetwork} from '@/core/network-store';
+import {CHAIN_ID, type Network} from '@/core/chain';
+import {displayAddress} from '@/core/address';
 import {useWallet} from '@/wallet/store';
 import {useActiveVaultAddress} from '@/core/active-vault';
-import {fetchWhitelist, removeWhitelisted, type WhitelistedRecipient} from '@/vault/payments';
+import {fetchWhitelist, paidHere, removeWhitelisted, type WhitelistedRecipient} from '@/vault/payments';
 import {WHITELIST_STATUS} from '@/core/abi';
 import {getRiskConfig, type RiskConfig} from '@/vault/risk';
 import {fmtAllowance, fmtDuration} from '@/components/riskFormat';
@@ -107,7 +109,9 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
     if (!vault) return;
     let live = true;
     setLoading(true);
-    fetchWhitelist(vault, network)
+    // Managing the book, or the Payees list, every network's entries; choosing whom to pay here, only
+    // those a send here may pay.
+    fetchWhitelist(vault, network, {all: manage || payees})
       .then((rows) => {
         if (live) setBook(rows);
       })
@@ -162,13 +166,13 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
    * core/recipient-names), a local edit with no signature and no fee; saving it empty falls back to
    * the entry's place in the book.
    */
-  const rename = (address: string, current: string | undefined) =>
+  const rename = (address: string, current: string | undefined, on: Network = network) =>
     Alert.prompt(
       t('mobile.payments.edit_name'),
       address,
       [
         {text: t('common.cancel'), style: 'cancel'},
-        {text: t('vault.save'), onPress: (v?: string) => setName(network, address, v ?? '')},
+        {text: t('vault.save'), onPress: (v?: string) => setName(on, address, v ?? '')},
       ],
       'plain-text',
       current ?? '',
@@ -199,8 +203,25 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
     return () => clearInterval(id);
   }, []);
 
+  /** The network a payee on one other network is on; null for one here or on every EVM network. */
+  const chainNet = (b: WhitelistedRecipient): Network | null =>
+    typeof b.chain === 'number' ? (Object.keys(CHAIN_ID) as Network[]).find((n) => CHAIN_ID[n] === b.chain) ?? null : null;
+  /** Where the payee is paid, after its name: every EVM network, or the one other network. */
+  const chainTag = (b: WhitelistedRecipient): string | null =>
+    b.chain === 'evm'
+      ? t('mobile.payments.chain_all_evm')
+      : typeof b.chain === 'number'
+        ? (() => {
+            const n = chainNet(b);
+            return n ? networkLabel(n, t) : t('mobile.payments.chain_id', {id: b.chain});
+          })()
+        : null;
   const entryRow = (b: WhitelistedRecipient, i: number, list: WhitelistedRecipient[]) => {
-    const named = recipientName(names, network, b.recipientAddress);
+    const onNet = chainNet(b) ?? network;
+    const named = recipientName(names, onNet, b.recipientAddress);
+    const tag = chainTag(b);
+    // On one other network: paid only by a bridge there, so the Payees list opens Bridge for it.
+    const viaBridge = !paidHere(b);
     const removeAt = b.status === WHITELIST_STATUS.removalQueued ? b.removeAt : undefined;
     const waitUntil = removeAt ?? (b.status === WHITELIST_STATUS.pending ? b.effectiveAt : undefined);
     const note = b.status === WHITELIST_STATUS.voided ? t('mobile.payments.voided_by_lock') : null;
@@ -213,8 +234,8 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
         key={b.id}
         style={({pressed}) => [styles.row, i === 0 && styles.rowFirst, i === list.length - 1 && styles.rowLast, (pressed || unpayable) && styles.pressed]}
         // Managing the book, a tap chooses nothing.
-        disabled={manage || unpayable || (payees && editing)}
-        onPress={() => pick(b.recipientAddress, named)}>
+        disabled={manage || unpayable || (payees && editing) || (viaBridge && !payees)}
+        onPress={() => (viaBridge ? nav.navigate('Bridge', {payeeId: b.id}) : pick(b.recipientAddress, named))}>
         {/* Every entry under a name: the one saved on this device, or its place in the
             book where none was given. The full address below, since that is what gets paid. */}
         <View style={styles.entryCol}>
@@ -223,12 +244,12 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
               {named ?? t('mobile.payments.recipient_n', {n: b.id})}
             </Text>
             {/* Copies the address below; a tap on the row chooses the payee. */}
-            <CopyButton address={b.recipientAddress} />
+            <CopyButton address={displayAddress(onNet, b.recipientAddress)} />
             {/* Its own target, like the ✕: a tap on the row chooses the recipient. */}
             {payees && !editing ? null : (
             <Pressable
               hitSlop={10}
-              onPress={() => rename(b.recipientAddress, named)}
+              onPress={() => rename(b.recipientAddress, named, onNet)}
               accessibilityRole="button"
               accessibilityLabel={t('vault.edit')}
               style={({pressed}) => pressed && styles.pressed}>
@@ -255,7 +276,12 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
               </>
             ) : null}
           </View>
-          <Text style={styles.addrMuted}>{asShown(b.recipientAddress)}</Text>
+          <Text style={styles.addrMuted}>{asShown(displayAddress(onNet, b.recipientAddress))}</Text>
+          {tag ? (
+            <Text style={styles.sub} numberOfLines={1}>
+              {viaBridge ? t('mobile.payments.chain_via_bridge', {network: tag}) : tag}
+            </Text>
+          ) : null}
           {note ? (
             <Text style={[styles.sub, b.status === WHITELIST_STATUS.voided && styles.subWarn]} numberOfLines={1}>
               {note}
@@ -300,7 +326,7 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
     : risk.sendDailyAllowance === 0n || risk.sendDailyAllowance === NO_LIMIT
       ? fmtAllowance(risk.sendDailyAllowance, t)
       : t('mobile.payments.max_send_daily', {value: fmtAllowance(risk.sendDailyAllowance, t)});
-  const whitelisted = (a: string) => live.some((b) => b.recipientAddress.toLowerCase() === a.toLowerCase());
+  const whitelisted = (a: string) => live.some((b) => paidHere(b) && b.recipientAddress.toLowerCase() === a.toLowerCase());
 
   /** One card of book entries, or its loading / empty state. */
   const group = (rows: WhitelistedRecipient[], empty: string) => (
