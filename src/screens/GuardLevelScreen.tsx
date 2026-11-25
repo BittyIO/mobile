@@ -1,45 +1,45 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
-import {useFocusEffect} from '@react-navigation/native';
+import {useFocusEffect, useNavigation} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import type {RootStackParamList} from '@/App';
 import {SettingsGroup} from '@/components/SettingsRow';
-import {GuardLevelRows, GuardParams, type GuardChoice} from '@/components/GuardLevelRows';
-import {PickerSheet} from '@/components/AssetPicker';
+import {GuardLevelRows, type GuardChoice} from '@/components/GuardLevelRows';
 import {NetworkFee} from '@/components/NetworkFee';
 import {Button} from '@/components/Button';
 import {useVaultWrite} from '@/components/useVaultWrite';
-import {RISK_TITLE, fmtRiskValue} from '@/components/riskFormat';
 import {GUARD_LEVELS, guardLevelOf, sameGuardValues, type GuardValues} from '@/core/new-vault-defaults';
 import {valuesInForce} from '@/core/safety-levels';
 import {useActiveVaultAddress} from '@/core/active-vault';
 import {useNetwork} from '@/core/network-store';
 import {getRiskConfig, needsLimits, updateRiskSettings} from '@/vault/risk';
-import {NO_LIMIT} from '@/vault/capabilities';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 
-const DAY = 86_400n;
-/** Custom's choices: the timelock (none, or 1–30 days) and the amounts a daily limit may be. */
-const CHOICES: Record<keyof GuardValues, bigint[]> = {
-  timelock: [0n, DAY, 3n * DAY, 7n * DAY, 14n * DAY, 30n * DAY],
-  sendDailyAllowance: [0n, 100n, 500n, 1_000n, 5_000n, 10_000n, 100_000n, 1_000_000n, NO_LIMIT],
-  marketTradeDailyLossAllowance: [0n, 100n, 500n, 1_000n, 5_000n, 10_000n, 100_000n, 1_000_000n, NO_LIMIT],
+/**
+ * A change the Custom page sent, until the chain shows it: this page keeps Custom on screen with a
+ * spinner, as it does for a level confirmed here, rather than snapping back to the level in force.
+ */
+let customSent: GuardValues | null = null;
+export const noteCustomSent = (values: GuardValues) => {
+  customSent = values;
 };
 
 /**
- * Guard › Guard level: Basic, Standard, Maximum or Custom. The choice's timelock and both daily
- * limits show below it — Custom's set row by row — and Confirm writes all three in one change, with
- * its network fee above. Raising them applies at once; a loosening waits out the timelock in force.
+ * Guard › Guard level: None, Low, Basic, High, Highest, or Custom. The chosen level shows its
+ * timelock and both daily limits under its name, and Confirm writes all three in one change, with
+ * its network fee above. Custom opens its own page to set the three. Raising them applies at once;
+ * a loosening waits out the timelock in force.
  */
 export function GuardLevelScreen() {
   const {t} = useT();
   const c = useColors();
   const styles = useStyles(makeStyles);
+  const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const network = useNetwork((s) => s.network);
   const vault = useActiveVaultAddress(network);
   const [now, setNow] = useState<GuardValues | null>(null);
   const [choice, setChoice] = useState<GuardChoice | null>(null);
-  const [custom, setCustom] = useState<GuardValues | null>(null);
-  const [editing, setEditing] = useState<keyof GuardValues | null>(null);
   /**
    * What Confirm sent, until the chain shows it — in force, or waiting out the timelock. Until then
    * a re-read (the write's own, or coming back to the page) keeps the choice on screen, with a
@@ -49,6 +49,12 @@ export function GuardLevelScreen() {
   const [sending, setSending] = useState<GuardChoice | null>(null);
   const load = useCallback(() => {
     if (!vault) return;
+    if (customSent) {
+      sent.current = {choice: 'custom', values: customSent};
+      customSent = null;
+      setChoice('custom');
+      setSending('custom');
+    }
     getRiskConfig(vault, network).then((r) => {
       if (!r.read) return;
       const v = valuesInForce(r);
@@ -63,7 +69,6 @@ export function GuardLevelScreen() {
       sent.current = null;
       setSending(null);
       setChoice(guardLevelOf(values));
-      setCustom(values);
     });
   }, [vault, network]);
   // While a change is on its way, read again every few seconds until it lands.
@@ -83,12 +88,9 @@ export function GuardLevelScreen() {
   useFocusEffect(load);
   const {busy, ready, run, sheet} = useVaultWrite(load);
 
-  // Custom starts from the level last chosen, so it is a tweak of what was on screen, not a reset.
-  const pickChoice = (next: GuardChoice) => {
-    if (next === 'custom' && choice != null && choice !== 'custom') setCustom(GUARD_LEVELS[choice]);
-    setChoice(next);
-  };
-  const want = choice == null ? null : choice === 'custom' ? custom : GUARD_LEVELS[choice];
+  // Custom's row shows the values in force, or the ones on their way from the Custom page.
+  const customValues = sending === 'custom' && sent.current ? sent.current.values : now ?? GUARD_LEVELS[0];
+  const want = choice == null || choice === 'custom' ? null : GUARD_LEVELS[choice];
   const changed = want != null && now != null && !sameGuardValues(want, now);
   // Above none, a timelock needs both limits to be amounts: the vault refuses the mix otherwise.
   const refused = want != null && needsLimits(want);
@@ -106,23 +108,21 @@ export function GuardLevelScreen() {
     <View style={styles.fill}>
       <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
         <SettingsGroup>
-          <GuardLevelRows selected={choice} onSelect={pickChoice} custom={custom ?? GUARD_LEVELS[0]} disabled={!now || busy != null || sending != null} loading={busy === 'level' ? choice : sending} />
+          <GuardLevelRows
+            selected={choice}
+            onSelect={setChoice}
+            onCustom={() => nav.navigate('GuardCustom')}
+            custom={customValues}
+            disabled={!now || busy != null || sending != null}
+            loading={busy === 'level' ? choice : sending}
+          />
         </SettingsGroup>
-        {want ? <GuardParams values={want} onEdit={choice === 'custom' ? setEditing : undefined} /> : null}
         {refused ? <Text style={[styles.note, {color: c.danger}]}>{t('mobile.vault.timelock_needs_limits')}</Text> : null}
         <View style={styles.confirmArea}>
           {changed && !refused ? <NetworkFee /> : null}
           <Button title={t('vault.confirm')} onPress={confirm} loading={busy === 'level' || sending != null} disabled={!changed || refused || !ready || sending != null} />
         </View>
       </ScrollView>
-      <PickerSheet
-        visible={editing !== null}
-        title={editing ? t(RISK_TITLE[editing]) : ''}
-        items={editing ? CHOICES[editing].map((v) => ({key: String(v), label: fmtRiskValue(editing, v, t)})) : []}
-        selected={editing && custom ? String(custom[editing]) : undefined}
-        onSelect={(k) => editing && setCustom((v) => (v ? {...v, [editing]: BigInt(k)} : v))}
-        onClose={() => setEditing(null)}
-      />
       {sheet}
     </View>
   );

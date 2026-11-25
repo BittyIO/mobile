@@ -98,10 +98,24 @@ export function OptionRow({
   onPress,
   last,
   leading,
+  trailing,
+  below,
+  belowIndent = 0,
+  titleNote,
   loading,
 }: {
   title: string;
+  /** A quieter word after the title, on its line (a Guard level's security delay). */
+  titleNote?: string;
   sub?: string;
+  /** Something of the choice's own after its title, before the mark (a Guard level's timelock ring). */
+  trailing?: React.ReactNode;
+  /**
+   * More under the row, below the title line so the leading mark and the check stay beside the
+   * title (the chosen Guard level's values). Indented by `belowIndent` to line up with the title.
+   */
+  below?: React.ReactNode;
+  belowIndent?: number;
   /** A mark of the choice's own before its title (a Guard level's shield). */
   leading?: React.ReactNode;
   /** A spinner where the mark goes: this choice is being written and not on chain yet. */
@@ -115,12 +129,48 @@ export function OptionRow({
 }) {
   const styles = useStyles(makeStyles);
   return (
-    <Pressable style={[styles.row, !last && styles.rowDivider]} onPress={onPress} disabled={disabled}>
+    <Pressable style={[below ? styles.optionWrap : styles.row, !last && styles.rowDivider]} onPress={onPress} disabled={disabled}>
+      {below ? <OptionLine {...{leading, title, titleNote, sub, trailing, checked, busy, disabled, loading}} /> : <OptionInner {...{leading, title, titleNote, sub, trailing, checked, busy, disabled, loading}} />}
+      {below ? <View style={{marginLeft: belowIndent}}>{below}</View> : null}
+    </Pressable>
+  );
+}
+
+type OptionParts = {
+  leading?: React.ReactNode;
+  title: string;
+  titleNote?: string;
+  sub?: string;
+  trailing?: React.ReactNode;
+  checked?: boolean;
+  busy?: boolean;
+  disabled?: boolean;
+  loading?: boolean;
+};
+
+/** The title line on its own, for a row with more under it. */
+function OptionLine(p: OptionParts) {
+  const styles = useStyles(makeStyles);
+  return (
+    <View style={styles.optionLine}>
+      <OptionInner {...p} />
+    </View>
+  );
+}
+
+function OptionInner({leading, title, titleNote, sub, trailing, checked, busy, disabled, loading}: OptionParts) {
+  const styles = useStyles(makeStyles);
+  return (
+    <>
       {leading}
       <View style={styles.rowText}>
-        <Text style={[styles.rowTitle, disabled && !checked && styles.rowTitleOff]}>{title}</Text>
+        <Text style={[styles.rowTitle, disabled && !checked && styles.rowTitleOff]}>
+          {title}
+          {titleNote ? <Text style={styles.rowTitleNote}>{`  ${titleNote}`}</Text> : null}
+        </Text>
         {sub ? <Text style={styles.rowSub}>{sub}</Text> : null}
       </View>
+      {trailing}
       {/* The mark is always laid out and only shown when chosen: it is a little taller than the
           title, so adding and removing it made the row change height as the choice moved. */}
       {loading ? (
@@ -130,7 +180,7 @@ export function OptionRow({
       ) : (
         <Text style={[styles.check, !checked && styles.checkHidden]}>✓</Text>
       )}
-    </Pressable>
+    </>
   );
 }
 
@@ -193,12 +243,15 @@ export const makeSettingsStyles = (c: Colors) =>
     section: {gap: 0},
     group: {backgroundColor: c.card, borderRadius: 20, overflow: 'hidden'},
     row: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 15, paddingHorizontal: 16, gap: 12},
+    optionWrap: {paddingVertical: 15, paddingHorizontal: 16},
+    optionLine: {flexDirection: 'row', alignItems: 'center', gap: 12},
     rowDivider: {borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border},
     rowText: {gap: 3, flexShrink: 1, flex: 1},
     rowTitle: {color: c.text, fontSize: 15, fontWeight: '600'},
     rowTitleLine: {flexDirection: 'row', alignItems: 'center', gap: 6},
     rowTitleShrink: {color: c.text, fontSize: 15, fontWeight: '600', flexShrink: 1},
     rowSub: {color: c.subtext, fontSize: 12},
+    rowTitleNote: {color: c.subtext, fontSize: 13, fontWeight: '500'},
     rowTitleOff: {color: c.subtext},
     check: {color: c.accent, fontSize: 17, fontWeight: '700'},
     checkHidden: {opacity: 0},
