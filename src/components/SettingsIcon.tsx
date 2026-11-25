@@ -253,11 +253,10 @@ export function SettingsIcon({name, size = 29, round = false}: {name: SettingsIc
           </>
         ) : name === 'allowlist' ? (
           <>
-            {/* A guard's shield with a tick inside (lucide ShieldCheck). The list it opens is not
-                a list of preferences — it is what the guard will let the vault touch at all, so
-                the row wears the thing doing the refusing rather than the paperwork. */}
-            <Path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" {...c} />
-            <Path d="M9 12l2 2 4-4" {...c} />
+            {/* lucide ListChecks: the list of what the smart wallet may use at all, each one ticked. */}
+            <Path d="m3 17 2 2 4-4" {...c} />
+            <Path d="m3 7 2 2 4-4" {...c} />
+            <Path d="M13 6h8M13 12h8M13 18h8" {...c} />
           </>
         ) : name === 'delegation' ? (
           <>

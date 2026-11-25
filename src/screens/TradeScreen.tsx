@@ -288,8 +288,8 @@ const MAX_MARKET_IMPACT = 0.05;
 
 export function TradeScreen() {
   /**
-   * At the accessibility text sizes: an asset is named without its icon, and the validity offers
-   * the usual 1, 7 and 30 days only, with no 180 days and no field for a number of days.
+   * At the accessibility text sizes: an asset is named without its icon, and the validity is a
+   * dropdown of the presets beside the field for a number of days, since four chips do not fit.
    */
   const bigText = useBigText();
   const headerHeight = useTransparentHeaderInset();
@@ -684,16 +684,6 @@ export function TradeScreen() {
    */
   const lastPreset = useRef(VALID_PRESETS[0].s);
   const [status, setStatus] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
-  // Into the accessibility sizes with a validity they no longer offer (180 days, or a typed one):
-  // back to 1 day, rather than an order carrying a validity nothing on screen names.
-  useEffect(() => {
-    if (!bigText) return;
-    if (validDays !== '' || !VALID_PRESETS.some((v) => v.n <= 30 && v.s === validSec)) {
-      lastPreset.current = VALID_PRESETS[0].s;
-      setValidSec(VALID_PRESETS[0].s);
-      setValidDays('');
-    }
-  }, [bigText, validDays, validSec]);
   const [err, setErr] = useState<string | null>(null);
 
   const [orders, setOrders] = useState<CowOrder[]>([]);
@@ -1545,7 +1535,7 @@ export function TradeScreen() {
 
 
   // Asset pickers: a sheet with icons, for the base and the quote side of the pair.
-  const [picker, setPicker] = useState<'base' | 'quote' | 'source' | 'slippage' | null>(null);
+  const [picker, setPicker] = useState<'base' | 'quote' | 'source' | 'slippage' | 'valid' | null>(null);
   // Read once into state so the sheet redraws on a change; written through on every pick.
   const [slippage, setSlippage] = useState(() => slippageBps());
   /**
@@ -3037,6 +3027,20 @@ export function TradeScreen() {
             }}
             onClose={() => setPicker(null)}
           />
+          {/* The validity's presets at the accessibility sizes, where the chips do not fit. */}
+          <PickerSheet
+            visible={picker === 'valid'}
+            title={mode === 'TWAP' ? t('mobile.trade.over') : t('vault.valid_for')}
+            items={VALID_PRESETS.map((v) => ({key: String(v.s), label: `${v.n}${t(v.unit)}`}))}
+            selected={validDays === '' ? String(validSec) : undefined}
+            onSelect={(key) => {
+              const sec = Number(key);
+              lastPreset.current = sec;
+              setValidSec(sec);
+              setValidDays('');
+            }}
+            onClose={() => setPicker(null)}
+          />
           <ToastHost />
     </>
   );
@@ -3909,24 +3913,22 @@ export function TradeScreen() {
             {/* Validity: the usual answers as chips, and a field for anything else. A preset is one
                 tap where it fits, and 45 days was previously unreachable without picking 30. */}
             {mode !== 'Market' ? (
-              <View style={styles.validRow}>
-                <Text style={styles.fieldLabel}>{mode === 'TWAP' ? t('mobile.trade.over') : t('vault.valid_for')}</Text>
-                <View style={styles.validChips}>
-                  {(bigText ? VALID_PRESETS.filter((v) => v.n <= 30) : VALID_PRESETS).map((v) => (
+              bigText ? (
+                // The accessibility sizes: four chips and a field do not fit one row, so the presets
+                // are a dropdown, and the field for any number of days stays beside it.
+                <View style={[styles.validRow, styles.validRowBig]}>
+                  <Text style={styles.fieldLabel}>{mode === 'TWAP' ? t('mobile.trade.over') : t('vault.valid_for')}</Text>
+                  <View style={styles.validChips}>
                     <Pressable
-                      key={v.s}
-                      style={[styles.vchip, validDays === '' && validSec === v.s && styles.vchipOn]}
-                      onPress={() => {
-                        lastPreset.current = v.s;
-                        setValidSec(v.s);
-                        setValidDays('');
-                      }}>
-                      <Text style={[styles.vchipText, validDays === '' && validSec === v.s && styles.vchipTextOn]}>
-                        {`${v.n}${t(v.unit)}`}
+                      style={[styles.vchip, styles.vdrop, validDays === '' && styles.vchipOn]}
+                      onPress={() => setPicker('valid')}
+                      accessibilityRole="button"
+                      accessibilityLabel={mode === 'TWAP' ? t('mobile.trade.over') : t('vault.valid_for')}>
+                      <Text style={[styles.vchipText, validDays === '' && styles.vchipTextOn]}>
+                        {`${(VALID_PRESETS.find((v) => v.s === (validDays === '' ? validSec : lastPreset.current)) ?? VALID_PRESETS[0]).n}${t(DAY)}`}
                       </Text>
+                      <Text style={styles.vdropMark}>▾</Text>
                     </Pressable>
-                  ))}
-                  {bigText ? null : (
                   <View style={[styles.vdays, validDays !== '' && styles.vdaysOn]}>
                     <TextInput
                       style={styles.vdaysInput}
@@ -3940,9 +3942,42 @@ export function TradeScreen() {
                     />
                     <Text style={[styles.vchipText, validDays !== '' && styles.vchipTextOn]}>{t(DAY)}</Text>
                   </View>
-                  )}
+                  </View>
+                </View>
+              ) : (
+              <View style={styles.validRow}>
+                <Text style={styles.fieldLabel}>{mode === 'TWAP' ? t('mobile.trade.over') : t('vault.valid_for')}</Text>
+                <View style={styles.validChips}>
+                  {VALID_PRESETS.map((v) => (
+                    <Pressable
+                      key={v.s}
+                      style={[styles.vchip, validDays === '' && validSec === v.s && styles.vchipOn]}
+                      onPress={() => {
+                        lastPreset.current = v.s;
+                        setValidSec(v.s);
+                        setValidDays('');
+                      }}>
+                      <Text style={[styles.vchipText, validDays === '' && validSec === v.s && styles.vchipTextOn]}>
+                        {`${v.n}${t(v.unit)}`}
+                      </Text>
+                    </Pressable>
+                  ))}
+                  <View style={[styles.vdays, validDays !== '' && styles.vdaysOn]}>
+                    <TextInput
+                      style={styles.vdaysInput}
+                      keyboardType="number-pad"
+                      placeholder="0"
+                      placeholderTextColor={c.subtext}
+                      value={validDays}
+                      onChangeText={onValidDays}
+                      onBlur={onValidDaysBlur}
+                      maxLength={3}
+                    />
+                    <Text style={[styles.vchipText, validDays !== '' && styles.vchipTextOn]}>{t(DAY)}</Text>
+                  </View>
                 </View>
               </View>
+              )
             ) : null}
 
             {status === 'error' && err ? <Text style={styles.err} selectable>{err}</Text> : null}
@@ -4168,6 +4203,10 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   vdaysOn: {backgroundColor: c.accentSoft},
   vdaysInput: {minWidth: 26, textAlign: 'right', color: c.text, fontSize: 13, fontWeight: '600', padding: 0},
   vchip: {paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8},
+  // At the accessibility sizes the row grows with its text, and wraps before it clips.
+  validRowBig: {height: undefined, minHeight: 52, paddingVertical: 6, flexWrap: 'wrap', gap: 6},
+  vdrop: {flexDirection: 'row', alignItems: 'center', gap: 4},
+  vdropMark: {color: c.subtext, fontSize: 13},
   vchipOn: {backgroundColor: c.buttonSecondary},
   vchipText: {color: c.subtext, fontSize: 13, fontWeight: '600'},
   vchipTextOn: {color: c.text},

@@ -1,4 +1,4 @@
-import {encodeAbiParameters, keccak256, parseAbi, toBytes, zeroAddress, type Address, type Hex} from 'viem';
+import {encodeAbiParameters, keccak256, pad, parseAbi, toBytes, zeroAddress, type Address, type Hex} from 'viem';
 import {CHAIN_ID, isTestnet, isTronNetwork, NATIVE, publicClientFor, type Network} from '@/core/chain';
 import {NETWORKS} from '@/core/network-store';
 import {vaultGuard} from '@/core/vault-contracts';
@@ -58,6 +58,15 @@ const ADAPTER_ABI = parseAbi([
 ]);
 /** The Across adapter release that pays the vault's own address on the other chain (1.1.0). */
 const SAME_ADDRESS_VERSION = 1_001_000n;
+/** The Across adapter release that also pays someone else's address (`bridgeTo`, 1.2.1). */
+const BRIDGE_TO_VERSION = 1_002_001n;
+/** The Across adapter release that reads a route's flat cost (1.2.2); older ones ignore it. */
+const FLAT_COST_VERSION = 1_002_002n;
+/** The adapter's ceiling on a route's flat cost, in whole output tokens (`MAX_FLAT_COST_TOKENS`). */
+const MAX_FLAT_COST_TOKENS = 10n;
+/** The guard's mark on an EVM chain, where a payee on every EVM network is paid (vault `EVM_CHAIN_KEY`). */
+const EVM_CHAIN_KEY = keccak256(toBytes('bitty.chain.evm'));
+const evmChainKey = (chainId: number): Hex => keccak256(encodeAbiParameters([{type: 'bytes32'}, {type: 'uint256'}], [EVM_CHAIN_KEY, BigInt(chainId)]));
 const OWNER_ABI = parseAbi(['function owner() view returns (address)']);
 
 /** The vault's own bridge calls (1.1.0). */
@@ -65,6 +74,9 @@ export const VAULT_BRIDGE_ABI = parseAbi([
   'function bridgeSettings() view returns (bool enabled, uint64 enableAt)',
   'function setBridgeEnabled(bool enabled)',
   'function bridge(address bridgeProtocol, address asset, uint256 amount, uint256 fee, bytes data)',
+  // 1.2.1: to someone else's address, and to a payee on another network.
+  'function bridgeTo(address bridgeProtocol, address asset, uint256 amount, uint256 fee, uint256 destinationChainId, bytes32 recipient, bytes data)',
+  'function bridgeToWhitelistedRecipient(address bridgeProtocol, uint256 id, address asset, uint256 amount, uint256 fee, uint256 destinationChainId, bytes data)',
 ]);
 
 /** The adapter's request, as `AcrossBridgeProtocol.AcrossQuote`. */
@@ -104,9 +116,23 @@ export type BridgeRoute = {
   outputDecimals: number;
   /** The most the crossing may cost, in basis points of what is deposited. */
   maxCostBps: number;
+  /**
+   * A flat cost it may keep on top, in the output token's smallest units (adapter 1.2.2, route bits
+   * 184-247, at most 10 whole tokens): room for a fee Across charges per transfer, like ~6.2 USDT
+   * into Tron. 0 where the route names none or the adapter does not read it.
+   */
+  maxFlatCost: bigint;
 };
 
-export type BridgeInfo = {adapter: Address; spokePool: Address; routes: BridgeRoute[]};
+export type BridgeInfo = {
+  adapter: Address;
+  spokePool: Address;
+  routes: BridgeRoute[];
+  /** The adapter pays someone else's address too ({BRIDGE_TO_VERSION}): Bridge's To may name an address or a payee. */
+  toAddress: boolean;
+  /** The networks the guard marks EVM: where a payee on every EVM network is paid. */
+  evm: Network[];
+};
 
 /**
  * Whether Across serves `n` at all. Tron mainnet yes (USDT, to and from Ethereum, Base, Arbitrum and
@@ -175,7 +201,10 @@ async function readBridge(network: Network, assets: Asset[]): Promise<BridgeInfo
   const adapter = protocols.find((_, i) => Number(fact(2 * i)) === PROTOCOL_BRIDGE && fact(2 * i + 1) === false);
   if (!adapter) return null;
 
-  const spokePool = (await client.readContract({address: adapter, abi: ADAPTER_ABI, functionName: 'spokePool'})) as Address;
+  const [spokePool, adapterVersion] = await Promise.all([
+    client.readContract({address: adapter, abi: ADAPTER_ABI, functionName: 'spokePool'}) as Promise<Address>,
+    (client.readContract({address: adapter, abi: ADAPTER_ABI, functionName: 'protocolVersion'}) as Promise<bigint>).catch(() => 0n),
+  ]);
 
   /**
    * The vault's WETH goes as the chain's coin (`native`): the vault unwraps it and sends ETH, and
@@ -191,13 +220,17 @@ async function readBridge(network: Network, assets: Asset[]): Promise<BridgeInfo
   });
   const destinations = BRIDGE_DESTINATIONS(network);
   const pairs = candidates.flatMap((c) => destinations.map((to) => ({...c, to})));
-  const [categories, routes] = await Promise.all([
+  const [categories, routes, evmMarks] = await Promise.all([
     client.multicall({
       contracts: candidates.map((c) => ({address: guard, abi: GUARD_ABI, functionName: 'assetCategory', args: [c.asset.address] as const})),
       allowFailure: true,
     }),
     client.multicall({
       contracts: pairs.map((p) => ({address: guard, abi: GUARD_ABI, functionName: 'getUint', args: [routeKey(p.inputToken, CHAIN_ID[p.to])]})),
+      allowFailure: true,
+    }),
+    client.multicall({
+      contracts: destinations.map((to) => ({address: guard, abi: GUARD_ABI, functionName: 'getUint', args: [evmChainKey(CHAIN_ID[to])]})),
       allowFailure: true,
     }),
   ]);
@@ -211,17 +244,23 @@ async function readBridge(network: Network, assets: Asset[]): Promise<BridgeInfo
     const v = routes[i].result as bigint | undefined;
     if (!v || !bridgeable.has(p.asset.address.toLowerCase())) return;
     const outputToken = `0x${(v & ((1n << 160n) - 1n)).toString(16).padStart(40, '0')}` as Address;
+    const outputDecimals = Number((v >> 160n) & 0xffn);
+    const flatCap = MAX_FLAT_COST_TOKENS * 10n ** BigInt(outputDecimals);
+    const flat = adapterVersion >= FLAT_COST_VERSION ? (v >> 184n) & ((1n << 64n) - 1n) : 0n;
     out.push({
       to: p.to,
       asset: p.asset,
       native: p.native,
       inputToken: p.inputToken,
       outputToken,
-      outputDecimals: Number((v >> 160n) & 0xffn),
+      outputDecimals,
       maxCostBps: Math.min(Number((v >> 168n) & 0xffffn), MAX_COST_BPS),
+      maxFlatCost: flat > flatCap ? flatCap : flat,
     });
   });
-  return {adapter, spokePool, routes: out};
+  // A mark that could not be read is no mark: a payee on every EVM network is then not offered there.
+  const evm = destinations.filter((_, i) => (evmMarks[i]?.result as unknown) === 1n);
+  return {adapter, spokePool, routes: out, toAddress: adapterVersion >= BRIDGE_TO_VERSION, evm};
 }
 
 /**
@@ -362,20 +401,34 @@ export async function quoteBridge(
       if (!limits?.maxDeposit) throw new BridgeQuoteError('quote_failed');
       throw new BridgeQuoteError('too_high', {max: limits.maxDeposit});
     }
-    throw new BridgeQuoteError('too_low', {min: limits?.minDeposit ?? '0'});
+    // `limits` misjudges some routes: to Tron it names about 1 USDT while every quote under ~25
+    // is refused, its fee being ~6 USDT. The least that really goes is worked out from a quote.
+    const least = await leastAmount(network, route, recipient, limits?.maxDeposit);
+    throw new BridgeQuoteError('too_low', {min: (least ?? BigInt(limits?.minDeposit ?? '0')).toString()});
   }
   if (j.code || !j.outputAmount) throw new BridgeQuoteError('quote_failed');
   const min = j.limits?.minDeposit ? BigInt(j.limits.minDeposit) : 0n;
   const max = j.limits?.maxDeposit ? BigInt(j.limits.maxDeposit) : null;
-  if (j.isAmountTooLow || deposit < min) throw new BridgeQuoteError('too_low', {min: min.toString()});
+  if (j.isAmountTooLow || deposit < min) {
+    const least = await leastAmount(network, route, recipient, j.limits?.maxDeposit);
+    throw new BridgeQuoteError('too_low', {min: (least ?? min).toString()});
+  }
   if (max != null && deposit > max) throw new BridgeQuoteError('too_high', {max: max.toString()});
   if (!j.outputAmount || !j.timestamp || !j.fillDeadline) throw new BridgeQuoteError('quote_failed');
 
   const outputAmount = BigInt(j.outputAmount);
   const inDec = route.native ? NATIVE[network].decimals : route.asset.decimals;
   const scaleUp = (x: bigint, from: number, to: number) => (to >= from ? x * 10n ** BigInt(to - from) : x / 10n ** BigInt(from - to));
-  const least = scaleUp((deposit * BigInt(10_000 - route.maxCostBps)) / 10_000n, inDec, route.outputDecimals);
-  if (outputAmount < least || outputAmount === 0n) throw new BridgeQuoteError('cost_too_high');
+  // As the adapter checks it: the deposit less the route's basis points, less its flat cost.
+  const pct = scaleUp((deposit * BigInt(10_000 - route.maxCostBps)) / 10_000n, inDec, route.outputDecimals);
+  const least = pct > route.maxFlatCost ? pct - route.maxFlatCost : 0n;
+  if (outputAmount < least || outputAmount === 0n) {
+    // A fee that is mostly flat (gas on the other side) is over the route's cap only on a small
+    // amount: name the amount from which it fits, rather than "try again later".
+    const enough = await leastAmount(network, route, recipient, j.limits?.maxDeposit);
+    if (enough && enough > amount) throw new BridgeQuoteError('too_low', {min: enough.toString()});
+    throw new BridgeQuoteError('cost_too_high');
+  }
 
   const across: AcrossTerms = {
       destinationChainId: BigInt(CHAIN_ID[route.to]),
@@ -402,6 +455,82 @@ export async function quoteBridge(
   };
 }
 
+/** Who a vault's bridge pays on the other side, when not the owner's own vault there. */
+export type BridgeDest = {kind: 'address'; recipient: Address} | {kind: 'payee'; id: string};
+
+const leasts = new Map<string, {at: number; v: bigint | null}>();
+
+/**
+ * The least `amount` (what leaves, Bitty's fee included, in input units) that both Across takes and
+ * the adapter lets through, kept five minutes per route; null when Across cannot be asked.
+ *
+ * Across's own `limits` misjudge some routes (to Tron it names ~1 USDT while refusing every quote
+ * under ~25), so both bounds come from real quotes:
+ *  - the route's cap: Across's fee is mostly flat, read off one quote for a large deposit. The
+ *    adapter lets through a cost of the route's basis points of the deposit plus its flat cost
+ *    (adapter 1.2.2), so the deposit must be at least (fee - flat) / bps, with 3% to spare;
+ *  - Across's floor: the smallest whole-token deposit it quotes at all, found by halving.
+ */
+async function leastAmount(network: Network, route: BridgeRoute, recipient: Address, maxDeposit?: string): Promise<bigint | null> {
+  const key = `${network}|${route.inputToken}|${route.to}|${route.maxCostBps}|${route.maxFlatCost}`;
+  const hit = leasts.get(key);
+  if (hit && Date.now() - hit.at < 5 * 60_000) return hit.v;
+  const inDec = route.native ? NATIVE[network].decimals : route.asset.decimals;
+  const unit = 10n ** BigInt(inDec);
+  // A deposit Across surely quotes: 1000 tokens, or 1 of the chain's coin.
+  let probe = route.native ? unit : 1000n * unit;
+  if (maxDeposit && BigInt(maxDeposit) < probe) probe = BigInt(maxDeposit);
+  const toIn = (out: bigint) =>
+    inDec >= route.outputDecimals ? out * 10n ** BigInt(inDec - route.outputDecimals) : out / 10n ** BigInt(route.outputDecimals - inDec);
+  /** What Across delivers for `deposit`, in input units; null when it refuses or cannot be asked. */
+  const quoted = async (deposit: bigint): Promise<bigint | null> => {
+    try {
+      const q = new URLSearchParams({
+        inputToken: route.inputToken,
+        outputToken: route.outputToken,
+        originChainId: String(CHAIN_ID[network]),
+        destinationChainId: String(CHAIN_ID[route.to]),
+        amount: deposit.toString(),
+        recipient,
+        allowUnmatchedDecimals: 'true',
+      });
+      const j = (await (await fetch(`${acrossApi(network)}/suggested-fees?${q.toString()}`)).json()) as {outputAmount?: string; code?: string};
+      return j.outputAmount && !j.code ? toIn(BigInt(j.outputAmount)) : null;
+    } catch {
+      return null;
+    }
+  };
+  let v: bigint | null = null;
+  const big = await quoted(probe);
+  if (big != null) {
+    const fee = probe > big ? probe - big : 0n;
+    const flat = toIn(route.maxFlatCost);
+    const cap = BigInt(Math.max(1, route.maxCostBps));
+    // The route's bound on the deposit; none when the flat cost alone covers Across's fee.
+    let need = fee > flat ? ((fee - flat) * 10_000n * 103n) / (cap * 100n) : 0n;
+    // Across's floor, in whole tokens (the chain's coin: as the cap gave it).
+    if (!route.native) {
+      const start = ((need + unit - 1n) / unit) * unit || unit;
+      if ((await quoted(start)) == null) {
+        let lo = start;
+        let hi = probe;
+        for (let i = 0; i < 8 && hi - lo > unit; i++) {
+          const mid = ((lo + hi) / 2n / unit) * unit;
+          if ((await quoted(mid)) != null) hi = mid;
+          else lo = mid;
+        }
+        need = hi;
+      } else need = start;
+    }
+    // What leaves: Bitty's fee on top, rounded up to a whole token.
+    const amount = (need * 10_000n) / BigInt(10_000 - BRIDGE_FEE_BPS) + 1n;
+    v = route.native ? amount : ((amount + unit - 1n) / unit) * unit;
+  }
+  // A failed probe is not kept: the next quote asks again.
+  if (v != null) leasts.set(key, {at: Date.now(), v});
+  return v;
+}
+
 /** Send `quote` across (relayed, gasless). Resolves with the transaction hash. */
 export async function bridgeFromVault(o: {
   account: Acct;
@@ -421,8 +550,21 @@ export async function bridgeFromVault(o: {
    * idle half-way: a bridge that would revert takes the withdrawals back with it.
    */
   withdrawals?: {protocol: Address; raw: bigint}[];
+  /**
+   * Who is paid on the other side (vault 1.2.1): the owner's own vault there (left out), someone
+   * else's address (`bridgeTo`, a stablecoin, metered as a send), or a payee by id
+   * (`bridgeToWhitelistedRecipient`). The quote must be for the same recipient, with no origin owner.
+   */
+  dest?: BridgeDest;
 }): Promise<Hex> {
   const asset = o.route.native ? zeroAddress : o.route.asset.address;
+  const chainId = BigInt(CHAIN_ID[o.route.to]);
+  const call =
+    o.dest?.kind === 'address'
+      ? {abi: VAULT_BRIDGE_ABI, functionName: 'bridgeTo', args: [o.adapter, asset, o.quote.amount, o.quote.fee, chainId, pad(o.dest.recipient, {size: 32}), o.quote.data]}
+      : o.dest?.kind === 'payee'
+        ? {abi: VAULT_BRIDGE_ABI, functionName: 'bridgeToWhitelistedRecipient', args: [o.adapter, BigInt(o.dest.id), asset, o.quote.amount, o.quote.fee, chainId, o.quote.data]}
+        : {abi: VAULT_BRIDGE_ABI, functionName: 'bridge', args: [o.adapter, asset, o.quote.amount, o.quote.fee, o.quote.data]};
   if (o.withdrawals?.length) {
     const r = await relayVaultMulticall({
       account: o.account,
@@ -431,7 +573,7 @@ export async function bridgeFromVault(o: {
       calls: [
         // A position holds the asset itself (WETH for the native route), which the bridge then sends.
         ...o.withdrawals.map((w) => ({abi: VAULT_DEFI_ABI, functionName: 'withdraw', args: [w.protocol, o.route.asset.address, w.raw]})),
-        {abi: VAULT_BRIDGE_ABI, functionName: 'bridge', args: [o.adapter, asset, o.quote.amount, o.quote.fee, o.quote.data]},
+        call,
       ],
       stableCoin: o.stableCoin,
       pinFee: o.pinFee,
@@ -443,9 +585,7 @@ export async function bridgeFromVault(o: {
     account: o.account,
     vault: o.vault,
     network: o.network,
-    abi: VAULT_BRIDGE_ABI,
-    functionName: 'bridge',
-    args: [o.adapter, asset, o.quote.amount, o.quote.fee, o.quote.data],
+    ...call,
     stableCoin: o.stableCoin,
     pinFee: o.pinFee,
     upgradeVault: o.upgradeVault,
@@ -500,20 +640,23 @@ const sameAddress = (a: string | undefined | null): string | null =>
 export const bridgeTxKey = (hash: string): string => hash.replace(/^0x/i, '').toLowerCase();
 
 export type BridgeArrival = {txHash: string; from: Network; token: string; amount: string; blockNum: number; timestamp: string | null};
+/** One Across deposit the vault made, as Across reports it: what was sent, where, and to whom. */
+export type BridgeDeparture = {txHash: string; to: Network; token: string; amount: string; recipient: string | null; blockNum: number; timestamp: string | null};
 
 export async function bridgeHistory(
   vault: string,
   network: Network,
-): Promise<{arrivals: Map<string, Network>; departures: Map<string, Network>; arrivalRows: BridgeArrival[]}> {
+): Promise<{arrivals: Map<string, Network>; departures: Map<string, Network>; arrivalRows: BridgeArrival[]; departureRows: BridgeDeparture[]}> {
   const arrivals = new Map<string, Network>();
   const departures = new Map<string, Network>();
   const arrivalRows: BridgeArrival[] = [];
-  if (!acrossServes(network)) return {arrivals, departures, arrivalRows};
+  const departureRows: BridgeDeparture[] = [];
+  if (!acrossServes(network)) return {arrivals, departures, arrivalRows, departureRows};
   try {
     // Across finds a Tron account only by its base58 form.
     const who = isTronNetwork(network) ? evmToTron(vault) : vault;
     const res = await fetch(`${acrossApi(network)}/deposits?address=${who}&limit=100`);
-    if (!res.ok) return {arrivals, departures, arrivalRows};
+    if (!res.ok) return {arrivals, departures, arrivalRows, departureRows};
     const rows = (await res.json()) as {
       depositor?: string;
       recipient?: string;
@@ -525,6 +668,10 @@ export async function bridgeHistory(
       outputAmount?: string;
       fillBlockNumber?: number | null;
       fillBlockTimestamp?: string | null;
+      inputToken?: string;
+      inputAmount?: string;
+      depositBlockNumber?: number | null;
+      depositBlockTimestamp?: string | null;
     }[];
     const byChain = new Map((Object.keys(CHAIN_ID) as Network[]).map((n) => [CHAIN_ID[n], n] as const));
     const me = vault.toLowerCase();
@@ -537,12 +684,24 @@ export async function bridgeHistory(
         if (r.outputToken && r.outputAmount && r.fillBlockNumber)
           arrivalRows.push({txHash: r.fillTx, from, token: sameAddress(r.outputToken) ?? r.outputToken, amount: r.outputAmount, blockNum: Number(r.fillBlockNumber), timestamp: r.fillBlockTimestamp ?? null});
       }
-      if (r.depositTxHash && r.originChainId === here && sameAddress(r.depositor) === me && to) departures.set(bridgeTxKey(r.depositTxHash), to);
+      if (r.depositTxHash && r.originChainId === here && sameAddress(r.depositor) === me && to) {
+        departures.set(bridgeTxKey(r.depositTxHash), to);
+        if (r.inputToken && r.inputAmount && r.depositBlockNumber)
+          departureRows.push({
+            txHash: r.depositTxHash,
+            to,
+            token: sameAddress(r.inputToken) ?? r.inputToken,
+            amount: r.inputAmount,
+            recipient: sameAddress(r.recipient),
+            blockNum: Number(r.depositBlockNumber),
+            timestamp: r.depositBlockTimestamp ?? null,
+          });
+      }
     }
   } catch {
     // As above.
   }
-  return {arrivals, departures, arrivalRows};
+  return {arrivals, departures, arrivalRows, departureRows};
 }
 
 /** One route's identity on the Bridge screen: ETH and WETH share an asset and differ by `native`. */

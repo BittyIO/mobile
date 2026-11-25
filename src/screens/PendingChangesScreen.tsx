@@ -1,11 +1,13 @@
 import React, {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react';
-import {ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {ActivityIndicator, Animated, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {CategoryTabs} from '@/components/ui';
 import {PendingRow} from '@/components/PendingRow';
+import {ProgressRing} from '@/components/ProgressRing';
 import {QuantumInfoButton, QuantumKeys} from '@/components/QuantumHandover';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
-import {fetchTimelockHistory, getPendingChanges, getRiskConfig, updateRiskSettings, type PendingChange, type TimelockHistoryItem} from '@/vault/risk';
+import {fetchSecurityHistory, fetchTimelockHistory, getPendingChanges, getRiskConfig, updateRiskSettings, type PendingChange, type SecurityHistoryItem, type TimelockHistoryItem} from '@/vault/risk';
 import {getStableCoinAsGasConfig, setStableCoinAsGasCoins} from '@/vault/stableCoinAsGas';
 import {removeWhitelisted} from '@/vault/payments';
 import {cancelPendingAssetManager, getAssetManager} from '@/vault/delegate';
@@ -110,6 +112,26 @@ export function pendingValue(p: PendingChange, t: T): string {
   }
 }
 
+/** The history's icons, the pending row's ring size. */
+const DONE_RING = 56;
+
+const HISTORY_TABS = ['delays', 'strengthen'] as const;
+type HistoryTab = (typeof HISTORY_TABS)[number];
+
+/** A strengthening's title: the number made stricter, the lock raised, or "Cancelled: <what was waiting>". */
+function strengthenTitle(s: SecurityHistoryItem, t: T, nameOf: (address: string) => string | undefined): string {
+  if (s.kind === 'lock') return t(s.level >= 2 ? 'mobile.vault.forever_lock' : 'mobile.vault.emergency_lock');
+  if (s.kind === 'cancel') return t('mobile.vault.history_cancelled', {title: pendingTitle(s.change, t, nameOf)});
+  return t(RISK_TITLE[s.kind]);
+}
+
+/** Its value: "from → to" for a number, what was waiting for a cancel, nothing for a lock. */
+function strengthenValue(s: SecurityHistoryItem, t: T): string {
+  if (s.kind === 'lock') return '';
+  if (s.kind === 'cancel') return pendingValue(s.change, t);
+  return pendingValue({kind: s.kind, from: s.from, value: s.value, at: BigInt(s.at)}, t);
+}
+
 /**
  * Overview › Pending — everything the vault has been told to do and has not done yet: a loosened
  * risk number, a handover, an asset-manager grant, an address-book entry maturing or leaving. Each
@@ -144,6 +166,36 @@ export function PendingChangesScreen() {
   // What already went through: `undefined` while the first read is out, `null` when the server could
   // not say, else the list (empty when nothing has gone through).
   const [history, setHistory] = useState<TimelockHistoryItem[] | null | undefined>(undefined);
+  // What made it stricter, at once: the same three states.
+  const [strengthened, setStrengthened] = useState<SecurityHistoryItem[] | null | undefined>(undefined);
+  const [tab, setTab] = useState<HistoryTab>('delays');
+  // The pager under the tabs, as AssetCategoryList's: its width, each page's height, and how far it has scrolled.
+  const [pageW, setPageW] = useState(0);
+  const [pageH, setPageH] = useState<Partial<Record<HistoryTab, number>>>({});
+  const pagerRef = useRef<ScrollView>(null);
+  const pagerX = useRef(new Animated.Value(0)).current;
+  const pickTab = (k: HistoryTab) => {
+    setTab(k);
+    pagerRef.current?.scrollTo({x: HISTORY_TABS.indexOf(k) * pageW, animated: true});
+  };
+  const settleTab = (x: number) => {
+    if (pageW <= 0) return;
+    const k = HISTORY_TABS[Math.max(0, Math.min(HISTORY_TABS.length - 1, Math.round(x / pageW)))];
+    if (k !== tab) setTab(k);
+  };
+  const heights = HISTORY_TABS.map((k) => pageH[k]);
+  const sized = pageW > 0 && heights.every((h) => h != null);
+  const tallest = sized ? Math.max(...(heights as number[])) : 0;
+  const pagerStyle = sized
+    ? {
+        height: tallest,
+        marginBottom: pagerX.interpolate({
+          inputRange: HISTORY_TABS.map((_, i) => i * pageW),
+          outputRange: (heights as number[]).map((h) => h - tallest),
+          extrapolate: 'clamp' as const,
+        }),
+      }
+    : undefined;
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const lastRead = useRef(0);
   const {busy, ready, run, sheet} = useVaultWrite(() => load());
@@ -159,6 +211,7 @@ export function PendingChangesScreen() {
         setLimits(valuesInForce(r));
       }),
       fetchTimelockHistory(vault, network).then(setHistory),
+      fetchSecurityHistory(vault, network).then(setStrengthened),
     ]);
   }, [vault, network]);
 
@@ -329,37 +382,96 @@ export function PendingChangesScreen() {
           full: a spinner while the first read is out, a line when nothing has gone through or the
           read failed, else the rows. A new delegate's permissions open in the same sheet as a
           pending one's. */}
-      <SettingsGroup label={t('mobile.app.history')}>
-        {history === undefined ? (
-          <View style={styles.emptyRow}>
-            <ActivityIndicator />
-          </View>
-        ) : history === null || history.length === 0 ? (
-          <View style={styles.emptyRow}>
-            <Text style={styles.empty}>{t(history === null ? 'mobile.vault.history_failed' : 'mobile.vault.history_none')}</Text>
-          </View>
-        ) : (
-          history.slice(0, 50).map((p, i, all) => (
-            <Pressable
-              key={`${p.txHash}:${p.kind}:${p.effectiveAt}`}
-              style={({pressed}) => [styles.done, i < all.length - 1 && styles.doneDivider, pressed && p.kind === 'newAssetManager' && styles.pressed]}
-              onPress={p.kind === 'newAssetManager' ? () => setPermsOf(p.perms) : undefined}
-              disabled={p.kind !== 'newAssetManager'}>
-              <Svg width={28} height={28} viewBox="0 0 24 24">
-                <Circle cx={12} cy={12} r={10} fill={c.success} />
-                <Path d="M7.5 12.5l3 3 6-6.5" stroke="#fff" strokeWidth={2.2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-              </Svg>
-              <View style={styles.doneText}>
-                <Text style={styles.doneTitle} numberOfLines={1}>{pendingTitle(p, t, nameOf)}</Text>
-                <Text style={styles.doneValue} numberOfLines={1} ellipsizeMode="middle">{pendingValue(p, t)}</Text>
-                {/* The wait it sat out: when it was requested, and when it took effect. */}
-                <Text style={styles.doneDate}>{t('mobile.vault.history_requested', {date: when(p.queuedAt)})}</Text>
-                <Text style={styles.doneDate}>{t('mobile.vault.history_effective', {date: when(p.effectiveAt)})}</Text>
-              </View>
-            </Pressable>
-          ))
-        )}
-      </SettingsGroup>
+      {/* Two histories behind two tabs: what loosened the smart wallet after waiting out the
+          security delay, and what made it stricter — at once, with no wait. */}
+      <View style={styles.historyBlock}>
+        <CategoryTabs
+          tabs={HISTORY_TABS.map((k) => ({key: k, label: t(k === 'delays' ? 'mobile.vault.history_delays' : 'mobile.vault.history_strengthen')}))}
+          value={tab}
+          onChange={pickTab}
+        />
+        {/* The two lists side by side, swiped or tapped between as Overview's Assets and Stocks are.
+            The pager's height follows the page in view, so a short list does not keep a long one's space. */}
+        <View onLayout={(e) => setPageW(e.nativeEvent.layout.width)}>
+          {pageW > 0 ? (
+            <Animated.ScrollView
+              ref={pagerRef as never}
+              horizontal
+              pagingEnabled
+              bounces={false}
+              showsHorizontalScrollIndicator={false}
+              style={pagerStyle}
+              scrollEventThrottle={16}
+              onScroll={Animated.event([{nativeEvent: {contentOffset: {x: pagerX}}}], {useNativeDriver: false})}
+              onMomentumScrollEnd={(e) => settleTab(e.nativeEvent.contentOffset.x)}>
+              {HISTORY_TABS.map((k) => (
+                <View key={k} style={{width: pageW}}>
+                  <View
+                    style={styles.page}
+                    onLayout={(e) => {
+                      // Read the height now: the event is pooled and recycled before an updater runs.
+                      const h = e.nativeEvent.layout.height;
+                      setPageH((prev) => (prev[k] === h ? prev : {...prev, [k]: h}));
+                    }}>
+                    <SettingsGroup>
+                      {(k === 'delays' ? history : strengthened) === undefined ? (
+                        <View style={styles.emptyRow}>
+                          <ActivityIndicator />
+                        </View>
+                      ) : k === 'delays' ? (
+                        history === null || !history?.length ? (
+                          <View style={styles.emptyRow}>
+                            <Text style={styles.empty}>{t(history === null ? 'mobile.vault.history_failed' : 'mobile.vault.history_none')}</Text>
+                          </View>
+                        ) : (
+                          history.slice(0, 50).map((p, i, all) => (
+                            <Pressable
+                              key={`${p.txHash}:${p.kind}:${p.effectiveAt}`}
+                              style={({pressed}) => [styles.done, i < all.length - 1 && styles.doneDivider, pressed && p.kind === 'newAssetManager' && styles.pressed]}
+                              onPress={p.kind === 'newAssetManager' ? () => setPermsOf(p.perms) : undefined}
+                              disabled={p.kind !== 'newAssetManager'}>
+                              {/* The pending row's ring, run all the way round, with the wait it sat out in the middle. */}
+                              <ProgressRing done={1} left={p.effectiveAt - p.queuedAt} tint={c.success} />
+                              <View style={styles.doneText}>
+                                <Text style={styles.doneTitle} numberOfLines={1}>{pendingTitle(p, t, nameOf)}</Text>
+                                <Text style={styles.doneValue} numberOfLines={1} ellipsizeMode="middle">{pendingValue(p, t)}</Text>
+                                {/* The wait it sat out: when it was requested, and when it took effect. */}
+                                <Text style={styles.doneDate}>{t('mobile.vault.history_requested', {date: when(p.queuedAt)})}</Text>
+                                <Text style={styles.doneDate}>{t('mobile.vault.history_effective', {date: when(p.effectiveAt)})}</Text>
+                              </View>
+                            </Pressable>
+                          ))
+                        )
+                      ) : strengthened === null || !strengthened?.length ? (
+                        <View style={styles.emptyRow}>
+                          <Text style={styles.empty}>{t(strengthened === null ? 'mobile.vault.history_failed' : 'mobile.vault.strengthen_none')}</Text>
+                        </View>
+                      ) : (
+                        strengthened.slice(0, 50).map((s, i, all) => (
+                          <View key={`${s.txHash}:${s.kind}:${i}`} style={[styles.done, i < all.length - 1 && styles.doneDivider]}>
+                            {/* A bolt, not a ring: nothing was waited out. */}
+                            <Svg width={DONE_RING} height={DONE_RING} viewBox="0 0 24 24">
+                              <Circle cx={12} cy={12} r={11} fill={c.success} />
+                              <Path d="M13 5 7.5 13H12l-1 6 5.5-8H12z" fill="#fff" />
+                            </Svg>
+                            <View style={styles.doneText}>
+                              <Text style={styles.doneTitle} numberOfLines={1}>{strengthenTitle(s, t, nameOf)}</Text>
+                              {strengthenValue(s, t) ? (
+                                <Text style={styles.doneValue} numberOfLines={1} ellipsizeMode="middle">{strengthenValue(s, t)}</Text>
+                              ) : null}
+                              <Text style={styles.doneDate}>{t('mobile.vault.history_instant', {date: when(s.at)})}</Text>
+                            </View>
+                          </View>
+                        ))
+                      )}
+                    </SettingsGroup>
+                  </View>
+                </View>
+              ))}
+            </Animated.ScrollView>
+          ) : null}
+        </View>
+      </View>
       {/* Why these wait: the timelock, said without the word. */}
       <Sheet visible={aboutOpen} title={t('mobile.vault.timelock_page_title')} onClose={() => setAboutOpen(false)}>
         <View style={styles.about}>
@@ -412,4 +524,7 @@ const makeStyles = (c: Colors) =>
     doneTitle: {color: c.text, fontSize: 15, fontWeight: '600'},
     doneValue: {color: c.subtext, fontSize: 13},
     doneDate: {color: c.subtext, fontSize: 12, fontVariant: ['tabular-nums']},
+    historyBlock: {gap: 8},
+    // Each page on its own, its card's top at the page's top: the pager measures this for its height.
+    page: {alignSelf: 'flex-start', width: '100%'},
   });

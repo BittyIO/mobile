@@ -135,11 +135,11 @@
       "err_payee_exists": "Alamat ini sudah menjadi salah satu penerima Anda.",
       "err_gas_budget": "Anggaran biaya jaringan hari ini sudah habis.",
       "err_price_unavailable": "Feed harga sedang tidak tersedia. Coba lagi sebentar lagi.",
-      "err_bridge_off": "Bridge untuk dompet pintar ini nonaktif, atau masih menunggu timelock.",
+      "err_bridge_off": "Bridge untuk dompet pintar ini nonaktif, atau masih menunggu penundaan keamanan.",
       "err_bridge_route": "Aset ini tidak bisa di-bridge lewat rute ini.",
       "err_bridge_cost": "Penawaran bridge melewati batas rute ini. Ambil penawaran baru lalu coba lagi.",
       "err_daily_loss": "Ini akan melewati batas kerugian hari ini.",
-      "err_timelock_needs_limits": "Timelock memerlukan kedua batas harian berupa jumlah, bukan tanpa batas."
+      "err_timelock_needs_limits": "Penundaan keamanan memerlukan kedua batas harian berupa jumlah, bukan tanpa batas."
     }
   }
 }

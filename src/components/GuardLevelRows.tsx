@@ -87,6 +87,8 @@ export function GuardParams({values, onEdit}: {values: GuardValues; onEdit?: (fi
           icon={icon}
           title={t(RISK_TITLE[field])}
           value={fmtRiskValue(field, values[field], t)}
+          // $0 of losses a day is no market trade at all: the vault turns trading and bridging off with it.
+          sub={field === 'marketTradeDailyLossAllowance' && values[field] === 0n ? t('mobile.vault.guard_loss_off') : undefined}
           onPress={onEdit ? () => onEdit(field) : undefined}
           chevron={!!onEdit}
           info={() => setAbout(field)}
@@ -94,8 +96,6 @@ export function GuardParams({values, onEdit}: {values: GuardValues; onEdit?: (fi
         />
       ))}
       </SettingsGroup>
-      {/* $0 of losses a day is no market trade at all: the vault turns trading and bridging off with it. */}
-      {values.marketTradeDailyLossAllowance === 0n ? <Text style={styles.lossOff}>{t('mobile.vault.guard_loss_off')}</Text> : null}
     </>
   );
 }
@@ -105,5 +105,4 @@ const makeStyles = (c: Colors) =>
     about: {gap: 12, paddingHorizontal: 4, paddingBottom: 24},
     aboutText: {color: c.text, fontSize: 15, lineHeight: 22},
     aboutSub: {color: c.subtext, fontSize: 13, lineHeight: 19},
-    lossOff: {color: c.danger, fontSize: 13, lineHeight: 19, paddingHorizontal: 4, marginTop: -12},
   });

@@ -352,7 +352,8 @@ export type PendingChange =
 export async function getPendingChanges(vault: Address, network: Network): Promise<PendingChange[]> {
   const [p, book] = await Promise.all([
     readPendingChanges(vault, network).catch(() => null),
-    fetchWhitelist(vault, network),
+    // Every entry: a payee added on another network waits out the delay as one here does.
+    fetchWhitelist(vault, network, {all: true}),
   ]);
   const out: PendingChange[] = [];
   if (p) {
@@ -447,6 +448,53 @@ export async function fetchTimelockHistory(vault: Address, network: Network): Pr
         default:
           return r.value != null ? [{kind: r.kind, value: BigInt(r.value), at, ...meta}] : [];
       }
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** One strengthening, taking effect at once: a stricter risk number, a lock, or a waiting change called off. */
+export type SecurityHistoryItem =
+  | {kind: 'timelock' | 'sendDailyAllowance' | 'marketTradeDailyLossAllowance'; from: bigint; value: bigint; at: number; txHash: string}
+  | {kind: 'lock'; level: number; at: number; txHash: string}
+  | {kind: 'cancel'; change: PendingChange; at: number; txHash: string};
+
+/**
+ * What made the vault stricter, newest first (web: /api/vaults/security-history) — the other half of
+ * fetchTimelockHistory, which lists what loosened it after waiting. Null when the server could not say.
+ */
+export async function fetchSecurityHistory(vault: Address, network: Network): Promise<SecurityHistoryItem[] | null> {
+  try {
+    const res = await fetch(apiUrl(`/api/ethereum/vaults/security-history/${vault}`, network));
+    if (!res.ok) return null;
+    type Change = {kind: PendingChange['kind']; value?: string; address?: Address; perms?: number; id?: string};
+    const json = (await res.json()) as {
+      data?: ({kind: string; at: number; txHash: string; from?: string; value?: string | number; change?: Change})[];
+    };
+    const changeOf = (c: Change, at: bigint): PendingChange | null => {
+      switch (c.kind) {
+        case 'newOwner':
+          return c.address ? {kind: c.kind, address: c.address, at} : null;
+        case 'newAssetManager':
+          return c.address ? {kind: c.kind, address: c.address, perms: c.perms ?? 0, at} : null;
+        case 'whitelistAdd':
+        case 'whitelistRemove':
+          return c.address ? {kind: c.kind, address: c.address, id: c.id ?? '', at} : null;
+        default:
+          return c.value != null ? {kind: c.kind, value: BigInt(c.value), at} : null;
+      }
+    };
+    return (json.data ?? []).flatMap((r): SecurityHistoryItem[] => {
+      const meta = {at: r.at, txHash: r.txHash};
+      if (r.kind === 'lock') return [{kind: 'lock', level: Number(r.value ?? 0), ...meta}];
+      if (r.kind === 'cancel') {
+        const change = r.change ? changeOf(r.change, BigInt(r.at)) : null;
+        return change ? [{kind: 'cancel', change, ...meta}] : [];
+      }
+      if ((r.kind === 'timelock' || r.kind === 'sendDailyAllowance' || r.kind === 'marketTradeDailyLossAllowance') && r.from != null && r.value != null)
+        return [{kind: r.kind, from: BigInt(r.from), value: BigInt(r.value), ...meta}];
+      return [];
     });
   } catch {
     return null;

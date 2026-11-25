@@ -1,7 +1,7 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {useFocusEffect, useNavigation} from '@react-navigation/native';
+import {useFocusEffect, useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
 import {formatUnits, parseUnits, zeroAddress, type Address, type Hex} from 'viem';
@@ -20,13 +20,24 @@ import {AvailableLine} from '@/components/AvailableLine';
 import {useConfirmAction} from '@/components/ConfirmAction';
 import {showTx} from '@/components/Toast';
 import {FIT} from '@/core/text-scale';
-import {isTestnet, NATIVE, type Network} from '@/core/chain';
+import {CHAIN_ID, isTestnet, isTronNetwork, NATIVE, type Network} from '@/core/chain';
+import {displayAddress, parseAddress} from '@/core/address';
+import {isPayableAddress} from '@/core/asset-catalog';
+import {recipientName, useRecipientNames} from '@/core/recipient-names';
+import {fetchWhitelist, type WhitelistedRecipient} from '@/vault/payments';
+import {WHITELIST_STATUS} from '@/core/abi';
+import {getRiskConfig} from '@/vault/risk';
+import {fmtAllowance} from '@/components/riskFormat';
+import {QrScanner} from '@/components/QrScanner';
+import {ScanButton} from '@/components/ScanIcon';
 import {networkLabel, useNetwork, useNetworks} from '@/core/network-store';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {knownAssets} from '@/core/assets';
 import {availableVaultUpgrade, plannedVaultUpgrade} from '@/vault/auto-upgrade';
 import {ProtocolChip} from '@/components/ProtocolIcon';
-import {useActiveVaultAddress} from '@/core/active-vault';
+import {useActiveVaultAddress, vaultAddressOf} from '@/core/active-vault';
+import {useVaults, vaultLabel} from '@/core/vault-store';
+import {CopyButton} from '@/components/CopyButton';
 import {asShown, displaySymbol, fmtNum, shortAddress} from '@/core/format';
 import {useWallet} from '@/wallet/store';
 import {useVaultBalances} from '@/vault/useVaultBalances';
@@ -39,9 +50,8 @@ import {quoteRelayFeeUsd, relayGasFor} from '@/vault/fee-quote';
 import {useFeeFloor} from '@/vault/useFeeFloor';
 import {feeCoinForSpend, feeWeth, reserveHeld, resolveFeeReserve, useWethFeeCoin} from '@/vault/stableCoinAsGas';
 import {gateReasonKey, useCapability} from '@/vault/gate';
-import {versionAtLeast} from '@/vault/capabilities';
+import {BRIDGE_TO_SINCE, NO_LIMIT, versionAtLeast} from '@/vault/capabilities';
 import {runningVaultVersion} from '@/vault/vault-abi';
-import {CopyButton} from '@/components/CopyButton';
 import {useActiveAccount} from '@/core/account-mode';
 import {usdValue} from '@/core/prices';
 import {bridgeFromWallet, walletBridgeCost} from '@/wallet/bridge';
@@ -61,6 +71,7 @@ import {
   routeId,
   forgetBridge,
   setBridgeEnabled,
+  type BridgeDest,
   type BridgeInfo,
   type BridgeQuote,
   type BridgeRoute,
@@ -106,8 +117,13 @@ export function BridgeScreen() {
   const assets = useAssetCatalog(network);
   const bal = useVaultBalances(network);
   const pos = useVaultPositions(vault, network);
-  const gate = useCapability('bridge');
+  const ownGate = useCapability('bridge');
+  const toGate = useCapability('bridgeTo');
+  const payeeGate = useCapability('bridgeToWhitelistedRecipient');
   const enableGate = useCapability('enableBridge');
+  const names = useRecipientNames((s) => s.names);
+  /** Opened from a payee on another network (Payees): that payee is the recipient. */
+  const params = useRoute<RouteProp<RootStackParamList, 'Bridge'>>().params;
   const {ask, sheet} = useConfirmAction();
   const label = (n: Network) => networkLabel(n, t);
 
@@ -188,8 +204,53 @@ export function BridgeScreen() {
   const [to, setTo] = useState<Network | null>(null);
   const [assetAddr, setAssetAddr] = useState<string | null>(null);
   /** The From or To network, or the coin and where it comes from. */
-  const [picker, setPicker] = useState<'from' | 'to' | 'source' | null>(null);
-  const destinations = useMemo(() => Array.from(new Set((bi?.routes ?? []).map((r) => r.to))), [bi]);
+  const [picker, setPicker] = useState<'from' | 'to' | 'source' | 'recipient' | null>(null);
+  /**
+   * Who is paid over there (vault 1.2.1 and an adapter that can): the owner's own smart wallet,
+   * an address typed or scanned, or a payee from the book that reaches the To network.
+   */
+  const [dest, setDest] = useState<{kind: 'mine'} | {kind: 'address'} | {kind: 'payee'; id: string}>(() =>
+    params?.payeeId ? {kind: 'payee', id: params.payeeId} : {kind: 'mine'},
+  );
+  const [addrText, setAddrText] = useState('');
+  const [scanning, setScanning] = useState(false);
+  /** The book, every network's entries: the payees a bridge may pay. Null until read. */
+  const [book, setBook] = useState<WhitelistedRecipient[] | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      if (!vault) return setBook(null);
+      let live = true;
+      fetchWhitelist(vault, network, {all: true}).then((b) => live && setBook(b));
+      return () => {
+        live = false;
+      };
+    }, [vault, network]),
+  );
+  /** The daily send limit, which a bridge to an address counts against. */
+  const [sendLimit, setSendLimit] = useState<bigint | null>(null);
+  useEffect(() => {
+    setSendLimit(null);
+    if (vault) getRiskConfig(vault, network).then((r) => r?.read && setSendLimit(r.sendDailyAllowance));
+  }, [vault, network]);
+  /**
+   * Someone else over there: offered once the vault's release and the adapter both bridge to
+   * others ({BRIDGE_TO_SINCE}), or an upgrade to such a release rides in front. A wallet sends to
+   * any address straight through the SpokePool; it has no payee book.
+   */
+  const plannedUp = vault ? plannedVaultUpgrade(vault, network) : null;
+  const toOthers = walletOn
+    ? !!bi
+    : !!bi?.toAddress && (versionAtLeast(version, BRIDGE_TO_SINCE) || (!!plannedUp && versionAtLeast(plannedUp, BRIDGE_TO_SINCE)));
+  /**
+   * There is no smart wallet on Tron any more: a vault bridges there only to someone else's
+   * address or a payee, so without those Tron is not offered at all.
+   */
+  const ownOn = (n: Network) => walletOn || !isTronNetwork(n);
+  const destinations = useMemo(
+    () => Array.from(new Set((bi?.routes ?? []).map((r) => r.to))).filter((n) => toOthers || ownOn(n)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [bi, toOthers, walletOn],
+  );
   /**
    * Where To should land once the network switch below has loaded its routes: the network just
    * left, after a flip or after picking To's network as From. Kept until the routes are in, since
@@ -286,6 +347,13 @@ export function BridgeScreen() {
   const [fundAmt, setFundAmt] = useState<Record<string, string>>({});
   /** The amount field as typed; the rows hold how it is split. */
   const [amountText, setAmountText] = useState('');
+  /**
+   * The To field as typed, when the amount was asked for by what should ARRIVE: the From amount is
+   * then worked back from Across's quote (see the quote's effect). Null while From leads.
+   */
+  const [toText, setToText] = useState<string | null>(null);
+  /** How many times the From amount has been nudged toward the typed To amount; a few at most. */
+  const toTries = useRef(0);
   /** Until a tick is changed, the ticks follow the coin's funded sources as balances and positions load. */
   const fundTouched = useRef(false);
   const freeOf = (r: BridgeRoute) => Number(balanceOfSymbol(bal.balances, r.asset.symbol) || 0);
@@ -403,6 +471,7 @@ export function BridgeScreen() {
     setFundOn(defaultOn());
     setFundAmt({});
     setAmountText('');
+    setToText(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceKey, assetAddr]);
   /** Back to the coin's own sources, empty: a new coin or a new From network. */
@@ -411,11 +480,13 @@ export function BridgeScreen() {
     setFundOn(defaultOn());
     setFundAmt({});
     setAmountText('');
+    setToText(null);
   };
   const setAmount = (v: string) => {
     if (v !== '') return;
     setFundAmt({});
     setAmountText('');
+    setToText(null);
   };
   const ticked = sourceKeys.filter((k) => fundOn[k]);
   /** A row's amount, never past what its source holds. */
@@ -430,6 +501,7 @@ export function BridgeScreen() {
   /** A row changed: the field restates the rows' total, so the two always agree. */
   const applyRows = (on: Record<string, boolean>, amt: Record<string, string>) => {
     fundTouched.current = true;
+    setToText(null);
     setFundOn(on);
     setFundAmt(amt);
     const total = sourceKeys.reduce((n, k) => n + rowOf(on, amt, k), 0n);
@@ -471,20 +543,95 @@ export function BridgeScreen() {
   const pinnedFee = route ? feeCoinForSpend(network, reserve.coin, route.asset.symbol) : null;
 
   // Where it lands, and Across's quote for it — re-asked shortly after the amount stops changing.
-  const [recipient, setRecipient] = useState<Address | null>(null);
+  const [ownRecipient, setOwnRecipient] = useState<Address | null>(null);
   useEffect(() => {
-    setRecipient(null);
+    setOwnRecipient(null);
     // The wallet's own address over there: the same key, the same 20 bytes (on Tron written T…).
-    if (walletOn) return setRecipient(bi && to && active.address ? active.address : null);
-    if (!bi || !to || !vault || !owner) return;
+    if (walletOn) return setOwnRecipient(bi && to && active.address ? active.address : null);
+    if (!bi || !to || !vault || !owner || !ownOn(to)) return;
     let live = true;
     bridgeRecipient(network, bi.adapter, vault, to, owner as Address)
-      .then((r) => live && setRecipient(r))
+      .then((r) => live && setOwnRecipient(r))
       .catch(() => {});
     return () => {
       live = false;
     };
   }, [bi, to, vault, owner, network, walletOn, active.address]);
+  /** The owner's own wallet over there is a choice: not a vault's to Tron. */
+  const ownOk = !!to && ownOn(to);
+  /**
+   * An address may be typed straight into To while a send to anyone may go: refused under a lock,
+   * and with Send to new at $0. A wallet answers to neither.
+   */
+  const addrOk = toOthers && (walletOn || toGate.allowed);
+  /** A payee is paid on `n`: one on that network, or on every EVM network where the guard marks `n` EVM. */
+  const reaches = (b: WhitelistedRecipient, n: Network) =>
+    b.chain === CHAIN_ID[n] || (b.chain === 'evm' && !!bi?.evm.includes(n));
+  const payeeNow = (b: WhitelistedRecipient) => b.status === WHITELIST_STATUS.payable || b.status === WHITELIST_STATUS.removalQueued;
+  const payeesTo = !walletOn && toOthers && to && book ? book.filter((b) => reaches(b, to)) : [];
+  const payee = dest.kind === 'payee' ? book?.find((b) => b.id === dest.id) : undefined;
+  /** Opened for a payee on one other network: To is that network, once its routes are in. */
+  const toForPayee = useRef(!!params?.payeeId);
+  useEffect(() => {
+    if (!toForPayee.current || !payee || typeof payee.chain !== 'number' || !destinations.length) return;
+    toForPayee.current = false;
+    const n = destinations.find((d) => CHAIN_ID[d] === payee.chain);
+    if (n) setTo(n);
+  }, [payee, destinations]);
+  // A choice the new To network (or release) no longer allows falls back to the owner's own wallet,
+  // or, where there is none (a vault to Tron), to an address.
+  useEffect(() => {
+    if (!to) return;
+    if (dest.kind === 'mine') {
+      if (!ownOk) setDest({kind: 'address'});
+      return;
+    }
+    if (dest.kind === 'payee' && (!book || toForPayee.current)) return;
+    const gone = dest.kind === 'payee' ? !(payee && reaches(payee, to)) : !addrOk;
+    if (!toOthers || gone) setDest(ownOk ? {kind: 'mine'} : {kind: 'address'});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [to, toOthers, book, dest.kind, ownOk, addrOk]);
+  /** What was typed, as the 0x… the vault takes (a Tron T… address too). */
+  const typed = dest.kind === 'address' && to && isPayableAddress(addrText, to) ? parseAddress(to, addrText) : null;
+  /** The vault's own address: its counterpart over there is "my smart wallet", and the vault refuses it as an address. */
+  const typedSelf = !!typed && !!vault && typed.toLowerCase() === vault.toLowerCase();
+  /**
+   * The owner's own smart wallet, pasted in rather than picked: this vault's address, or its
+   * counterpart over there. Not an error: it is sent as My smart wallet, the address left showing.
+   */
+  const isOwnText = (v: string) => {
+    if (!to || !isPayableAddress(v, to)) return false;
+    const a = parseAddress(to, v)?.toLowerCase();
+    if (!a) return false;
+    return (!!vault && a === vault.toLowerCase()) || (!!ownRecipient && a === ownRecipient.toLowerCase());
+  };
+  const pastedOwn = isOwnText(addrText);
+  useEffect(() => {
+    if (pastedOwn && ownOk && dest.kind === 'address') setDest({kind: 'mine'});
+  }, [pastedOwn, ownOk, dest.kind]);
+  /**
+   * The owner's other smart wallets on the To network, for the list beside this one's. Paid as an
+   * address (bridgeTo), so offered only while a send to anyone may go; a wallet bridges to its own.
+   */
+  const vaultRefs = useVaults((st) => st.vaults);
+  const vaultIdx = useVaults((st) => st.activeIndex);
+  const otherVaults = useMemo(() => {
+    if (walletOn || !to || !ownOk || !addrOk) return [];
+    const shown = vaultRefs.filter((v) => !v.hidden);
+    const here = (vault ?? '').toLowerCase();
+    const mine = (ownRecipient ?? '').toLowerCase();
+    return shown
+      .filter((v) => v.index !== vaultIdx)
+      .map((v) => ({index: v.index, name: vaultLabel(v, (n) => t('mobile.app.vault_n', {n}), shown), address: vaultAddressOf(v, to)}))
+      .filter((v): v is typeof v & {address: Address} => !!v.address && v.address.toLowerCase() !== here && v.address.toLowerCase() !== mine);
+  }, [vaultRefs, vaultIdx, walletOn, to, ownOk, addrOk, vault, ownRecipient, t]);
+  /** My smart wallet picked from the list: named on the row, as a payee is, until cleared. */
+  const [mineChosen, setMineChosen] = useState(false);
+  const recipient: Address | null =
+    dest.kind === 'mine' ? (ownOk ? ownRecipient : null) : dest.kind === 'address' ? (typedSelf ? null : typed) : payee && to && reaches(payee, to) ? (payee.recipientAddress as Address) : null;
+  /** To an address: a send that crosses, so a stablecoin only (the vault meters it as one); to a payee, any token but the coin itself. */
+  const assetBad =
+    !walletOn && !!route && ((dest.kind === 'address' && (route.native || route.asset.kind !== 'stable')) || (dest.kind === 'payee' && route.native));
   const [quote, setQuote] = useState<BridgeQuote | null>(null);
   const [quoteNonce, setQuoteNonce] = useState(0);
   const [quoteErr, setQuoteErr] = useState<BridgeQuoteError | null>(null);
@@ -493,11 +640,16 @@ export function BridgeScreen() {
     setQuote(null);
     setQuoteErr(null);
     // Quoted over the balance too, so what an amount would bring is seen before there is enough; Confirm stays off.
-    if (!route || !recipient || raw <= 0n) return;
+    // Before a recipient is named (an address still to type), the quote is asked for the owner's own
+    // address: what arrives and the least that goes hardly depend on who receives, so the amount
+    // gets its answer at once. Confirm still waits for the recipient; the quote is asked again then.
+    const quoteTo = recipient ?? (owner as Address | null) ?? active.address ?? null;
+    if (!route || !quoteTo || raw <= 0n || assetBad) return;
     let live = true;
     setQuoting(true);
     const timer = setTimeout(() => {
-      quoteBridge(network, route, raw, recipient, walletOn ? zeroAddress : bridgeOriginOwner(network, route.to, owner as Address))
+      // Only the owner's own vault over there takes the origin owner; someone else is paid as named.
+      quoteBridge(network, route, raw, quoteTo, walletOn || dest.kind !== 'mine' ? zeroAddress : bridgeOriginOwner(network, route.to, owner as Address))
         .then((q) => live && setQuote(q))
         .catch((e) => live && setQuoteErr(e instanceof BridgeQuoteError ? e : new BridgeQuoteError('quote_failed')))
         .finally(() => live && setQuoting(false));
@@ -508,7 +660,37 @@ export function BridgeScreen() {
       setQuoting(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route, recipient, raw, network, quoteNonce, planKey]);
+  }, [route, recipient, raw, network, quoteNonce, planKey, dest.kind, assetBad]);
+
+  // To leads: nudge the From amount by what the quote fell short or over, until it lands on the
+  // typed amount. The fee hardly moves with the amount, so one or two steps settle it.
+  useEffect(() => {
+    if (toText === null || !quote || !route) return;
+    const want = toRaw(toText);
+    const miss = want - quote.received;
+    const tol = want / 10_000n; // within 0.01%
+    if ((miss <= tol && -miss <= tol) || toTries.current >= 4) return;
+    toTries.current += 1;
+    const next = raw + miss;
+    if (next > 0n) typeAmount(fmtCap(next));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quote]);
+  /** The To field typed in: a first guess at the From amount, from the last quote's rate when there is one. */
+  const typeTo = (v: string) => {
+    setToText(v);
+    toTries.current = 0;
+    const want = toRaw(v);
+    if (want <= 0n) {
+      fundTouched.current = true;
+      setFundAmt({});
+      setAmountText('');
+      return;
+    }
+    const guess = quote && quote.received > 0n ? (want * quote.amount) / quote.received : want;
+    typeAmount(fmtCap(guess));
+  };
+  /** What arrives, as the To field shows it while From leads: plain digits, so it can be typed over. */
+  const toShown = toText ?? (quote && route ? String(Number(Number(formatUnits(quote.received, dec)).toFixed(6))) : '');
 
   // The coin the relayer bills.
   const stables = assets.filter((a) => a.kind === 'stable');
@@ -528,7 +710,7 @@ export function BridgeScreen() {
     const tx = showTx(title, network);
     try {
       const account = await useWallet.getState().walletSigner();
-      const {hash} = await bridgeFromWallet({account, network, info: bi, route, quote, wallet: from});
+      const {hash} = await bridgeFromWallet({account, network, info: bi, route, quote, wallet: from, recipient: dest.kind === 'address' && typed ? typed : undefined});
       recordSent({
         hash,
         network,
@@ -556,7 +738,10 @@ export function BridgeScreen() {
     try {
       const account = await getSigner();
       const withdrawals = plan;
-      const hash = await bridgeFromVault({account, vault, network, adapter: bi.adapter, route, quote, stableCoin: bill.coin, pinFee: bill.pin, upgradeVault, withdrawals});
+      const target: BridgeDest | undefined =
+        dest.kind === 'address' && typed ? {kind: 'address', recipient: typed} : dest.kind === 'payee' && payee ? {kind: 'payee', id: payee.id} : undefined;
+      if (dest.kind !== 'mine' && !target) return;
+      const hash = await bridgeFromVault({account, vault, network, adapter: bi.adapter, route, quote, stableCoin: bill.coin, pinFee: bill.pin, upgradeVault, withdrawals, dest: target});
       tx.success(hash);
       setAmount('');
       resetFunding();
@@ -610,6 +795,8 @@ export function BridgeScreen() {
   const pad = {paddingTop: 8, paddingBottom: tabBarHeight + 16};
   // Not scrolled, so the bar's height is padding here.
   const padStill = {paddingTop: headerHeight + 8, paddingBottom: tabBarHeight + 16};
+  /** The rule for who is paid: the owner's own bridge, a bridge to an address (a send), or to a payee. */
+  const gate = dest.kind === 'address' ? toGate : dest.kind === 'payee' ? payeeGate : ownGate;
   const message = (text: string) => (
     <View style={[styles.empty, padStill]}>
       <NetworkIcon network={network} size={56} />
@@ -666,7 +853,7 @@ export function BridgeScreen() {
   // The daily loss limit at $0 refuses a bridge (its cost counts against the limit): say so in the
   // bridge's words, not the market trade's the shared reason is named for.
   // The vault's guard rules the vault's bridge; a wallet answers to no guard.
-  const lossOff = !walletOn && !gate.allowed && gate.reason === 'market_trade_off';
+  const lossOff = !walletOn && dest.kind === 'mine' && !gate.allowed && gate.reason === 'market_trade_off';
   const blocked = walletOn || gate.allowed ? null : lossOff ? 'loss_off' : t(gateReasonKey(gate)!);
   // "Daily loss limit" in the sentence is a link to its own page in Risk settings.
   const lossOffLine = () => {
@@ -684,6 +871,29 @@ export function BridgeScreen() {
   };
   // The form shows either way, as the Trade tab does; this says why it has nothing to offer.
   const emptyNote = fresh && info === 'failed' ? t('mobile.bridge.load_failed') : null;
+
+  const payeeName = (b: WhitelistedRecipient) =>
+    recipientName(names, to ?? network, b.recipientAddress) ?? t('mobile.payments.recipient_n', {n: b.id});
+  const ownName = () => t(walletOn ? 'mobile.bridge.my_wallet' : 'mobile.bridge.my_smart_wallet');
+  const destName = () =>
+    dest.kind === 'mine' ? (ownOk ? ownName() : t('mobile.bridge.choose_recipient')) : dest.kind === 'address' ? t('mobile.bridge.an_address') : payee ? payeeName(payee) : '…';
+  /** What the choice of recipient means, under the To card. */
+  const destNote = () => {
+    if (!to || dest.kind === 'mine') return null;
+    if (assetBad)
+      return <Text style={styles.err}>{t(dest.kind === 'address' ? 'mobile.bridge.to_address_stable_only' : 'mobile.bridge.to_payee_no_native')}</Text>;
+    if (walletOn) return <Text style={styles.hint}>{t('mobile.bridge.to_address_check', {network: label(to)})}</Text>;
+    if (dest.kind === 'address') {
+      const limit = sendLimit == null ? null : sendLimit === NO_LIMIT ? null : fmtAllowance(sendLimit, t);
+      return (
+        <Text style={styles.hint}>
+          {limit ? `${t('mobile.bridge.to_address_limit', {limit})} ` : ''}
+          {t('mobile.bridge.to_address_check', {network: label(to)})}
+        </Text>
+      );
+    }
+    return <Text style={styles.hint}>{t('mobile.bridge.to_payee_note')}</Text>;
+  };
 
   return (
     <View style={styles.container}>
@@ -708,7 +918,7 @@ export function BridgeScreen() {
             {/* Picked here or in the header's switcher: both are the app's network. */}
             <NetPill network={network} name={label(network)} onPress={() => setPicker('from')} styles={styles} />
             {/* The vault it leaves, after its network. */}
-            {vault ? <VaultAddr address={vault} styles={styles} /> : walletOn && active.address ? <VaultAddr address={active.address} styles={styles} /> : null}
+            {vault ? <VaultAddr address={vault} styles={styles} copy /> : walletOn && active.address ? <VaultAddr address={active.address} styles={styles} copy /> : null}
           </View>
           {/* Trade's field: what the ticked sources hold above it (tapped, it is Max), the amount, Max
               or clear, and the coin's pill, which opens where it comes from. */}
@@ -725,7 +935,10 @@ export function BridgeScreen() {
                 value={amountText}
                 placeholder="0"
                 placeholderTextColor={c.subtext}
-                onChangeText={typeAmount}
+                onChangeText={(v) => {
+                  setToText(null);
+                  typeAmount(v);
+                }}
               />
               {Number(amountText) > 0 ? (
                 <ClearBtn onPress={() => setAmount('')} />
@@ -751,14 +964,98 @@ export function BridgeScreen() {
           <View style={styles.cardHead}>
             <Text style={styles.cardTitle}>{t('mobile.bridge.to')}</Text>
             <NetPill network={to} name={to ? label(to) : t('mobile.bridge.choose_destination')} onPress={() => setPicker('to')} styles={styles} />
-            {/* The owner's vault there, where it arrives. */}
-            {to && recipient ? <VaultAddr address={recipient} styles={styles} /> : null}
-            <View style={styles.spacer} />
-            {quote?.fillSeconds ? (
-              <Text {...FIT} style={styles.arrival}>
-                {t('mobile.bridge.arrival_time')} <Text style={styles.arrivalValue}>{fillTime(quote.fillSeconds)}</Text>
-              </Text>
-            ) : null}
+            {/* Who is paid there, on this same row (vault 1.2.1). While a send to anyone may go, an
+                address is typed straight in: left empty, the owner's own smart wallet. The book's
+                payees are a tap on the person mark; the camera is at the right end. */}
+            {toOthers && to && addrOk ? (
+              <View style={styles.headRecip}>
+                {(dest.kind === 'payee' && payee) || (dest.kind === 'mine' && mineChosen && !addrText) ? (
+                  <>
+                    {payee && dest.kind === 'payee' ? (
+                      <Text {...FIT} style={styles.payeeChosen} numberOfLines={1}>
+                        {payeeName(payee)}
+                      </Text>
+                    ) : (
+                      // My smart wallet picked: its address there, shortened as From shows its own.
+                      <View style={styles.headRecipAddr}>
+                        {ownRecipient ? <VaultAddr address={ownRecipient} styles={styles} /> : <Text style={styles.payeeChosen}>{ownName()}</Text>}
+                      </View>
+                    )}
+                    <ClearBtn
+                      onPress={() => {
+                        setMineChosen(false);
+                        setDest(ownOk ? {kind: 'mine'} : {kind: 'address'});
+                      }}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <TextInput
+                      style={[styles.addrInput, addrText.length > 0 && dest.kind === 'address' && !typed && !pastedOwn && styles.inputOver]}
+                      // Empty is the owner's own wallet, so no name stands in it; only where there is
+                      // none of theirs (Tron) does it say what to type.
+                      placeholder={ownOk ? undefined : t('mobile.bridge.address_on', {network: label(to)})}
+                      placeholderTextColor={c.subtext}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      value={addrText}
+                      onChangeText={(v) => {
+                        setAddrText(v);
+                        setMineChosen(false);
+                        // The owner's own address pasted in is My smart wallet (see `pastedOwn`), decided
+                        // here in one step: passing through "an address" first re-asked the quote twice
+                        // and the card redrew. Already My smart wallet, nothing changes at all.
+                        const own = ownOk && (!v || isOwnText(v));
+                        if (own) {
+                          if (dest.kind !== 'mine') setDest({kind: 'mine'});
+                        } else if (dest.kind !== 'address') setDest({kind: 'address'});
+                      }}
+                    />
+                    {addrText ? (
+                      <ClearBtn
+                        onPress={() => {
+                          setAddrText('');
+                          if (ownOk) setDest({kind: 'mine'});
+                        }}
+                      />
+                    ) : null}
+                  </>
+                )}
+                {/* The list: My smart wallet, and the payees that reach this network. */}
+                {ownOk || payeesTo.length > 0 || otherVaults.length > 0 ? (
+                  <Pressable
+                    hitSlop={8}
+                    onPress={() => setPicker('recipient')}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('mobile.bridge.recipient')}
+                    style={({pressed}) => pressed && styles.pressed}>
+                    <PersonIcon color={c.subtext} />
+                  </Pressable>
+                ) : null}
+                {/* Its 48pt target, pulled in so the mark sits at the card's right inset. */}
+                <View style={styles.scanEnd}>
+                  <ScanButton onPress={() => setScanning(true)} />
+                </View>
+              </View>
+            ) : toOthers && to && (payeesTo.length > 0 || !ownOk) ? (
+              // Send to new at $0 or locked: no address to type, only the owner's own wallet or a payee.
+              <Pressable
+                style={({pressed}) => [styles.headRecip, pressed && styles.pressed]}
+                onPress={() => setPicker('recipient')}
+                accessibilityRole="button"
+                accessibilityLabel={t('mobile.bridge.recipient')}>
+                <Text {...FIT} style={styles.recipValue} numberOfLines={1}>
+                  {destName()}
+                </Text>
+                <Chevron color={c.subtext} />
+              </Pressable>
+            ) : (
+              <>
+                {/* The owner's vault there, where it arrives. */}
+                {to && dest.kind === 'mine' && recipient ? <VaultAddr address={recipient} styles={styles} /> : null}
+                <View style={styles.spacer} />
+              </>
+            )}
           </View>
           <View style={styles.line}>
             <View style={styles.field}>
@@ -767,13 +1064,22 @@ export function BridgeScreen() {
                 {shownOutSym ? <TokenIcon symbol={shownOutSym} size={20} /> : null}
                 <Text style={styles.assetSym}>{shownOutSym ?? '—'}</Text>
               </View>
-              <Text {...FIT} style={[styles.receiveAmount, !quote && styles.receiveEmpty]}>
-                {quote && route ? `≈ ${fmtRaw(quote.received)}` : '0'}
-              </Text>
+              {/* About what arrives, or typed: what should arrive, the From amount worked back from it. */}
+              {toText === null && quote ? <Text style={styles.approx}>≈</Text> : null}
+              <TextInput
+                style={styles.input}
+                keyboardType="decimal-pad"
+                value={toShown}
+                placeholder="0"
+                placeholderTextColor={c.subtext}
+                editable={!!route && !!to}
+                onChangeText={typeTo}
+              />
               {quoting ? <ActivityIndicator size="small" color={c.subtext} /> : null}
             </View>
           </View>
         </SettingsGroup>
+        {destNote()}
 
         {emptyNote ? <Text style={styles.hint}>{emptyNote}</Text> : null}
         {errText ? <Text style={styles.err}>{errText}</Text> : null}
@@ -805,6 +1111,13 @@ export function BridgeScreen() {
         {on ? (
           <View style={styles.footer}>
             {/* Who carries it, then Bitty's fee, both as Trade's lines: the label left, the value right. */}
+            {/* How long it takes, as a fee line: the To row holds who is paid. */}
+            {quote?.fillSeconds ? (
+              <View style={styles.feeLine}>
+                <Text style={styles.feeLabel}>{t('mobile.bridge.arrival_time')}</Text>
+                <Text style={styles.feeValue}>{fillTime(quote.fillSeconds)}</Text>
+              </View>
+            ) : null}
             <View style={styles.feeLine}>
               <Text style={styles.feeLabel}>{t('mobile.bridge.protocol')}</Text>
               <ProtocolChip name={BRIDGE_PROTOCOL_NAME} size={16} />
@@ -817,9 +1130,14 @@ export function BridgeScreen() {
             </View>
             {walletOn ? (
               // The wallet's own gas, in its coin: the fee transfer, the approval or unwrap, the deposit.
-              <ConfirmButton onPress={confirm} disabled={!quote || over} fee={walletFeeUsd != null} networkFeeUsd={walletFeeUsd ?? undefined} />
+              <ConfirmButton onPress={confirm} disabled={!quote || over || !recipient} fee={walletFeeUsd != null} networkFeeUsd={walletFeeUsd ?? undefined} />
             ) : (
-              <ConfirmButton onPress={confirm} disabled={!quote || over || !!blocked || stuck} gas={bridgeGas} locked={!gate.allowed && gate.reason !== 'market_trade_off'} />
+              <ConfirmButton
+                onPress={confirm}
+                disabled={!quote || over || !!blocked || stuck || !recipient || assetBad}
+                gas={bridgeGas}
+                locked={!gate.allowed && gate.reason !== 'market_trade_off' && gate.reason !== 'send_allowance_off'}
+              />
             )}
           </View>
         ) : null}
@@ -827,7 +1145,7 @@ export function BridgeScreen() {
 
       <Sheet
         visible={picker != null}
-        title={t(picker === 'from' ? 'mobile.bridge.from' : picker === 'to' ? 'mobile.bridge.to' : 'vault.select_asset')}
+        title={t(picker === 'from' ? 'mobile.bridge.from' : picker === 'to' ? 'mobile.bridge.to' : picker === 'recipient' ? 'mobile.bridge.recipient' : 'vault.select_asset')}
         onClose={() => setPicker(null)}
         // The sources apply as they are ticked, so closing confirms, as on Trade; and taller, for the fractions and the keyboard.
         done={picker === 'source'}
@@ -849,6 +1167,79 @@ export function BridgeScreen() {
                   {n === to ? <Check color={c.accent} /> : null}
                 </Pressable>
               ))
+            : picker === 'recipient' && to
+            ? (
+                <>
+                  {/* Two sections: the owner's smart wallets (this one, then the others), and payees. */}
+                  {ownOk ? <Text style={styles.pickSection}>{t('mobile.payments.my_vaults')}</Text> : null}
+                  {ownOk ? (
+                    <Pressable style={styles.pickRow} onPress={() => (setDest({kind: 'mine'}), setMineChosen(true), setAddrText(''), setPicker(null))}>
+                      <NetworkIcon network={to} size={30} />
+                      <View style={styles.pickCol}>
+                        <Text style={styles.pickLabel} numberOfLines={1}>
+                          {ownName()}
+                        </Text>
+                        {ownRecipient ? (
+                          <Text style={styles.pickSub} numberOfLines={1}>
+                            {shortAddress(displayAddress(to, ownRecipient))}
+                          </Text>
+                        ) : null}
+                      </View>
+                      {/* Ticked only once picked: the empty field's default is not a choice made. */}
+                      {dest.kind === 'mine' && mineChosen ? <Check color={c.accent} /> : null}
+                    </Pressable>
+                  ) : null}
+                  {otherVaults.map((v) => {
+                    const on = dest.kind === 'address' && !!typed && typed.toLowerCase() === v.address.toLowerCase();
+                    return (
+                      <Pressable
+                        key={`v${v.index}`}
+                        style={styles.pickRow}
+                        onPress={() => {
+                          setMineChosen(false);
+                          setAddrText(displayAddress(to, v.address));
+                          setDest({kind: 'address'});
+                          setPicker(null);
+                        }}>
+                        <NetworkIcon network={to} size={30} />
+                        <View style={styles.pickCol}>
+                          <Text style={styles.pickLabel} numberOfLines={1}>
+                            {v.name}
+                          </Text>
+                          <Text style={styles.pickSub} numberOfLines={1}>
+                            {shortAddress(displayAddress(to, v.address))}
+                          </Text>
+                        </View>
+                        {on ? <Check color={c.accent} /> : null}
+                      </Pressable>
+                    );
+                  })}
+                  {payeesTo.length > 0 ? <Text style={styles.pickSection}>{t('mobile.payments.whitelisted_book')}</Text> : null}
+                  {payeesTo.map((b) => {
+                    const ok = payeeNow(b);
+                    return (
+                      <Pressable
+                        key={b.id}
+                        disabled={!ok}
+                        style={[styles.pickRow, !ok && styles.dim]}
+                        onPress={() => (setDest({kind: 'payee', id: b.id}), setPicker(null))}>
+                        <View style={styles.pickGlyph}>
+                          <Text style={styles.pickGlyphText}>{payeeName(b).slice(0, 1).toUpperCase()}</Text>
+                        </View>
+                        <View style={styles.pickCol}>
+                          <Text style={styles.pickLabel} numberOfLines={1}>
+                            {payeeName(b)}
+                          </Text>
+                          <Text style={styles.pickSub} numberOfLines={1}>
+                            {ok ? shortAddress(displayAddress(to, b.recipientAddress)) : t('mobile.bridge.payee_not_yet')}
+                          </Text>
+                        </View>
+                        {dest.kind === 'payee' && dest.id === b.id ? <Check color={c.accent} /> : null}
+                      </Pressable>
+                    );
+                  })}
+                </>
+              )
             : picker === 'source' && route
             ? (
                 <>
@@ -905,7 +1296,32 @@ export function BridgeScreen() {
         </ScrollView>
       </Sheet>
       {sheet}
+      <QrScanner
+        visible={scanning}
+        onScan={(a) => {
+          setScanning(false);
+          setAddrText(to ? displayAddress(to, a) : a);
+        }}
+        onClose={() => setScanning(false)}
+      />
     </View>
+  );
+}
+
+function PersonIcon({color}: {color: string}) {
+  return (
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+      <Path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+function Chevron({color}: {color: string}) {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+      <Path d="M9 6l6 6-6 6" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
   );
 }
 
@@ -918,13 +1334,14 @@ function Check({color}: {color: string}) {
 }
 
 /** A vault's address after its network, shortened, and its copy button, which copies it in full. */
-function VaultAddr({address, styles}: {address: Address; styles: ReturnType<typeof makeStyles>}) {
+function VaultAddr({address, styles, copy}: {address: Address; styles: ReturnType<typeof makeStyles>; copy?: boolean}) {
   return (
     <View style={styles.vaultAddrLine}>
       <Text style={styles.vaultAddr} numberOfLines={1}>
         {shortAddress(asShown(address))}
       </Text>
-      <CopyButton address={address} size={12} />
+      {/* The From side only: it is the owner's own address, the one worth copying. */}
+      {copy ? <CopyButton address={address} size={12} /> : null}
     </View>
   );
 }
@@ -1021,8 +1438,7 @@ const makeStyles = (c: Colors) =>
     netBtn: {flexDirection: 'row', alignItems: 'center', backgroundColor: c.neutralSoft, borderRadius: 18, padding: 4},
     netBlank: {width: 26, height: 26, borderRadius: 13, backgroundColor: c.border},
     receiveRight: {flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, minWidth: 0},
-    receiveAmount: {flex: 1, minWidth: 0, color: c.text, fontSize: 17, fontVariant: ['tabular-nums']},
-    receiveEmpty: {color: c.subtext, fontWeight: '400'},
+    approx: {color: c.subtext, fontSize: 17},
     quoteRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44, paddingHorizontal: 16, gap: 12},
     quoteLabel: {color: c.subtext, fontSize: 14},
     quoteValue: {color: c.text, fontSize: 14, fontVariant: ['tabular-nums'], flexShrink: 1, textAlign: 'right'},
@@ -1040,4 +1456,17 @@ const makeStyles = (c: Colors) =>
     pickRow: {flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 4},
     pickLabel: {color: c.text, fontSize: 16, fontWeight: '600', flex: 1},
     pickSub: {color: c.subtext, fontSize: 14, fontVariant: ['tabular-nums']},
+    pickCol: {flex: 1, minWidth: 0, gap: 2},
+    pickGlyph: {width: 30, height: 30, borderRadius: 15, backgroundColor: c.neutralSoft, alignItems: 'center', justifyContent: 'center'},
+    pickGlyphText: {color: c.text, fontSize: 12, fontWeight: '700'},
+    recipRow: {flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48},
+    recipLabel: {color: c.subtext, fontSize: 14},
+    recipValue: {flex: 1, minWidth: 0, color: c.text, fontSize: 15, fontWeight: '600', textAlign: 'right'},
+    addrInput: {flex: 1, minWidth: 0, color: c.text, fontSize: 13, paddingVertical: 4},
+    payeeChosen: {flex: 1, minWidth: 0, color: c.text, fontSize: 13, fontWeight: '600'},
+    // The recipient on the To row, after the network: the rest of the row, the camera at its end.
+    scanEnd: {marginVertical: -8, marginRight: -12, marginLeft: -8},
+    pickSection: {color: c.subtext, fontSize: 13, fontWeight: '600', paddingHorizontal: 4, paddingTop: 14, paddingBottom: 6},
+    headRecipAddr: {flex: 1, minWidth: 0, flexDirection: 'row', justifyContent: 'flex-end'},
+    headRecip: {flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8},
   });

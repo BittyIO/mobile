@@ -604,7 +604,7 @@
     "this_vault_sign": "이 스마트 지갑에서. 지갑에서 서명하라는 요청을 받게 됩니다.",
     "remove_asset_manager_title": "자산 관리자 제거",
     "new_address_protection": "새 수취인 보호",
-    "protection_description": "새로 추가된 수취인이 결제를 받을 수 있기까지의 타임락(초).",
+    "protection_description": "새로 추가된 수취인이 결제를 받을 수 있기까지의 보안 지연(초).",
     "duration_placeholder": "기간(초), 예: 86400",
     "edit_receiver": "수취인 편집: {{name}}",
     "tx_failed": "거래 실패",
@@ -1473,11 +1473,11 @@
       "err_payee_exists": "이 주소는 이미 수취인 목록에 있습니다.",
       "err_gas_budget": "오늘의 네트워크 수수료 예산을 모두 사용했습니다.",
       "err_price_unavailable": "지금은 가격 피드를 사용할 수 없습니다. 잠시 후 다시 시도하세요.",
-      "err_bridge_off": "이 스마트 지갑의 브리지가 꺼져 있거나 아직 타임락을 기다리는 중입니다.",
+      "err_bridge_off": "이 스마트 지갑의 브리지가 꺼져 있거나 아직 보안 지연을 기다리는 중입니다.",
       "err_bridge_route": "이 자산은 이 경로로 브리지할 수 없습니다.",
       "err_bridge_cost": "브리지 견적이 이 경로의 허용 범위를 벗어났습니다. 새 견적을 받아 다시 시도하세요.",
       "err_daily_loss": "오늘의 손실 한도를 넘게 됩니다.",
-      "err_timelock_needs_limits": "타임락을 쓰려면 두 일일 한도가 모두 제한 없음이 아닌 금액이어야 합니다."
+      "err_timelock_needs_limits": "보안 지연을 쓰려면 두 일일 한도가 모두 제한 없음이 아닌 금액이어야 합니다."
     }
   },
   "matrica": {

@@ -82,7 +82,7 @@ export type RootStackParamList = {
   /** Overview › Payees: the address book, to pay from (a tap opens Send) and add to. */
   Payees: undefined;
   /** Overview › Bridge: moving an asset to the owner's vault on another network. */
-  Bridge: undefined;
+  Bridge: {payeeId?: string} | undefined;
   SelectRecipient: undefined;
   NewRecipient: undefined;
   /** Security › Whitelisted addresses: the address book, to add to and remove from. */

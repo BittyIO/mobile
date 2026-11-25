@@ -52,6 +52,19 @@ export const NO_PER_OP_CAP_SINCE = '1.1.1';
  */
 export const OPEN_RISK_SINCE = '1.1.1';
 
+/**
+ * The first vault release that bridges to someone else (contracts vault `feat/bridge_better`):
+ *  - `bridgeTo`: a stablecoin to any address on another network, the owner's alone; a send that
+ *    crosses chains, so metered by the daily send allowance (refused at 0) and refused under a lock,
+ *    and not by the loss allowance;
+ *  - `bridgeToWhitelistedRecipient`: any bridgeable ERC-20 to a payee on another network, unmetered
+ *    and open under either lock, as a payout to a payee here;
+ *  - `addWhitelistedRecipientOn`: a payee on another network, or on every EVM network;
+ *  - two more words in every `getWhitelist` entry (its chain and its 32-byte address).
+ * Each still needs the bridge switch on, and an Across adapter from 1.2.1 ({BridgeInfo.toAddress}).
+ */
+export const BRIDGE_TO_SINCE = '1.2.1';
+
 /** An allowance of no limit (the vault's `NO_LIMIT`, type(uint64).max - 1), from {OPEN_RISK_SINCE}. */
 export const NO_LIMIT = (1n << 64n) - 2n;
 
@@ -78,6 +91,10 @@ export type VaultAction =
   // Vault 1.1.0: the owner's alone, never an asset manager's, and not under a lock — except that
   // turning the bridge OFF applies at once, locked or not.
   | 'bridge'
+  // Vault 1.2.1 ({BRIDGE_TO_SINCE}): the owner's alone. To an address, refused under a lock and with
+  // the send allowance at 0; to a payee, open under either lock.
+  | 'bridgeTo'
+  | 'bridgeToWhitelistedRecipient'
   | 'enableBridge'
   | 'disableBridge'
   | 'placeIntentOrder'
@@ -197,6 +214,7 @@ const OPEN_WHILE_LOCKED = new Set<VaultAction>([
   'claimWithdrawal',
   'approveIntentSpender',
   'sendToWhitelistedRecipient',
+  'bridgeToWhitelistedRecipient',
   'disableBridge',
   // Up to 1.0.5 only (back to Bitty's list; leaving it is updateAllowList). From 1.0.6 the switch is
   // frozen under a lock in both directions.
@@ -261,7 +279,7 @@ export function capability(
   )
     return refuse(lockReason);
 
-  if (action === 'send' && state.sendAllowanceOff)
+  if ((action === 'send' || action === 'bridgeTo') && state.sendAllowanceOff)
     return refuse('send_allowance_off');
   // The daily loss allowance at 0 turns off what it bounds: market trades and, from 1.1.0, bridges.
   if ((action === 'marketTrade' || action === 'bridge') && state.marketTradeOff)
@@ -311,6 +329,9 @@ export const ACTION_FOR_FUNCTION: Record<string, VaultAction> = {
   sendAndAddWhitelistedRecipient: 'send',
   batchSendAndAddWhitelistedRecipient: 'send',
   addWhitelistedRecipient: 'addWhitelistedRecipient',
+  addWhitelistedRecipientOn: 'addWhitelistedRecipient',
+  bridgeTo: 'bridgeTo',
+  bridgeToWhitelistedRecipient: 'bridgeToWhitelistedRecipient',
   removeWhitelistedRecipients: 'removeWhitelistedRecipient',
   retrieve721: 'retrieve721',
   updateRisk: 'updateRisk',
