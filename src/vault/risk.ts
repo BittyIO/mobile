@@ -181,13 +181,20 @@ export async function getRiskConfig(vault: Address, network: Network): Promise<R
  * until the read lands, or when it fails — the vault still refuses what is off.
  */
 export function useAllowancesOff(vault: Address | null | undefined, network: Network) {
-  const [off, setOff] = useState({sends: false, marketTrades: false});
+  // `marketUnlimited`: no market loss limit ({NO_LIMIT}, from 1.1.1), so market trades are not
+  // priced and a token without a price feed can still be swapped. False until read.
+  const [off, setOff] = useState({sends: false, marketTrades: false, marketUnlimited: false});
   useFocusEffect(
     useCallback(() => {
-      if (!vault) return setOff({sends: false, marketTrades: false});
+      if (!vault) return setOff({sends: false, marketTrades: false, marketUnlimited: false});
       let live = true;
       getRiskConfig(vault, network).then((r) => {
-        if (live && r.read) setOff({sends: r.sendDailyAllowance === 0n, marketTrades: r.marketTradeDailyLossAllowance === 0n});
+        if (live && r.read)
+          setOff({
+            sends: r.sendDailyAllowance === 0n,
+            marketTrades: r.marketTradeDailyLossAllowance === 0n,
+            marketUnlimited: r.marketTradeDailyLossAllowance === NO_LIMIT,
+          });
       });
       return () => {
         live = false;

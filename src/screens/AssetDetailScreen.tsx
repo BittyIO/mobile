@@ -18,6 +18,9 @@ import {useColors, useStyles, type Colors, MONO} from '@/theme';
 import {useT} from '@/i18n';
 import {useAssetCatalog} from '@/core/asset-catalog';
 import {openLink} from '@/core/open-link';
+import {useActiveVaultAddress} from '@/core/active-vault';
+import {useWalletMode} from '@/core/account-mode';
+import {useAllowancesOff} from '@/vault/risk';
 
 /**
  * One asset, in full: what it is, what the vault holds of it, and how it can be traded.
@@ -38,6 +41,10 @@ export function AssetDetailScreen() {
   const {symbol} = useRoute<RouteProp<RootStackParamList, 'AssetDetail'>>().params;
   const network = useNetwork((s) => s.network);
   const catalog = useAssetCatalog(network);
+  // As on the Trade tab: no price feed is needed where market trades are not priced.
+  const walletOn = useWalletMode(network);
+  const marketUnlimited = useAllowancesOff(useActiveVaultAddress(network), network).marketUnlimited;
+  const marketable = (sym: string) => isAmmLiquid(network, sym, {feedless: walletOn || marketUnlimited});
   const asset = useMemo(() => catalog.find((a) => a.symbol === symbol), [catalog, symbol]);
 
   const prices = usePrices(network);
@@ -192,13 +199,13 @@ export function AssetDetailScreen() {
         <Row
           label={t('mobile.trade.market_trading')}
           value={
-            isAmmLiquid(network, asset.symbol)
+            marketable(asset.symbol)
               ? t('mobile.trade.market_available')
               : adapterByName(network, 'CoW Swap')
                 ? t('mobile.trade.limit_only')
                 : t('mobile.trade.not_tradable_title')
           }
-          tone={isAmmLiquid(network, asset.symbol) ? c.success : c.subtext}
+          tone={marketable(asset.symbol) ? c.success : c.subtext}
         />
       </View>
     </ScrollView>
