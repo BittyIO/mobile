@@ -184,6 +184,7 @@ export type RootStackParamList = {
   SelectAsset: {slot: 'base' | 'quote'; selected?: string; exclude?: string};
   VaultSecurity: undefined;
   GuardLevel: undefined;
+  GuardCustom: undefined;
   VaultUpgrade: undefined;
   /** Security › Risk settings, Vault lock, Legacy ETH — each a row on the Security page. */
   /** Pick one risk number: presets, or a custom value. */
@@ -660,6 +661,7 @@ function Root() {
           options={{title: t('vault.select_asset')}}
         />
         <Stack.Screen name="GuardLevel" getComponent={() => require('@/screens/GuardLevelScreen').GuardLevelScreen} options={{title: t('mobile.vault.guard_level')}} />
+        <Stack.Screen name="GuardCustom" getComponent={() => require('@/screens/GuardCustomScreen').GuardCustomScreen} options={{title: t('mobile.vault.guard_level_custom')}} />
         <Stack.Screen name="VaultSecurity" getComponent={() => require('@/screens/SecurityScreen').SecurityScreen} options={{title: t('mobile.app.security')}} />
         <Stack.Screen name="VaultUpgrade" getComponent={() => require('@/screens/UpgradeScreen').UpgradeScreen} options={{title: t('mobile.settings.contract_upgrade')}} />
         <Stack.Screen

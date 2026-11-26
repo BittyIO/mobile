@@ -1,5 +1,5 @@
-import React, {useState} from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import React, {useEffect, useRef, useState} from 'react';
+import {Animated, Easing, StyleSheet, Text, View} from 'react-native';
 import {OptionRow, SettingsGroup, SettingsRow} from '@/components/SettingsRow';
 import {Sheet} from '@/components/Sheet';
 import {useVaultGate} from '@/vault/gate';
@@ -20,12 +20,15 @@ export type GuardChoice = GuardLevel | 'custom';
 export function GuardLevelRows({
   selected,
   onSelect,
+  onCustom,
   custom,
   disabled,
   loading,
 }: {
   selected: GuardChoice | null;
   onSelect: (choice: GuardChoice) => void;
+  /** Custom opens its own page instead of being chosen here. */
+  onCustom?: () => void;
   /** Offer Custom, its shield the one `custom` earns. */
   custom?: GuardValues;
   disabled?: boolean;
@@ -41,14 +44,87 @@ export function GuardLevelRows({
           key={String(l)}
           leading={<GuardShield level={guardShieldOf(l === 'custom' ? custom! : GUARD_LEVELS[l])} size={30} />}
           title={t(`mobile.vault.guard_level_${l}`)}
+          // The security delay beside the name; the panel under the chosen level has the two limits.
+          // Who each level is for, beside its name — Highest is for earning only.
+          titleNote={t(`mobile.vault.guard_level_${l}_for`)}
+          // The chosen level shows what it sets, under its name.
+          below={
+            <Expand open={selected === l}>
+              <LevelValues values={l === 'custom' ? custom! : GUARD_LEVELS[l]} />
+            </Expand>
+          }
+          // Under the title, past the 30-point shield and the row's 12-point gap.
+          belowIndent={42}
           checked={selected === l}
           loading={loading === l}
           disabled={disabled}
-          onPress={() => onSelect(l)}
+          onPress={() => (l === 'custom' && onCustom ? onCustom() : onSelect(l))}
           last={i === choices.length - 1}
         />
       ))}
     </>
+  );
+}
+
+/**
+ * Opens and closes its content by animating its height (and fading it), measured off the content's
+ * natural size, so a level's values slide in under it when chosen and away when another is.
+ */
+function Expand({open, children}: {open: boolean; children: React.ReactNode}) {
+  const [h, setH] = useState(0);
+  const anim = useRef(new Animated.Value(open ? 1 : 0)).current;
+  useEffect(() => {
+    Animated.timing(anim, {toValue: open ? 1 : 0, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: false}).start();
+  }, [open, anim]);
+  return (
+    <Animated.View style={{height: anim.interpolate({inputRange: [0, 1], outputRange: [0, h]}), opacity: anim, overflow: 'hidden'}}>
+      <View style={expandStyles.measure} onLayout={(e) => setH(e.nativeEvent.layout.height)}>
+        {children}
+      </View>
+    </Animated.View>
+  );
+}
+
+const expandStyles = StyleSheet.create({measure: {position: 'absolute', top: 0, left: 0, right: 0}});
+
+/** A security delay as "7 days" with the number in blue (hours for an odd custom one; none is 0 days). */
+function DelayDays({seconds}: {seconds: bigint}) {
+  const {t} = useT();
+  const styles = useStyles(makeStyles);
+  const days = seconds % 86_400n === 0n;
+  const n = days ? Number(seconds / 86_400n) : Number((Number(seconds) / 3600).toFixed(2));
+  // The unit's own wording around the number, so each language keeps its order ("7 days", "7 天").
+  const MARK = '\u0001';
+  const [before, after = ''] = t(days ? 'mobile.vault.duration_days' : 'mobile.vault.duration_hours', {n: MARK}).split(MARK);
+  return (
+    <>
+      {before}
+      <Text style={styles.delayNum}>{n}</Text>
+      {after}
+    </>
+  );
+}
+
+/** A level's security delay and both daily limits, as lines under its name. */
+function LevelValues({values}: {values: GuardValues}) {
+  const {t} = useT();
+  const styles = useStyles(makeStyles);
+  return (
+    <View style={styles.values}>
+      {FIELDS.map(({field}) => (
+        <View key={field} style={styles.valueLine}>
+          <Text style={styles.valueLabel} numberOfLines={2}>
+            {field === 'marketTradeDailyLossAllowance'
+              ? // Said as what it governs: at $0 trading and bridging are off; above, it is their slippage.
+                t(values[field] === 0n ? 'mobile.vault.guard_trading_bridging' : 'mobile.vault.guard_market_slippage')
+              : t(RISK_TITLE[field])}
+          </Text>
+          <Text style={styles.valueText}>
+            {field === 'timelock' ? <DelayDays seconds={values.timelock} /> : fmtRiskValue(field, values[field], t)}
+          </Text>
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -102,6 +178,12 @@ export function GuardParams({values, onEdit}: {values: GuardValues; onEdit?: (fi
 
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
+    // A surface one step off the card, so the chosen level's values read as its own panel.
+    delayNum: {color: c.accent, fontWeight: '700'},
+    values: {marginTop: 10, gap: 6, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, backgroundColor: c.cardAlt},
+    valueLine: {flexDirection: 'row', justifyContent: 'space-between', gap: 8},
+    valueLabel: {color: c.subtext, fontSize: 12, flexShrink: 1},
+    valueText: {color: c.text, fontSize: 12, fontWeight: '600', textAlign: 'right'},
     about: {gap: 12, paddingHorizontal: 4, paddingBottom: 24},
     aboutText: {color: c.text, fontSize: 15, lineHeight: 22},
     aboutSub: {color: c.subtext, fontSize: 13, lineHeight: 19},
