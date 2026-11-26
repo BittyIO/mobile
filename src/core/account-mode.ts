@@ -37,15 +37,15 @@ const defaultStore = new MMKV({id: 'bitty.default-account'});
 const DEFAULT_KEY = 'kind';
 
 /**
- * The first answer, written down so it is never asked again. A phone that already holds wallets is
- * an update from a release with smart wallets only: it opens on the smart wallet, where its money
- * is — the key's own address is usually empty, and opening there read as the balance gone. A new
- * install (no wallets yet) opens on the general wallet.
+ * The first answer, written down so it is never asked again: the smart wallet, for everyone. A phone
+ * updated from a release with smart wallets only opens where its money is; a new install opens there
+ * too, even when the key it imports already holds money of its own — the smart wallet, with its
+ * guard, is the account Bitty is for, and the general wallet is one switch away on Overview.
  */
 function firstKind(): AccountKind {
   const saved = defaultStore.getString(DEFAULT_KEY);
   if (saved === 'vault' || saved === 'wallet') return saved;
-  const kind: AccountKind = useVaults.getState().vaults.length > 0 ? 'vault' : 'wallet';
+  const kind: AccountKind = 'vault';
   defaultStore.set(DEFAULT_KEY, kind);
   return kind;
 }
