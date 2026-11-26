@@ -106,7 +106,7 @@ export function OptionRow({
 }: {
   title: string;
   /** A quieter word after the title, on its line (a Guard level's security delay). */
-  titleNote?: string;
+  titleNote?: React.ReactNode;
   sub?: string;
   /** Something of the choice's own after its title, before the mark (a Guard level's timelock ring). */
   trailing?: React.ReactNode;
@@ -139,7 +139,7 @@ export function OptionRow({
 type OptionParts = {
   leading?: React.ReactNode;
   title: string;
-  titleNote?: string;
+  titleNote?: React.ReactNode;
   sub?: string;
   trailing?: React.ReactNode;
   checked?: boolean;
@@ -166,7 +166,7 @@ function OptionInner({leading, title, titleNote, sub, trailing, checked, busy, d
       <View style={styles.rowText}>
         <Text style={[styles.rowTitle, disabled && !checked && styles.rowTitleOff]}>
           {title}
-          {titleNote ? <Text style={styles.rowTitleNote}>{`  ${titleNote}`}</Text> : null}
+          {titleNote ? <Text style={styles.rowTitleNote}>{'  '}{titleNote}</Text> : null}
         </Text>
         {sub ? <Text style={styles.rowSub}>{sub}</Text> : null}
       </View>

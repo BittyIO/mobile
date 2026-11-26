@@ -45,14 +45,8 @@ export function GuardLevelRows({
           leading={<GuardShield level={guardShieldOf(l === 'custom' ? custom! : GUARD_LEVELS[l])} size={30} />}
           title={t(`mobile.vault.guard_level_${l}`)}
           // The security delay beside the name; the panel under the chosen level has the two limits.
-          // "Security delay 7 days"; None reads "0 days", not a second "None" after the name.
-          titleNote={(() => {
-            const lock = (l === 'custom' ? custom! : GUARD_LEVELS[l]).timelock;
-            const days = lock > 0n ? fmtRiskValue('timelock', lock, t) : t('mobile.vault.duration_days', {n: 0});
-            return `${t(RISK_TITLE.timelock)} ${days}`;
-          })()}
-          // Who each level is for — Highest is for earning only.
-          sub={t(`mobile.vault.guard_level_${l}_for`)}
+          // Who each level is for, beside its name — Highest is for earning only.
+          titleNote={t(`mobile.vault.guard_level_${l}_for`)}
           // The chosen level shows what it sets, under its name.
           below={
             <Expand open={selected === l}>
@@ -93,21 +87,43 @@ function Expand({open, children}: {open: boolean; children: React.ReactNode}) {
 
 const expandStyles = StyleSheet.create({measure: {position: 'absolute', top: 0, left: 0, right: 0}});
 
-/** A level's three values as lines under its name: the timelock and both daily limits. */
+/** A security delay as "7 days" with the number in blue (hours for an odd custom one; none is 0 days). */
+function DelayDays({seconds}: {seconds: bigint}) {
+  const {t} = useT();
+  const styles = useStyles(makeStyles);
+  const days = seconds % 86_400n === 0n;
+  const n = days ? Number(seconds / 86_400n) : Number((Number(seconds) / 3600).toFixed(2));
+  // The unit's own wording around the number, so each language keeps its order ("7 days", "7 天").
+  const MARK = '\u0001';
+  const [before, after = ''] = t(days ? 'mobile.vault.duration_days' : 'mobile.vault.duration_hours', {n: MARK}).split(MARK);
+  return (
+    <>
+      {before}
+      <Text style={styles.delayNum}>{n}</Text>
+      {after}
+    </>
+  );
+}
+
+/** A level's security delay and both daily limits, as lines under its name. */
 function LevelValues({values}: {values: GuardValues}) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   return (
     <View style={styles.values}>
-      {FIELDS.filter(({field}) => field !== 'timelock').map(({field}) => (
+      {FIELDS.map(({field}) => (
         <View key={field} style={styles.valueLine}>
           <Text style={styles.valueLabel} numberOfLines={2}>
-            {t(RISK_TITLE[field])}
+            {field === 'marketTradeDailyLossAllowance'
+              ? // Said as what it governs: at $0 trading and bridging are off; above, it is their slippage.
+                t(values[field] === 0n ? 'mobile.vault.guard_trading_bridging' : 'mobile.vault.guard_market_slippage')
+              : t(RISK_TITLE[field])}
           </Text>
-          <Text style={styles.valueText}>{fmtRiskValue(field, values[field], t)}</Text>
+          <Text style={styles.valueText}>
+            {field === 'timelock' ? <DelayDays seconds={values.timelock} /> : fmtRiskValue(field, values[field], t)}
+          </Text>
         </View>
       ))}
-      {values.marketTradeDailyLossAllowance === 0n ? <Text style={styles.valueNote}>{t('mobile.vault.guard_loss_off')}</Text> : null}
     </View>
   );
 }
@@ -163,11 +179,11 @@ export function GuardParams({values, onEdit}: {values: GuardValues; onEdit?: (fi
 const makeStyles = (c: Colors) =>
   StyleSheet.create({
     // A surface one step off the card, so the chosen level's values read as its own panel.
+    delayNum: {color: c.accent, fontWeight: '700'},
     values: {marginTop: 10, gap: 6, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, backgroundColor: c.cardAlt},
     valueLine: {flexDirection: 'row', justifyContent: 'space-between', gap: 8},
     valueLabel: {color: c.subtext, fontSize: 12, flexShrink: 1},
     valueText: {color: c.text, fontSize: 12, fontWeight: '600', textAlign: 'right'},
-    valueNote: {color: c.subtext, fontSize: 12, fontStyle: 'italic'},
     about: {gap: 12, paddingHorizontal: 4, paddingBottom: 24},
     aboutText: {color: c.text, fontSize: 15, lineHeight: 22},
     aboutSub: {color: c.subtext, fontSize: 13, lineHeight: 19},
