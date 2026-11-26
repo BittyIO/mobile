@@ -138,6 +138,12 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
 
   const isSelf = onChain !== 'here' && !!vault && parseAddress(addrNet, draft)?.toLowerCase() === vault.toLowerCase();
   const valid = isPayableAddress(draft, addrNet) && !isSelf;
+  /**
+   * The key that owns this smart wallet, typed as a payee. Payees are paid with no daily limit, so
+   * whoever steals the key could empty the smart wallet to it in one go — the guard would protect
+   * nothing. Allowed, but warned under the field and confirmed before it is added.
+   */
+  const isOwner = !!owner && parseAddress(addrNet, draft)?.toLowerCase() === owner.toLowerCase();
   const isToken = isTokenAddress(draft, addrNet);
   const max = addToBook || addsOnChain
     ? t('mobile.payments.max_send_none')
@@ -153,7 +159,25 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
     if (vault) markAdding(vault);
     nav.goBack();
   });
+  // Whether Confirm puts the address on the payee list (now, or with the send it starts).
+  const addsPayee = () => {
+    const to = parseAddress(addrNet, draft);
+    if (!to) return false;
+    if (manage) return true;
+    const listed = book.some((b) => b.recipientAddress.toLowerCase() === to.toLowerCase());
+    return !listed && (addsOnChain || (addToBook && addGate.allowed));
+  };
   const confirm = () => {
+    if (isOwner && addsPayee()) {
+      Alert.alert(t('mobile.payments.payee_owner_title'), t('mobile.payments.payee_is_owner'), [
+        {text: t('common.cancel'), style: 'cancel'},
+        {text: t('mobile.payments.payee_owner_add_anyway'), style: 'destructive', onPress: confirmNow},
+      ]);
+      return;
+    }
+    confirmNow();
+  };
+  const confirmNow = () => {
     // What was typed, as the 0x… the vault takes: on Tron the T… form is what people paste.
     const to = parseAddress(addrNet, draft);
     if (!to) return;
@@ -246,6 +270,7 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
           </Text>
         ) : null}
         {isSelf ? <Text style={styles.warn}>{t('mobile.payments.payee_is_vault')}</Text> : null}
+        {isOwner ? <Text style={styles.warn}>{t('mobile.payments.payee_is_owner')}</Text> : null}
         {isToken ? <Text style={styles.warn}>{t('mobile.payments.token_address_warning')}</Text> : null}
         {own.length > 0 ? (
           <View style={styles.gap}>

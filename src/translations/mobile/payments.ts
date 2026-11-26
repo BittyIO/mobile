@@ -3,6 +3,9 @@ import type {MobileTable} from './index';
 // Payments tab (Send / Scheduled / Address Book), plus first-run onboarding and the lock screen.
 export const payments: MobileTable = {
   en: {
+    payee_is_owner: "This is the key that owns this smart wallet. Payees are paid with no daily limit, so anyone who steals this key could send everything to it at once.",
+    payee_owner_title: "Add the owner key as a payee?",
+    payee_owner_add_anyway: "Add anyway",
     payee_network: "Network",
     chain_here_sub: "Paid here only",
     chain_all_evm: "All EVM networks",
@@ -101,6 +104,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Unlock',
   },
   zh: {
+    payee_is_owner: "这是拥有本智能钱包的密钥地址。付款给收款人不受每日限额限制，一旦这个密钥被盗，别人就能一次把所有资金转到这里。",
+    payee_owner_title: "要把所有者密钥添加为收款人吗？",
+    payee_owner_add_anyway: "仍然添加",
     payee_network: "网络",
     chain_here_sub: "仅在本网络付款",
     chain_all_evm: "所有 EVM 网络",
@@ -199,6 +205,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: '解锁',
   },
   'zh-TW': {
+    payee_is_owner: "這是擁有本智慧錢包的金鑰地址。付款給收款人不受每日限額限制，一旦這個金鑰被盜，別人就能一次把所有資金轉到這裡。",
+    payee_owner_title: "要把擁有者金鑰新增為收款人嗎？",
+    payee_owner_add_anyway: "仍然新增",
     payee_network: "網路",
     chain_here_sub: "僅在本網路付款",
     chain_all_evm: "所有 EVM 網路",
@@ -297,6 +306,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: '解鎖',
   },
   ja: {
+    payee_is_owner: "これはこのスマートウォレットを所有する鍵のアドレスです。受取人への支払いには1日の上限がないため、この鍵が盗まれると全額を一度に送られてしまいます。",
+    payee_owner_title: "所有者の鍵を受取人に追加しますか？",
+    payee_owner_add_anyway: "追加する",
     payee_network: "ネットワーク",
     chain_here_sub: "このネットワークでのみ支払い",
     chain_all_evm: "すべての EVM ネットワーク",
@@ -380,6 +392,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'ロック解除',
   },
   ko: {
+    payee_is_owner: "이 스마트 지갑을 소유한 키의 주소입니다. 수취인 지급에는 일일 한도가 없어서, 이 키를 훔친 사람이 모든 자금을 한 번에 보낼 수 있습니다.",
+    payee_owner_title: "소유자 키를 수취인으로 추가할까요?",
+    payee_owner_add_anyway: "그래도 추가",
     payee_network: "네트워크",
     chain_here_sub: "이 네트워크에서만 지급",
     chain_all_evm: "모든 EVM 네트워크",
@@ -463,6 +478,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: '잠금 해제',
   },
   fr: {
+    payee_is_owner: "C’est la clé propriétaire de ce portefeuille intelligent. Les bénéficiaires sont payés sans limite quotidienne : quiconque volerait cette clé pourrait tout y envoyer d’un coup.",
+    payee_owner_title: "Ajouter la clé propriétaire comme bénéficiaire ?",
+    payee_owner_add_anyway: "Ajouter quand même",
     payee_network: "Réseau",
     chain_here_sub: "Payé ici seulement",
     chain_all_evm: "Tous les réseaux EVM",
@@ -546,6 +564,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Déverrouiller',
   },
   es: {
+    payee_is_owner: "Es la clave dueña de esta billetera inteligente. A los beneficiarios se les paga sin límite diario, así que quien robe esta clave podría enviarle todo de una vez.",
+    payee_owner_title: "¿Agregar la clave dueña como beneficiario?",
+    payee_owner_add_anyway: "Agregar de todos modos",
     payee_network: "Red",
     chain_here_sub: "Se paga solo aquí",
     chain_all_evm: "Todas las redes EVM",
@@ -629,6 +650,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Desbloquear',
   },
   de: {
+    payee_is_owner: "Das ist der Schlüssel, dem diese Smart Wallet gehört. Empfänger werden ohne Tageslimit bezahlt – wer diesen Schlüssel stiehlt, könnte alles auf einmal dorthin senden.",
+    payee_owner_title: "Eigentümerschlüssel als Empfänger hinzufügen?",
+    payee_owner_add_anyway: "Trotzdem hinzufügen",
     payee_network: "Netzwerk",
     chain_here_sub: "Nur hier bezahlt",
     chain_all_evm: "Alle EVM-Netzwerke",
@@ -712,6 +736,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Entsperren',
   },
   'pt-BR': {
+    payee_is_owner: "Esta é a chave dona desta carteira inteligente. Beneficiários são pagos sem limite diário, então quem roubar esta chave poderia enviar tudo para ela de uma vez.",
+    payee_owner_title: "Adicionar a chave dona como beneficiário?",
+    payee_owner_add_anyway: "Adicionar mesmo assim",
     payee_network: "Rede",
     chain_here_sub: "Pago só aqui",
     chain_all_evm: "Todas as redes EVM",
@@ -795,6 +822,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Desbloquear',
   },
   hi: {
+    payee_is_owner: "यह इस स्मार्ट वॉलेट की मालिक कुंजी है। प्राप्तकर्ताओं को बिना दैनिक सीमा के भुगतान होता है, इसलिए यह कुंजी चुराने वाला सब कुछ एक बार में यहाँ भेज सकता है।",
+    payee_owner_title: "मालिक कुंजी को प्राप्तकर्ता के रूप में जोड़ें?",
+    payee_owner_add_anyway: "फिर भी जोड़ें",
     payee_network: "नेटवर्क",
     chain_here_sub: "केवल यहीं भुगतान",
     chain_all_evm: "सभी EVM नेटवर्क",
@@ -878,6 +908,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'अनलॉक करें',
   },
   tr: {
+    payee_is_owner: "Bu, bu akıllı cüzdanın sahibi olan anahtardır. Alıcılara günlük limit olmadan ödeme yapılır; bu anahtarı çalan biri her şeyi tek seferde buraya gönderebilir.",
+    payee_owner_title: "Sahip anahtarı alıcı olarak eklensin mi?",
+    payee_owner_add_anyway: "Yine de ekle",
     payee_network: "Ağ",
     chain_here_sub: "Yalnızca burada ödenir",
     chain_all_evm: "Tüm EVM ağları",
@@ -961,6 +994,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Kilidi aç',
   },
   ru: {
+    payee_is_owner: "Это ключ-владелец этого смарт-кошелька. Получателям платят без дневного лимита, поэтому укравший этот ключ сможет сразу вывести на него всё.",
+    payee_owner_title: "Добавить ключ владельца как получателя?",
+    payee_owner_add_anyway: "Всё равно добавить",
     payee_network: "Сеть",
     chain_here_sub: "Оплата только здесь",
     chain_all_evm: "Все сети EVM",
@@ -1044,6 +1080,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Разблокировать',
   },
   id: {
+    payee_is_owner: "Ini kunci pemilik dompet pintar ini. Penerima dibayar tanpa batas harian, jadi siapa pun yang mencuri kunci ini bisa mengirim semuanya sekaligus ke sini.",
+    payee_owner_title: "Tambahkan kunci pemilik sebagai penerima?",
+    payee_owner_add_anyway: "Tetap tambahkan",
     payee_network: "Jaringan",
     chain_here_sub: "Dibayar di sini saja",
     chain_all_evm: "Semua jaringan EVM",
@@ -1127,6 +1166,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Buka kunci',
   },
   vi: {
+    payee_is_owner: "Đây là khóa sở hữu ví thông minh này. Người nhận được thanh toán không giới hạn hằng ngày, nên ai đánh cắp khóa này có thể chuyển hết tiền về đây một lần.",
+    payee_owner_title: "Thêm khóa chủ sở hữu làm người nhận?",
+    payee_owner_add_anyway: "Vẫn thêm",
     payee_network: "Mạng",
     chain_here_sub: "Chỉ thanh toán tại đây",
     chain_all_evm: "Tất cả mạng EVM",
@@ -1210,6 +1252,9 @@ export const payments: MobileTable = {
     lock_unlock_face_id: 'Mở khóa',
   },
   th: {
+    payee_is_owner: "นี่คือคีย์ที่เป็นเจ้าของสมาร์ทวอลเล็ตนี้ ผู้รับเงินได้รับเงินโดยไม่มีวงเงินรายวัน หากคีย์นี้ถูกขโมย ผู้ขโมยจะโอนทุกอย่างมาที่นี่ได้ในครั้งเดียว",
+    payee_owner_title: "เพิ่มคีย์เจ้าของเป็นผู้รับเงินหรือไม่",
+    payee_owner_add_anyway: "เพิ่มต่อไป",
     payee_network: "เครือข่าย",
     chain_here_sub: "จ่ายที่นี่เท่านั้น",
     chain_all_evm: "ทุกเครือข่าย EVM",
