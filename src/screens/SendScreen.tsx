@@ -542,12 +542,15 @@ export function SendScreen({anyone = false}: {anyone?: boolean} = {}) {
       setRecipient((r) => ({...r, needsWhitelist: false, lines: defaultLines}));
       setLinesTouched(false);
       custom.reload();
+      // Sent: back to where Send was opened from, as the wallet's Send does; the toast follows.
+      if (nav.canGoBack()) nav.goBack();
     } catch (e) {
       const msg = String((e as Error)?.message ?? e);
       tx.error(msg);
       // Signed for a multisig and waiting for the other owners: not an error on this page either.
       if (softMessage(msg)) {
         setStatus('done');
+        if (nav.canGoBack()) nav.goBack();
         return;
       }
       setErr(msg);
