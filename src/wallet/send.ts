@@ -87,12 +87,26 @@ export async function maxNativeSend(network: Network, from: Address, to: Address
 
 /** Send it. Returns once broadcast; the caller's toast follows it to its receipt. */
 export async function sendWalletTransfer(
-  o: WalletTransfer & {account: LocalAccount; plan?: OwnerTxPlan; usdtGas?: import('@/tron/usdt-gas').UsdtGasQuote},
+  o: WalletTransfer & {
+    account: LocalAccount;
+    plan?: OwnerTxPlan;
+    /** Rented energy (tron/usdt-gas): the quote, and the coin the fee is paid in. */
+    rented?: {quote: import('@/tron/usdt-gas').UsdtGasQuote; feeIn: import('@/tron/usdt-gas').FeeCoin};
+  },
 ): Promise<{hash: Hex}> {
-  // USDT as gas (tron/usdt-gas): Bitty's server rents the energy and is paid in USDT.
-  if (o.usdtGas && isTronNetwork(o.network) && o.asset.address !== 'native') {
+  // Rented energy (tron/usdt-gas): Bitty's server rents it and is paid in TRX or USDT.
+  if (o.rented && isTronNetwork(o.network) && o.asset.address !== 'native') {
     const {sendWithUsdtGas} = require('@/tron/usdt-gas') as typeof import('@/tron/usdt-gas');
-    return sendWithUsdtGas({net: o.network as import('@/tron/config').TronChain, account: o.account, from: o.from, to: o.to, amount: o.amount, quote: o.usdtGas});
+    return sendWithUsdtGas({
+      net: o.network as import('@/tron/config').TronChain,
+      account: o.account,
+      from: o.from,
+      to: o.to,
+      token: o.asset.address,
+      amount: o.amount,
+      quote: o.rented.quote,
+      feeIn: o.rented.feeIn,
+    });
   }
   if (isTronNetwork(o.network) && o.asset.address === 'native') {
     const plan = o.plan ?? (await planWalletTransfer(o));
