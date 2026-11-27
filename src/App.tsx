@@ -79,13 +79,6 @@ export type RootStackParamList = {
   HiddenWallets: undefined;
   /** Wallet mode's Send (see core/account-mode): `to` prefilled for "To vault", `symbol` the asset. */
   WalletSend: {to?: string; symbol?: string} | undefined;
-  /** Wallet mode on Tron › Escrow: the deals this phone knows, to open, create, or open by address. */
-  Escrow: undefined;
-  /** Escrow › New escrow: this wallet as A. */
-  EscrowCreate: undefined;
-  /** One escrow deal: its terms, where it stands, and what this wallet can do in it. */
-  /** An escrow account, and which of its deals (its current one when left out). */
-  EscrowDetail: {escrow: string; dealId?: number};
   /** Overview › Payees: the address book, to pay from (a tap opens Send) and add to. */
   Payees: undefined;
   /** Overview › Bridge: moving an asset to the owner's vault on another network. */
@@ -484,9 +477,6 @@ function Root() {
         }}>
         <Stack.Screen name="Main" component={MainTabs} options={MAIN_NATIVE_BAR ? mainBarOptions() : {headerShown: false}} />
         <Stack.Screen name="WalletSend" getComponent={() => require('@/screens/WalletSendScreen').WalletSendScreen} options={{title: t('vault.send')}} />
-        <Stack.Screen name="Escrow" getComponent={() => require('@/screens/EscrowScreen').EscrowScreen} options={{title: t('mobile.escrow.title')}} />
-        <Stack.Screen name="EscrowCreate" getComponent={() => require('@/screens/EscrowCreateScreen').EscrowCreateScreen} options={{title: t('mobile.escrow.new')}} />
-        <Stack.Screen name="EscrowDetail" getComponent={() => require('@/screens/EscrowDetailScreen').EscrowDetailScreen} options={{title: t('mobile.escrow.title')}} />
         <Stack.Screen
           name="Payments"
           component={PaymentsGated}

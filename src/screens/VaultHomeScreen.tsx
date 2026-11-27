@@ -1,5 +1,4 @@
 import {isTronNetwork, NATIVE, NETWORK_FEATURES} from '@/core/chain';
-import {ESCROW_FACTORY} from '@/escrow/config';
 import {acrossServes} from '@/vault/bridge';
 import {FIT} from '@/core/text-scale';
 import {useTransparentHeaderInset} from '@/components/header-inset';
@@ -72,8 +71,8 @@ export function EyeIcon({off, color, size = 20}: {off: boolean; color: string; s
   );
 }
 
-/** Payees (address book) / Bridge / Send / Escrow / Receive / History (clock) / Pending (hourglass) action icons. */
-function ActionIcon({name, color, size = 22}: {name: 'payees' | 'bridge' | 'send' | 'escrow' | 'receive' | 'history' | 'guard'; color: string; size?: number}) {
+/** Payees (address book) / Bridge / Send / Receive / History (clock) / Pending (hourglass) action icons. */
+function ActionIcon({name, color, size = 22}: {name: 'payees' | 'bridge' | 'send' | 'receive' | 'history' | 'guard'; color: string; size?: number}) {
   const c = {stroke: color, strokeWidth: 2.2, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const};
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
@@ -99,15 +98,6 @@ function ActionIcon({name, color, size = 22}: {name: 'payees' | 'bridge' | 'send
         <>
           <Path d="M7 17L17 7" {...c} />
           <Path d="M8 7h9v9" {...c} />
-        </>
-      ) : name === 'escrow' ? (
-        // Escrow: money held between two sides until it is decided (lucide scale).
-        <>
-          <Path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z" {...c} />
-          <Path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z" {...c} />
-          <Path d="M7 21h10" {...c} />
-          <Path d="M12 3v18" {...c} />
-          <Path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2" {...c} />
         </>
       ) : name === 'receive' ? (
         // In and down: its mirror for Receive (lucide arrow-down-left).
@@ -1102,9 +1092,6 @@ export function VaultHomeScreen() {
             walletOn
               ? {label: t('vault.send'), icon: 'send' as const, onPress: () => nav.navigate('WalletSend')}
               : {label: t('vault.send'), icon: 'payees' as const, onPress: () => nav.navigate('Payees')},
-            // Escrow, second: the Tron wallet's two-sided deals (escrow/escrow), only where a factory
-            // is deployed (Nile today; not Tron mainnet yet).
-            ...(walletOn && isTronNetwork(network) && ESCROW_FACTORY[network] ? [{label: t('mobile.escrow.title'), icon: 'escrow' as const, onPress: () => nav.navigate('Escrow')}] : []),
             // Wherever Across serves the network: Tron mainnet too (USDT), not Nile, which has no SpokePool.
             ...(acrossServes(network) ? [{label: t('mobile.bridge.tab'), icon: 'bridge' as const, onPress: () => nav.navigate('Bridge')}] : []),
             {label: t('mobile.app.transactions'), icon: 'history', onPress: () => nav.navigate('Transactions')},

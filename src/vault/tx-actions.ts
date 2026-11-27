@@ -400,35 +400,6 @@ export function describeActions(
       case 'activateVault':
         out.push(k('activate'));
         break;
-      // A wallet's escrow (escrow/escrow): the deal's own contract made, no token moved yet.
-      case 'createEscrow':
-      case 'escrowStart':
-        out.push(g.escrow ? k('create_escrow_at', {address: shortAddress(String(g.escrow))}) : k('create_escrow'));
-        break;
-      // The escrow account's own calls (vault/transactions names them by selector).
-      case 'escrowDeposit':
-        out.push(k('escrow_deposit'));
-        break;
-      case 'escrowChoose': {
-        const o = ({'1': 'to_a', '2': 'to_b', '3': 'refund'} as Record<string, string>)[String(g.outcome)];
-        out.push(k('escrow_choose', {outcome: o ? t(`mobile.escrow.${o}`) : '?'}));
-        break;
-      }
-      case 'escrowCancel':
-        out.push(k('escrow_cancel'));
-        break;
-      case 'escrowFinalize':
-        out.push(k('escrow_finalize'));
-        break;
-      case 'escrowWithdraw':
-        out.push(k('escrow_withdraw'));
-        break;
-      case 'escrowApprove':
-        out.push(k('escrow_approve'));
-        break;
-      case 'escrowRescue':
-        out.push(k('escrow_rescue'));
-        break;
       // Neither was described before, so an Earn move showed no line at all under its title.
       case 'deposit':
         if (skipMoves) break;

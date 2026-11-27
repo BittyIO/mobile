@@ -29,7 +29,6 @@ import {QrScanner} from '@/components/QrScanner';
 import {Sheet} from '@/components/Sheet';
 import {ConfirmButton} from '@/components/Button';
 import {showTx} from '@/components/Toast';
-import {isEscrowAddress} from '@/escrow/escrow';
 import {useT} from '@/i18n';
 import {MONO, useColors, useStyles, type Colors} from '@/theme';
 
@@ -121,17 +120,6 @@ export function WalletSendScreen() {
     }
   }, [amount, asset]);
 
-  // An escrow's address is never a place to pay: money sent there by transfer is lost (escrow `isEscrowAddress`).
-  const [toEscrow, setToEscrow] = useState(false);
-  useEffect(() => {
-    setToEscrow(false);
-    if (!to) return;
-    let live = true;
-    isEscrowAddress(network, to).then((yes) => live && setToEscrow(yes));
-    return () => {
-      live = false;
-    };
-  }, [network, to]);
 
   // The fee, re-asked whenever what would be sent changes; a little after the last keystroke.
   useEffect(() => {
@@ -175,7 +163,7 @@ export function WalletSendScreen() {
   const nativeHeld = held[0]?.raw ?? BigInt(0);
   const short = !!asset && !!raw && (raw > asset.raw || (feeCost != null && (asset.address === 'native' ? raw + feeCost > nativeHeld : feeCost > nativeHeld)));
   const shortSymbol = asset && raw && raw > asset.raw ? asset.label : native.symbol;
-  const canSend = !!from && !!to && !toEscrow && !!asset && !!raw && raw > BigInt(0) && !!fee && !short && rentReady && !sending;
+  const canSend = !!from && !!to && !!asset && !!raw && raw > BigInt(0) && !!fee && !short && rentReady && !sending;
 
   const setMax = async () => {
     if (!asset || !from) return;
@@ -230,7 +218,6 @@ export function WalletSendScreen() {
             ) : null}
           </View>
           {badAddress ? <Text style={[styles.error, styles.inCard]}>{t('mobile.account.bad_address', {network: networkLabel(network, t)})}</Text> : null}
-          {toEscrow ? <Text style={[styles.error, styles.inCard]}>{t('mobile.escrow.send_to_escrow')}</Text> : null}
           {vault ? (
             <Pressable style={styles.chip} onPress={() => setToText(displayAddress(network, vault))} accessibilityRole="button">
               <Text style={styles.chipText}>
