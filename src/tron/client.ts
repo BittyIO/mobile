@@ -145,3 +145,36 @@ export async function broadcast(net: TronChain, signedHex: string, txID: string)
   if (!r.result) throw new Error(r.message ? hexText(r.message) : r.code ?? 'The Tron node refused the transaction');
   return r.txid ?? txID;
 }
+
+/** A TRX transfer as the node builds it, unsigned, in the JSON form (`visible`: base58 addresses). */
+export type NodeTx = {visible: boolean; txID: string; raw_data: unknown; raw_data_hex: string};
+
+/**
+ * Have the node build an unsigned TRX transfer, for a service that wants the whole transaction
+ * object rather than its bytes (tron/energy-rental: TronSave broadcasts the payment itself).
+ */
+export async function createTrxTransfer(net: TronChain, from: string, to: string, amountSun: bigint): Promise<NodeTx> {
+  const tx = await post<NodeTx & {Error?: string}>(net, '/wallet/createtransaction', {
+    owner_address: from,
+    to_address: to,
+    amount: Number(amountSun),
+    visible: true,
+  });
+  if (!tx?.txID) throw new Error(tx?.Error ?? 'The Tron node did not build the transfer');
+  return tx;
+}
+
+const memoFees: Partial<Record<TronChain, bigint>> = {};
+
+/**
+ * What Tron burns for a transaction with a note (the chain's `getMemoFee`, in sun: 1 TRX on mainnet
+ * and Nile today). Read once per run.
+ */
+export async function memoFeeSun(net: TronChain): Promise<bigint> {
+  const known = memoFees[net];
+  if (known != null) return known;
+  const r = await request<{chainParameter?: {key: string; value?: number}[]}>(net, '/wallet/getchainparameters');
+  const fee = BigInt(r.chainParameter?.find((p) => p.key === 'getMemoFee')?.value ?? 1_000_000);
+  memoFees[net] = fee;
+  return fee;
+}

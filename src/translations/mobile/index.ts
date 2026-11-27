@@ -25,6 +25,7 @@ import {bridge} from './bridge';
 import {phrases} from './phrases';
 import {safemode} from './safemode';
 import {account} from './account';
+import {escrow} from './escrow';
 
 export const MOBILE_STRINGS: Record<string, MobileTable> = {
   settings,
@@ -47,4 +48,5 @@ export const MOBILE_STRINGS: Record<string, MobileTable> = {
   phrases,
   safemode,
   account,
+  escrow,
 };

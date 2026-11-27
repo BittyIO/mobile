@@ -138,6 +138,13 @@ export async function sendFromOwner(o: {
   data?: Hex;
   value?: bigint;
   plan?: OwnerTxPlan;
+  /** Tron only: a note on the transaction. */
+  memo?: string;
+  /**
+   * Tron only: check the fee against what the energy on the account leaves to burn, not the whole
+   * burn. For a send on rented energy, where the wallet holds less TRX than burning would take.
+   */
+  useFreeEnergy?: boolean;
 }): Promise<{hash: Hex}> {
   if (!o.account.signTransaction || o.account.isContract) {
     throw new Error(translate(useLanguage.getState().language, 'mobile.fees.owner_cannot_send'));
@@ -146,7 +153,14 @@ export async function sendFromOwner(o: {
   const value = o.value ?? BigInt(0);
   const plan = o.plan ?? (await planOwnerTx({network: o.network, from: o.account.address, to: o.to, data: o.data, value}));
   const have = await ownerEthBalance(o.network, o.account.address);
-  if (have < plan.cost + value) throw new OwnerGasShort(o.account.address, plan.cost + value, have, o.network);
+  let cost = plan.cost;
+  if (o.useFreeEnergy && isTronNetwork(o.network)) {
+    const {freeEnergy} = require('@/tron/energy-rental') as typeof import('@/tron/energy-rental');
+    const {evmToTron} = require('@/tron/address') as typeof import('@/tron/address');
+    const free = BigInt(await freeEnergy(o.network as import('@/tron/config').TronChain, evmToTron(o.account.address)).catch(() => 0));
+    cost = (plan.gas > free ? plan.gas - free : BigInt(0)) * plan.maxFeePerGas + plan.l1Fee;
+  }
+  if (have < cost + value) throw new OwnerGasShort(o.account.address, cost + value, have, o.network);
 
   // Tron: the same calldata, as a Tron transaction from the same key (tron/vault-tx). Its fee_limit
   // is the energy the plan allows at the plan's price; bandwidth is charged outside it.
@@ -159,6 +173,7 @@ export async function sendFromOwner(o: {
       data: o.data ?? '0x',
       value,
       feeLimitSun: plan.gas * plan.maxFeePerGas,
+      memo: o.memo,
     });
   }
 
