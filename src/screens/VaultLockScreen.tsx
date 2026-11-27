@@ -9,6 +9,8 @@ import {useWallet} from '@/wallet/store';
 import {useNetwork} from '@/core/network-store';
 import {useActiveVaultAddress} from '@/core/active-vault';
 import type {LockAction} from '@/screens/VaultLockActionScreen';
+import {useActiveAccount} from '@/core/account-mode';
+import {readGuard} from '@/account/guard';
 import {useT} from '@/i18n';
 import {useStyles, type Colors} from '@/theme';
 import {LOCK_ICON, LOCK_TITLE} from '@/core/lock-status';
@@ -33,10 +35,17 @@ export function VaultLockScreen() {
   // "Emergency lock" to a vault that is already locked is a choice that can only fail.
   const [lockLevel, setLockLevel] = useState<LockLevel | null>(null);
 
+  // The Tron smart wallet: its one lock, read from the account; no forever lock.
+  const active = useActiveAccount(network);
+  const smart = active.kind === 'account';
   useFocusEffect(
     useCallback(() => {
+      if (smart && active.account) {
+        readGuard(network, active.account).then((g) => setLockLevel((g.locked ? 1 : 0) as LockLevel)).catch(() => {});
+        return;
+      }
       if (vault) getLockLevel(vault, network).then(setLockLevel);
-    }, [vault, network]),
+    }, [vault, network, smart, active.account]),
   );
 
   const status = lockLevel == null ? undefined : t(LOCK_TITLE[lockLevel]);
@@ -48,7 +57,7 @@ export function VaultLockScreen() {
       : [
           ...(lockLevel === 1 ? [{action: 'unlock' as const, title: 'mobile.vault.unlock'}] : []),
           ...(lockLevel === 0 ? [{action: 'emergency' as const, title: 'mobile.vault.emergency_lock'}] : []),
-          ...(lockLevel !== 2 ? [{action: 'forever' as const, title: 'mobile.vault.forever_lock'}] : []),
+          ...(lockLevel !== 2 && !smart ? [{action: 'forever' as const, title: 'mobile.vault.forever_lock'}] : []),
         ];
 
   return (

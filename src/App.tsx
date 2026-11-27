@@ -1,4 +1,4 @@
-import {NETWORK_FEATURES} from '@/core/chain';
+import {NETWORK_FEATURES, isTronNetwork} from '@/core/chain';
 import React, {useEffect} from 'react';
 import {ActivityIndicator, Platform, StatusBar, StyleSheet, View} from 'react-native';
 import {SafeAreaProvider, useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -279,9 +279,15 @@ const PayeesGated = vaultOnly(() => require('@/screens/SelectRecipientScreen').P
 function EarnTab() {
   // Wallet mode too: the wallet earns in its own name (wallet/earn).
   const noDefi = useNoDefi();
+  const network = useNetwork((s) => s.network);
   if (noDefi) {
     const {TronUnavailableScreen} = require('@/screens/TronUnavailableScreen');
     return <TronUnavailableScreen feature="earn" />;
+  }
+  // Tron: staking TRX earns energy, not yield, so the tab is Energy (screens/TronEnergyScreen).
+  if (isTronNetwork(network)) {
+    const {TronEnergyScreen} = require('@/screens/TronEnergyScreen');
+    return <TronEnergyScreen />;
   }
   const {EarnScreen} = require('@/screens/EarnScreen');
   return <EarnScreen />;
@@ -308,6 +314,7 @@ function MainTabs() {
   // Setting an explicit height opts out of the navigator's own safe-area handling, so the home
   // indicator's space has to be added back by hand or the bar sits under it.
   const insets = useSafeAreaInsets();
+  const tron = isTronNetwork(useNetwork((s) => s.network));
   return (
     <Tab.Navigator
       screenOptions={({route}) => ({
@@ -384,10 +391,10 @@ function MainTabs() {
         tabBarAllowFontScaling: false,
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.subtext,
-        tabBarIcon: ({color, size, focused}) => <TabIcon name={route.name as TabName} color={color} size={size} focused={focused} />,
+        tabBarIcon: ({color, size, focused}) => <TabIcon name={tron && route.name === 'Earn' ? 'Energy' : (route.name as TabName)} color={color} size={size} focused={focused} />,
       })}>
       <Tab.Screen name="Overview" options={{title: t('mobile.app.overview')}} component={OverviewTab} />
-      <Tab.Screen name="Earn" options={{title: t('mobile.app.earn')}} component={EarnTab} />
+      <Tab.Screen name="Earn" options={{title: tron ? t('mobile.tron.energy_title') : t('mobile.app.earn')}} component={EarnTab} />
       {/* Labelled Trade; the ROUTE keeps the name Market. `navigate` resolves a name against the
             nearest navigator that has it, and a tab called Trade once swallowed every push to the
             pair screen. The title is what the user reads; the name is what routing matches. */}

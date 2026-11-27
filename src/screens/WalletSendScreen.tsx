@@ -254,10 +254,7 @@ export function WalletSendScreen() {
         {short ? <Text style={styles.error}>{t('mobile.account.not_enough', {symbol: shortSymbol})}</Text> : null}
         {tron ? (
           <>
-            <Text style={styles.label}>
-              {t('mobile.tron.note')}
-              {memoSun != null ? ` · ${formatNative(network, memoSun)} ${native.symbol}` : ''}
-            </Text>
+            <Text style={styles.label}>{t('mobile.tron.note')}</Text>
             <View style={styles.card}>
               <TextInput
                 style={[styles.input, styles.noteInput]}
@@ -265,8 +262,15 @@ export function WalletSendScreen() {
                 onChangeText={setMemo}
                 maxLength={200}
                 multiline
+                placeholder={t('mobile.tron.note_optional')}
+                placeholderTextColor={c.subtext}
               />
             </View>
+            {/* Said before anything is typed: Tron burns its memo fee for any note (1 TRX on
+                mainnet and Nile, the chain's getMemoFee), and it is in the network fee below. */}
+            <Text style={[styles.noteFee, note ? styles.noteFeeOn : null]}>
+              {t('mobile.tron.note_fee', {fee: `${formatNative(network, memoSun ?? BigInt(1_000_000))} ${native.symbol}`})}
+            </Text>
           </>
         ) : null}
         {feeState === 'failed' ? <Text style={styles.error}>{t('mobile.account.fee_failed')}</Text> : null}
@@ -359,6 +363,8 @@ const makeStyles = (c: Colors) =>
     // Inside a card, whose own padding already insets it.
     inCard: {marginHorizontal: 0},
     noteInput: {fontFamily: undefined, minHeight: 22},
+    noteFee: {color: c.subtext, fontSize: 13, marginTop: 6, paddingHorizontal: 16},
+    noteFeeOn: {color: c.text, fontWeight: '600'},
     footer: {paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16},
     pickRow: {flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 4},
   });

@@ -9,7 +9,9 @@ import {IMPORTED_SECTION, nextAccountOf, nextNumberOf, phraseOf, useVaults, vaul
 import {vaultAddressOf} from '@/core/active-vault';
 import {ownerVaultAddress} from '@/vault/read';
 import {useNetwork} from '@/core/network-store';
-import {NATIVE, type Network} from '@/core/chain';
+import {NATIVE, isTronNetwork, type Network} from '@/core/chain';
+import {walletAddressOf} from '@/core/account-mode';
+import {tronAccountAddress} from '@/core/tron-account';
 import {useWallet} from '@/wallet/store';
 import * as keyring from '@/wallet/keyring';
 import {deviceKeys, fetchOneTimeKeyVaults, fetchOwnedVaults, recall, remember, useVaultDirectory, type FoundVault} from '@/vault/owned-vaults';
@@ -492,7 +494,9 @@ export function VaultListScreen() {
   const row = (v: VaultRef, i: number, count: number) => {
     const on = v.index === activeIndex;
     const gone = notYours.has(v.index);
-    const address = vaultAddressOf(v, network);
+    // On Tron the smart wallet is the key's own account (core/tron-account), not a derived vault.
+    const tronKey = isTronNetwork(network) ? walletAddressOf(v, allVaults) : null;
+    const address = tronKey ? tronAccountAddress(network, tronKey) : vaultAddressOf(v, network);
     // A received vault on another chain, with no vault on this one: its own address, the one it has there.
     const elsewhere = !!v.vault && !address;
     const from = v.vault && !elsewhere ? fromOf(v.vault, v.owner) : null;
@@ -757,7 +761,8 @@ export function VaultListScreen() {
           </SettingsGroup>
         </>
       )}
-      {multisig.length > 0 ? (
+      {/* Tron has no multisig (Safe) vaults. */}
+      {multisig.length > 0 && !isTronNetwork(network) ? (
         <View style={styles.section}>
           {/* Opens the multisig page: choosing one, approvals, taking one off the phone. */}
           <Pressable
@@ -778,10 +783,12 @@ export function VaultListScreen() {
           <Text style={styles.link}>{t('mobile.phrases.import_key')}</Text>
           <Text style={styles.chev}>›</Text>
         </Pressable>
-        <Pressable style={[styles.row, styles.rowDivider]} onPress={() => nav.navigate('AddSafeVault')}>
-          <Text style={styles.link}>{t('mobile.safemode.import')}</Text>
-          <Text style={styles.chev}>›</Text>
-        </Pressable>
+        {isTronNetwork(network) ? null : (
+          <Pressable style={[styles.row, styles.rowDivider]} onPress={() => nav.navigate('AddSafeVault')}>
+            <Text style={styles.link}>{t('mobile.safemode.import')}</Text>
+            <Text style={styles.chev}>›</Text>
+          </Pressable>
+        )}
         <Pressable style={styles.row} onPress={() => nav.navigate('RecoveryPhrases')}>
           <Text style={styles.link}>{t('mobile.phrases.manage')}</Text>
           <Text style={styles.chev}>›</Text>
@@ -813,16 +820,18 @@ export function VaultListScreen() {
           ) : null}
           {/* Last: the Safe vaults' own page — adding one (the owner's key, the Safe's address),
               choosing one, taking one off the phone. */}
-          <Pressable
-            style={({pressed}) => [styles.menuRow, pressed && styles.pressed]}
-            onPress={() => {
-              setMenuOpen(false);
-              nav.navigate('SafeVaults');
-            }}
-            accessibilityRole="button">
-            <Text style={styles.menuLabel}>{t('mobile.safemode.menu')}</Text>
-            <Text style={styles.chev}>›</Text>
-          </Pressable>
+          {isTronNetwork(network) ? null : (
+            <Pressable
+              style={({pressed}) => [styles.menuRow, pressed && styles.pressed]}
+              onPress={() => {
+                setMenuOpen(false);
+                nav.navigate('SafeVaults');
+              }}
+              accessibilityRole="button">
+              <Text style={styles.menuLabel}>{t('mobile.safemode.menu')}</Text>
+              <Text style={styles.chev}>›</Text>
+            </Pressable>
+          )}
         </View>
       </Sheet>
       {sheet}

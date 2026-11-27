@@ -195,6 +195,22 @@ const ACTION_CATEGORY: Record<string, ActionCategory> = {
   useBittyAllowList: 'settings',
   updatePayoutOperator: 'settings',
   emergencyLock: 'settings',
+  // The Tron smart wallet (BittyAccount), from its own events (vault/transactions, account/events).
+  acctActivated: 'settings',
+  acctRequestUnlock: 'settings',
+  acctPayeeAdded: 'settings',
+  acctPayeeRemoved: 'settings',
+  acctDailyLimit: 'settings',
+  acctTimelock: 'settings',
+  acctQueued: 'settings',
+  acctQueueCancelled: 'settings',
+  acctQueueRan: 'settings',
+  acctOwnerProposed: 'settings',
+  acctStaked: 'stake',
+  acctUnstaked: 'stake',
+  acctWithdrawn: 'stake',
+  acctEnergyLent: 'stake',
+  acctEnergyBack: 'stake',
   foreverLock: 'settings',
   unlock: 'settings',
   transferOwnership: 'settings',
@@ -305,6 +321,9 @@ export function categoryForActions(actions: VaultAction[] | undefined): ActionCa
   }
   return settings ? 'settings' : null;
 }
+
+/** A sun amount as TRX, for the smart wallet's staking lines. */
+const trxOf = (v: string | string[] | undefined) => `${Number(BigInt(String(v ?? '0'))) / 1e6} TRX`;
 
 /** `type(uint256).max`: the field is left as it is. */
 const RISK_UNCHANGED = (BigInt(1) << BigInt(256)) - BigInt(1);
@@ -595,6 +614,55 @@ export function describeActions(
         break;
       case 'cancelSends':
         out.push(k('send_cancelled'));
+        break;
+      // ── the Tron smart wallet ──
+      case 'acctActivated':
+        out.push(k('activate'));
+        break;
+      case 'acctRequestUnlock':
+        out.push(k('unlock_requested'));
+        break;
+      case 'acctPayeeAdded':
+        out.push(k('recipient_added'), addr(String(g.payee)));
+        break;
+      case 'acctPayeeRemoved':
+        out.push(k('recipient_removed'), addr(String(g.payee)));
+        break;
+      case 'acctDailyLimit':
+        out.push(
+          k('risk_updated'),
+          `${t(RISK_TITLE.sendDailyAllowance)}: ${String(g.unlimited) === 'true' ? t('mobile.vault.no_limit') : `${Number(BigInt(String(g.limit ?? '0'))) / 1e6} USDT`}`,
+        );
+        break;
+      case 'acctTimelock':
+        out.push(k('risk_updated'), `${t(RISK_TITLE.timelock)}: ${fmtRiskValue('timelock', BigInt(String(g.timelock ?? '0')), t)}`);
+        break;
+      case 'acctQueued':
+        out.push(k('change_queued'));
+        break;
+      case 'acctQueueCancelled':
+        out.push(k('change_cancelled'));
+        break;
+      case 'acctQueueRan':
+        out.push(k('change_applied'));
+        break;
+      case 'acctOwnerProposed':
+        out.push(k('ownership_to', {address: addr(String(g.proposed))}));
+        break;
+      case 'acctStaked':
+        out.push(k('stake_trx', {amount: trxOf(g.amount)}));
+        break;
+      case 'acctUnstaked':
+        out.push(k('unstake_trx', {amount: trxOf(g.amount)}));
+        break;
+      case 'acctWithdrawn':
+        out.push(k('withdraw_unstaked', {amount: trxOf(g.amount)}));
+        break;
+      case 'acctEnergyLent':
+        out.push(k('energy_lent', {address: addr(String(g.receiver))}));
+        break;
+      case 'acctEnergyBack':
+        out.push(k('energy_back', {address: addr(String(g.receiver))}));
         break;
       default:
         // marketSell/marketBuy, deposit/withdraw, send: the legs already say it.

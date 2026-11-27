@@ -21,7 +21,8 @@ const FEE_VAULT = '0xf0e7f6998b362bd15cf819c7ebfcace8865feca0';
 // (0x12ee…9823, TBhJ… in base58) rather than to the relayer — measured on Nile, 2026-11-11; mainnet's
 // vault is built with the same fee collector.
 export const BITTY_FEE_COLLECTORS = new Set([FEE_VAULT, FEE_SAFE, '0x76dc42c2e0ef4fb02600430cb0d3a68d015c30aa']);
-const TRON_FEE_COLLECTORS = new Set([...BITTY_FEE_COLLECTORS, '0x12ee2de7bf086388b1d560eb95e7191edfab9823']);
+// The last is the smart wallet's (BittyAccount's) relayer, paid each batch's fee in USDT (account/relay).
+const TRON_FEE_COLLECTORS = new Set([...BITTY_FEE_COLLECTORS, '0x12ee2de7bf086388b1d560eb95e7191edfab9823', '0x76dc42c2e0ef4fb02600430cb0d3a68d015c30aa']);
 /** Whether a transfer to `to` is the relay fee on `network`. */
 export const isRelayFeeCollector = (network: string, to: string | null | undefined): boolean =>
   !!to && (network === 'tron' || network === 'tron-nile' ? TRON_FEE_COLLECTORS : BITTY_FEE_COLLECTORS).has(to.toLowerCase());

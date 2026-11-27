@@ -24,6 +24,9 @@ import {fmtAllowance, fmtDuration} from '@/components/riskFormat';
 import {CopyButton} from '@/components/CopyButton';
 import {ProgressRing, leftUnit, waitDone} from '@/components/ProgressRing';
 import {useVaultWrite} from '@/components/useVaultWrite';
+import {useAccountWrite} from '@/account/useAccountWrite';
+import {accountBook, accountRiskConfig} from '@/account/guard-evm';
+import {readGuard, removePayeeCall} from '@/account/guard';
 import {usePending} from '@/vault/pending';
 import {useRecipientNames, recipientName} from '@/core/recipient-names';
 import {useRecipientPick} from '@/core/recipient-pick';
@@ -73,10 +76,22 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
   const activeIndex = useVaults((s) => s.activeIndex);
   // A locked vault pays only book entries already payable, and adds or removes none.
   const sendGate = useCapability('send');
-  const addGate = useCapability('addWhitelistedRecipient');
-  const removeGate = useCapability('removeWhitelistedRecipient');
+  const vaultAddGate = useCapability('addWhitelistedRecipient');
+  const vaultRemoveGate = useCapability('removeWhitelistedRecipient');
   const lockLevel = useLockLevel();
-  const lockedSends = !sendGate.allowed && sendGate.reason !== 'send_allowance_off';
+  /**
+   * The Tron smart wallet (BittyAccount) in front: the same page over the account's payees
+   * (account/guard-evm), each removal relayed. Its lock is read from the account, since the vault
+   * gate knows nothing of it.
+   */
+  const acct = useAccountWrite(useCallback(() => setReload((n) => n + 1), []));
+  const smart = acct.account != null;
+  const [acctLocked, setAcctLocked] = useState(false);
+  // Locked, the account adds and removes no payee (AccountLocked), as a locked vault does.
+  const smartGate = acctLocked ? ({allowed: false, reason: 'locked'} as unknown as typeof vaultAddGate) : ({allowed: true} as typeof vaultAddGate);
+  const addGate = smart ? smartGate : vaultAddGate;
+  const removeGate = smart ? smartGate : vaultRemoveGate;
+  const lockedSends = smart ? acctLocked : !sendGate.allowed && sendGate.reason !== 'send_allowance_off';
 
   /**
    * The book as the vault reports it, each entry with its status. An entry whose removal is queued
@@ -103,9 +118,25 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
   const [risk, setRisk] = useState<RiskConfig | null>(null);
   const [whyOpen, setWhyOpen] = useState(false);
   useEffect(() => {
+    if (acct.account) {
+      accountRiskConfig(network, acct.account).then(setRisk).catch(() => {});
+      readGuard(network, acct.account).then((g) => setAcctLocked(g.locked)).catch(() => {});
+      return;
+    }
     if (vault) getRiskConfig(vault, network).then(setRisk);
-  }, [vault, network]);
+  }, [vault, network, acct.account, reload]);
   useEffect(() => {
+    if (acct.account) {
+      let live = true;
+      setLoading(true);
+      accountBook(network, acct.account)
+        .then((rows) => live && setBook(rows))
+        .catch(() => live && setBook([]))
+        .finally(() => live && setLoading(false));
+      return () => {
+        live = false;
+      };
+    }
     if (!vault) return;
     let live = true;
     setLoading(true);
@@ -120,12 +151,23 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
     return () => {
       live = false;
     };
-  }, [vault, network, reload]);
+  }, [vault, network, reload, acct.account]);
 
   // Removing an entry is a relayed write: confirmed first, so a mis-tap cannot spend anything.
-  const {busy, ready, run, sheet} = useVaultWrite(useCallback(() => setReload((n) => n + 1), []));
+  const vw = useVaultWrite(useCallback(() => setReload((n) => n + 1), []));
+  const {run} = vw;
+  const sheet = (
+    <>
+      {vw.sheet}
+      {acct.sheet}
+    </>
+  );
+  const busy = smart ? acct.busy : vw.busy;
+  const ready = smart ? acct.ready : vw.ready;
   const removeEntry = (b: WhitelistedRecipient) =>
-    run(
+    acct.account
+      ? void acct.run(`rm-${b.id}`, `${t('vault.remove')} · ${t('vault.address_book')}`, [removePayeeCall(acct.account, b.recipientAddress as Address)], b.recipientAddress)
+      : run(
       `rm-${b.id}`,
       `${t('vault.remove')} · ${t('vault.address_book')}`,
       (base) => removeWhitelisted({...base, id: b.id}),
@@ -330,8 +372,10 @@ export function SelectRecipientScreen({manage = false, payees = false}: {manage?
 
   /** One card of book entries, or its loading / empty state. */
   const group = (rows: WhitelistedRecipient[], empty: string) => (
-    <View style={[styles.card, loading && payees && styles.hidden]}>
-      {loading && payees ? null : loading ? (
+    // Loading is the same card with a spinner in it, on every mode of the page: the Payees list
+    // used to hide the card until it had read, which on a slow read looked like no payees at all.
+    <View style={styles.card}>
+      {loading ? (
         <View style={[styles.row, styles.rowFirst, styles.rowLast, styles.centered]}>
           <ActivityIndicator color={c.accent} />
         </View>

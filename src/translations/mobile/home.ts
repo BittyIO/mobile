@@ -39,6 +39,15 @@ export const home: MobileTable = {
     withdraw_from: 'Withdraw from {{name}}',
     category_crypto: 'Crypto',
     your_vault_on: 'Your smart wallet address on {{network}}',
+    your_wallet_on: 'Your wallet address on {{network}}',
+    account_activate_title: 'Smart wallet not activated',
+    account_activate_body: 'Activate it with {{token}} to start.',
+    account_activate_sheet: 'Activate smart wallet',
+    account_activate_fee: 'Activation fee',
+    account_activate_held: 'In your smart wallet',
+    account_activate_fund: 'Send at least {{amount}} more to your smart wallet address, then activate.',
+    activate: 'Activate',
+    copy_error: 'Copy error',
   },
   zh: {
     address_copied: '地址已复制（{{network}}）',
@@ -77,6 +86,15 @@ export const home: MobileTable = {
     withdraw_from: '从 {{name}} 取出',
     category_crypto: '加密',
     your_vault_on: '你在 {{network}} 上的智能钱包地址',
+    your_wallet_on: '你在 {{network}} 上的钱包地址',
+    account_activate_title: '智能钱包尚未激活',
+    account_activate_body: '使用 {{token}} 激活即可开始使用。',
+    account_activate_sheet: '激活智能钱包',
+    account_activate_fee: '激活费用',
+    account_activate_held: '智能钱包余额',
+    account_activate_fund: '请再向你的智能钱包地址转入至少 {{amount}}，然后激活。',
+    activate: '激活',
+    copy_error: '复制错误信息',
   },
   'zh-TW': {
     address_copied: '地址已複製（{{network}}）',
@@ -115,6 +133,15 @@ export const home: MobileTable = {
     withdraw_from: '從 {{name}} 取出',
     category_crypto: '加密',
     your_vault_on: '你在 {{network}} 上的智慧錢包地址',
+    your_wallet_on: '你在 {{network}} 上的錢包地址',
+    account_activate_title: '智慧錢包尚未啟用',
+    account_activate_body: '使用 {{token}} 啟用即可開始使用。',
+    account_activate_sheet: '啟用智慧錢包',
+    account_activate_fee: '啟用費用',
+    account_activate_held: '智慧錢包餘額',
+    account_activate_fund: '請再向你的智慧錢包地址轉入至少 {{amount}}，然後啟用。',
+    activate: '啟用',
+    copy_error: '複製錯誤訊息',
   },
   ja: {
     address_copied: 'アドレスをコピーしました（{{network}}）',
@@ -153,6 +180,7 @@ export const home: MobileTable = {
     withdraw_from: '{{name}} から引き出し',
     category_crypto: '暗号資産',
     your_vault_on: '{{network}} 上のあなたのスマートウォレットアドレス',
+    your_wallet_on: '{{network}} 上のあなたのウォレットアドレス',
   },
   ko: {
     address_copied: '주소를 복사했습니다 ({{network}})',
@@ -191,6 +219,7 @@ export const home: MobileTable = {
     withdraw_from: '{{name}}에서 출금',
     category_crypto: '암호화폐',
     your_vault_on: '{{network}}의 내 스마트 지갑 주소',
+    your_wallet_on: '{{network}}의 내 지갑 주소',
   },
   fr: {
     address_copied: 'Adresse copiée ({{network}})',
@@ -229,6 +258,7 @@ export const home: MobileTable = {
     withdraw_from: 'Retirer de {{name}}',
     category_crypto: 'Crypto',
     your_vault_on: 'L’adresse de votre portefeuille intelligent sur {{network}}',
+    your_wallet_on: 'L’adresse de votre portefeuille sur {{network}}',
   },
   es: {
     address_copied: 'Dirección copiada ({{network}})',
@@ -267,6 +297,7 @@ export const home: MobileTable = {
     withdraw_from: 'Retirar de {{name}}',
     category_crypto: 'Cripto',
     your_vault_on: 'La dirección de tu billetera inteligente en {{network}}',
+    your_wallet_on: 'La dirección de tu billetera en {{network}}',
   },
   de: {
     address_copied: 'Adresse kopiert ({{network}})',
@@ -305,6 +336,7 @@ export const home: MobileTable = {
     withdraw_from: 'Aus {{name}} abheben',
     category_crypto: 'Krypto',
     your_vault_on: 'Die Adresse deiner Smart Wallet auf {{network}}',
+    your_wallet_on: 'Die Adresse deiner Wallet auf {{network}}',
   },
   'pt-BR': {
     address_copied: 'Endereço copiado ({{network}})',
@@ -343,6 +375,7 @@ export const home: MobileTable = {
     withdraw_from: 'Sacar de {{name}}',
     category_crypto: 'Cripto',
     your_vault_on: 'O endereço da sua carteira inteligente na {{network}}',
+    your_wallet_on: 'O endereço da sua carteira na {{network}}',
   },
   hi: {
     address_copied: 'पता कॉपी किया गया ({{network}})',
@@ -381,6 +414,7 @@ export const home: MobileTable = {
     withdraw_from: '{{name}} से निकालें',
     category_crypto: 'क्रिप्टो',
     your_vault_on: '{{network}} पर आपके स्मार्ट वॉलेट का पता',
+    your_wallet_on: '{{network}} पर आपके वॉलेट का पता',
   },
   tr: {
     address_copied: 'Adres kopyalandı ({{network}})',
@@ -419,6 +453,7 @@ export const home: MobileTable = {
     withdraw_from: '{{name}} hesabından çek',
     category_crypto: 'Kripto',
     your_vault_on: '{{network}} üzerindeki akıllı cüzdan adresiniz',
+    your_wallet_on: '{{network}} üzerindeki cüzdan adresiniz',
   },
   ru: {
     address_copied: 'Адрес скопирован ({{network}})',
@@ -457,6 +492,7 @@ export const home: MobileTable = {
     withdraw_from: 'Вывести из {{name}}',
     category_crypto: 'Крипто',
     your_vault_on: 'Адрес вашего смарт-кошелька в сети {{network}}',
+    your_wallet_on: 'Адрес вашего кошелька в сети {{network}}',
   },
   id: {
     address_copied: 'Alamat disalin ({{network}})',
@@ -495,6 +531,7 @@ export const home: MobileTable = {
     withdraw_from: 'Tarik dari {{name}}',
     category_crypto: 'Kripto',
     your_vault_on: 'Alamat dompet pintar Anda di {{network}}',
+    your_wallet_on: 'Alamat dompet Anda di {{network}}',
   },
   vi: {
     address_copied: 'Đã sao chép địa chỉ ({{network}})',
@@ -533,6 +570,7 @@ export const home: MobileTable = {
     withdraw_from: 'Rút từ {{name}}',
     category_crypto: 'Crypto',
     your_vault_on: 'Địa chỉ ví thông minh của bạn trên {{network}}',
+    your_wallet_on: 'Địa chỉ ví của bạn trên {{network}}',
   },
   th: {
     address_copied: 'คัดลอกที่อยู่แล้ว ({{network}})',
@@ -571,5 +609,6 @@ export const home: MobileTable = {
     withdraw_from: 'ถอนจาก {{name}}',
     category_crypto: 'คริปโต',
     your_vault_on: 'ที่อยู่สมาร์ทวอลเล็ตของคุณบน {{network}}',
+    your_wallet_on: 'ที่อยู่วอลเล็ตของคุณบน {{network}}',
   },
 };

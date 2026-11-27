@@ -1,7 +1,7 @@
 import React from 'react';
 import Svg, {Circle, Line, Path, Rect} from 'react-native-svg';
 
-export type TabName = 'Overview' | 'Earn' | 'Market' | 'Bridge' | 'Settings';
+export type TabName = 'Overview' | 'Earn' | 'Energy' | 'Market' | 'Bridge' | 'Settings';
 
 /** The cog body. Only its centre fills when selected, so the gear keeps its teeth readable. */
 const COG =
@@ -45,6 +45,9 @@ export function TabIcon({name, color, size = 24, focused}: {name: TabName; color
           <Line x1={18} y1={11} x2={18} y2={18} {...common} />
           <Line x1={3} y1={22} x2={21} y2={22} {...common} />
         </>
+      ) : name === 'Energy' ? (
+        // Tron's Earn: staking TRX earns energy (lucide zap).
+        <Path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" {...solid} />
       ) : name === 'Market' ? (
         /**
          * An exchange ring: two arcs chasing each other round a circle, each ending in a head.

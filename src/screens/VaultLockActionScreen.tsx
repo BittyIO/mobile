@@ -8,6 +8,10 @@ import {SettingsGroup} from '@/components/SettingsRow';
 import {PendingRow} from '@/components/PendingRow';
 import {Button} from '@/components/Button';
 import {useVaultWrite} from '@/components/useVaultWrite';
+import {useAccountWrite} from '@/account/useAccountWrite';
+import {fmtWait} from '@/components/riskFormat';
+import {getAccountPending} from '@/account/guard-evm';
+import {lockCall, requestUnlockCall, unlockCall} from '@/account/guard';
 import {useWallet} from '@/wallet/store';
 import {pendingExtras, pendingTitle, pendingValue, useEntryLabel} from '@/screens/PendingChangesScreen';
 import {useT} from '@/i18n';
@@ -44,7 +48,21 @@ export function VaultLockActionScreen() {
   const nav = useNavigation();
   const {action} = useRoute<RouteProp<RootStackParamList, 'VaultLockAction'>>().params;
   const owner = useWallet((s) => s.address);
-  const {vault, network, busy, ready, run, sheet} = useVaultWrite(() => nav.goBack());
+  const vw = useVaultWrite(() => nav.goBack());
+  const {vault, network, run} = vw;
+  // The Tron smart wallet: lock() at once; unlock asks first (requestUnlock), waits out the
+  // timelock, then unlock(). What a lock cancels is read from the account (account/guard-evm).
+  const acct = useAccountWrite(() => nav.goBack());
+  const smart = acct.account != null;
+  const busy = smart ? acct.busy : vw.busy;
+  const ready = smart ? acct.ready : vw.ready;
+  const sheet = (
+    <>
+      {vw.sheet}
+      {acct.sheet}
+    </>
+  );
+  const [unlockAt, setUnlockAt] = useState(0);
   const nameOf = useEntryLabel(network);
 
   const [pending, setPending] = useState<PendingChange[] | null>(null);
@@ -53,6 +71,17 @@ export function VaultLockActionScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (acct.account) {
+        const a = acct.account;
+        getAccountPending(network, a)
+          .then(({items, guard}) => {
+            setPending(items);
+            setTimelock(guard.timelock);
+            setUnlockAt(guard.unlockAt);
+          })
+          .catch(() => setPending([]));
+        return;
+      }
       if (!vault) return;
       if (action !== 'unlock') {
         getPendingChanges(vault, network).then(setPending).catch(() => setPending([]));
@@ -66,15 +95,23 @@ export function VaultLockActionScreen() {
           setEscapes(usable);
         })().catch(() => setEscapes([]));
       }
-    }, [vault, network, action, owner]),
+    }, [vault, network, action, owner, acct.account]),
   );
 
   const now = Math.floor(Date.now() / 1000);
   const escape = escapes?.[0]?.id ?? null;
-  const canConfirm = ready && (action !== 'forever' || escape != null);
+  // A smart wallet's unlock asked for and still waiting: nothing to confirm until it is due.
+  const unlockWaiting = smart && action === 'unlock' && unlockAt > now;
+  const canConfirm = ready && (action !== 'forever' || escape != null) && !unlockWaiting;
 
   const confirm = () => {
     if (!canConfirm) return;
+    if (acct.account) {
+      const a = acct.account;
+      if (action === 'emergency') return void acct.run('go', t(TITLE[action]), [lockCall(a)]);
+      if (action === 'unlock') return void acct.run('go', t(unlockAt > 0 ? TITLE.unlock : 'mobile.tron.guard_request_unlock'), [unlockAt > 0 ? unlockCall(a) : requestUnlockCall(a)]);
+      return;
+    }
     if (action === 'emergency') return run('go', t(TITLE[action]), emergencyLock);
     if (action === 'unlock') return run('go', t(TITLE[action]), unlockVault);
     run('go', t(TITLE[action]), (b) => foreverLock({...b, escapeRecipientId: escape!}));
@@ -131,8 +168,18 @@ export function VaultLockActionScreen() {
         <Text style={styles.warn}>{t('mobile.vault.forever_lock_no_escape')}</Text>
       ) : null}
 
+      {/* The smart wallet's unlock: asked for first, then made once the timelock has passed. */}
+      {smart && action === 'unlock' ? (
+        <Text style={styles.warn}>
+          {unlockAt === 0
+            ? t('mobile.tron.lock_unlock_ask', {time: fmtWait(BigInt(timelock), t)})
+            : unlockAt > now
+              ? t('mobile.tron.guard_unlocks_at', {time: new Date(unlockAt * 1000).toLocaleString(undefined, {dateStyle: 'medium', timeStyle: 'short'})})
+              : t('mobile.tron.lock_unlock_ready')}
+        </Text>
+      ) : null}
       <Button
-        title={t(TITLE[action])}
+        title={smart && action === 'unlock' && unlockAt === 0 ? t('mobile.tron.guard_request_unlock') : t(TITLE[action])}
         variant={action === 'unlock' ? 'primary' : 'danger'}
         onPress={confirm}
         loading={busy === 'go'}
