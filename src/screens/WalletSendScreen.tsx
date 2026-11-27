@@ -15,9 +15,9 @@ import {usePrices} from '@/vault/usePrices';
 import {formatNative} from '@/vault/direct';
 import {useWallet} from '@/wallet/store';
 import {recordSent} from '@/wallet/sent-log';
-import {energyOf, maxNativeSend, planWalletTransfer, sendWalletTransfer, type WalletAsset} from '@/wallet/send';
+import {maxNativeSend, planWalletTransfer, sendWalletTransfer, type WalletAsset} from '@/wallet/send';
 import type {OwnerTxPlan} from '@/vault/direct';
-import {useEnergyRental} from '@/components/EnergyRental';
+import {useUsdtGas} from '@/components/EnergyRental';
 import {BookIcon} from '@/components/BookIcon';
 import {ClearBtn} from '@/components/ClearBtn';
 import {AddressInput} from '@/components/AddressInput';
@@ -142,28 +142,23 @@ export function WalletSendScreen() {
   }, [network, from, to, asset, raw, note]);
 
   /**
-   * Rent the transfer's energy from TronSave instead of burning TRX for it (components/EnergyRental,
-   * at the confirm button's top left). Only for a token transfer, where the network offers it.
+   * Tron USDT: pay the network fee in USDT instead of TRX (tron/usdt-gas, at the confirm button's
+   * top left). On by default where offered: the wallet then needs no TRX at all.
    */
-  const rental = useEnergyRental({
-    network,
-    wallet: from,
-    energy: fee ? energyOf(fee) : null,
-    price: fee?.maxFeePerGas ?? null,
-    bandwidth: fee?.l1Fee ?? null,
-    worst: fee?.cost ?? null,
-    enabled: !!asset && asset.address !== 'native',
-  });
-  const renting = rental.renting;
-  // What the wallet must hold for the fee (the "not enough" check), and the fee shown.
-  const feeCost = rental.needSun;
-  const shownFee = rental.shownSun;
-  const rentReady = rental.ok;
+  const gas = useUsdtGas({network, from, to, token: asset?.address, amount: raw, memo: note, burnSun: fee?.cost ?? null});
+  const payUsdt = gas.on;
+  // What the wallet must hold in its coin for the fee (the "not enough" check), and the fee shown.
+  const feeCost = payUsdt ? BigInt(0) : (fee?.cost ?? null);
+  const shownFee = payUsdt ? null : (fee?.cost ?? null);
 
   const nativeHeld = held[0]?.raw ?? BigInt(0);
-  const short = !!asset && !!raw && (raw > asset.raw || (feeCost != null && (asset.address === 'native' ? raw + feeCost > nativeHeld : feeCost > nativeHeld)));
-  const shortSymbol = asset && raw && raw > asset.raw ? asset.label : native.symbol;
-  const canSend = !!from && !!to && !!asset && !!raw && raw > BigInt(0) && !!fee && !short && rentReady && !sending;
+  // Paying in USDT: the transfer and its fee both come out of the USDT.
+  const usdtShort = payUsdt && !!asset && !!raw && gas.usdtFee != null && raw + gas.usdtFee > asset.raw;
+  const short =
+    !!asset && !!raw && (raw > asset.raw || usdtShort || (feeCost != null && (asset.address === 'native' ? raw + feeCost > nativeHeld : feeCost > nativeHeld)));
+  const shortSymbol = asset && raw && (raw > asset.raw || usdtShort) ? asset.label : native.symbol;
+  const priced = payUsdt ? !!gas.quote : !!fee;
+  const canSend = !!from && !!to && !!asset && !!raw && raw > BigInt(0) && priced && !short && gas.ok && !sending;
 
   const setMax = async () => {
     if (!asset || !from) return;
@@ -178,7 +173,7 @@ export function WalletSendScreen() {
     const tx = showTx(`${t('vault.send')} ${fmtShort(Number(formatUnits(raw, asset.decimals)))} ${asset.label}`, network);
     try {
       const signer = await useWallet.getState().walletSigner();
-      const {hash} = await sendWalletTransfer({account: signer, network, from, to, asset, amount: raw, memo: note || undefined, ...(renting ? {plan: fee ?? undefined, rent: rental.quote!} : {})});
+      const {hash} = await sendWalletTransfer({account: signer, network, from, to, asset, amount: raw, memo: note || undefined, ...(payUsdt && gas.quote ? {usdtGas: gas.quote} : {})});
       recordSent({
         hash,
         network,
@@ -200,7 +195,13 @@ export function WalletSendScreen() {
     }
   };
 
-  const feeUsd = shownFee != null ? usdValue(Number(formatUnits(shownFee, native.decimals)), native.wrapped, prices) : null;
+  const feeUsd = payUsdt
+    ? gas.usdtFee != null
+      ? Number(formatUnits(gas.usdtFee, 6))
+      : null
+    : shownFee != null
+      ? usdValue(Number(formatUnits(shownFee, native.decimals)), native.wrapped, prices)
+      : null;
   const vault = account.vault;
 
   return (
@@ -269,14 +270,14 @@ export function WalletSendScreen() {
             </View>
           </>
         ) : null}
-        {feeState === 'failed' ? <Text style={styles.error}>{t('mobile.account.fee_failed')}</Text> : null}
+        {feeState === 'failed' && !payUsdt ? <Text style={styles.error}>{t('mobile.account.fee_failed')}</Text> : null}
       </ScrollView>
 
       {/* The app's one signing control (Face ID, Confirm), in the footer as on the smart wallet's Send.
-          The fee is at its top left/right: the rental and TRX, then the network fee in dollars; until
+          The fee is at its top left/right: USDT or TRX (Tron USDT), then the network fee in dollars; until
           it is priced (`pricing`) no line, as a wallet has no activation to quote. */}
       <View style={styles.footer}>
-        <ConfirmButton onPress={send} loading={sending} disabled={!canSend} pricing={!rental.toggle && feeUsd == null} rental={rental.toggle} networkFeeUsd={feeUsd ?? undefined} />
+        <ConfirmButton onPress={send} loading={sending} disabled={!canSend} pricing={!gas.toggle && feeUsd == null} rental={gas.toggle} networkFeeUsd={feeUsd ?? undefined} />
       </View>
 
       <Sheet visible={picking} title={t('mobile.account.asset')} onClose={() => setPicking(false)}>

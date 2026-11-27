@@ -155,7 +155,7 @@ export async function sendFromOwner(o: {
   const have = await ownerEthBalance(o.network, o.account.address);
   let cost = plan.cost;
   if (o.useFreeEnergy && isTronNetwork(o.network)) {
-    const {freeEnergy} = require('@/tron/energy-rental') as typeof import('@/tron/energy-rental');
+    const {freeEnergy} = require('@/tron/client') as typeof import('@/tron/client');
     const {evmToTron} = require('@/tron/address') as typeof import('@/tron/address');
     const free = BigInt(await freeEnergy(o.network as import('@/tron/config').TronChain, evmToTron(o.account.address)).catch(() => 0));
     cost = (plan.gas > free ? plan.gas - free : BigInt(0)) * plan.maxFeePerGas + plan.l1Fee;

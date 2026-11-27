@@ -1,128 +1,103 @@
 import React, {useEffect, useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import Svg, {Path} from 'react-native-svg';
-import type {Address} from 'viem';
+import {formatUnits, type Address} from 'viem';
 import {NATIVE, type Network} from '@/core/chain';
 import {formatNative} from '@/vault/direct';
-import {fmtNum} from '@/core/format';
-import {evmToTron} from '@/tron/address';
-import {freeEnergy, quoteEnergy, rentAmount, rentalOffered, type RentQuote} from '@/tron/energy-rental';
+import {quoteUsdtGas, usdtGasOffered, type UsdtGasQuote} from '@/tron/usdt-gas';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 
-/** What ConfirmButton needs to draw the rental at its top left (see {RentalToggle}). */
+/** What ConfirmButton needs to draw the fee choice at its top left (see {RentalToggle}). */
 export type RentalToggleProps = {
+  /** On: the fee is paid in USDT (tron/usdt-gas). Off: in TRX, from the wallet. */
   on: boolean;
   onChange: (on: boolean) => void;
-  /** With the rental, and without it, as "6.5 TRX"; null while it is being worked out. */
+  /** The fee each way, as "1.20 USDT" and "6.5 TRX"; null while it is being worked out. */
   rent: string | null;
   burn: string | null;
   busy: boolean;
   error: string | null;
-  /**
-   * Renting would not change the fee: the wallet's own energy covers the operation, so it pays the
-   * same bandwidth either way. The mark is then greyed and only says so when tapped.
-   */
-  useless?: boolean;
 };
 
 /**
- * Energy rental (tron/energy-rental) for any Tron confirm: quotes the energy the wallet's own does
- * not cover, and prices the operation both ways. The switch follows whichever costs less until the
- * user sets it. `energy` is what the operation uses (no margin), `price` the chain's sun per energy,
- * `bandwidth` what it pays either way, `worst` its full fee without renting (margins included).
+ * USDT as gas (tron/usdt-gas) for a Tron wallet's USDT transfer: the fee quoted in USDT by Bitty's
+ * server, which rents the energy and pays the rest, against the fee in TRX the wallet would burn.
+ * On by default where offered — it is the cheaper of the two and needs no TRX at all. Not offered
+ * with a note: Tron burns its memo fee in TRX from the sender.
  */
-export function useEnergyRental(o: {network: Network; wallet?: Address | null; energy: number | null; price: bigint | null; bandwidth: bigint | null; worst: bigint | null; enabled?: boolean}) {
+export function useUsdtGas(o: {network: Network; from?: Address | null; to?: Address | null; token?: Address | 'native'; amount?: bigint | null; memo?: string; burnSun: bigint | null}) {
   const {t} = useT();
-  const offered = (o.enabled ?? true) && rentalOffered(o.network) && !!o.wallet;
+  const offered = !!o.from && !!o.to && !!o.token && !!o.amount && o.amount > BigInt(0) && !o.memo && usdtGasOffered(o.network, o.token);
   const [choice, setChoice] = useState<boolean | null>(null);
-  const [rent, setRent] = useState<{quote: RentQuote | null; covered: boolean; free: number} | null>(null);
+  const [quote, setQuote] = useState<UsdtGasQuote | null>(null);
   const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle');
-  const ready = o.energy != null && o.price != null && o.bandwidth != null;
+  const amountKey = o.amount?.toString();
   useEffect(() => {
-    setRent(null);
-    if (!offered || !ready || !rentalOffered(o.network)) return setState('idle');
+    setQuote(null);
+    if (!offered || !usdtGasOffered(o.network, o.token!)) return setState('idle');
     setState('busy');
     let live = true;
     const net = o.network;
-    const me = evmToTron(o.wallet!);
-    const need = o.energy!;
-    (async () => {
-      const free = await freeEnergy(net, me);
-      if (need - free <= 0) return {quote: null, covered: true, free};
-      return {quote: await quoteEnergy(net, me, rentAmount(need - free)), covered: false, free};
-    })()
-      .then((r) => live && (setRent(r), setState('idle')))
-      .catch(() => live && setState('failed'));
+    const id = setTimeout(() => {
+      quoteUsdtGas(net, o.from!, o.to!, BigInt(amountKey!))
+        .then((q) => live && (setQuote(q), setState('idle')))
+        .catch(() => live && setState('failed'));
+    }, 450);
     return () => {
       live = false;
+      clearTimeout(id);
     };
-    // The numbers, not the objects they came from: a re-render must not quote again.
-  }, [offered, ready, o.network, o.wallet, o.energy]);
+    // The values, not the objects they came from: a re-render must not quote again.
+  }, [offered, o.network, o.from, o.to, o.token, amountKey]);
 
-  const burnSun = ready ? BigInt(Math.max(0, o.energy! - (rent?.free ?? 0))) * o.price! + o.bandwidth! : null;
-  const rentSun = !ready ? null : rent?.covered ? o.bandwidth! : rent?.quote ? rent.quote.costSun + o.bandwidth! : null;
-  // Nothing to gain: the wallet's energy covers it, or the two totals come out the same.
-  const useless = !!rent?.covered || (rentSun != null && burnSun != null && rentSun === burnSun);
-  const on = offered && !useless && (choice ?? (rentSun != null && burnSun != null && rentSun < burnSun));
-  const renting = on && !!rent?.quote;
-  const short = renting && rent!.quote!.available < rent!.quote!.energy;
+  const on = offered && (choice ?? true);
   const sym = NATIVE[o.network].symbol;
-  const show = (v: bigint | null) => (v != null ? `${formatNative(o.network, v)} ${sym}` : null);
+  const usdt = quote ? `${Number(formatUnits(quote.fee, 6)).toFixed(2)} USDT` : null;
+  const trx = o.burnSun != null ? `${formatNative(o.network, o.burnSun)} ${sym}` : null;
   return {
     offered,
     on,
-    renting,
-    /** The quote to rent with, when renting. */
-    quote: renting ? rent!.quote! : null,
-    /** Nothing in the way of confirming: off, or the quote is in and the market has the energy. */
-    ok: !on || (state === 'idle' && !!rent && !short),
-    /** The fee to show: the one the switch picks (the full fee where rental is not offered). */
-    shownSun: !offered ? o.worst : on ? rentSun : burnSun,
-    /** What the wallet must hold for the fee: the rent and bandwidth, or the full fee. */
-    needSun: renting ? rentSun : o.worst,
+    /** The quote to send with, when paying in USDT. */
+    quote: on ? quote : null,
+    /** Nothing in the way of confirming: paying in TRX, or the USDT quote is in. */
+    ok: !on || (state === 'idle' && !!quote),
+    /** The fee in USDT units when paying in USDT (also its dollar value), else null. */
+    usdtFee: on && quote ? quote.fee : null,
     toggle: offered
       ? ({
           on,
           onChange: setChoice,
-          rent: show(rentSun),
-          burn: show(burnSun),
-          busy: state === 'busy' || !ready,
-          useless,
-          error: !on ? null : state === 'failed' ? t('mobile.tron.rent_failed') : short ? t('mobile.tron.rent_short', {energy: fmtNum(rent!.quote!.available)}) : null,
+          rent: usdt,
+          burn: trx,
+          busy: state === 'busy',
+          error: on && state === 'failed' ? t('mobile.tron.usdt_gas_failed') : null,
         } satisfies RentalToggleProps)
       : undefined,
   };
 }
 
 /**
- * The rental at the confirm button's top left: a small energy mark that turns the rental on or off
- * (filled when on), then the fee in TRX the choice costs, the other one struck through after it.
+ * The fee choice at the confirm button's top left: a small energy mark that turns paying in USDT on
+ * or off (filled when on), then the fee the choice costs, the other one struck through after it.
  */
 export function RentalToggle({p, disabled}: {p: RentalToggleProps; disabled?: boolean}) {
   const {t} = useT();
   const c = useColors();
   const styles = useStyles(makeStyles);
   const taken = p.on ? p.rent : p.burn;
-  // Where renting changes nothing there is one fee, not two to compare.
-  const other = p.useless ? null : p.on ? p.burn : p.rent;
-  const [why, setWhy] = useState(false);
-  useEffect(() => {
-    if (!why) return;
-    const id = setTimeout(() => setWhy(false), 3000);
-    return () => clearTimeout(id);
-  }, [why]);
+  const other = p.on ? p.burn : p.rent;
   return (
     <View style={styles.wrap}>
       <View style={styles.row}>
         <Pressable
-          onPress={() => (p.useless ? setWhy(true) : p.onChange(!p.on))}
+          onPress={() => p.onChange(!p.on)}
           disabled={disabled}
           hitSlop={10}
-          style={[styles.mark, p.on ? styles.markOn : styles.markOff, p.useless && styles.markUseless]}
+          style={[styles.mark, p.on ? styles.markOn : styles.markOff]}
           accessibilityRole="switch"
           accessibilityState={{checked: p.on}}
-          accessibilityLabel={t('mobile.tron.rent_energy')}>
+          accessibilityLabel={t('mobile.tron.usdt_gas')}>
           <Svg width={14} height={14} viewBox="0 0 24 24">
             <Path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" fill={p.on ? c.accent : 'none'} stroke={p.on ? c.accent : c.subtext} strokeWidth={2} strokeLinejoin="round" />
           </Svg>
@@ -131,7 +106,6 @@ export function RentalToggle({p, disabled}: {p: RentalToggleProps; disabled?: bo
         {other ? <Text style={[styles.dim, styles.struck]}>{other}</Text> : null}
       </View>
       {p.error ? <Text style={styles.error}>{p.error}</Text> : null}
-      {p.useless && why ? <Text style={styles.why}>{t('mobile.tron.rent_useless')}</Text> : null}
     </View>
   );
 }
@@ -147,6 +121,4 @@ const makeStyles = (c: Colors) =>
     dim: {color: c.subtext, fontSize: 12},
     struck: {textDecorationLine: 'line-through'},
     error: {color: c.danger, fontSize: 12},
-    markUseless: {opacity: 0.4},
-    why: {color: c.subtext, fontSize: 12},
   });
