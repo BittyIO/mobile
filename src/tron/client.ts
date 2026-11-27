@@ -119,16 +119,22 @@ export type TronStake = {
   energySun: bigint;
   /** Each unstake still in Tron's delay or unlocked and not withdrawn: sun, and when it unlocks (ms). */
   unfreezing: {amountSun: bigint; unlockMs: number}[];
+  /** Staked for ENERGY and lent out (delegated) to other addresses, in sun: frozen too, not in energySun. */
+  delegatedSun: bigint;
 };
 
 export async function accountStake(net: TronChain, address: string): Promise<TronStake> {
-  type Acc = {frozenV2?: {type?: string; amount?: number}[]; unfrozenV2?: {type?: string; unfreeze_amount?: number; unfreeze_expire_time?: number}[]};
+  type Acc = {
+    frozenV2?: {type?: string; amount?: number}[];
+    unfrozenV2?: {type?: string; unfreeze_amount?: number; unfreeze_expire_time?: number}[];
+    account_resource?: {delegated_frozenV2_balance_for_energy?: number};
+  };
   const r = await post<Acc>(net, '/wallet/getaccount', {address: tronHex(address)});
   const energy = (r.frozenV2 ?? []).filter((f) => f.type === 'ENERGY').reduce((n, f) => n + BigInt(f.amount ?? 0), BigInt(0));
   const unfreezing = (r.unfrozenV2 ?? [])
     .filter((u) => u.type === 'ENERGY' && (u.unfreeze_amount ?? 0) > 0)
     .map((u) => ({amountSun: BigInt(u.unfreeze_amount ?? 0), unlockMs: u.unfreeze_expire_time ?? 0}));
-  return {energySun: energy, unfreezing};
+  return {energySun: energy, unfreezing, delegatedSun: BigInt(r.account_resource?.delegated_frozenV2_balance_for_energy ?? 0)};
 }
 
 /** The node returns some messages hex-encoded. */

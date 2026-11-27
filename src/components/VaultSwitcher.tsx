@@ -9,10 +9,6 @@ import {useWalletMode, walletNumber} from '@/core/account-mode';
 import {useT} from '@/i18n';
 import {useColors} from '@/theme';
 import {CHROME_SCALE} from '@/core/text-scale';
-import {SmartWalletIcon, WalletIcon} from './AccountSwitch';
-import {GuardShield} from './GuardShield';
-import {vaultAddressOf} from '@/core/active-vault';
-import {useGuardLevel} from '@/vault/guard';
 
 /**
  * The vault in front, in every tab's left-hand corner: its name, opening the Vaults page. In wallet
@@ -29,30 +25,15 @@ export function VaultSwitcher({stack = false}: {stack?: boolean} = {}) {
   const network = useNetwork((s) => s.network);
   const wallet = useWalletMode(network);
   const current = useVaults((s) => s.vaults.find((v) => v.index === s.activeIndex) ?? s.vaults[0]);
-  // The smart wallet's mark is its Guard level's shield; the plain shield until that is read.
-  const level = useGuardLevel(wallet ? null : vaultAddressOf(current, network), network);
   if (!current) return null;
-  // Both kinds are named "Wallet N" here; the big icon beside the name says which kind is in front:
-  // the shield for the smart wallet (the vault), the wallet for the key's own address.
+  // Both kinds are named "Wallet N" here, the name alone: the switch on Overview says which kind is in front.
   const label = wallet ? t('mobile.account.wallet_n', {n: walletNumber(current)}) : vaultLabel(current, (n) => t('mobile.account.wallet_n', {n}));
   return (
     <View style={[styles.row, stack ? styles.stack : styles.pill]}>
-      {/* The smart wallet's shield opens Guard, the page its level is set on; the name, the list. */}
-      {wallet ? (
-        <WalletIcon color={c.accent} size={26} />
-      ) : (
-        <Pressable
-          onPress={() => nav.navigate('PendingChanges')}
-          hitSlop={{top: 12, bottom: 12, left: 12, right: 4}}
-          accessibilityRole="button"
-          accessibilityLabel={t('mobile.vault.guard')}>
-          {level != null ? <GuardShield level={level} size={28} /> : <SmartWalletIcon color={c.accent} size={26} />}
-        </Pressable>
-      )}
       <Pressable
         onPress={() => nav.navigate(wallet ? 'WalletList' : 'VaultList')}
         style={[styles.row, styles.nameBtn]}
-        hitSlop={{top: 12, bottom: 12, left: 4, right: 12}}
+        hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
         accessibilityRole="button"
         accessibilityLabel={`${t(wallet ? 'mobile.account.choose_wallet' : 'mobile.settings.choose_vault')}: ${label}`}>
         <Text style={[styles.name, {color: c.text}]} numberOfLines={1} maxFontSizeMultiplier={CHROME_SCALE}>

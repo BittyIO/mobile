@@ -10,6 +10,7 @@ import {evmToTron, tronToEvm} from '@/tron/address';
 import {fetchSettlements, type SettlementMeta} from './limit';
 import {vaultActionsFor} from './decode-actions';
 import {bridgeHistory, bridgeTxKey} from './bridge';
+import {accountEvents, type AccountEvent} from '@/account/events';
 
 export type TransferRow = {
   txHash: string;
@@ -55,8 +56,9 @@ export type Operation = {
 export async function fetchTransactions(
   vault: string,
   network: Network,
-  kind: 'vault' | 'wallet' = 'vault',
+  kind: 'vault' | 'wallet' | 'account' = 'vault',
 ): Promise<Operation[]> {
+  if (isTronNetwork(network) && kind === 'account') return fetchAccountTransactions(vault, network);
   if (isTronNetwork(network)) return fetchTronTransactions(vault, network, kind === 'wallet');
   if (kind === 'wallet') return fetchWalletTransactions(vault, network);
   const [res, settlements, arrivals] = await Promise.all([
@@ -276,6 +278,105 @@ async function fetchTronTransactions(vault: string, network: TronChain, wallet =
   }
   return ops.sort((a, b) => b.blockNum - a.blockNum);
 }
+
+/**
+ * The Tron smart wallet's (BittyAccount's) history: its transfers, read as a wallet's are, and every
+ * batch it ran named from its own events (account/events) — a payee added, the lock, a limit, a stake —
+ * the way a vault's rows are named from its calls. A batch that moved nothing but the relayer's fee
+ * is still a row, titled by what it did.
+ */
+async function fetchAccountTransactions(account: string, network: TronChain): Promise<Operation[]> {
+  const [ops, events] = await Promise.all([
+    fetchTronTransactions(account, network, true),
+    accountEvents(network, account as `0x${string}`).catch(() => [] as AccountEvent[]),
+  ]);
+  const wrapped = knownAssets(network).find((a) => a.symbol === NATIVE_TRX(network).wrapped);
+  const map = new Map(ops.map((o) => [o.txHash.toLowerCase(), o]));
+  for (const e of events) {
+    const hash = `0x${e.transaction_id.replace(/^0x/, '')}`.toLowerCase();
+    let op = map.get(hash);
+    if (!op) {
+      const timestamp = new Date(e.block_timestamp).toISOString();
+      op = {txHash: hash, timestamp, blockNum: e.block_timestamp, legs: [], actions: []};
+      map.set(hash, op);
+    }
+    const r = e.result;
+    const act = (name: string, args: Record<string, string> = {}) => op!.actions.push({name, args});
+    switch (e.event_name) {
+      case 'OwnershipTransferred':
+        if (/^0x0{40}$/i.test(r.previous ?? '')) act('acctActivated');
+        break;
+      case 'OwnershipProposed':
+        act('acctOwnerProposed', {proposed: r.proposed});
+        break;
+      case 'PayeeAdded':
+        act('acctPayeeAdded', {payee: r.payee});
+        break;
+      case 'PayeeRemoved':
+        act('acctPayeeRemoved', {payee: r.payee});
+        break;
+      case 'Locked':
+        act('emergencyLock');
+        break;
+      case 'UnlockRequested':
+        act('acctRequestUnlock');
+        break;
+      case 'Unlocked':
+        act('unlock');
+        break;
+      case 'DailyLimitSet':
+        act('acctDailyLimit', {limit: r.limit, unlimited: r.unlimited});
+        break;
+      case 'TimelockSet':
+        act('acctTimelock', {timelock: r.timelock});
+        break;
+      case 'CallsQueued':
+        act('acctQueued');
+        break;
+      case 'QueuedCancelled':
+        act('acctQueueCancelled');
+        break;
+      case 'QueuedExecuted':
+        act('acctQueueRan');
+        break;
+      case 'Staked':
+        act('acctStaked', {amount: r.amount});
+        break;
+      case 'Unstaked':
+        act('acctUnstaked', {amount: r.amount});
+        break;
+      case 'UnstakedWithdrawn':
+        act('acctWithdrawn', {amount: r.amount});
+        break;
+      case 'EnergyDelegated':
+        act('acctEnergyLent', {receiver: r.receiver});
+        break;
+      case 'EnergyUndelegated':
+        act('acctEnergyBack', {receiver: r.receiver});
+        break;
+      case 'SentTrx':
+        // Paid from inside the contract: an internal transfer, which the TRX feed never lists.
+        if (!op.legs.some((l) => l.assetSymbol === NATIVE_TRX(network).wrapped && l.direction === 'out'))
+          op.legs.push({
+            txHash: op.txHash,
+            direction: 'out',
+            counterparty: r.to?.toLowerCase() ?? null,
+            amount: formatUnits(BigInt(r.amount ?? '0'), NATIVE_TRX(network).decimals),
+            assetSymbol: NATIVE_TRX(network).wrapped,
+            assetAddress: wrapped?.address ?? null,
+            category: 'internal',
+            blockNum: op.blockNum,
+            timestamp: op.timestamp,
+          });
+        break;
+      default:
+        break;
+    }
+  }
+  return [...map.values()].sort((a, b) => b.blockNum - a.blockNum);
+}
+
+const NATIVE_TRX = (network: TronChain) => (require('@/core/chain') as typeof import('@/core/chain')).NATIVE[network];
 
 type V1Tx = {
   txID: string;

@@ -24,6 +24,7 @@ export function PendingRow({
   detail,
   onPress,
   onCancel,
+  onApply,
   cancelling,
   cancelDisabled,
   onMatured,
@@ -40,6 +41,11 @@ export function PendingRow({
   detail?: React.ReactNode;
   onPress?: () => void;
   onCancel?: () => void;
+  /**
+   * Once the wait has run out, a change that has to be RUN to take effect (the Tron smart wallet's
+   * queued batches; a vault's apply by themselves): Apply in place of Cancel.
+   */
+  onApply?: () => void;
   cancelling?: boolean;
   cancelDisabled?: boolean;
   /** Once, when the wait runs out while the row is on screen: the page re-reads, and the row goes. */
@@ -65,6 +71,11 @@ export function PendingRow({
         </View>
         {detail ?? <Text style={styles.value}>{value}</Text>}
       </View>
+      {onApply && matured ? (
+        <Pressable style={({pressed}) => [styles.apply, (pressed || cancelDisabled) && styles.pressed]} disabled={cancelDisabled} onPress={onApply}>
+          <Text style={styles.applyText}>{t('mobile.tron.guard_apply')}</Text>
+        </Pressable>
+      ) : null}
       {onCancel && !matured ? (
         <Pressable
           style={({pressed}) => [styles.cancel, (pressed || cancelDisabled) && styles.pressed]}
@@ -87,5 +98,7 @@ const makeStyles = (c: Colors) =>
     titleLine: {flexDirection: 'row', alignItems: 'center', gap: 6},
     cancel: {paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: c.neutralSoft, minWidth: 64, alignItems: 'center'},
     cancelText: {color: c.danger, fontSize: 13, fontWeight: '700'},
+    apply: {paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: c.accentSoft, minWidth: 64, alignItems: 'center'},
+    applyText: {color: c.accent, fontSize: 13, fontWeight: '700'},
     pressed: {opacity: 0.6},
   });

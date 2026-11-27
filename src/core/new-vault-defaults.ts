@@ -18,8 +18,8 @@ export const GUARD_LEVELS: Record<GuardLevel, GuardValues> = {
   0: {timelock: 0n, sendDailyAllowance: NO_LIMIT, marketTradeDailyLossAllowance: NO_LIMIT},
   1: {timelock: DAY, sendDailyAllowance: 10_000n, marketTradeDailyLossAllowance: 10_000n},
   2: {timelock: 3n * DAY, sendDailyAllowance: 5_000n, marketTradeDailyLossAllowance: 5_000n},
-  3: {timelock: 7n * DAY, sendDailyAllowance: 1_000n, marketTradeDailyLossAllowance: 1_000n},
-  4: {timelock: 30n * DAY, sendDailyAllowance: 0n, marketTradeDailyLossAllowance: 0n},
+  3: {timelock: 5n * DAY, sendDailyAllowance: 1_000n, marketTradeDailyLossAllowance: 1_000n},
+  4: {timelock: 7n * DAY, sendDailyAllowance: 0n, marketTradeDailyLossAllowance: 0n},
 };
 
 export const sameGuardValues = (a: GuardValues, b: GuardValues) =>
@@ -33,10 +33,10 @@ export function guardLevelOf(v: GuardValues): GuardLevel | 'custom' {
 
 /**
  * The shield a vault's numbers earn: a level's own, and a custom mix the level its timelock reaches —
- * none (grey, and the red dot on Overview's Guard), 1 day, 3, 7, 30.
+ * none (grey, and the red dot on Overview's Guard), 1 day, 3, 5, 7.
  */
 export function guardShieldOf(v: GuardValues): ShieldKind {
   const exact = guardLevelOf(v);
   if (exact !== 'custom') return exact;
-  return v.timelock === 0n ? 0 : v.timelock < 3n * DAY ? 1 : v.timelock < 7n * DAY ? 2 : v.timelock < 30n * DAY ? 3 : 4;
+  return v.timelock === 0n ? 0 : v.timelock < 3n * DAY ? 1 : v.timelock < 5n * DAY ? 2 : v.timelock < 7n * DAY ? 3 : 4;
 }

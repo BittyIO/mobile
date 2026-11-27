@@ -577,6 +577,8 @@ export function SendScreen({anyone = false}: {anyone?: boolean} = {}) {
                 value={draft}
                 onChangeText={typeAddress}
               />
+              {/* Typed (or scanned) wrong: cleared in one tap, as the amounts are. */}
+              {draft.length > 0 ? <ClearBtn onPress={() => typeAddress('')} /> : null}
               <ScanButton onPress={() => setScanning(true)} />
             </View>
             <View style={styles.saveRow}>

@@ -32,6 +32,11 @@ import {useActiveVaultAddress} from '@/core/active-vault';
 import {recipientName, useRecipientNames} from '@/core/recipient-names';
 import type {Network} from '@/core/chain';
 import type {Address} from 'viem';
+import {useAccountWrite} from '@/account/useAccountWrite';
+import {accountApplyCalls, accountCancelCalls, accountHistories, accountRiskValues, getAccountPending, type AccountExtra, type AccountPending} from '@/account/guard-evm';
+import {cancelQueuedCall, lockCall, unlockCall} from '@/account/guard';
+import {shortAddress} from '@/core/format';
+import {readGuard} from '@/account/guard';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 
@@ -151,13 +156,20 @@ export function PendingChangesScreen() {
   const network = useNetwork((s) => s.network);
   const vault = useActiveVaultAddress(network);
   const nameOf = useEntryLabel(network);
-  const [items, setItems] = useState<PendingChange[] | null>(null);
+  const [items, setItems] = useState<AccountPending[] | null>(null);
+  // The Tron smart wallet (BittyAccount) in front: the same page, its data from the account
+  // (account/guard-evm) and each change relayed (account/useAccountWrite). Its extras are what a
+  // vault has no kind for: an unlock waiting out the timelock, a batch this phone did not queue.
+  const acct = useAccountWrite(() => load());
+  const smart = acct.account != null;
+  const [extras, setExtras] = useState<AccountExtra[]>([]);
   const [timelock, setTimelock] = useState(0);
   // Whether `timelock` has been read: 0 until then, which would read as no wait at all.
   const [timelockRead, setTimelockRead] = useState(false);
   // The two daily limits, beside the timelock: Guard holds all three.
   const [limits, setLimits] = useState<RiskValues | null>(null);
-  const guardOpen = isOpenRiskVersion(useVaultGate().vaultVersion);
+  const vaultGuardOpen = isOpenRiskVersion(useVaultGate().vaultVersion);
+  const guardOpen = smart || vaultGuardOpen;
   const inForce = {
     timelock: BigInt(timelock),
     sendDailyAllowance: limits?.sendDailyAllowance ?? 0n,
@@ -198,9 +210,45 @@ export function PendingChangesScreen() {
     : undefined;
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const lastRead = useRef(0);
-  const {busy, ready, run, sheet} = useVaultWrite(() => load());
+  const vw = useVaultWrite(() => load());
+  const {run, sheet} = vw;
+  const busy = smart ? acct.busy : vw.busy;
+  const ready = smart ? acct.ready : vw.ready;
 
   const load = useCallback(() => {
+    if (acct.account) {
+      const a = acct.account;
+      lastRead.current = Date.now();
+      // The level from the account's own reads, at once; what is waiting (from its logs, slower) on
+      // its own, so neither holds the other up and a failed one leaves the rest on the page.
+      return Promise.all([
+        readGuard(network, a)
+          .then((guard) => {
+            setTimelock(guard.timelock);
+            setTimelockRead(true);
+            setLimits(accountRiskValues(guard));
+          })
+          .catch(() => {}),
+        getAccountPending(network, a)
+          .then(({items: it, extras: ex}) => {
+            setItems(it);
+            setExtras(ex);
+          })
+          .catch(() => {
+            setItems((cur) => cur ?? []);
+            setExtras((cur) => cur);
+          }),
+        accountHistories(network, a)
+          .then(({delays, strengthened: st}) => {
+            setHistory(delays);
+            setStrengthened(st);
+          })
+          .catch(() => {
+            setHistory(null);
+            setStrengthened(null);
+          }),
+      ]).catch(() => setItems((v) => v ?? []));
+    }
     if (!vault) return;
     lastRead.current = Date.now();
     return Promise.all([
@@ -213,7 +261,7 @@ export function PendingChangesScreen() {
       fetchTimelockHistory(vault, network).then(setHistory),
       fetchSecurityHistory(vault, network).then(setStrengthened),
     ]);
-  }, [vault, network]);
+  }, [vault, network, acct.account]);
 
   /**
    * What calls an item off. Every kind waiting out the timelock can be, except a payee's removal —
@@ -225,7 +273,13 @@ export function PendingChangesScreen() {
    * cancel is that write, with the value read fresh from the vault rather than from this screen.
    * The two fee limits share one setter, so cancelling either cancels both.
    */
-  const cancelFor = (p: PendingChange) => {
+  const cancelFor = (p: AccountPending) => {
+    if (acct.account) {
+      const calls = accountCancelCalls(acct.account, p);
+      if (!calls) return null;
+      const title = t(p.kind === 'whitelistAdd' ? 'mobile.vault.cancel_whitelist_add' : 'mobile.vault.cancel_change');
+      return () => void acct.run(`cancel-${p.kind}`, title, calls, 'address' in p ? p.address : undefined);
+    }
     if (!vault) return null;
     if (p.kind === 'whitelistAdd')
       return () => run(`cancel-${p.kind}`, t('mobile.vault.cancel_whitelist_add'), (b) => removeWhitelisted({...b, id: p.id}), p.address);
@@ -269,6 +323,11 @@ export function PendingChangesScreen() {
   const [notMe, setNotMe] = useState(false);
   const lockWith = (action: 'emergency' | 'forever') => {
     setNotMe(false);
+    // The smart wallet has the one lock, applied at once: no page of its own to go to.
+    if (acct.account) {
+      const a = acct.account;
+      return void setTimeout(() => void acct.run('lock', t('mobile.vault.emergency_lock'), [lockCall(a)]), 320);
+    }
     setTimeout(() => nav.navigate('VaultLockAction', {action}), 320);
   };
   // Why these wait, behind the ⓘ at the top right rather than as a paragraph over the list.
@@ -298,7 +357,8 @@ export function PendingChangesScreen() {
   );
 
   // Something came due: read again so it drops out once the chain agrees.
-  const anyDue = items?.some((p) => Number(p.at) <= now) ?? false;
+  // A queued batch stays until it is run (Apply), so it is not a reason to read again.
+  const anyDue = items?.some((p) => !p.batch && Number(p.at) <= now) ?? false;
   useEffect(() => {
     if (anyDue && Date.now() - lastRead.current > 5_000) load();
   }, [anyDue, now, load]);
@@ -328,7 +388,7 @@ export function PendingChangesScreen() {
           />
         </SettingsGroup>
       ) : null}
-      {items === null || items.length === 0 ? (
+      {items === null || (items.length === 0 && extras.length === 0) ? (
         // An empty card rather than a line floating on its own: the page has the same shape
         // with nothing waiting as with something, and the answer sits where the changes would.
         // Loading is the same card with a spinner in it, as History's.
@@ -359,6 +419,7 @@ export function PendingChangesScreen() {
                     // A new asset manager's permissions are a list, so they open in a sheet rather than crowd the row.
                     onPress={p.kind === 'newAssetManager' ? () => setPermsOf(p.perms) : undefined}
                     onCancel={cancel ?? undefined}
+                    onApply={acct.account && p.batch ? () => void acct.run('apply', t('mobile.tron.guard_apply_title', {title: pendingTitle(p, t, nameOf)}), accountApplyCalls(acct.account!, p) ?? []) : undefined}
                     cancelling={busy === `cancel-${p.kind}`}
                     cancelDisabled={!ready || busy !== null}
                     onMatured={() => void load()}
@@ -369,6 +430,41 @@ export function PendingChangesScreen() {
             </SettingsGroup>
           ),
         )}
+        {extras.length && acct.account ? (
+          <SettingsGroup label={items.length === 0 ? t('mobile.vault.pending_section') : undefined}>
+            {extras.map((x, i) => {
+              const a = acct.account!;
+              return x.kind === 'unlock' ? (
+                <PendingRow
+                  key="unlock"
+                  at={x.at}
+                  now={now}
+                  timelock={timelock}
+                  title={t('mobile.tron.guard_unlock_pending')}
+                  value={t('mobile.tron.guard_unlock_pending_value')}
+                  onApply={() => void acct.run('unlock', t('mobile.tron.guard_unlock'), [unlockCall(a)])}
+                  onCancel={() => void acct.run('lock', t('mobile.vault.cancel_change'), [lockCall(a)])}
+                  cancelling={busy === 'lock'}
+                  cancelDisabled={!ready}
+                  last={i === extras.length - 1}
+                />
+              ) : (
+                <PendingRow
+                  key={x.id}
+                  at={x.at}
+                  now={now}
+                  timelock={timelock}
+                  title={t('mobile.tron.guard_unknown_change')}
+                  value={shortAddress(x.id)}
+                  onCancel={() => void acct.run(`cancel-${x.id}`, t('mobile.vault.cancel_change'), [cancelQueuedCall(a, x.id)])}
+                  cancelling={busy === `cancel-${x.id}`}
+                  cancelDisabled={!ready}
+                  last={i === extras.length - 1}
+                />
+              );
+            })}
+          </SettingsGroup>
+        ) : null}
         {/* The one thing to do about a change the owner did not ask for: lock before it lands. */}
         <SettingsGroup>
           <Pressable style={({pressed}) => [styles.notMe, pressed && styles.pressed]} onPress={() => setNotMe(true)}>
@@ -485,10 +581,12 @@ export function PendingChangesScreen() {
             <Text style={styles.notMeHint}>{t('mobile.vault.emergency_lock_hint')}</Text>
             <Button title={t('mobile.vault.emergency_lock')} onPress={() => lockWith('emergency')} />
           </View>
-          <View style={styles.notMeOption}>
-            <Text style={styles.notMeHint}>{t('mobile.vault.forever_lock_hint')}</Text>
-            <Button title={t('mobile.vault.forever_lock')} variant="danger" onPress={() => lockWith('forever')} />
-          </View>
+          {smart ? null : (
+            <View style={styles.notMeOption}>
+              <Text style={styles.notMeHint}>{t('mobile.vault.forever_lock_hint')}</Text>
+              <Button title={t('mobile.vault.forever_lock')} variant="danger" onPress={() => lockWith('forever')} />
+            </View>
+          )}
         </View>
       </Sheet>
       <Sheet visible={permsOf !== null} title={t('mobile.vault.permissions')} onClose={() => setPermsOf(null)}>
@@ -499,6 +597,7 @@ export function PendingChangesScreen() {
         </SettingsGroup>
       </Sheet>
       {sheet}
+      {acct.sheet}
     </ScrollView>
   );
 }

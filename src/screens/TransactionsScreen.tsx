@@ -574,6 +574,8 @@ export function TransactionsScreen() {
   // The account in front: the vault's history, or in wallet mode the wallet's.
   const account = useActiveAccount(network);
   const vault = account.address;
+  // The Tron smart wallet: its transfers as a wallet's, and each batch it ran named from its own
+  // events (vault/transactions fetchAccountTransactions).
   const {ops, loading, error, refresh} = useVaultTransactions(vault, network, account.kind);
   // A multisig vault: what its owners still have to sign is its own category, and the one it opens on.
   const active = useVaults((s) => s.vaults.find((v) => v.index === s.activeIndex));

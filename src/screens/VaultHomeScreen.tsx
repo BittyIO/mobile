@@ -1,4 +1,6 @@
 import {isTronNetwork, NATIVE, NETWORK_FEATURES} from '@/core/chain';
+import {ReceiveDialog} from '@/components/ReceiveDialog';
+import {AccountActivateBanner} from '@/components/AccountActivateBanner';
 import {acrossServes} from '@/vault/bridge';
 import {FIT} from '@/core/text-scale';
 import {useTransparentHeaderInset} from '@/components/header-inset';
@@ -16,7 +18,7 @@ import {HoldingRow, MASK} from '@/components/HoldingRow';
 import {Amount} from '@/components/Amount';
 import {Sheet} from '@/components/Sheet';
 import type {PieSlice} from '@/components/PortfolioPie';
-import {useNetwork} from '@/core/network-store';
+import {useNetwork, networkLabel} from '@/core/network-store';
 import {useVaultBalances} from '@/vault/useVaultBalances';
 import {useSyncFeeReserve} from '@/vault/stableCoinAsGas';
 import {useReorder} from '@/components/useReorder';
@@ -41,6 +43,7 @@ import {getFlag, setFlag, getPref, setPref, HIDE_BALANCES, FEE_TIP_DISMISSED, fe
 import {GasIcon} from '@/components/GasIcon';
 import {useHasPayees} from '@/vault/payees';
 import {useGuardLevel} from '@/vault/guard';
+import {GuardShield} from '@/components/GuardShield';
 import {useVaults} from '@/core/vault-store';
 import {useMultisigToSign} from '@/components/MultisigWaiting';
 import {useWatchDraft} from '@/core/watch-draft';
@@ -48,6 +51,7 @@ import {balanceOfSymbol} from '@/vault/read';
 import {getPendingChanges} from '@/vault/risk';
 import {formatUnits} from 'viem';
 import {useColors, useStyles, type Colors} from '@/theme';
+import {getAccountPending} from '@/account/guard-evm';
 import {useT} from '@/i18n';
 
 /** Eye (visible) / eye-off (hidden) toggle icon. */
@@ -72,7 +76,7 @@ export function EyeIcon({off, color, size = 20}: {off: boolean; color: string; s
 }
 
 /** Payees (address book) / Bridge / Send / Receive / History (clock) / Pending (hourglass) action icons. */
-function ActionIcon({name, color, size = 22}: {name: 'payees' | 'bridge' | 'send' | 'receive' | 'history' | 'guard'; color: string; size?: number}) {
+function ActionIcon({name, color, size = 22}: {name: 'payees' | 'bridge' | 'send' | 'receive' | 'history' | 'guard' | 'energy'; color: string; size?: number}) {
   const c = {stroke: color, strokeWidth: 2.2, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const};
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
@@ -105,9 +109,12 @@ function ActionIcon({name, color, size = 22}: {name: 'payees' | 'bridge' | 'send
           <Path d="M17 7L7 17" {...c} />
           <Path d="M16 17H7V8" {...c} />
         </>
+      ) : name === 'energy' ? (
+        // Energy: TRX staked for it (lucide zap).
+        <Path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" {...c} />
       ) : name === 'guard' ? (
         // Guard: the timelock, the two daily limits and what is waiting out the timelock (lucide
-        // shield-check, the smart wallet's own mark at the top left).
+        // shield-check; its level's colour once read, see GuardShield).
         <>
           <Path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" {...c} />
           <Path d="m9 12 2 2 4-4" {...c} />
@@ -431,6 +438,11 @@ export function VaultHomeScreen() {
   const network = useNetwork((s) => s.network);
   const account = useActiveAccount(network);
   const walletOn = account.kind === 'wallet';
+  // Tron's smart wallet, the BittyAccount: Send (relayed, account/relay), Receive and History; its
+  // guard comes with the account's protections.
+  const accountOn = account.kind === 'account';
+  // The wallet's Receive sheet: its address as a QR, to copy or share.
+  const [receiveOpen, setReceiveOpen] = useState(false);
   const bal = useVaultBalances(network);
   // What the page shows is read where the balances were (`readAt`); what it does goes to `bal.vault`.
   const pos = useVaultPositions(bal.readAt, network);
@@ -442,19 +454,25 @@ export function VaultHomeScreen() {
   const [badgeNonce, setBadgeNonce] = useState(0);
   const hasPayees = useHasPayees(bal.vault, network, badgeNonce);
   // Guard level 0 (no timelock): Guard gets a red dot, as Send does with no payees.
-  const noTimelock = useGuardLevel(bal.vault, network, badgeNonce) === 0;
+  const guardLevel = useGuardLevel(bal.vault, network, badgeNonce);
+  const noTimelock = guardLevel === 0;
   // A multisig vault: requests waiting on this phone's signature, counted on Transactions.
   const activeRef = useVaults((s) => s.vaults.find((v) => v.index === s.activeIndex));
   const toSign = useMultisigToSign(activeRef, network, badgeNonce);
   useFocusEffect(
     useCallback(() => {
-      if (bal.vault) getPendingChanges(bal.vault, network).then((p) => setPendingCount(p.length));
+      // The Tron smart wallet's waiting changes are its own (account/guard-evm), as the Guard page reads them.
+      if (bal.vault && accountOn)
+        getAccountPending(network, bal.vault)
+          .then((p) => setPendingCount(p.items.length + p.extras.length))
+          .catch(() => {});
+      else if (bal.vault) getPendingChanges(bal.vault, network).then((p) => setPendingCount(p.length));
       // The earned ledger, too: this tab mounts at launch and stays up, so a deposit recorded since
       // (from Earn, say) never reached it, and its rows lacked the earned the Earn tab showed. No
       // loading state of its own, so re-reading it on focus flashes nothing.
       flows.refresh();
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [bal.vault, network]),
+    }, [bal.vault, network, accountOn]),
   );
 
   // The hooks load once on mount; after that the data refreshes only on pull-to-refresh. Refetching on
@@ -788,7 +806,8 @@ export function VaultHomeScreen() {
   const hideEmptyDefault = (r: Row) => r.total === 0 && (r.symbol === 'WBTC' || (!walletOn && r.symbol === 'WETH'));
   /**
    * Tron has no watch lists: Assets only, and only its two assets, TRX and USDT. The wallet shows
-   * both even when empty; the vault keeps leaving an empty TRX off ({hideEmptyNative}).
+   * both even when empty; the smart wallet, funded in USDT and paying its fees in it, shows USDT
+   * only and leaves an empty TRX off ({hideEmptyNative}), showing it once it holds any.
    */
   const tron = isTronNetwork(network);
   const tronAsset = (r: Row) => r.symbol === NATIVE[network].wrapped || r.symbol === 'USDT';
@@ -1038,6 +1057,8 @@ export function VaultHomeScreen() {
       ) : null}
       {/* A Tron vault not activated yet: activation is its own step, before anything else. */}
       {/* Activation is the vault's: a wallet is an address already. */}
+      {/* Tron's smart wallet is activated once, on its own, before it can send (account/relay). */}
+      {accountOn && account.account ? <AccountActivateBanner network={network} account={account.account} onActivated={onRefresh} /> : null}
       <View style={styles.heroCard}>
         {/* The figure itself heads the card, no label over it: the pie beside it breaks it down,
             the eye at the far end masks it. */}
@@ -1089,18 +1110,30 @@ export function VaultHomeScreen() {
           {([
             // The wallet sends as any wallet does — to an address, no payee book (its Send page offers
             // the vault's own address as a one-tap recipient); the vault pays from its book.
-            walletOn
-              ? {label: t('vault.send'), icon: 'send' as const, onPress: () => nav.navigate('WalletSend')}
-              : {label: t('vault.send'), icon: 'payees' as const, onPress: () => nav.navigate('Payees')},
+            ...(accountOn
+              ? [{label: t('vault.send'), icon: 'payees' as const, onPress: () => nav.navigate('Payees')}]
+              : [
+                  walletOn
+                    ? {label: t('vault.send'), icon: 'send' as const, onPress: () => nav.navigate('WalletSend')}
+                    : {label: t('vault.send'), icon: 'payees' as const, onPress: () => nav.navigate('Payees')},
+                ]),
+            // The Tron wallet's own address as a QR, after Send: a plain wallet, or the account, is paid by address.
+            ...((walletOn || accountOn) && isTronNetwork(network) ? [{label: t('vault.receive'), icon: 'receive' as const, onPress: () => setReceiveOpen(true)}] : []),
             // Wherever Across serves the network: Tron mainnet too (USDT), not Nile, which has no SpokePool.
             ...(acrossServes(network) ? [{label: t('mobile.bridge.tab'), icon: 'bridge' as const, onPress: () => nav.navigate('Bridge')}] : []),
             {label: t('mobile.app.transactions'), icon: 'history', onPress: () => nav.navigate('Transactions')},
             // The vault's waiting changes: a wallet has none.
-            ...(walletOn ? [] : [{label: t('mobile.vault.guard'), icon: 'guard' as const, onPress: () => nav.navigate('PendingChanges')}]),
+            ...(accountOn
+              ? [
+                  {label: t('mobile.vault.guard'), icon: 'guard' as const, onPress: () => nav.navigate('PendingChanges')},
+                ]
+              : []),
+            ...(walletOn || accountOn ? [] : [{label: t('mobile.vault.guard'), icon: 'guard' as const, onPress: () => nav.navigate('PendingChanges')}]),
           ] as const).map((a) => (
             <Pressable key={a.icon} style={styles.action} onPress={a.onPress}>
               <View style={styles.actionCircle}>
-                <ActionIcon name={a.icon} color={c.accent} />
+                {/* Guard wears its level's colour, the shield the Guard level page shows beside it. */}
+                {a.icon === 'guard' && guardLevel != null ? <GuardShield level={guardLevel} size={24} /> : <ActionIcon name={a.icon} color={c.accent} />}
                 {a.icon === 'guard' && pendingCount > 0 ? (
                   <View style={styles.actionBadge}>
                     <Text style={styles.actionBadgeText}>{pendingCount}</Text>
@@ -1233,6 +1266,13 @@ export function VaultHomeScreen() {
       </View>
 
 
+      <ReceiveDialog
+        visible={receiveOpen}
+        onClose={() => setReceiveOpen(false)}
+        vault={account.address ?? null}
+        networkLabel={networkLabel(network, t)}
+        sub={t(accountOn ? 'mobile.home.your_vault_on' : 'mobile.home.your_wallet_on', {network: networkLabel(network, t)})}
+      />
     </ScrollView>
   );
 }
