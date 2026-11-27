@@ -105,18 +105,23 @@ export type RefBlock = {blockID: string; timestamp: number};
  * Expiry is a minute past the reference block, the node default: long enough to broadcast, short
  * enough that a transaction that did not go out cannot be replayed into the chain later.
  */
-export function encodeRaw(call: TronCall, ref: RefBlock, opts: {feeLimitSun?: bigint; now?: number} = {}): Uint8Array {
+export function encodeRaw(call: TronCall, ref: RefBlock, opts: {feeLimitSun?: bigint; now?: number; memo?: string} = {}): Uint8Array {
   const id = ref.blockID;
   const raw = [
     ...fBytes(1, fromHex(id.slice(12, 16))), // ref_block_bytes: bytes 6–7 of the block number
     ...fBytes(4, fromHex(id.slice(16, 32))), // ref_block_hash: bytes 8–15 of the block id
     ...fInt(8, BigInt(ref.timestamp + 60_000)), // expiration
+    // data: the transaction's note (memo), UTF-8. Tron burns its memo fee (1 TRX) for it.
+    ...(opts.memo ? fBytes(10, [...memoBytes(opts.memo)]) : []),
     ...fBytes(11, contractOf(call)),
     ...fInt(14, BigInt(opts.now ?? Date.now())), // timestamp
     ...fInt(18, opts.feeLimitSun ?? 0n), // fee_limit: the most a contract call may burn
   ];
   return Uint8Array.from(raw);
 }
+
+/** A note's bytes as the chain stores them (UTF-8). */
+export const memoBytes = (memo: string): Uint8Array => new TextEncoder().encode(memo);
 
 /** The transaction id: sha256 of the raw bytes. */
 export const txIdOf = (raw: Uint8Array): string => toHex(sha256(raw));

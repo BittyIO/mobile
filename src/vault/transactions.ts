@@ -183,7 +183,7 @@ function ownsCall(op: Operation): boolean {
  * tab opens — which came back to the user as "transfers 429" over a history that loads a second
  * later. Four tries, 1s, 2s and 4s apart, honouring a Retry-After when TronGrid sends one.
  */
-async function tronGridGet(url: string): Promise<Response> {
+export async function tronGridGet(url: string): Promise<Response> {
   for (let attempt = 0; ; attempt++) {
     const res = await apiFetch(url);
     if (res.status !== 429 || attempt === 3) return res;
@@ -215,7 +215,7 @@ async function fetchTronTransactions(vault: string, network: TronChain, wallet =
   const [res, bridges, trx] = await Promise.all([
     tronGridGet(`${host}/v1/accounts/${evmToTron(vault)}/transactions/trc20?limit=50`),
     bridgeHistory(vault, network),
-    wallet ? tronTrxTransfers(host, vault, network) : Promise.resolve([] as Operation[]),
+    wallet ? tronTrxTransfers(host, vault, network) : Promise.resolve({ops: [] as Operation[], fees: new Map<string, bigint>()}),
   ]);
   if (!res.ok) throw new Error(`transfers ${res.status}`);
   const json = (await res.json()) as {data?: V1Trc20[]};
@@ -252,15 +252,25 @@ async function fetchTronTransactions(vault: string, network: TronChain, wallet =
       timestamp: op.timestamp,
     });
   }
-  for (const op of trx) if (!map.has(op.txHash)) map.set(op.txHash, op);
+  // A deposit or a withdrawal is in the transfer feed already: it takes the escrow call's name.
+  for (const op of trx.ops) {
+    const have = map.get(op.txHash);
+    if (!have) map.set(op.txHash, op);
+    else if (op.actions.length) have.actions = [...have.actions, ...op.actions];
+  }
   const ops = [...map.values()];
+  // What the wallet burned in TRX for each transaction it sent: shown as the row's network fee.
+  for (const op of ops) {
+    const f = trx.fees.get(op.txHash);
+    if (f) op.ownerFee = f;
+  }
   // Best effort: a row whose calldata cannot be read yet is still shown by its transfers. A wallet
   // makes no vault calls, so there is nothing to decode.
   const actions = wallet
     ? new Map<string, VaultAction[]>()
     : await vaultActionsFor(ops.map((o) => o.txHash), vault, network).catch(() => new Map<string, VaultAction[]>());
   for (const op of ops) {
-    op.actions = actions.get(op.txHash) ?? [];
+    op.actions = actions.get(op.txHash) ?? (op.actions.length ? op.actions : []);
     op.bridgedFrom = bridges.arrivals.get(bridgeTxKey(op.txHash));
     op.bridgedTo = bridges.departures.get(bridgeTxKey(op.txHash));
   }
@@ -271,35 +281,95 @@ type V1Tx = {
   txID: string;
   block_timestamp: number;
   blockNumber?: number;
-  ret?: {contractRet?: string}[];
-  raw_data?: {contract?: {type: string; parameter?: {value?: {amount?: number; owner_address?: string; to_address?: string}}}[]};
+  ret?: {contractRet?: string; fee?: number}[];
+  raw_data?: {
+    contract?: {type: string; parameter?: {value?: {amount?: number; owner_address?: string; to_address?: string; contract_address?: string; data?: string}}}[];
+  };
 };
 
 /**
- * A Tron wallet's TRX transfers: TronGrid's transactions for the address, TransferContract only —
- * the chain's own coin moving, which the TRC-20 feed never shows. One leg each, in WTRX's row, as
- * the app shows TRX everywhere (core/format `displaySymbol`).
+ * The escrow's calls (contracts repo escrow, 3cb96a0), by selector: the factory's startDeal, and
+ * each call on an escrow account. Only the start moves no token; a deposit and a withdrawal show by
+ * their transfer too, and these name them. Retired factories' createEscrow is kept for old rows.
  */
-async function tronTrxTransfers(host: string, address: string, network: TronChain): Promise<Operation[]> {
+const ESCROW_FACTORY_CALLS: Record<string, string> = {
+  '59765d0e': 'escrowStart', // startDeal(uint256,(address,address,address,address,uint128,uint128,uint64))
+  eb3b7f43: 'createEscrow', // createEscrow(...) of the retired factories
+};
+const ESCROW_ACCOUNT_CALLS: Record<string, string> = {
+  '13765838': 'escrowDeposit', // deposit(uint64)
+  b040d166: 'escrowChoose', // vote(uint64,uint8)
+  '4c125e79': 'escrowCancel', // cancel(uint64)
+  '359bc19e': 'escrowFinalize', // finalize(uint64)
+  '1e83409a': 'escrowWithdraw', // claim(address)
+  '20ff430b': 'escrowRescue', // rescue(address,address,uint256): the owner, money sent by mistake
+};
+/** approve(address,uint256): USDT allowed to an escrow account, before a deposit. */
+const APPROVE_SELECTOR = '095ea7b3';
+
+/**
+ * A Tron wallet's own transactions from TronGrid's index of the address:
+ *
+ *   - its TRX transfers (TransferContract), the chain's coin moving, which the TRC-20 feed never
+ *     shows — one leg each, in WTRX's row, as the app shows TRX everywhere (core/format `displaySymbol`);
+ *   - an escrow it created (escrow/escrow), which moves no token and so is in no transfer feed;
+ *   - the TRX each transaction it sent burned (energy and bandwidth), by hash, for the row's fee.
+ */
+async function tronTrxTransfers(host: string, address: string, network: TronChain): Promise<{ops: Operation[]; fees: Map<string, bigint>}> {
   const {NATIVE} = require('@/core/chain') as typeof import('@/core/chain');
   const {fromTronHex} = require('@/tron/address') as typeof import('@/tron/address');
+  const {cachedAccounts, escrowFactory, knownEscrows} = require('@/escrow/escrow') as typeof import('@/escrow/escrow');
+  // The wallet's own accounts by number: a start names its account by number only.
+  const own = cachedAccounts(network, address as `0x${string}`);
+  const {ESCROW_FACTORIES_RETIRED} = require('@/escrow/config') as typeof import('@/escrow/config');
   const wrapped = knownAssets(network).find((a) => a.symbol === NATIVE[network].wrapped);
+  const fees = new Map<string, bigint>();
   const res = await tronGridGet(`${host}/v1/accounts/${evmToTron(address)}/transactions?limit=50&only_confirmed=true`);
-  if (!res.ok) return [];
+  if (!res.ok) return {ops: [], fees};
   const json = (await res.json()) as {data?: V1Tx[]};
   const me = address.toLowerCase();
+  const factories = new Set([escrowFactory(network), ...(ESCROW_FACTORIES_RETIRED[network] ?? [])].filter(Boolean).map((f) => f!.toLowerCase()));
+  // The escrow accounts this phone knows (its own and ones it joined): calls on them are named.
+  const accounts = new Set(knownEscrows(network).map((a) => a.toLowerCase()));
   const ops: Operation[] = [];
   for (const x of json.data ?? []) {
     const c = x.raw_data?.contract?.[0];
     const v = c?.parameter?.value;
-    if (c?.type !== 'TransferContract' || !v?.amount || !v.owner_address || !v.to_address) continue;
-    if (x.ret?.[0]?.contractRet && x.ret[0].contractRet !== 'SUCCESS') continue;
+    if (!v?.owner_address) continue;
     const from = tronToEvm(fromTronHex(v.owner_address))?.toLowerCase();
+    const hash = `0x${x.txID}`;
+    const timestamp = new Date(x.block_timestamp).toISOString();
+    const fee = x.ret?.[0]?.fee;
+    if (from === me && fee) fees.set(hash, BigInt(fee));
+    if (x.ret?.[0]?.contractRet && x.ret[0].contractRet !== 'SUCCESS') continue;
+    if (c?.type === 'TriggerSmartContract') {
+      const target = v.contract_address ? tronToEvm(fromTronHex(v.contract_address))?.toLowerCase() : undefined;
+      const sel = v.data?.slice(0, 8) ?? '';
+      let name: string | undefined;
+      const args: Record<string, string> = {};
+      if (from === me && target && factories.has(target)) {
+        name = ESCROW_FACTORY_CALLS[sel];
+        // startDeal(uint256 n, ...): the account is the wallet's own number n.
+        if (name === 'escrowStart') {
+          const n = parseInt((v.data ?? '').slice(8, 8 + 64) || '0', 16);
+          if (own[n]) args.escrow = own[n];
+        }
+      }
+      else if (from === me && target && accounts.has(target)) {
+        name = ESCROW_ACCOUNT_CALLS[sel];
+        // vote(uint64 id, uint8 o): the outcome is the second word.
+        if (name === 'escrowChoose') args.outcome = String(parseInt((v.data ?? '').slice(8 + 64, 8 + 128) || '0', 16));
+      } else if (from === me && sel === APPROVE_SELECTOR) {
+        const spender = `0x${(v.data ?? '').slice(8 + 24, 8 + 64)}`.toLowerCase();
+        if (accounts.has(spender)) name = 'escrowApprove';
+      }
+      if (name) ops.push({txHash: hash, timestamp, blockNum: x.block_timestamp, legs: [], actions: [{name, args}]});
+      continue;
+    }
+    if (c?.type !== 'TransferContract' || !v.amount || !v.to_address) continue;
     const to = tronToEvm(fromTronHex(v.to_address))?.toLowerCase();
     const out = from === me;
     if (!out && to !== me) continue;
-    const hash = `0x${x.txID}`;
-    const timestamp = new Date(x.block_timestamp).toISOString();
     ops.push({
       txHash: hash,
       timestamp,
@@ -320,7 +390,7 @@ async function tronTrxTransfers(host: string, address: string, network: TronChai
       ],
     });
   }
-  return ops;
+  return {ops, fees};
 }
 
 /**

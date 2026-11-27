@@ -39,13 +39,20 @@ export async function standingApprovalIfNeeded(network: Network, owner: Address,
  * Send `calls` in order from the wallet, each once the one before has landed. Resolves with the
  * LAST one's hash (the one the toast follows); a step that reverts stops the rest.
  */
-export async function sendWalletCalls(o: {account: Signer; network: Network; calls: WalletCall[]; onStep?: (i: number, n: number) => void}): Promise<{hash: Hex}> {
+export async function sendWalletCalls(o: {
+  account: Signer;
+  network: Network;
+  calls: WalletCall[];
+  onStep?: (i: number, n: number) => void;
+  /** Tron: count the energy on the account (rented, say) when checking each step's fee. */
+  useFreeEnergy?: boolean;
+}): Promise<{hash: Hex}> {
   const client = publicClientFor(o.network);
   let last: Hex | null = null;
   for (let i = 0; i < o.calls.length; i++) {
     o.onStep?.(i, o.calls.length);
     const c = o.calls[i];
-    const {hash} = await sendFromOwner({account: o.account, network: o.network, to: c.to, data: c.data, value: c.value});
+    const {hash} = await sendFromOwner({account: o.account, network: o.network, to: c.to, data: c.data, value: c.value, useFreeEnergy: o.useFreeEnergy});
     last = hash;
     if (i < o.calls.length - 1) {
       const r = await client.waitForTransactionReceipt({hash, timeout: 180_000});

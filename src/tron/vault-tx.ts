@@ -31,12 +31,14 @@ export async function sendVaultTxOnTron(o: {
   value: bigint;
   /** The most the call may burn, in sun (Tron's fee_limit): energy at the plan's estimate and price. */
   feeLimitSun: bigint;
+  /** A note on the transaction (raw_data.data). */
+  memo?: string;
 }): Promise<{hash: Hex}> {
   if (!o.account.sign) throw new Error('This key cannot sign a Tron transaction');
   const raw = encodeRaw(
     {kind: 'call', from: evmToTron(o.account.address), contract: evmToTron(o.to), data: hexToBytes(o.data), callValueSun: o.value},
     await refBlock(o.net),
-    {feeLimitSun: o.feeLimitSun},
+    {feeLimitSun: o.feeLimitSun, memo: o.memo},
   );
   const txID = toHex(sha256(raw));
   // r ‖ s ‖ v with v = 27 / 28: what TronWeb and TronLink produce, over the transaction id.

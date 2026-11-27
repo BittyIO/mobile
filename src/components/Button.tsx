@@ -15,6 +15,7 @@ import {ACTIVATION_GAS} from '@/core/activation-fee';
 import {TYPICAL_RELAY_GAS} from '@/vault/fee-quote';
 import {useT} from '@/i18n';
 import {LockIcon, useLockLevel} from '@/components/LockNotice';
+import {RentalToggle, type RentalToggleProps} from '@/components/EnergyRental';
 
 type Props = {
   title: string;
@@ -135,6 +136,11 @@ type ConfirmProps = {
    * write's gas plus a bare activation's, $16 on Tron) and then swapped in its own quote.
    */
   pricing?: boolean;
+  /**
+   * Tron: the energy rental, drawn at the top left (components/EnergyRental). It shows the fee both
+   * ways itself, so it takes the place of the network fee line.
+   */
+  rental?: RentalToggleProps;
 };
 
 function PlainConfirmButton({
@@ -149,6 +155,7 @@ function PlainConfirmButton({
   activationFee,
   networkFeeUsd,
   pricing,
+  rental,
   lockLevel = 0,
 }: ConfirmProps & {lockLevel?: 0 | 1 | 2}) {
   const {t} = useT();
@@ -174,6 +181,18 @@ function PlainConfirmButton({
       )}
     </Pressable>
   );
+  if (rental) {
+    return (
+      <View style={styles.confirmWrap}>
+        {/* The rental and its TRX at the left; the network fee in dollars at the right, as always. */}
+        <View style={styles.feeRow}>
+          <RentalToggle p={rental} disabled={isDisabled && !disabled} />
+          {networkFeeUsd != null ? <NetworkFee usd={networkFeeUsd} /> : null}
+        </View>
+        {button}
+      </View>
+    );
+  }
   const showFee = fee || free || networkFeeUsd != null;
   if (pricing || (!showFee && activation === null)) return button;
   // The cost sits with the control that incurs it, so every signing surface answers "what does this

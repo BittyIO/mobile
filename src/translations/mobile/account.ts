@@ -3,6 +3,7 @@ import type {MobileTable} from './index';
 // The vault / wallet switch (core/account-mode) and wallet mode's own words.
 export const account: MobileTable = {
   en: {
+    address_book: "Address book",
     vault: 'Smart wallet',
     wallet: 'General wallet',
     to_wallet: 'Switch to general wallet',
@@ -30,6 +31,7 @@ export const account: MobileTable = {
     hidden_note: "Wallets taken off this phone’s list. Nothing changed on chain: restore one to see it again.",
   },
   zh: {
+    address_book: "地址簿",
     vault: '智能钱包',
     wallet: '普通钱包',
     to_wallet: '切换到普通钱包',
@@ -57,6 +59,7 @@ export const account: MobileTable = {
     hidden_note: "从这台手机列表中移除的钱包。链上没有任何变化，恢复后即可再次看到。",
   },
   'zh-TW': {
+    address_book: "地址簿",
     vault: '智慧錢包',
     wallet: '一般錢包',
     to_wallet: '切換到一般錢包',

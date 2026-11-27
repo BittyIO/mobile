@@ -1,4 +1,5 @@
 import {isTronNetwork, NATIVE, NETWORK_FEATURES} from '@/core/chain';
+import {ESCROW_FACTORY} from '@/escrow/config';
 import {acrossServes} from '@/vault/bridge';
 import {FIT} from '@/core/text-scale';
 import {useTransparentHeaderInset} from '@/components/header-inset';
@@ -71,8 +72,8 @@ export function EyeIcon({off, color, size = 20}: {off: boolean; color: string; s
   );
 }
 
-/** Payees (address book) / Bridge / Send / Receive / History (clock) / Pending (hourglass) action icons. */
-function ActionIcon({name, color, size = 22}: {name: 'payees' | 'bridge' | 'send' | 'receive' | 'history' | 'guard'; color: string; size?: number}) {
+/** Payees (address book) / Bridge / Send / Escrow / Receive / History (clock) / Pending (hourglass) action icons. */
+function ActionIcon({name, color, size = 22}: {name: 'payees' | 'bridge' | 'send' | 'escrow' | 'receive' | 'history' | 'guard'; color: string; size?: number}) {
   const c = {stroke: color, strokeWidth: 2.2, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const};
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
@@ -98,6 +99,15 @@ function ActionIcon({name, color, size = 22}: {name: 'payees' | 'bridge' | 'send
         <>
           <Path d="M7 17L17 7" {...c} />
           <Path d="M8 7h9v9" {...c} />
+        </>
+      ) : name === 'escrow' ? (
+        // Escrow: money held between two sides until it is decided (lucide scale).
+        <>
+          <Path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z" {...c} />
+          <Path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z" {...c} />
+          <Path d="M7 21h10" {...c} />
+          <Path d="M12 3v18" {...c} />
+          <Path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2" {...c} />
         </>
       ) : name === 'receive' ? (
         // In and down: its mirror for Receive (lucide arrow-down-left).
@@ -786,12 +796,20 @@ export function VaultHomeScreen() {
    * (the vault), which is funded in dollars and pays its fees from them. Held, they show as always.
    */
   const hideEmptyDefault = (r: Row) => r.total === 0 && (r.symbol === 'WBTC' || (!walletOn && r.symbol === 'WETH'));
+  /**
+   * Tron has no watch lists: Assets only, and only its two assets, TRX and USDT. The wallet shows
+   * both even when empty; the vault keeps leaving an empty TRX off ({hideEmptyNative}).
+   */
+  const tron = isTronNetwork(network);
+  const tronAsset = (r: Row) => r.symbol === NATIVE[network].wrapped || r.symbol === 'USDT';
   const rowsForList = (listId: string): Row[] => {
     const held = isAssetsList(listId);
     const starred = new Set(watch.lists.find((l) => l.id === listId)?.symbols ?? []);
-    const visible = held
-      ? rows.filter((r) => (starred.has(r.symbol) && !hideEmptyNative(r) && !hideEmptyDefault(r)) || r.total > 0)
-      : rows.filter((r) => starred.has(r.symbol));
+    const visible = tron
+      ? rows.filter((r) => tronAsset(r) && (walletOn || !hideEmptyNative(r) || r.total > 0))
+      : held
+        ? rows.filter((r) => (starred.has(r.symbol) && !hideEmptyNative(r) && !hideEmptyDefault(r)) || r.total > 0)
+        : rows.filter((r) => starred.has(r.symbol));
     // A list of the user's own keeps the order they dragged it into: they chose what is on it,
     // so they choose the sequence, and it shows no balance to sort by anyway.
     if (!held) return sortFor(listId)(visible);
@@ -951,7 +969,8 @@ export function VaultHomeScreen() {
    */
   const [pageH, setPageH] = useState<Record<string, number>>({});
   const hkey = (id: string) => `${network}:${id}`;
-  const pages = watch.lists;
+  // Tron: the Assets list alone (no watch lists there).
+  const pages = tron ? watch.lists.filter((l) => isAssetsList(l.id)) : watch.lists;
   const activeIdx = Math.max(0, pages.findIndex((l) => l.id === watch.activeId));
   const pickList = (id: string) => {
     watch.select(network, id);
@@ -1083,6 +1102,9 @@ export function VaultHomeScreen() {
             walletOn
               ? {label: t('vault.send'), icon: 'send' as const, onPress: () => nav.navigate('WalletSend')}
               : {label: t('vault.send'), icon: 'payees' as const, onPress: () => nav.navigate('Payees')},
+            // Escrow, second: the Tron wallet's two-sided deals (escrow/escrow), only where a factory
+            // is deployed (Nile today; not Tron mainnet yet).
+            ...(walletOn && isTronNetwork(network) && ESCROW_FACTORY[network] ? [{label: t('mobile.escrow.title'), icon: 'escrow' as const, onPress: () => nav.navigate('Escrow')}] : []),
             // Wherever Across serves the network: Tron mainnet too (USDT), not Nile, which has no SpokePool.
             ...(acrossServes(network) ? [{label: t('mobile.bridge.tab'), icon: 'bridge' as const, onPress: () => nav.navigate('Bridge')}] : []),
             {label: t('mobile.app.transactions'), icon: 'history', onPress: () => nav.navigate('Transactions')},
@@ -1134,8 +1156,8 @@ export function VaultHomeScreen() {
           scrollEventThrottle={16}
           onLayout={(e) => (tabViewW.current = e.nativeEvent.layout.width)}
           onScroll={(e) => (tabScrollX.current = e.nativeEvent.contentOffset.x)}>
-          {watch.lists.map((l) => {
-            const on = l.id === watch.activeId;
+          {pages.map((l) => {
+            const on = tron || l.id === watch.activeId;
             return (
               <Pressable
                 key={l.id}
@@ -1147,6 +1169,7 @@ export function VaultHomeScreen() {
                 }}
                 /** A tap selects the list; a tap on the one already in front opens it for editing. */
                 onPress={() => {
+                  if (tron) return;
                   if (!on) return pickList(l.id);
                   nav.navigate('Watchlist');
                 }}>
@@ -1160,6 +1183,7 @@ export function VaultHomeScreen() {
               thing a new list demanded be the least interesting thing about it — the page it opens
               has the name as a field at the top and the assets underneath, which is where both
               questions actually get answered. */}
+          {tron ? null : (
           <Pressable
             style={styles.tabHit}
             accessibilityRole="button"
@@ -1173,6 +1197,7 @@ export function VaultHomeScreen() {
             }}>
             <Text style={styles.listAdd}>＋</Text>
           </Pressable>
+          )}
         </ScrollView>
       </View>
       <View onLayout={(e) => setPageW(e.nativeEvent.layout.width)}>
