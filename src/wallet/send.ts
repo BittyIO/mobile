@@ -85,17 +85,15 @@ export async function maxNativeSend(network: Network, from: Address, to: Address
   return have > keep ? have - keep : BigInt(0);
 }
 
-/**
- * The energy a Tron token transfer needs: the node's estimate, without the plan's third of margin
- * (planOwnerTx keeps gas = used × 4/3 as the fee_limit).
- */
-export const energyOf = (plan: OwnerTxPlan): number => Number((plan.gas * BigInt(3)) / BigInt(4));
-
 /** Send it. Returns once broadcast; the caller's toast follows it to its receipt. */
 export async function sendWalletTransfer(
-  o: WalletTransfer & {account: LocalAccount; plan?: OwnerTxPlan; rent?: import('@/tron/energy-rental').RentQuote},
+  o: WalletTransfer & {account: LocalAccount; plan?: OwnerTxPlan; usdtGas?: import('@/tron/usdt-gas').UsdtGasQuote},
 ): Promise<{hash: Hex}> {
-  if (o.rent && isTronNetwork(o.network) && o.asset.address !== 'native') return sendWithRentedEnergy({...o, rent: o.rent});
+  // USDT as gas (tron/usdt-gas): Bitty's server rents the energy and is paid in USDT.
+  if (o.usdtGas && isTronNetwork(o.network) && o.asset.address !== 'native') {
+    const {sendWithUsdtGas} = require('@/tron/usdt-gas') as typeof import('@/tron/usdt-gas');
+    return sendWithUsdtGas({net: o.network as import('@/tron/config').TronChain, account: o.account, from: o.from, to: o.to, amount: o.amount, quote: o.usdtGas});
+  }
   if (isTronNetwork(o.network) && o.asset.address === 'native') {
     const plan = o.plan ?? (await planWalletTransfer(o));
     const have = await ownerEthBalance(o.network, o.from);
@@ -103,31 +101,6 @@ export async function sendWalletTransfer(
     return sendTrx(o);
   }
   return sendFromOwner({account: o.account, network: o.network, ...txOf(o), plan: o.plan, memo: o.memo});
-}
-
-/**
- * A Tron token transfer on rented energy (tron/energy-rental): pay TronSave for the energy, wait
- * until it is delegated to the wallet, then send, burning TRX only for whatever the energy does
- * not cover. Nothing is sent if the energy does not arrive.
- */
-async function sendWithRentedEnergy(
-  o: WalletTransfer & {account: LocalAccount; plan?: OwnerTxPlan; rent: import('@/tron/energy-rental').RentQuote},
-): Promise<{hash: Hex}> {
-  const {evmToTron} = require('@/tron/address') as typeof import('@/tron/address');
-  const {freeEnergy, rentEnergy, untilEnergy} = require('@/tron/energy-rental') as typeof import('@/tron/energy-rental');
-  const net = o.network as import('@/tron/config').TronChain;
-  const me = evmToTron(o.from);
-  const plan = o.plan ?? (await planWalletTransfer(o));
-  const have = await ownerEthBalance(o.network, o.from);
-  if (have < o.rent.costSun + plan.l1Fee) throw new OwnerGasShort(o.from, o.rent.costSun + plan.l1Fee, have, o.network);
-  const need = energyOf(plan);
-  const before = await freeEnergy(net, me);
-  await rentEnergy({net, account: o.account, wallet: me, quote: o.rent});
-  const energy = await untilEnergy(net, me, Math.min(need, before + o.rent.energy));
-  // What the energy does not cover still burns; the fee_limit stays the plan's.
-  const left = plan.gas > BigInt(energy) ? plan.gas - BigInt(energy) : BigInt(0);
-  const after: OwnerTxPlan = {...plan, cost: left * plan.maxFeePerGas + plan.l1Fee};
-  return sendFromOwner({account: o.account, network: o.network, ...txOf(o), plan: after, memo: o.memo});
 }
 
 /** A TRX TransferContract, signed over its transaction id with the wallet key. */
