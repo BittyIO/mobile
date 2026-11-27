@@ -141,23 +141,24 @@ export function WalletSendScreen() {
     };
   }, [network, from, to, asset, raw, note]);
 
-  /**
-   * Tron USDT: pay the network fee in USDT instead of TRX (tron/usdt-gas, at the confirm button's
-   * top left). On by default where offered: the wallet then needs no TRX at all.
-   */
-  const gas = useUsdtGas({network, from, to, token: asset?.address, amount: raw, memo: note, burnSun: fee?.cost ?? null});
-  const payUsdt = gas.on;
-  // What the wallet must hold in its coin for the fee (the "not enough" check), and the fee shown.
-  const feeCost = payUsdt ? BigInt(0) : (fee?.cost ?? null);
-  const shownFee = payUsdt ? null : (fee?.cost ?? null);
-
   const nativeHeld = held[0]?.raw ?? BigInt(0);
+  /**
+   * Tron token transfers: rent the energy through Bitty instead of burning TRX for it (tron/usdt-gas,
+   * at the confirm button's top left), the fee paid in TRX, or in USDT for a USDT transfer from a
+   * wallet without the TRX. On by default where offered.
+   */
+  const gas = useUsdtGas({network, from, to, token: asset?.address, amount: raw, memo: note, burnSun: fee?.cost ?? null, trxHeld: nativeHeld});
+  const renting = gas.on;
+  // What the wallet must hold in its coin for the fee (the "not enough" check), and the fee shown.
+  const feeCost = renting ? (gas.trxNeed ?? BigInt(0)) : (fee?.cost ?? null);
+  const shownFee = renting ? gas.trxFee : (fee?.cost ?? null);
+
   // Paying in USDT: the transfer and its fee both come out of the USDT.
-  const usdtShort = payUsdt && !!asset && !!raw && gas.usdtFee != null && raw + gas.usdtFee > asset.raw;
+  const usdtShort = renting && !!asset && !!raw && gas.usdtFee != null && raw + gas.usdtFee > asset.raw;
   const short =
     !!asset && !!raw && (raw > asset.raw || usdtShort || (feeCost != null && (asset.address === 'native' ? raw + feeCost > nativeHeld : feeCost > nativeHeld)));
   const shortSymbol = asset && raw && (raw > asset.raw || usdtShort) ? asset.label : native.symbol;
-  const priced = payUsdt ? !!gas.quote : !!fee;
+  const priced = renting ? !!gas.quote : !!fee;
   const canSend = !!from && !!to && !!asset && !!raw && raw > BigInt(0) && priced && !short && gas.ok && !sending;
 
   const setMax = async () => {
@@ -173,7 +174,7 @@ export function WalletSendScreen() {
     const tx = showTx(`${t('vault.send')} ${fmtShort(Number(formatUnits(raw, asset.decimals)))} ${asset.label}`, network);
     try {
       const signer = await useWallet.getState().walletSigner();
-      const {hash} = await sendWalletTransfer({account: signer, network, from, to, asset, amount: raw, memo: note || undefined, ...(payUsdt && gas.quote ? {usdtGas: gas.quote} : {})});
+      const {hash} = await sendWalletTransfer({account: signer, network, from, to, asset, amount: raw, memo: note || undefined, ...(renting && gas.quote && gas.feeIn ? {rented: {quote: gas.quote, feeIn: gas.feeIn}} : {})});
       recordSent({
         hash,
         network,
@@ -195,11 +196,10 @@ export function WalletSendScreen() {
     }
   };
 
-  const feeUsd = payUsdt
-    ? gas.usdtFee != null
+  const feeUsd =
+    gas.usdtFee != null
       ? Number(formatUnits(gas.usdtFee, 6))
-      : null
-    : shownFee != null
+      : shownFee != null
       ? usdValue(Number(formatUnits(shownFee, native.decimals)), native.wrapped, prices)
       : null;
   const vault = account.vault;
@@ -270,11 +270,11 @@ export function WalletSendScreen() {
             </View>
           </>
         ) : null}
-        {feeState === 'failed' && !payUsdt ? <Text style={styles.error}>{t('mobile.account.fee_failed')}</Text> : null}
+        {feeState === 'failed' && !renting ? <Text style={styles.error}>{t('mobile.account.fee_failed')}</Text> : null}
       </ScrollView>
 
       {/* The app's one signing control (Face ID, Confirm), in the footer as on the smart wallet's Send.
-          The fee is at its top left/right: USDT or TRX (Tron USDT), then the network fee in dollars; until
+          The fee is at its top left/right: rented or burned (Tron tokens), then the network fee in dollars; until
           it is priced (`pricing`) no line, as a wallet has no activation to quote. */}
       <View style={styles.footer}>
         <ConfirmButton onPress={send} loading={sending} disabled={!canSend} pricing={!gas.toggle && feeUsd == null} rental={gas.toggle} networkFeeUsd={feeUsd ?? undefined} />
