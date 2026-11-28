@@ -152,22 +152,10 @@ export async function broadcast(net: TronChain, signedHex: string, txID: string)
   return r.txid ?? txID;
 }
 
-/** A TRX transfer as the node builds it, unsigned, in the JSON form (`visible`: base58 addresses). */
-export type NodeTx = {visible: boolean; txID: string; raw_data: unknown; raw_data_hex: string};
-
-/**
- * Have the node build an unsigned TRX transfer, for a service that wants the whole transaction
- * object rather than its bytes (tron/energy-rental: TronSave broadcasts the payment itself).
- */
-export async function createTrxTransfer(net: TronChain, from: string, to: string, amountSun: bigint): Promise<NodeTx> {
-  const tx = await post<NodeTx & {Error?: string}>(net, '/wallet/createtransaction', {
-    owner_address: from,
-    to_address: to,
-    amount: Number(amountSun),
-    visible: true,
-  });
-  if (!tx?.txID) throw new Error(tx?.Error ?? 'The Tron node did not build the transfer');
-  return tx;
+/** The energy `address` can spend now: its limit (staked plus delegated) less what it has used. */
+export async function freeEnergy(net: TronChain, address: string): Promise<number> {
+  const e = await accountEnergy(net, address);
+  return Math.max(0, e.limit - e.used);
 }
 
 const memoFees: Partial<Record<TronChain, bigint>> = {};

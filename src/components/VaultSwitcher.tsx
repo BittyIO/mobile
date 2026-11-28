@@ -9,6 +9,10 @@ import {useWalletMode, walletNumber} from '@/core/account-mode';
 import {useT} from '@/i18n';
 import {useColors} from '@/theme';
 import {CHROME_SCALE} from '@/core/text-scale';
+import {SmartWalletIcon, WalletIcon} from './AccountSwitch';
+import {GuardShield} from './GuardShield';
+import {vaultAddressOf} from '@/core/active-vault';
+import {useGuardLevel} from '@/vault/guard';
 
 /**
  * The vault in front, in every tab's left-hand corner: its name, opening the Vaults page. In wallet
@@ -25,6 +29,8 @@ export function VaultSwitcher({stack = false}: {stack?: boolean} = {}) {
   const network = useNetwork((s) => s.network);
   const wallet = useWalletMode(network);
   const current = useVaults((s) => s.vaults.find((v) => v.index === s.activeIndex) ?? s.vaults[0]);
+  // The guard wallet's mark is its Guard level's shield; the plain shield until that is read.
+  const level = useGuardLevel(wallet ? null : vaultAddressOf(current, network), network);
   if (!current) return null;
   // Both kinds are named "Wallet N" here, the name alone: the switch on Overview says which kind is in front.
   const label = wallet ? t('mobile.account.wallet_n', {n: walletNumber(current)}) : vaultLabel(current, (n) => t('mobile.account.wallet_n', {n}));
@@ -36,6 +42,15 @@ export function VaultSwitcher({stack = false}: {stack?: boolean} = {}) {
         hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
         accessibilityRole="button"
         accessibilityLabel={`${t(wallet ? 'mobile.account.choose_wallet' : 'mobile.settings.choose_vault')}: ${label}`}>
+        {/* The mark says which kind is in front; it is part of the name's button (the list), not a
+            way to Guard — Overview's Guard is that. */}
+        {wallet ? (
+          <WalletIcon color={c.accent} size={26} />
+        ) : level != null ? (
+          <GuardShield level={level} size={28} />
+        ) : (
+          <SmartWalletIcon color={c.accent} size={26} />
+        )}
         <Text style={[styles.name, {color: c.text}]} numberOfLines={1} maxFontSizeMultiplier={CHROME_SCALE}>
           {label}
         </Text>

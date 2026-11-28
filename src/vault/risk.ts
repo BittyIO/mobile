@@ -71,7 +71,11 @@ export const isOpenRiskVersion = (version: string | null | undefined): boolean =
  * {MAX_DAILY_ALLOWANCE}, with {NO_LIMIT} beside them.
  */
 export function riskBoundsFor(version: string | null | undefined, field: RiskField): {min: bigint; max: bigint} {
-  if (!isOpenRiskVersion(version)) return RISK_BOUNDS[field];
+  if (!isOpenRiskVersion(version)) {
+    // From 1.0.5 a daily limit may be $0 (that one turned off), though not yet no-limit.
+    if (field !== 'timelock' && versionAtLeast(version, ZERO_ALLOWANCE_SINCE)) return {...RISK_BOUNDS[field], min: 0n};
+    return RISK_BOUNDS[field];
+  }
   return field === 'timelock' ? {min: 0n, max: RISK_BOUNDS.timelock.max} : {min: 0n, max: MAX_DAILY_ALLOWANCE};
 }
 

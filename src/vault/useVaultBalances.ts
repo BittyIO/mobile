@@ -145,8 +145,7 @@ usePending.subscribe((s) => {
 export function useVaultBalances(network: Network): State {
   const account = useActiveAccount(network);
   const wallet = account.kind === 'wallet' ? account.wallet : null;
-  // The smart side: the vault, or on Tron the BittyAccount (read by address alike).
-  const active = account.kind === 'vault' ? account.vault : account.kind === 'account' ? account.account : null;
+  const active = account.kind === 'vault' ? account.vault : null;
   /**
    * The vault in front was received on another chain, and has no vault of its own on this one. Its
    * address is still an address here, and anything sent to it is there whether or not a vault was

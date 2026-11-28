@@ -22,6 +22,12 @@ export const GUARD_LEVELS: Record<GuardLevel, GuardValues> = {
   4: {timelock: 7n * DAY, sendDailyAllowance: 0n, marketTradeDailyLossAllowance: 0n},
 };
 
+/**
+ * What `level` sets. The same on every vault: a $0 limit is taken from 1.0.5, so Highest needs
+ * nothing different on an older one (`open` is kept for the callers' sake).
+ */
+export const guardValuesFor = (level: GuardLevel, _open: boolean): GuardValues => GUARD_LEVELS[level];
+
 export const sameGuardValues = (a: GuardValues, b: GuardValues) =>
   a.timelock === b.timelock && a.sendDailyAllowance === b.sendDailyAllowance && a.marketTradeDailyLossAllowance === b.marketTradeDailyLossAllowance;
 

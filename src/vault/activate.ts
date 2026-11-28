@@ -7,9 +7,10 @@
  * Ported from web `activateByStablecoin`. The fee is a flat $1, plus the gas of any first calls riding
  * on the activation, and is SIGNED; the server prices it the same way (see core/activation-fee).
  */
-import {encodeFunctionData, keccak256, parseAbi, stringToHex, type Address, type Hex} from 'viem';
+import {encodeFunctionData, hexToBytes, keccak256, parseAbi, stringToHex, type Address, type Hex} from 'viem';
+import {relayEnergyPrice} from '@/vault/fee-quote';
 import type {Signer} from '@/wallet/signer';
-import {apiUrl, CHAIN_ID, NATIVE, publicClientFor, type Network} from '@/core/chain';
+import {apiFetch, apiUrl, CHAIN_ID, isTronNetwork, NATIVE, publicClientFor, type Network} from '@/core/chain';
 import {ACTIVATION_TYPES, GUARD_IMPL_ABI, IMPLEMENTATION_VAULT, PRICE_FEED_ABI} from '@/core/abi';
 import {API_VERSION, vaultFactory, vaultGuard} from '@/core/vault-contracts';
 import {ACTIVATION_GAS, SIGNED_ACTIVATION_OVERHEAD_GAS, activationFeeNative, relayFeeUnits} from '@/core/activation-fee';
@@ -18,7 +19,7 @@ import {ACTIVATION_GAS, SIGNED_ACTIVATION_OVERHEAD_GAS, activationFeeNative, rel
 import {ETH_USD_FEED} from './fee-quote';
 import {fetchPrices} from '@/core/prices';
 import {knownAssets} from '@/core/assets';
-import {sendFromOwner} from './direct';
+import {ownerEthBalance, sendFromOwner} from './direct';
 import {nameRevert} from './vault-abi';
 import {REVERT_REASON} from './capabilities';
 import {translate} from '@/i18n';
@@ -336,9 +337,13 @@ export async function priceActivation(o: {
   const nativeDecimals = NATIVE[o.network].decimals;
   // Priced as a relayed operation is: at cost plus the margin in the wrapped native coin, or converted
   // at the feed's price into the stable coin. The server prices it again and accepts it within a band.
+  // On Tron the relayer rents the activation's energy when that is cheaper than burning, and prices it
+  // at the rental's price (web activateExec): the same price, from its quote (/api/vaults/relay/quote).
+  // The burn where the server cannot say; it accepts the signed fee within a band of its own quote.
+  const feePrice = isTronNetwork(o.network) ? ((await relayEnergyPrice(o.network, gasUnits))?.price ?? gasPrice) : gasPrice;
   const feeAmount = weth
-    ? activationFeeNative(gasUnits, gasPrice)
-    : relayFeeUnits(gasUnits, gasPrice, ethUsd, Number(decimals), BigInt(0), nativeDecimals);
+    ? activationFeeNative(gasUnits, feePrice)
+    : relayFeeUnits(gasUnits, feePrice, ethUsd, Number(decimals), BigInt(0), nativeDecimals);
 
   // Over the vault's per-operation cap the activation cannot be paid, however the vault is funded:
   // said now, in dollars, before anything is signed — not as the relayer's refusal afterwards.
@@ -435,6 +440,91 @@ export async function activateVaultDirect(o: {
       args: [o.allowlistEnabled, (o.calls ?? []) as Hex[]],
     }),
   });
+}
+
+/**
+ * Tron: the owner key activates the vault itself and pays in TRX, on energy Bitty's server rents to
+ * it (web api/tron/key-activation; the cheaper of CatFee and TronSave) instead of burnt — no relayed
+ * signature, so no forwarder overhead, and the energy at the rental's price: about half the relayed
+ * activation on Nile. The operation's calls ride on it, as they do on a relayed activation. The key
+ * signs two transactions, the server's fee (a TRX transfer to its relayer) and the activation, and
+ * hands both over unbroadcast: the server rents, sends the fee, then the activation once the fee
+ * has succeeded. Nile only for now; offered when the key holds the TRX the server asks for.
+ */
+const KEY_ACTIVATION_NETWORKS: Network[] = ['tron-nile'];
+/** How long the two signed transactions stay valid: the server rents and waits for the fee. */
+const KEY_ACTIVATION_VALID_MS = 10 * 60_000;
+
+export type KeyActivationPlan = {
+  data: Hex;
+  relayer: Address;
+  /** The server's fee, in sun: the rental and its margin. */
+  feeSun: bigint;
+  /** The fee_limit the activation is signed with. */
+  feeLimitSun: bigint;
+  /** All the key must hold, in sun: the fee and the bandwidth it burns. */
+  costSun: bigint;
+};
+
+export async function planKeyActivation(o: {owner: Address; network: Network; calls?: readonly Hex[]}): Promise<KeyActivationPlan | null> {
+  if (!KEY_ACTIVATION_NETWORKS.includes(o.network)) return null;
+  const data = encodeFunctionData({abi: ACTIVATE_ESTIMATE_ABI, functionName: 'activateVault', args: [false, (o.calls ?? []) as Hex[]]});
+  const res = await apiFetch(
+    apiUrl('/api/tron/key-activation/quote', o.network),
+    {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({from: o.owner, data})},
+    20_000,
+  );
+  const r = (await res.json().catch(() => null)) as {
+    ok?: boolean;
+    relayer?: Address;
+    factory?: Address;
+    trx?: {fee: string; needSun: string; callTx: {feeLimitSun: string}};
+  } | null;
+  if (!r?.ok || !r.relayer || !r.trx) return null;
+  // The server's factory must be the one this app activates through.
+  if (r.factory && r.factory.toLowerCase() !== vaultFactory(o.network).toLowerCase()) return null;
+  return {data, relayer: r.relayer, feeSun: BigInt(r.trx.fee), feeLimitSun: BigInt(r.trx.callTx.feeLimitSun), costSun: BigInt(r.trx.needSun)};
+}
+
+/** Whether the key can pay {planKeyActivation}'s activation now. */
+export async function keyCanActivate(owner: Address, network: Network, p: KeyActivationPlan): Promise<boolean> {
+  const have = await ownerEthBalance(network, owner).catch(() => BigInt(0));
+  // A tenth more held back: the rental's price moves between the quote and the send.
+  return have >= p.costSun + p.costSun / BigInt(10);
+}
+
+/** Sign the fee and the activation, and hand both to the server. Resolves with the activation's hash. */
+export async function activateWithKeyRental(o: {account: Signer; network: Network; plan: KeyActivationPlan}): Promise<{hash: Hex}> {
+  if (!o.account.sign) throw new Error('This key cannot sign a Tron transaction');
+  const {evmToTron} = require('@/tron/address') as typeof import('@/tron/address');
+  const {refBlock} = require('@/tron/client') as typeof import('@/tron/client');
+  const {encodeRaw, encodeSigned, txIdOf} = require('@/tron/tx') as typeof import('@/tron/tx');
+  const net = o.network as import('@/tron/config').TronChain;
+  const me = evmToTron(o.account.address);
+  const ref = await refBlock(net);
+  const sign = async (raw: Uint8Array) => {
+    const signature = await o.account.sign!({hash: `0x${txIdOf(raw)}`});
+    return encodeSigned(raw, signature.replace(/^0x/, ''));
+  };
+  // Distinct timestamps, so the two cannot collide.
+  const now = Date.now();
+  const feeTx = await sign(encodeRaw({kind: 'trx', from: me, to: evmToTron(o.plan.relayer), amountSun: o.plan.feeSun}, ref, {now, expiresInMs: KEY_ACTIVATION_VALID_MS}));
+  const callTx = await sign(
+    encodeRaw(
+      {kind: 'call', from: me, contract: evmToTron(vaultFactory(o.network)), data: hexToBytes(o.plan.data)},
+      ref,
+      {feeLimitSun: o.plan.feeLimitSun, now: now + 1, expiresInMs: KEY_ACTIVATION_VALID_MS},
+    ),
+  );
+  // A write: no abort (see apiFetch). The server may take most of a minute (rental, fee receipt).
+  const res = await fetch(apiUrl('/api/tron/usdt-gas/send', o.network), {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({feeTx, transferTx: callTx}),
+  });
+  const r = (await res.json().catch(() => null)) as {ok?: boolean; hash?: Hex; reason?: string} | null;
+  if (!r?.ok || !r.hash) throw new Error(`The activation could not be sent (${r?.reason ?? `HTTP ${res.status}`}).`);
+  return {hash: r.hash};
 }
 
 /**

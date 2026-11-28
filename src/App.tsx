@@ -280,12 +280,14 @@ function EarnTab() {
   // Wallet mode too: the wallet earns in its own name (wallet/earn).
   const noDefi = useNoDefi();
   const network = useNetwork((s) => s.network);
+  const tronWallet = isTronNetwork(network);
   if (noDefi) {
     const {TronUnavailableScreen} = require('@/screens/TronUnavailableScreen');
     return <TronUnavailableScreen feature="earn" />;
   }
-  // Tron: staking TRX earns energy, not yield, so the tab is Energy (screens/TronEnergyScreen).
-  if (isTronNetwork(network)) {
+  // On Tron, staking TRX earns energy, not yield, so the tab is Energy (screens/TronEnergyScreen),
+  // for the wallet and the smart wallet alike.
+  if (tronWallet) {
     const {TronEnergyScreen} = require('@/screens/TronEnergyScreen');
     return <TronEnergyScreen />;
   }
@@ -314,7 +316,8 @@ function MainTabs() {
   // Setting an explicit height opts out of the navigator's own safe-area handling, so the home
   // indicator's space has to be added back by hand or the bar sits under it.
   const insets = useSafeAreaInsets();
-  const tron = isTronNetwork(useNetwork((s) => s.network));
+  const tabNetwork = useNetwork((s) => s.network);
+  const tron = isTronNetwork(tabNetwork);
   return (
     <Tab.Navigator
       screenOptions={({route}) => ({
@@ -530,7 +533,10 @@ function Root() {
           name="EarnDetail"
           getComponent={() => require('@/screens/EarnDetailScreen').EarnDetailScreen}
           options={({route}) => ({
-            title: t((route.params as {lend?: boolean} | undefined)?.lend ? 'vault.flexible_lend' : 'vault.flexible_yield'),
+            // TRON Stake earns energy, not yield: its page is named for that.
+            title: (route.params as {name?: string} | undefined)?.name === 'TRON Stake'
+              ? t('mobile.tron.energy_detail_title')
+              : t((route.params as {lend?: boolean} | undefined)?.lend ? 'vault.flexible_lend' : 'vault.flexible_yield'),
             fullScreenGestureEnabled: true,
           })}
         />

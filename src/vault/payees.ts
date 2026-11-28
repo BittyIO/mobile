@@ -5,8 +5,6 @@ import type {Network} from '@/core/chain';
 import {fetchWhitelist} from '@/vault/payments';
 import {WHITELIST_STATUS} from '@/core/abi';
 import {usePending} from '@/vault/pending';
-import {useActiveAccount} from '@/core/account-mode';
-import {readPayees} from '@/account/guard';
 
 /**
  * Vaults with a payee on its way in: the add was accepted by the relayer and is not mined yet, so
@@ -27,20 +25,15 @@ export function useHasPayees(vault: string | null | undefined, network: Network,
   const focused = useIsFocused();
   const settled = usePending((s) => s.txs.filter((x) => x.status !== 'pending').length);
   const adding = usePayeeAdding((s) => (vault ? !!s.adding[vault.toLowerCase()] : false));
-  // The Tron smart wallet keeps its payees itself, not in a vault's whitelist.
-  const smart = useActiveAccount(network).kind === 'account';
   useEffect(() => {
     if (!vault || !focused) return;
     let live = true;
-    (smart
-      ? readPayees(network, vault as `0x${string}`).then((rows) => rows.length > 0)
-      : fetchWhitelist(vault as `0x${string}`, network).then((rows) => rows.some((r) => r.status !== WHITELIST_STATUS.voided))
-    )
-      .then((v) => live && setHas(v))
+    fetchWhitelist(vault as `0x${string}`, network)
+      .then((rows) => live && setHas(rows.some((r) => r.status !== WHITELIST_STATUS.voided)))
       .catch(() => {});
     return () => {
       live = false;
     };
-  }, [vault, network, focused, settled, nonce, smart]);
+  }, [vault, network, focused, settled, nonce]);
   return adding || has;
 }

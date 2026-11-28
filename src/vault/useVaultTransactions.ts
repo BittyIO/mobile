@@ -1,3 +1,6 @@
+import {TronHistoryBusy} from './transactions';
+import {translate} from '@/i18n';
+import {useLanguage} from '@/core/language-store';
 import {useCallback, useEffect, useState} from 'react';
 import type {Address} from 'viem';
 import type {Network} from '@/core/chain';
@@ -11,7 +14,7 @@ type State = {
 };
 
 /** The vault's transaction history (grouped by tx). `refresh()` re-fetches. */
-export function useVaultTransactions(vault: Address | null, network: Network, kind: 'vault' | 'wallet' | 'account' = 'vault'): State {
+export function useVaultTransactions(vault: Address | null, network: Network, kind: 'vault' | 'wallet' = 'vault'): State {
   const [ops, setOps] = useState<Operation[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +31,7 @@ export function useVaultTransactions(vault: Address | null, network: Network, ki
     setError(null);
     fetchTransactions(vault, network, kind)
       .then((o) => live && setOps(o))
-      .catch((e) => live && setError(String((e as Error)?.message ?? e)))
+      .catch((e) => live && setError(e instanceof TronHistoryBusy ? translate(useLanguage.getState().language, 'mobile.tron.history_busy') : String((e as Error)?.message ?? e)))
       .finally(() => live && setLoading(false));
     return () => {
       live = false;

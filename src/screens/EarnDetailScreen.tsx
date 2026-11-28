@@ -575,7 +575,7 @@ export function EarnDetailScreen() {
           disabled={held <= 0}
           onPress={() => go('withdraw')}>
           <Text style={[styles.secText, held <= 0 && styles.secTextOff]} numberOfLines={1}>
-            {t('vault.withdraw')}
+            {t(isTronStake ? 'vault.unstake' : 'vault.withdraw')}
           </Text>
         </Pressable>
         {/* Nothing free in the vault, nothing to put in — and null while the balances load, which
@@ -589,7 +589,7 @@ export function EarnDetailScreen() {
           onPress={() => go('deposit')}>
           <View style={styles.btnRow}>
             {depositLocked ? <LockIcon level={lockLevel as 1 | 2} /> : null}
-            <Text style={styles.priText} numberOfLines={1}>{t(lend ? 'vault.supply' : 'vault.deposit')}</Text>
+            <Text style={styles.priText} numberOfLines={1}>{t(isTronStake ? 'vault.stake' : lend ? 'vault.supply' : 'vault.deposit')}</Text>
           </View>
         </Pressable>
       </View>

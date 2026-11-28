@@ -5,18 +5,16 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
 import {SettingsGroup} from '@/components/SettingsRow';
 import {GuardLevelRows, type GuardChoice} from '@/components/GuardLevelRows';
-import {NetworkFee} from '@/components/NetworkFee';
-import {Button} from '@/components/Button';
+import {relayGasFor} from '@/vault/fee-quote';
+import {ConfirmButton} from '@/components/Button';
 import {useVaultWrite} from '@/components/useVaultWrite';
-import {GUARD_LEVELS, guardLevelOf, sameGuardValues, type GuardValues} from '@/core/new-vault-defaults';
+import {GUARD_LEVELS, guardLevelOf, guardValuesFor, sameGuardValues, type GuardValues} from '@/core/new-vault-defaults';
+import {useVaultGate} from '@/vault/gate';
+import {isOpenRiskVersion} from '@/vault/risk';
 import {valuesInForce} from '@/core/safety-levels';
 import {useActiveVaultAddress} from '@/core/active-vault';
 import {useNetwork} from '@/core/network-store';
 import {getRiskConfig, needsLimits, updateRiskSettings} from '@/vault/risk';
-import {useAccountWrite} from '@/account/useAccountWrite';
-import {readGuard} from '@/account/guard';
-import {accountRiskValues, guardLevelCalls, rememberGuardBatch} from '@/account/guard-evm';
-import type {AccountGuard} from '@/account/guard';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 
@@ -51,31 +49,7 @@ export function GuardLevelScreen() {
    */
   const sent = useRef<{choice: GuardChoice; values: GuardValues} | null>(null);
   const [sending, setSending] = useState<GuardChoice | null>(null);
-  // The Tron smart wallet in front: the same levels, its numbers read and set on the account
-  // (account/guard-evm), the change relayed. It has one daily limit and no Custom page.
-  const acct = useAccountWrite(() => load());
-  const smart = acct.account != null;
-  const guardRef = useRef<AccountGuard | null>(null);
   const load = useCallback(() => {
-    if (acct.account) {
-      if (customSent) {
-        sent.current = {choice: 'custom', values: customSent};
-        customSent = null;
-        setChoice('custom');
-        setSending('custom');
-      }
-      readGuard(network, acct.account).then((g) => {
-        guardRef.current = g;
-        const v = accountRiskValues(g);
-        const values = {timelock: v.timelock, sendDailyAllowance: v.sendDailyAllowance, marketTradeDailyLossAllowance: v.marketTradeDailyLossAllowance};
-        setNow(values);
-        if (sent.current && !sameGuardValues(values, sent.current.values)) return;
-        sent.current = null;
-        setSending(null);
-        setChoice(guardLevelOf(values));
-      });
-      return;
-    }
     if (!vault) return;
     if (customSent) {
       sent.current = {choice: 'custom', values: customSent};
@@ -98,7 +72,7 @@ export function GuardLevelScreen() {
       setSending(null);
       setChoice(guardLevelOf(values));
     });
-  }, [vault, network, acct.account]);
+  }, [vault, network]);
   // While a change is on its way, read again every few seconds until it lands.
   useEffect(() => {
     if (sending == null) return;
@@ -114,43 +88,25 @@ export function GuardLevelScreen() {
     };
   }, [sending, load]);
   useFocusEffect(load);
-  const vw = useVaultWrite(load);
-  const {run, sheet} = vw;
-  const busy = smart ? acct.busy : vw.busy;
-  const ready = smart ? acct.ready : vw.ready;
+  const {busy, ready, runConfirmed, sheet} = useVaultWrite(load);
 
   // Custom's row shows the values in force, or the ones on their way from the Custom page.
   const customValues = sending === 'custom' && sent.current ? sent.current.values : now ?? GUARD_LEVELS[0];
-  const want = choice == null || choice === 'custom' ? null : GUARD_LEVELS[choice];
+  const open = isOpenRiskVersion(useVaultGate().vaultVersion);
+  const want = choice == null || choice === 'custom' ? null : guardValuesFor(choice, open);
   const changed = want != null && now != null && !sameGuardValues(want, now);
   // Above none, a timelock needs both limits to be amounts: the vault refuses the mix otherwise.
-  const refused = !smart && want != null && needsLimits(want);
-  const confirm = () => {
-    if (smart) {
-      const a = acct.account;
-      const g = guardRef.current;
-      if (!a || !g || !want || choice == null) return;
-      const {calls, queued} = guardLevelCalls(network, a, g, want);
-      // A loosening only queues now: the page shows the level once it is in force, so no spinner waits for it.
-      return void acct.run('level', t('mobile.vault.change_guard_config'), calls, undefined, () => {
-        if (queued) rememberGuardBatch(network, a, queued);
-        else {
-          sent.current = {choice, values: want};
-          setSending(choice);
-        }
-      });
-    }
-    return (
+  const refused = want != null && needsLimits(want);
+  const confirm = () =>
     want &&
     choice != null &&
-    run('level', t('mobile.vault.change_guard_config'), async (b) => {
+    // One confirm: this page's own Confirm, with the fee on it, then Face ID — no sheet after it.
+    runConfirmed('level', t('mobile.vault.change_guard_config'), async (b) => {
       const hash = await updateRiskSettings({...b, changes: want});
       sent.current = {choice, values: want};
       setSending(choice);
       return hash;
-    })
-    );
-  };
+    });
 
   return (
     <View style={styles.fill}>
@@ -161,19 +117,17 @@ export function GuardLevelScreen() {
             onSelect={setChoice}
             onCustom={() => nav.navigate('GuardCustom')}
             custom={customValues}
-            sendOnly={smart}
             disabled={!now || busy != null || sending != null}
             loading={busy === 'level' ? choice : sending}
           />
         </SettingsGroup>
         {refused ? <Text style={[styles.note, {color: c.danger}]}>{t('mobile.vault.timelock_needs_limits')}</Text> : null}
         <View style={styles.confirmArea}>
-          {changed && !refused && !smart ? <NetworkFee /> : null}
-          <Button title={t('vault.confirm')} onPress={confirm} loading={busy === 'level' || sending != null} disabled={!changed || refused || !ready || sending != null} />
+          {/* Face ID and the fee on the button itself, as Custom's: one confirm, no sheet after it. */}
+          <ConfirmButton onPress={confirm} loading={busy === 'level' || sending != null} disabled={!changed || refused || !ready || sending != null} gas={relayGasFor({})} fee={changed && !refused} />
         </View>
       </ScrollView>
       {sheet}
-      {acct.sheet}
     </View>
   );
 }

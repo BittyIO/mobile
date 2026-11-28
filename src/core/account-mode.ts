@@ -1,11 +1,10 @@
 import {create} from 'zustand';
 import {MMKV} from 'react-native-mmkv';
 import type {Address} from 'viem';
-import {isTronNetwork, type Network} from '@/core/chain';
+import type {Network} from '@/core/chain';
 import {useNetwork} from '@/core/network-store';
 import {keyIndexOf, phraseOf, useVaults, vaultNumber, type VaultRef} from '@/core/vault-store';
 import {vaultAddressOf} from '@/core/active-vault';
-import {hasTronAccount, tronAccountAddress} from '@/core/tron-account';
 
 /**
  * Which of an entry's two accounts is in front: its VAULT (the contract, which the relayer pays
@@ -20,13 +19,9 @@ import {hasTronAccount, tronAccountAddress} from '@/core/tron-account';
  * Per network AND entry, kept on the phone; unset follows {useDefaultAccount}, the kind last
  * switched to (the general wallet until the first switch).
  */
-export type AccountKind = 'vault' | 'wallet' | 'account';
-/**
- * What is kept: the smart side ('vault') or the wallet. On Tron the smart side is the entry's
- * BittyAccount ('account', core/tron-account) rather than a BittyVault, so a choice made on one
- * chain carries to the other.
- */
-type SavedKind = 'vault' | 'wallet';
+export type AccountKind = 'vault' | 'wallet';
+/** What is kept: the smart side ('vault') or the wallet, every chain alike. */
+type SavedKind = AccountKind;
 
 const store = new MMKV({id: 'bitty.account-mode'});
 /**
@@ -161,22 +156,15 @@ const activeRef = (s: ReturnType<typeof useVaults.getState>) => s.vaults.find((v
 
 /** The kind in front for `v` on `network`: what was chosen, or the chain's default — never a wallet it has not got. */
 function kindFor(wallet: Address | null, network: Network, modes: Record<string, SavedKind>, fallback: SavedKind): AccountKind {
-  if (isTronNetwork(network)) {
-    // Tron's smart side is the BittyAccount, where the network has its factory; else the wallet only.
-    if (!wallet || !hasTronAccount(network)) return 'wallet';
-    return (modes[keyOf(network, wallet)] ?? fallback) === 'wallet' ? 'wallet' : 'account';
-  }
   if (!wallet) return 'vault';
   return modes[keyOf(network, wallet)] ?? fallback;
 }
 
 export type ActiveAccount = {
   kind: AccountKind;
-  /** The address the page is about: the vault's, the account's or the wallet's. Null while it is not known yet. */
+  /** The address the page is about: the vault's or the wallet's. Null while it is not known yet. */
   address: Address | null;
   vault: Address | null;
-  /** Tron: the wallet key's BittyAccount (created or not); null elsewhere. */
-  account: Address | null;
   wallet: Address | null;
   /** The entry has both, so the switch is offered. */
   canSwitch: boolean;
@@ -194,10 +182,8 @@ function accountOf(
   const key = walletAddressOf(v, vaults);
   const wallet = key && !hidden.includes(key.toLowerCase()) ? key : null;
   const kind = kindFor(wallet, network, modes, fallback);
-  // The account is the KEY's (an imported key's too); a Safe entry has no key and so none.
-  const account = wallet && isTronNetwork(network) ? tronAccountAddress(network, wallet) : null;
-  const address = kind === 'wallet' ? wallet : kind === 'account' ? account : vault;
-  return {kind, address, vault, wallet, account, canSwitch: !!wallet && (!isTronNetwork(network) || !!account)};
+  const address = kind === 'wallet' ? wallet : vault;
+  return {kind, address, vault, wallet, canSwitch: !!wallet};
 }
 
 /** The account in front on `network`, read now — for code that is not a component. */

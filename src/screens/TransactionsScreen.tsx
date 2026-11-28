@@ -32,6 +32,7 @@ import {GPV2_SETTLEMENT, fetchRecentOrders, type CowOrder} from '@/vault/limit';
 
 import {currentCatalog} from '@/core/asset-catalog';
 import {openLink} from '@/core/open-link';
+import {CopyButton} from '@/components/CopyButton';
 import {attemptTrade, isFailure, useVaultAttempts, wasSent, type Attempt} from '@/vault/attempts';
 import {formatNative} from '@/vault/direct';
 import {formatUnits} from 'viem';
@@ -401,12 +402,12 @@ function Op({
     <Pressable style={styles.op} onPress={() => openLink(explorer + (isTronNetwork(network) ? op.txHash.replace(/^0x/, '') : op.txHash), isTronNetwork(network) ? 'Tronscan' : 'Etherscan')}>
       {v.parts.map((part, i) => (
         <View key={`${op.txHash}-${i}`} style={i > 0 ? styles.partGap : undefined}>
-          {/* The title owns the line. It shared it with the timestamp until a Russian
-              "Вывести из Гибкого кредитования" ran into the date and pushed it off the row;
-              the timestamp moved to the footer, where it belongs anyway — it describes the
-              transaction, not this one part of it. */}
-          <View style={[styles.opHeader, i === 0 && onManager ? styles.opHeaderRow : null]}>
+          {/* The date at the top right of the first line: it describes the transaction, not one
+              part of it, so only the first part carries it. The title wraps beside it rather than
+              running into it (a Russian "Вывести из Гибкого кредитования" once pushed it off). */}
+          <View style={[styles.opHeader, i === 0 ? styles.opHeaderRow : null]}>
             <Text style={[styles.title, styles.flex]}>{part.title}</Text>
+            {i === 0 ? <Text style={styles.headDate}>{fmtDate(op.timestamp, language)}</Text> : null}
             {i === 0 && onManager ? (
               <Pressable hitSlop={10} onPress={onManager} accessibilityLabel={t('mobile.actions.by_asset_manager')}>
                 <SettingsIcon name="delegation" size={22} round />
@@ -444,7 +445,6 @@ function Op({
           {/* The gasless relay fee, split out of the transfer legs so it never inflates a send, is
               shown on every row: it left the vault, whatever the operation was. No minus: beside
               the gas mark a fee is only ever a cost. */}
-          <Text style={styles.date}>{fmtDate(op.timestamp, language)}</Text>
           {/* An activation's fee is its network fee, shown like any other. */}
           {v.fee ? (
             <>
@@ -459,7 +459,10 @@ function Op({
             <OwnerFee fee={op.ownerFee} />
           ) : null}
         </View>
-        <Text style={styles.link}>{t('mobile.home.view')} ↗</Text>
+        <View style={styles.txid}>
+          <Text style={styles.link}>{shortTxid(op.txHash, network)}</Text>
+          <CopyButton address={fullTxid(op.txHash, network)} size={13} />
+        </View>
       </View>
     </Pressable>
   );
@@ -517,8 +520,9 @@ function FailedOp({tx, explorer, network}: {tx: Attempt; explorer: string; netwo
       style={styles.op}
       disabled={!onChain}
       onPress={onChain ? () => openLink(explorer + (isTronNetwork(network) ? tx.txHash!.replace(/^0x/, '') : tx.txHash), isTronNetwork(network) ? 'Tronscan' : 'Etherscan') : undefined}>
-      <View style={styles.opHeader}>
-        <Text style={styles.title}>{title}</Text>
+      <View style={[styles.opHeader, styles.opHeaderRow]}>
+        <Text style={[styles.title, styles.flex]}>{title}</Text>
+        <Text style={styles.headDate}>{fmtDate(new Date(tx.at * 1000).toISOString(), language)}</Text>
       </View>
       {/* The legs, drawn exactly as a completed swap's are — same icons, same arrow, same
           metrics — because it is the same kind of event and the only difference is how it ended.
@@ -553,16 +557,27 @@ function FailedOp({tx, explorer, network}: {tx: Attempt; explorer: string; netwo
         </Text>
       ) : null}
       <View style={styles.footer}>
-        <View style={styles.meta}>
-          {/* Through {fmtDate}, like every other row: a bare toLocaleString prints
-              "10/8/2026, 10:25:35 PM" against the "8 Oct, 22:25" above it, which reads as a
-              different kind of row rather than the same row with a worse outcome. */}
-          <Text style={styles.date}>{fmtDate(new Date(tx.at * 1000).toISOString(), language)}</Text>
-        </View>
-        {onChain ? <Text style={styles.link}>{t('mobile.home.view')} ↗</Text> : null}
+        <View style={styles.meta} />
+        {onChain ? (
+          <View style={styles.txid}>
+            <Text style={styles.link}>{shortTxid(tx.txHash!, network)}</Text>
+            <CopyButton address={fullTxid(tx.txHash!, network)} size={13} />
+          </View>
+        ) : null}
       </View>
     </Pressable>
   );
+}
+
+/**
+ * The transaction's id, shortened to its ends ("0x5bc8fd5056…f856858b"): the link to the explorer, in blue.
+ * Tron's is written without the 0x, as Tronscan writes it.
+ */
+const fullTxid = (hash: string, network: Network): string => (isTronNetwork(network) ? hash.replace(/^0x/, '') : hash);
+
+function shortTxid(hash: string, network: Network): string {
+  const h = fullTxid(hash, network);
+  return h.length > 22 ? `${h.slice(0, 12)}…${h.slice(-8)}` : h;
 }
 
 export function TransactionsScreen() {
@@ -574,8 +589,6 @@ export function TransactionsScreen() {
   // The account in front: the vault's history, or in wallet mode the wallet's.
   const account = useActiveAccount(network);
   const vault = account.address;
-  // The Tron smart wallet: its transfers as a wallet's, and each batch it ran named from its own
-  // events (vault/transactions fetchAccountTransactions).
   const {ops, loading, error, refresh} = useVaultTransactions(vault, network, account.kind);
   // A multisig vault: what its owners still have to sign is its own category, and the one it opens on.
   const active = useVaults((s) => s.vaults.find((v) => v.index === s.activeIndex));
@@ -833,7 +846,8 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   content: {flexGrow: 1, padding: 16, gap: 16, paddingBottom: 32},
   op: {backgroundColor: c.card, borderRadius: 20, padding: 18, gap: 12},
   opHeader: {marginBottom: 10},
-  opHeaderRow: {flexDirection: 'row', alignItems: 'center', gap: 10},
+  opHeaderRow: {flexDirection: 'row', alignItems: 'flex-start', gap: 10},
+  headDate: {color: c.subtext, fontSize: 12, lineHeight: 20, flexShrink: 0},
   flex: {flex: 1},
   managerSheet: {paddingHorizontal: 16, paddingVertical: 8, gap: 12},
   managerText: {color: c.text, fontSize: 15, lineHeight: 21},
@@ -845,7 +859,6 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   partGap: {marginTop: 14, gap: 8},
   titleRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
   title: {color: c.text, fontSize: 15, fontWeight: '400'},
-  date: {color: c.subtext, fontSize: 12},
   swapRow: {flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap'},
   swapSide: {flexDirection: 'row', alignItems: 'center', gap: 6},
   swapText: {color: c.text, fontSize: 15, fontVariant: ['tabular-nums']},
@@ -862,7 +875,8 @@ const makeStyles = (c: Colors) => StyleSheet.create({
   // Timestamp and fee together on the left; the fee is a pump and a number, no label.
   meta: {flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1},
   fee: {color: c.subtext, fontSize: 12, fontVariant: ['tabular-nums']},
-  link: {color: c.accent, fontSize: 12, fontWeight: '600'},
+  link: {color: c.accent, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums']},
+  txid: {flexDirection: 'row', alignItems: 'center', gap: 6},
   note: {color: c.subtext, fontSize: 14},
   more: {paddingVertical: 8},
   err: {color: c.danger, fontSize: 13},

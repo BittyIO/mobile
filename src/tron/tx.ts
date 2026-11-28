@@ -103,14 +103,15 @@ export type RefBlock = {blockID: string; timestamp: number};
  * The raw transaction bytes (what is hashed and signed).
  *
  * Expiry is a minute past the reference block, the node default: long enough to broadcast, short
- * enough that a transaction that did not go out cannot be replayed into the chain later.
+ * enough that a transaction that did not go out cannot be replayed into the chain later. A
+ * transaction handed to someone else to broadcast (tron/usdt-gas) asks for longer.
  */
-export function encodeRaw(call: TronCall, ref: RefBlock, opts: {feeLimitSun?: bigint; now?: number; memo?: string} = {}): Uint8Array {
+export function encodeRaw(call: TronCall, ref: RefBlock, opts: {feeLimitSun?: bigint; now?: number; memo?: string; expiresInMs?: number} = {}): Uint8Array {
   const id = ref.blockID;
   const raw = [
     ...fBytes(1, fromHex(id.slice(12, 16))), // ref_block_bytes: bytes 6–7 of the block number
     ...fBytes(4, fromHex(id.slice(16, 32))), // ref_block_hash: bytes 8–15 of the block id
-    ...fInt(8, BigInt(ref.timestamp + 60_000)), // expiration
+    ...fInt(8, BigInt(ref.timestamp + (opts.expiresInMs ?? 60_000))), // expiration
     // data: the transaction's note (memo), UTF-8. Tron burns its memo fee (1 TRX) for it.
     ...(opts.memo ? fBytes(10, [...memoBytes(opts.memo)]) : []),
     ...fBytes(11, contractOf(call)),
