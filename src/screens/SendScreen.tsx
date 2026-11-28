@@ -327,16 +327,23 @@ export function SendScreen({anyone = false}: {anyone?: boolean} = {}) {
     [assets, bal.balances, pos.positions, custom.tokens, prices],
   );
 
-  // What the recipient starts with: EVERY funded source of one token — a stablecoin the vault holds,
+  // What the recipient starts with: USDT where the chain has it, with every funded source of it (or a
+  // blank line when there is none). Elsewhere EVERY funded source of one token — a stablecoin the vault holds,
   // since that is what people send — so a vault with free, yielding and supplied USDC opens with all
   // three lines ready and nothing to add by hand. Falls back to any funded token, then to a blank
   // line on the first asset.
   const defaultLines = useMemo<Line[]>(() => {
+    // USDT first, on every chain that has it, even with none in the vault: it is what people send.
+    const usdt = assets.find((a) => a.symbol === 'USDT');
     const funded = sourceOptions.filter((o) => worth(o) && !o.queued);
+    if (usdt) {
+      const lines = funded.filter((o) => o.asset.symbol === 'USDT').map((o) => newLine(o.asset.symbol, o.source));
+      return lines.length ? lines : [newLine('USDT')];
+    }
     const pick = funded.find((o) => o.asset.kind === 'stable') ?? funded[0];
     if (!pick) return [newLine(first)];
     return funded.filter((o) => o.asset.symbol === pick.asset.symbol).map((o) => newLine(o.asset.symbol, o.source));
-  }, [sourceOptions, first]);
+  }, [sourceOptions, first, assets]);
 
   // Until the user edits the token lines, the recipient tracks that set.
   //

@@ -4,10 +4,6 @@ import type {Network} from '@/core/chain';
 import {getRiskConfig} from '@/vault/risk';
 import {usePending} from '@/vault/pending';
 import {guardShieldOf, type ShieldKind} from '@/core/new-vault-defaults';
-import {useActiveAccount} from '@/core/account-mode';
-import {readGuard} from '@/account/guard';
-import {accountRiskValues} from '@/account/guard-evm';
-import {useAccountWrites} from '@/account/writes';
 
 /** The Guard level read for each vault, shared: the corner's shield and Overview's dot agree. */
 const useShieldKinds = create<{levels: Record<string, ShieldKind>; put: (key: string, level: ShieldKind) => void}>((set) => ({
@@ -25,20 +21,9 @@ export function useGuardLevel(vault: string | null | undefined, network: Network
   const key = vault ? `${network}:${vault.toLowerCase()}` : '';
   const level = useShieldKinds((s) => (key ? s.levels[key] : undefined));
   const settled = usePending((s) => s.txs.filter((x) => x.status !== 'pending').length);
-  // The Tron smart wallet: its level from its own timelock and limit.
-  const smart = useActiveAccount(network).kind === 'account';
-  const acctWrites = useAccountWrites((s) => s.n);
   useEffect(() => {
     if (!vault) return;
     let live = true;
-    if (smart) {
-      readGuard(network, vault as `0x${string}`)
-        .then((g) => live && useShieldKinds.getState().put(key, guardShieldOf(accountRiskValues(g))))
-        .catch(() => {});
-      return () => {
-        live = false;
-      };
-    }
     getRiskConfig(vault as `0x${string}`, network)
       .then((r) => {
         if (live && r.read) useShieldKinds.getState().put(key, guardShieldOf(r));
@@ -47,6 +32,6 @@ export function useGuardLevel(vault: string | null | undefined, network: Network
     return () => {
       live = false;
     };
-  }, [vault, network, key, settled, nonce, smart, acctWrites]);
+  }, [vault, network, key, settled, nonce]);
   return level ?? null;
 }

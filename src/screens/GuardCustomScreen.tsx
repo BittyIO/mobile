@@ -11,13 +11,10 @@ import {sameGuardValues, type GuardValues} from '@/core/new-vault-defaults';
 import {valuesInForce} from '@/core/safety-levels';
 import {useActiveVaultAddress} from '@/core/active-vault';
 import {useNetwork} from '@/core/network-store';
-import {getRiskConfig, needsLimits, updateRiskSettings} from '@/vault/risk';
+import {getRiskConfig, needsLimits, riskBoundsFor, updateRiskSettings} from '@/vault/risk';
+import {useVaultGate} from '@/vault/gate';
 import {NO_LIMIT} from '@/vault/capabilities';
-import {useAccountQuote, useAccountWrite} from '@/account/useAccountWrite';
 import {ConfirmButton} from '@/components/Button';
-import {formatUnits} from 'viem';
-import {readGuard, type AccountGuard} from '@/account/guard';
-import {accountRiskValues, guardLevelCalls, rememberGuardBatch} from '@/account/guard-evm';
 import {useT} from '@/i18n';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {noteCustomSent} from './GuardLevelScreen';
@@ -45,25 +42,8 @@ export function GuardCustomScreen() {
   const [now, setNow] = useState<GuardValues | null>(null);
   const [values, setValues] = useState<GuardValues | null>(null);
   const [editing, setEditing] = useState<keyof GuardValues | null>(null);
-  // The Tron smart wallet: the timelock and its one daily limit, set on the account and relayed.
-  const acct = useAccountWrite(() => nav.goBack());
-  const smart = acct.account != null;
-  const [guard, setGuard] = useState<AccountGuard | null>(null);
   useFocusEffect(
     useCallback(() => {
-      if (acct.account) {
-        let live = true;
-        readGuard(network, acct.account).then((g) => {
-          if (!live) return;
-          setGuard(g);
-          const inForce = accountRiskValues(g);
-          setNow(inForce);
-          setValues((cur) => cur ?? inForce);
-        });
-        return () => {
-          live = false;
-        };
-      }
       if (!vault) return;
       let live = true;
       getRiskConfig(vault, network).then((r) => {
@@ -77,27 +57,20 @@ export function GuardCustomScreen() {
       return () => {
         live = false;
       };
-    }, [vault, network, acct.account]),
+    }, [vault, network]),
   );
+  // Only what this vault takes: one before 1.1.1 has no "none" timelock, no $0 and no "no limit".
+  const version = useVaultGate().vaultVersion;
+  const choicesFor = (f: keyof GuardValues) => {
+    const b = riskBoundsFor(version, f);
+    return CHOICES[f].filter((v) => v >= b.min && v <= b.max);
+  };
   const vw = useVaultWrite(() => nav.goBack());
-  const busy = smart ? acct.busy : vw.busy;
-  const ready = smart ? acct.ready : vw.ready;
+  const {busy, ready} = vw;
   const changed = values != null && now != null && !sameGuardValues(values, now);
   // Above none, a timelock needs both limits to be amounts: the vault refuses the mix otherwise.
-  const refused = !smart && values != null && needsLimits(values);
-  // The smart wallet's batch for what is chosen, priced as it changes: the fee on Confirm itself.
-  const batch = smart && changed && acct.account && guard && values ? guardLevelCalls(network, acct.account, guard, values) : null;
-  const priced = useAccountQuote(batch?.calls ?? null);
+  const refused = values != null && needsLimits(values);
   const confirm = () => {
-    if (smart) {
-      const a = acct.account;
-      if (!a || !batch || !priced.quote || !values) return;
-      const queued = batch.queued;
-      return void acct.runQuoted('custom', t('mobile.vault.change_guard_config'), batch.calls, priced.quote, () => {
-        if (queued) rememberGuardBatch(network, a, queued);
-        else noteCustomSent(values);
-      });
-    }
     // The fee is on Confirm itself, so no sheet before it: Face ID, then the toast.
     return (
     values &&
@@ -112,42 +85,33 @@ export function GuardCustomScreen() {
   return (
     <View style={styles.fill}>
       <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
-        {values ? <GuardParams values={values} onEdit={busy ? undefined : setEditing} sendOnly={smart} /> : null}
+        {values ? <GuardParams values={values} onEdit={busy ? undefined : setEditing} /> : null}
         {refused ? <Text style={[styles.note, {color: c.danger}]}>{t('mobile.vault.timelock_needs_limits')}</Text> : null}
         <View style={styles.confirmArea}>
-          {smart && priced.error ? <Text style={[styles.note, {color: c.danger}]}>{`${t('mobile.account.fee_failed')} (${priced.error})`}</Text> : null}
           <ConfirmButton
             onPress={confirm}
             loading={busy === 'custom'}
-            disabled={!changed || refused || !ready || (smart && !priced.quote)}
-            fee={changed && !refused && (!smart || !!priced.quote)}
-            networkFeeUsd={smart && priced.quote ? Number(formatUnits(priced.quote.fee, 6)) : undefined}
-            pricing={smart && priced.pricing}
+            disabled={!changed || refused || !ready}
+            fee={changed && !refused}
           />
         </View>
       </ScrollView>
       <TimelockSheet
         visible={editing === 'timelock'}
         value={values?.timelock ?? 0n}
+        presets={choicesFor('timelock')}
         onSelect={(v) => setValues((cur) => (cur ? {...cur, timelock: v} : cur))}
         onClose={() => setEditing(null)}
       />
       <PickerSheet
         visible={editing !== null && editing !== 'timelock'}
         title={editing ? t(RISK_TITLE[editing]) : ''}
-        items={editing ? CHOICES[editing].map((v) => ({key: String(v), label: fmtRiskValue(editing, v, t)})) : []}
+        items={editing ? choicesFor(editing).map((v) => ({key: String(v), label: fmtRiskValue(editing, v, t)})) : []}
         selected={editing && values ? String(values[editing]) : undefined}
-        // The smart wallet's one limit stands for both of the vault's: kept alike.
-        onSelect={(k) =>
-          editing &&
-          setValues((v) =>
-            v ? (smart && editing !== 'timelock' ? {...v, sendDailyAllowance: BigInt(k), marketTradeDailyLossAllowance: BigInt(k)} : {...v, [editing]: BigInt(k)}) : v,
-          )
-        }
+        onSelect={(k) => editing && setValues((v) => (v ? {...v, [editing]: BigInt(k)} : v))}
         onClose={() => setEditing(null)}
       />
       {vw.sheet}
-      {acct.sheet}
     </View>
   );
 }
@@ -159,11 +123,10 @@ const MAX_TIMELOCK_DAYS = 30;
  * The timelock's choices: none, the usual day counts, and Custom, where any whole number of days
  * from 1 to {MAX_TIMELOCK_DAYS} is typed in.
  */
-function TimelockSheet({visible, value, onSelect, onClose}: {visible: boolean; value: bigint; onSelect: (v: bigint) => void; onClose: () => void}) {
+function TimelockSheet({visible, value, presets, onSelect, onClose}: {visible: boolean; value: bigint; presets: bigint[]; onSelect: (v: bigint) => void; onClose: () => void}) {
   const {t} = useT();
   const c = useColors();
   const styles = useStyles(makeStyles);
-  const presets = CHOICES.timelock;
   const isCustom = !presets.includes(value);
   const [typing, setTyping] = useState(false);
   const [days, setDays] = useState('');

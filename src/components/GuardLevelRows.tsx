@@ -3,13 +3,15 @@ import {Animated, Easing, StyleSheet, Text, View} from 'react-native';
 import {OptionRow, SettingsGroup, SettingsRow} from '@/components/SettingsRow';
 import {Sheet} from '@/components/Sheet';
 import {useVaultGate} from '@/vault/gate';
+import {useNetwork} from '@/core/network-store';
+import {isTronNetwork} from '@/core/chain';
 import {isOpenRiskVersion} from '@/vault/risk';
 import {versionAtLeast} from '@/vault/capabilities';
 import {BRIDGE_SINCE} from '@/vault/bridge';
 import {useStyles, type Colors} from '@/theme';
 import {GuardShield} from '@/components/GuardShield';
 import {RISK_TITLE, fmtRiskValue, riskHintKey, riskWhyKey} from '@/components/riskFormat';
-import {GUARD_LEVELS, GUARD_LEVEL_LIST, guardShieldOf, type GuardLevel, type GuardValues} from '@/core/new-vault-defaults';
+import {GUARD_LEVELS, GUARD_LEVEL_LIST, guardShieldOf, guardValuesFor, type GuardLevel, type GuardValues} from '@/core/new-vault-defaults';
 import {useT} from '@/i18n';
 
 export type GuardChoice = GuardLevel | 'custom';
@@ -24,7 +26,6 @@ export function GuardLevelRows({
   custom,
   disabled,
   loading,
-  sendOnly,
 }: {
   selected: GuardChoice | null;
   onSelect: (choice: GuardChoice) => void;
@@ -35,17 +36,20 @@ export function GuardLevelRows({
   disabled?: boolean;
   /** The choice being written: a spinner in place of its mark. */
   loading?: GuardChoice | null;
-  /** Only the timelock and the send limit: the Tron smart wallet, which has no trading limit. */
-  sendOnly?: boolean;
 }) {
   const {t} = useT();
-  const choices: GuardChoice[] = custom ? [...GUARD_LEVEL_LIST, 'custom'] : GUARD_LEVEL_LIST;
+  // A vault before 1.1.1 refuses a 0 timelock, so None is not offered on it. Highest ($0 limits,
+  // taken from 1.0.5) is offered on Tron's older vaults; elsewhere only from 1.1.1.
+  const open = isOpenRiskVersion(useVaultGate().vaultVersion);
+  const tron = isTronNetwork(useNetwork((s) => s.network));
+  const levels = open ? GUARD_LEVEL_LIST : GUARD_LEVEL_LIST.filter((l) => l !== 0 && (l !== 4 || tron));
+  const choices: GuardChoice[] = custom ? [...levels, 'custom'] : levels;
   return (
     <>
       {choices.map((l, i) => (
         <OptionRow
           key={String(l)}
-          leading={<GuardShield level={guardShieldOf(l === 'custom' ? custom! : GUARD_LEVELS[l])} size={30} />}
+          leading={<GuardShield level={guardShieldOf(l === 'custom' ? custom! : guardValuesFor(l, open))} size={30} />}
           title={t(`mobile.vault.guard_level_${l}`)}
           // The security delay beside the name; the panel under the chosen level has the two limits.
           // Who each level is for, beside its name — Highest is for earning only.
@@ -53,7 +57,7 @@ export function GuardLevelRows({
           // The chosen level shows what it sets, under its name.
           below={
             <Expand open={selected === l}>
-              <LevelValues values={l === 'custom' ? custom! : GUARD_LEVELS[l]} sendOnly={sendOnly} />
+              <LevelValues values={l === 'custom' ? custom! : guardValuesFor(l, open)} />
             </Expand>
           }
           // Under the title, past the 30-point shield and the row's 12-point gap.
@@ -109,12 +113,12 @@ function DelayDays({seconds}: {seconds: bigint}) {
 }
 
 /** A level's security delay and both daily limits, as lines under its name. */
-function LevelValues({values, sendOnly}: {values: GuardValues; sendOnly?: boolean}) {
+function LevelValues({values}: {values: GuardValues}) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   return (
     <View style={styles.values}>
-      {FIELDS.filter(({field}) => !sendOnly || field !== 'marketTradeDailyLossAllowance').map(({field}) => (
+      {FIELDS.map(({field}) => (
         <View key={field} style={styles.valueLine}>
           <Text style={styles.valueLabel} numberOfLines={2}>
             {field === 'marketTradeDailyLossAllowance'
@@ -142,7 +146,7 @@ const FIELDS: {field: Field; icon: 'timelock' | 'sendNew' | 'dailyLimit'}[] = [
  * What a level sets: the timelock and both daily limits, each with an ⓘ explaining it as its own page
  * does. With `onEdit` (Custom) each row opens a choice.
  */
-export function GuardParams({values, onEdit, sendOnly}: {values: GuardValues; onEdit?: (field: Field) => void; sendOnly?: boolean}) {
+export function GuardParams({values, onEdit}: {values: GuardValues; onEdit?: (field: Field) => void}) {
   const {t} = useT();
   const styles = useStyles(makeStyles);
   const version = useVaultGate().vaultVersion;
@@ -160,7 +164,7 @@ export function GuardParams({values, onEdit, sendOnly}: {values: GuardValues; on
         ) : null}
       </Sheet>
       <SettingsGroup>
-      {FIELDS.filter(({field}) => !sendOnly || field !== 'marketTradeDailyLossAllowance').map(({field, icon}, i, shown) => (
+      {FIELDS.map(({field, icon}, i) => (
         <SettingsRow
           key={field}
           icon={icon}
@@ -171,7 +175,7 @@ export function GuardParams({values, onEdit, sendOnly}: {values: GuardValues; on
           onPress={onEdit ? () => onEdit(field) : undefined}
           chevron={!!onEdit}
           info={() => setAbout(field)}
-          last={i === shown.length - 1}
+          last={i === FIELDS.length - 1}
         />
       ))}
       </SettingsGroup>

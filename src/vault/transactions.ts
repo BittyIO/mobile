@@ -10,7 +10,6 @@ import {evmToTron, tronToEvm} from '@/tron/address';
 import {fetchSettlements, type SettlementMeta} from './limit';
 import {vaultActionsFor} from './decode-actions';
 import {bridgeHistory, bridgeTxKey} from './bridge';
-import {accountEvents, type AccountEvent} from '@/account/events';
 
 export type TransferRow = {
   txHash: string;
@@ -56,9 +55,8 @@ export type Operation = {
 export async function fetchTransactions(
   vault: string,
   network: Network,
-  kind: 'vault' | 'wallet' | 'account' = 'vault',
+  kind: 'vault' | 'wallet' = 'vault',
 ): Promise<Operation[]> {
-  if (isTronNetwork(network) && kind === 'account') return fetchAccountTransactions(vault, network);
   if (isTronNetwork(network)) return fetchTronTransactions(vault, network, kind === 'wallet');
   if (kind === 'wallet') return fetchWalletTransactions(vault, network);
   const [res, settlements, arrivals] = await Promise.all([
@@ -188,12 +186,18 @@ function ownsCall(op: Operation): boolean {
 export async function tronGridGet(url: string): Promise<Response> {
   for (let attempt = 0; ; attempt++) {
     const res = await apiFetch(url);
-    if (res.status !== 429 || attempt === 3) return res;
+    // TronGrid throttles an unkeyed caller with 429, and past that suspends the address for a while
+    // with 403 ("… suspended for 30s"): both are waited out, not shown as an error.
+    if ((res.status !== 429 && res.status !== 403) || attempt === 3) return res;
     const after = Number(res.headers.get('retry-after'));
-    const waitMs = after > 0 && after <= 10 ? after * 1000 : 1000 * 2 ** attempt;
+    const said = res.status === 403 ? Number(/suspended for (\d+)\s*s/i.exec(await res.clone().text().catch(() => ''))?.[1]) : NaN;
+    const waitMs = after > 0 && after <= 10 ? after * 1000 : said > 0 ? Math.min(said, 10) * 1000 : 1000 * 2 ** attempt;
     await new Promise((r) => setTimeout(r, waitMs));
   }
 }
+
+/** TronGrid still refusing after the retries: busy, not broken, and said so in words. */
+export class TronHistoryBusy extends Error {}
 
 type V1Trc20 ={transaction_id: string; block_timestamp: number; from: string; to: string; value: string; type?: string; token_info?: {address?: string}};
 
@@ -219,6 +223,7 @@ async function fetchTronTransactions(vault: string, network: TronChain, wallet =
     bridgeHistory(vault, network),
     wallet ? tronTrxTransfers(host, vault, network) : Promise.resolve({ops: [] as Operation[], fees: new Map<string, bigint>()}),
   ]);
+  if (res.status === 403 || res.status === 429) throw new TronHistoryBusy(`transfers ${res.status}`);
   if (!res.ok) throw new Error(`transfers ${res.status}`);
   const json = (await res.json()) as {data?: V1Trc20[]};
   const me = vault.toLowerCase();
@@ -278,105 +283,6 @@ async function fetchTronTransactions(vault: string, network: TronChain, wallet =
   }
   return ops.sort((a, b) => b.blockNum - a.blockNum);
 }
-
-/**
- * The Tron smart wallet's (BittyAccount's) history: its transfers, read as a wallet's are, and every
- * batch it ran named from its own events (account/events) — a payee added, the lock, a limit, a stake —
- * the way a vault's rows are named from its calls. A batch that moved nothing but the relayer's fee
- * is still a row, titled by what it did.
- */
-async function fetchAccountTransactions(account: string, network: TronChain): Promise<Operation[]> {
-  const [ops, events] = await Promise.all([
-    fetchTronTransactions(account, network, true),
-    accountEvents(network, account as `0x${string}`).catch(() => [] as AccountEvent[]),
-  ]);
-  const wrapped = knownAssets(network).find((a) => a.symbol === NATIVE_TRX(network).wrapped);
-  const map = new Map(ops.map((o) => [o.txHash.toLowerCase(), o]));
-  for (const e of events) {
-    const hash = `0x${e.transaction_id.replace(/^0x/, '')}`.toLowerCase();
-    let op = map.get(hash);
-    if (!op) {
-      const timestamp = new Date(e.block_timestamp).toISOString();
-      op = {txHash: hash, timestamp, blockNum: e.block_timestamp, legs: [], actions: []};
-      map.set(hash, op);
-    }
-    const r = e.result;
-    const act = (name: string, args: Record<string, string> = {}) => op!.actions.push({name, args});
-    switch (e.event_name) {
-      case 'OwnershipTransferred':
-        if (/^0x0{40}$/i.test(r.previous ?? '')) act('acctActivated');
-        break;
-      case 'OwnershipProposed':
-        act('acctOwnerProposed', {proposed: r.proposed});
-        break;
-      case 'PayeeAdded':
-        act('acctPayeeAdded', {payee: r.payee});
-        break;
-      case 'PayeeRemoved':
-        act('acctPayeeRemoved', {payee: r.payee});
-        break;
-      case 'Locked':
-        act('emergencyLock');
-        break;
-      case 'UnlockRequested':
-        act('acctRequestUnlock');
-        break;
-      case 'Unlocked':
-        act('unlock');
-        break;
-      case 'DailyLimitSet':
-        act('acctDailyLimit', {limit: r.limit, unlimited: r.unlimited});
-        break;
-      case 'TimelockSet':
-        act('acctTimelock', {timelock: r.timelock});
-        break;
-      case 'CallsQueued':
-        act('acctQueued');
-        break;
-      case 'QueuedCancelled':
-        act('acctQueueCancelled');
-        break;
-      case 'QueuedExecuted':
-        act('acctQueueRan');
-        break;
-      case 'Staked':
-        act('acctStaked', {amount: r.amount});
-        break;
-      case 'Unstaked':
-        act('acctUnstaked', {amount: r.amount});
-        break;
-      case 'UnstakedWithdrawn':
-        act('acctWithdrawn', {amount: r.amount});
-        break;
-      case 'EnergyDelegated':
-        act('acctEnergyLent', {receiver: r.receiver});
-        break;
-      case 'EnergyUndelegated':
-        act('acctEnergyBack', {receiver: r.receiver});
-        break;
-      case 'SentTrx':
-        // Paid from inside the contract: an internal transfer, which the TRX feed never lists.
-        if (!op.legs.some((l) => l.assetSymbol === NATIVE_TRX(network).wrapped && l.direction === 'out'))
-          op.legs.push({
-            txHash: op.txHash,
-            direction: 'out',
-            counterparty: r.to?.toLowerCase() ?? null,
-            amount: formatUnits(BigInt(r.amount ?? '0'), NATIVE_TRX(network).decimals),
-            assetSymbol: NATIVE_TRX(network).wrapped,
-            assetAddress: wrapped?.address ?? null,
-            category: 'internal',
-            blockNum: op.blockNum,
-            timestamp: op.timestamp,
-          });
-        break;
-      default:
-        break;
-    }
-  }
-  return [...map.values()].sort((a, b) => b.blockNum - a.blockNum);
-}
-
-const NATIVE_TRX = (network: TronChain) => (require('@/core/chain') as typeof import('@/core/chain')).NATIVE[network];
 
 type V1Tx = {
   txID: string;

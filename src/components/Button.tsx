@@ -10,10 +10,12 @@ import {
 } from 'react-native';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {FaceIdIcon} from '@/components/FaceIdIcon';
-import {NetworkFee, useActivationDue} from '@/components/NetworkFee';
+import {ActivationFees, NetworkFee, useActivationDue} from '@/components/NetworkFee';
 import {ACTIVATION_GAS} from '@/core/activation-fee';
 import {TYPICAL_RELAY_GAS} from '@/vault/fee-quote';
 import {useT} from '@/i18n';
+import {isTronNetwork} from '@/core/chain';
+import {useNetwork} from '@/core/network-store';
 import {LockIcon, useLockLevel} from '@/components/LockNotice';
 import {RentalToggle, type RentalToggleProps} from '@/components/EnergyRental';
 
@@ -164,6 +166,10 @@ function PlainConfirmButton({
   const isDisabled = disabled || loading || lockLevel > 0;
   const due = useActivationDue();
   const activation = activationFee ?? (due ? undefined : null);
+  // Read on every render: a hook behind the `&&` ran only once `due` turned true, and React crashed
+  // on the changed hook count (the Guard level page, as its activation check came back).
+  const network = useNetwork((st) => st.network);
+  const splitActivation = due && activationFee == null && isTronNetwork(network);
   const button = (
     <Pressable
       onPress={onPress}
@@ -201,10 +207,17 @@ function PlainConfirmButton({
   // top of the operation's — and nothing else.
   return (
     <View style={styles.confirmWrap}>
+      {/* Tron, before the smart wallet's first write: the activation's fee at the left, the
+          operation's at the right — two figures, since over the per-operation cap they are two
+          transactions (vault/relay). Elsewhere the one fee, the activation's included. */}
+      {splitActivation ? (
+        <ActivationFees gas={gas ?? TYPICAL_RELAY_GAS} label={t('mobile.fees.activation_label')} />
+      ) : (
       <View style={styles.feeRow}>
         <View />
         {activation !== null ? <NetworkFee gas={(gas ?? TYPICAL_RELAY_GAS) + ACTIVATION_GAS} usd={activation} /> : showFee ? <NetworkFee gas={gas} free={free} usd={networkFeeUsd} /> : null}
       </View>
+      )}
       {button}
     </View>
   );

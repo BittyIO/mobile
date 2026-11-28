@@ -12,7 +12,7 @@
  * a fee being a surprise.
  */
 import type {Address, Hex} from 'viem';
-import {publicClientFor, type Network, NATIVE} from '@/core/chain';
+import {apiFetch, apiUrl, isTronNetwork, publicClientFor, type Network, NATIVE} from '@/core/chain';
 import {PRICE_FEED_ABI} from '@/core/abi';
 import {fetchPrices} from '@/core/prices';
 
@@ -114,10 +114,66 @@ export async function ethUsd(network: Network): Promise<number> {
  * one is twice the other.
  */
 export async function quoteRelayFeeUsd(network: Network, gasUnits = TYPICAL_RELAY_GAS): Promise<number | null> {
+  if (isTronNetwork(network)) return quoteTronRelayFeeUsd(network, gasUnits);
   try {
     const [gasPrice, usd] = await Promise.all([publicClientFor(network).getGasPrice(), ethUsd(network)]);
     const wei = (gasUnits * gasPrice * BigInt(BPS + RELAY_MARGIN_BPS)) / BigInt(BPS);
     return (Number(wei) / 10 ** NATIVE[network].decimals) * usd;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Tron's energy for an operation the gas model above prices. That model is fitted to EVM gas; a
+ * Tron vault relay spends well under half of it — measured on Nile: a settings change or a payee
+ * 61,000–76,000 energy, a send ~71,000, a claim ~148,000 — so two fifths of the gas, which keeps a
+ * typical write at ~70,000.
+ */
+export const tronRelayEnergy = (gasUnits: bigint): bigint => (gasUnits * BigInt(2)) / BigInt(5);
+
+/** A Tron relay's bandwidth, burned as TRX (sun): its ~800–1,300 signed bytes at 1,000 sun a byte. */
+const TRON_RELAY_BANDWIDTH_SUN = BigInt(1_100_000);
+
+/**
+ * The relayer's price for `energy`, in sun an energy, and its margin: what the relay will charge
+ * at, the cheapest energy rental (CatFee or TronSave) when it is below the burn
+ * (web /api/vaults/relay/quote). Null when the server cannot say.
+ */
+export async function relayEnergyPrice(network: Network, energy: bigint): Promise<{price: bigint; marginBps: number} | null> {
+  try {
+    const res = await apiFetch(apiUrl(`/api/vaults/relay/quote?energy=${energy}`, network));
+    if (!res.ok) return null;
+    const j = (await res.json()) as {ok?: boolean; price?: string; marginBps?: number};
+    if (!j?.ok || !j.price) return null;
+    return {price: BigInt(j.price), marginBps: typeof j.marginBps === 'number' ? j.marginBps : RELAY_MARGIN_BPS};
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The relay fee on Tron, in dollars: the energy at the relayer's own price for it (rented when
+ * that is cheaper than burning), the bandwidth, and the relayer's margin on the whole — the sum
+ * relayExec charges. Falls back to the chain's burn price when the server cannot be asked.
+ */
+async function quoteTronRelayFeeUsd(network: Network, gasUnits: bigint): Promise<number | null> {
+  try {
+    const [sun, usd] = await Promise.all([quoteTronRelayFeeSun(network, gasUnits), ethUsd(network)]);
+    return sun == null ? null : (Number(sun) / 10 ** NATIVE[network].decimals) * usd;
+  } catch {
+    return null;
+  }
+}
+
+/** The same relay fee in sun: what a vault paying in TRX (WTRX) is charged. */
+export async function quoteTronRelayFeeSun(network: Network, gasUnits: bigint): Promise<bigint | null> {
+  try {
+    const energy = tronRelayEnergy(gasUnits);
+    const quoted = await relayEnergyPrice(network, energy);
+    const price = quoted?.price ?? (await publicClientFor(network).getGasPrice());
+    const margin = BigInt(quoted?.marginBps ?? RELAY_MARGIN_BPS);
+    return ((energy * price + TRON_RELAY_BANDWIDTH_SUN) * (BigInt(BPS) + margin)) / BigInt(BPS);
   } catch {
     return null;
   }

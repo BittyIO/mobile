@@ -10,8 +10,6 @@ import {vaultAddressOf} from '@/core/active-vault';
 import {ownerVaultAddress} from '@/vault/read';
 import {useNetwork} from '@/core/network-store';
 import {NATIVE, isTronNetwork, type Network} from '@/core/chain';
-import {walletAddressOf} from '@/core/account-mode';
-import {tronAccountAddress} from '@/core/tron-account';
 import {useWallet} from '@/wallet/store';
 import * as keyring from '@/wallet/keyring';
 import {deviceKeys, fetchOneTimeKeyVaults, fetchOwnedVaults, recall, remember, useVaultDirectory, type FoundVault} from '@/vault/owned-vaults';
@@ -494,9 +492,7 @@ export function VaultListScreen() {
   const row = (v: VaultRef, i: number, count: number) => {
     const on = v.index === activeIndex;
     const gone = notYours.has(v.index);
-    // On Tron the smart wallet is the key's own account (core/tron-account), not a derived vault.
-    const tronKey = isTronNetwork(network) ? walletAddressOf(v, allVaults) : null;
-    const address = tronKey ? tronAccountAddress(network, tronKey) : vaultAddressOf(v, network);
+    const address = vaultAddressOf(v, network);
     // A received vault on another chain, with no vault on this one: its own address, the one it has there.
     const elsewhere = !!v.vault && !address;
     const from = v.vault && !elsewhere ? fromOf(v.vault, v.owner) : null;

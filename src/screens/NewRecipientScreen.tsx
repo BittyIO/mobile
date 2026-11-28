@@ -31,9 +31,6 @@ import {usePayeeAdding} from '@/vault/payees';
 import {useColors, useStyles, type Colors} from '@/theme';
 import {useT} from '@/i18n';
 import {useVaultWrite} from '@/components/useVaultWrite';
-import {useAccountWrite} from '@/account/useAccountWrite';
-import {accountBook, accountRiskConfig} from '@/account/guard-evm';
-import {addPayeeCall, readGuard} from '@/account/guard';
 import {addWhitelisted, addWhitelistedOn, fetchWhitelist, type WhitelistedRecipient} from '@/vault/payments';
 import {WHITELIST_STATUS} from '@/core/abi';
 import {GateHint, LockIcon, useLockLevel} from '@/components/LockNotice';
@@ -92,27 +89,15 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
   // the usual reason to type one is to keep using it. Off is a one-off payment that leaves no entry.
   const [addToBook, setAddToBook] = useState(true);
   const [risk, setRisk] = useState<RiskConfig | null>(null);
-  // The Tron smart wallet in front: its timelock, limit, lock and payees, each add relayed.
-  const acct = useAccountWrite(() => nav.goBack());
-  const smart = acct.account != null;
-  const [acctLocked, setAcctLocked] = useState(false);
   useEffect(() => {
-    if (acct.account) {
-      accountRiskConfig(network, acct.account).then(setRisk).catch(() => {});
-      readGuard(network, acct.account).then((g) => setAcctLocked(g.locked)).catch(() => {});
-      return;
-    }
     if (vault) getRiskConfig(vault, network).then(setRisk);
-  }, [vault, network, acct.account]);
+  }, [vault, network]);
   // With sends to new addresses off, a typed address can be paid only if it is already in the book
   // and past its wait — so the book is read to tell.
   const sendsOff = !manage && !!risk?.read && risk.sendDailyAllowance === 0n;
   // Locked, the same holds — the vault pays only the book — and nothing can be added to it.
-  const vaultSendGate = useCapability('send');
-  const vaultAddGate = useCapability('addWhitelistedRecipient');
-  const smartGate = acctLocked ? ({allowed: false, reason: 'locked'} as unknown as typeof vaultAddGate) : ({allowed: true} as typeof vaultAddGate);
-  const sendGate = smart ? smartGate : vaultSendGate;
-  const addGate = smart ? smartGate : vaultAddGate;
+  const sendGate = useCapability('send');
+  const addGate = useCapability('addWhitelistedRecipient');
   const lockLevel = useLockLevel();
   const lockedSends = !manage && !sendGate.allowed && sendGate.reason !== 'send_allowance_off';
   const bookOnly = sendsOff || lockedSends;
@@ -123,12 +108,8 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
   const addsOnChain = manage || (sendsOff && !lockedSends);
   const [book, setBook] = useState<WhitelistedRecipient[]>([]);
   useEffect(() => {
-    if (acct.account) {
-      accountBook(network, acct.account).then(setBook).catch(() => setBook([]));
-      return;
-    }
     if (bookOnly && vault) fetchWhitelist(vault, network).then(setBook).catch(() => setBook([]));
-  }, [bookOnly, vault, network, acct.account]);
+  }, [bookOnly, vault, network]);
 
   /**
    * The user's other smart wallets holding something on this chain: one tap fills the address and,
@@ -155,8 +136,7 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
   }, [vaults, network, vault]);
   const walletName = (n: number) => t('mobile.account.wallet_n', {n});
 
-  const self = acct.account ?? vault;
-  const isSelf = (smart || onChain !== 'here') && !!self && parseAddress(addrNet, draft)?.toLowerCase() === self.toLowerCase();
+  const isSelf = onChain !== 'here' && !!vault && parseAddress(addrNet, draft)?.toLowerCase() === vault.toLowerCase();
   const valid = isPayableAddress(draft, addrNet) && !isSelf;
   /**
    * The key that owns this smart wallet, typed as a payee. Payees are paid with no daily limit, so
@@ -209,10 +189,6 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
       return;
     }
     const listed = book.find((b) => b.recipientAddress.toLowerCase() === to.toLowerCase());
-    if (acct.account && (manage || (addsOnChain && !listed))) {
-      void acct.run('add', `${t('vault.add')} · ${t('vault.address_book')}`, [addPayeeCall(acct.account, to)], undefined, () => markAdding(acct.account!));
-      return;
-    }
     if (manage || (addsOnChain && !listed)) {
       write.run('add', `${t('vault.add')} · ${t('vault.address_book')}`, (base) =>
         addWhitelisted({...base, recipient: to}),
@@ -236,7 +212,7 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
     if (nav.getState().routes.some((r) => r.name === 'Payments')) nav.pop(2);
     else nav.replace('Payments');
   };
-  const canConfirm = valid && (!addsOnChain || ((smart ? acct.ready : write.ready) && addGate.allowed));
+  const canConfirm = valid && (!addsOnChain || (write.ready && addGate.allowed));
 
   // No timelock: a new payee is payable at once, so the Payee after row is left out.
   const noWait = risk?.timelock === 0n;
@@ -358,7 +334,6 @@ export function NewRecipientScreen({manage = false}: {manage?: boolean}) {
         {addsOnChain && !lockedHere ? <GateHint gate={addGate} style={styles.gap} /> : null}
       </Pressable>
       {write.sheet}
-      {acct.sheet}
       <Sheet visible={chainPicker} title={t('mobile.payments.payee_network')} onClose={() => setChainPicker(false)}>
         <ScrollView showsVerticalScrollIndicator={false}>
           {([

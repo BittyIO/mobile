@@ -15,7 +15,7 @@ import type {Signer} from '@/wallet/signer';
 import {apiUrl, CHAIN_ID, isTronNetwork, publicClientFor, type Network} from '@/core/chain';
 import {FORWARDER_ABI, FORWARD_REQUEST_TYPES, VAULT_FWD_ABI, VAULT_MULTICALL_ABI, VAULT_OWNERSHIP_ABI, VAULT_RISK_ABI} from '@/core/abi';
 import {rotationOn} from '@/wallet/rotation-store';
-import {ActivationCallReverted, ActivationFeeTooHigh, ConnectionLost, RelayerUnfunded, isActivated, activateVault, activateVaultDirect, revertData} from './activate';
+import {ACTIVATION_FEE_CAP_USD, ActivationCallReverted, ActivationFeeTooHigh, ConnectionLost, RelayerUnfunded, isActivated, activateVault, activateVaultDirect, activateWithKeyRental, keyCanActivate, planKeyActivation, priceActivation, revertData} from './activate';
 import {displayAddress} from '@/core/address';
 import {formatNative, OwnerGasShort, ownerEthBalance, sendFromOwner} from './direct';
 import {feePayerFor, type FeePayer} from '@/core/fee-payer-store';
@@ -383,6 +383,28 @@ async function viaRelayer(opts: EncodedWrite): Promise<RelayResult> {
   // `calls` batch, so deploy + init + the op all happen in one signed, gasless call. The relayer takes
   // the activation fee FROM the vault — its stable coin, or its ETH from v1.0.3 — so it must hold some.
   if (!(await isActivated(vault, network))) {
+    // On Tron, where the key holds the TRX for it: the key activates the vault itself on rented energy,
+    // the operation riding on it — the cheapest way (vault/activate planKeyActivation). Paid in TRX
+    // from the key, so the per-operation cap does not apply.
+    if (isTronNetwork(network) && account.signTransaction && !account.isContract) {
+      const plan = await planKeyActivation({owner: account.address, network, calls: opts.activationCalls}).catch(() => null);
+      if (plan && (await keyCanActivate(account.address, network, plan))) {
+        const {hash} = await activateWithKeyRental({account, network, plan});
+        await client.waitForTransactionReceipt({hash});
+        return {hash};
+      }
+    }
+    // On Tron, an activation with this operation riding on it that comes to more than a vault may pay
+    // at once is split in two: the activation alone first, then the operation as an ordinary relay —
+    // asked for, since it is two signatures.
+    if (isTronNetwork(network) && opts.activationCalls.length > 0 && (await activationTooHighTogether(opts))) {
+      const t = (key: string, p?: Record<string, string>) => translate(useLanguage.getState().language, key, p);
+      const go = await offerOtherPayer(t('mobile.fees.two_step_title'), t('mobile.fees.two_step_body', {cap: `$${ACTIVATION_FEE_CAP_USD}`}), t('mobile.fees.two_step_button'));
+      if (!go) throw new Error(t('mobile.fees.two_step_cancelled'));
+      const {hash} = await activateVault({account, network, stableCoin: opts.stableCoin, allowlistEnabled: false, calls: []});
+      await client.waitForTransactionReceipt({hash});
+      return viaRelayerActivated(opts);
+    }
     let activationHash: Hex;
     try {
       ({hash: activationHash} = await activateVault({
@@ -414,7 +436,26 @@ async function viaRelayer(opts: EncodedWrite): Promise<RelayResult> {
     await client.waitForTransactionReceipt({hash: activationHash});
     return {hash: activationHash}; // the operation ran as part of activation — nothing else to relay
   }
+  return viaRelayerActivated(opts);
+}
 
+/**
+ * Whether activating with `opts`'s operation riding on it costs more than a vault may pay for one
+ * operation: priced as the activation would be signed, which throws {ActivationFeeTooHigh} then.
+ */
+async function activationTooHighTogether(opts: EncodedWrite): Promise<boolean> {
+  try {
+    await priceActivation({owner: opts.account.address, network: opts.network, stableCoin: opts.stableCoin, allowlistEnabled: false, calls: opts.activationCalls});
+    return false;
+  } catch (e) {
+    return e instanceof ActivationFeeTooHigh;
+  }
+}
+
+/** The relay itself, on a vault already activated. */
+async function viaRelayerActivated(opts: EncodedWrite): Promise<RelayResult> {
+  const {account, vault, network} = opts;
+  const client = publicClientFor(network);
   const forwarder = await readForwarder(client, vault);
 
   const nonce = (await client.readContract({
@@ -620,6 +661,23 @@ function withCode(message: string, reason?: string, code?: string): string {
   return tail ? `${message}\n\n${tail.slice(0, 140)}` : message;
 }
 
+/**
+ * On Tron, the vault's plain TRX wrapped first, in the same transaction.
+ *
+ * On an EVM chain the vault wraps ETH the moment it arrives (its receive()), so it never holds any.
+ * A plain TRX transfer on Tron runs no contract code, so TRX sent to the vault stays unwrapped, while
+ * the balance counts it as WTRX (see {readVaultBalances}) and every action spends WTRX: a stake of
+ * more than the WTRX actually held was refused. `wrapNative()` (open to anyone, a no-op at zero)
+ * goes in front whenever there is TRX to wrap, so the TRX is the WTRX the balance already shows.
+ */
+async function wrapNativeFirst(network: Network, vault: Address, datas: Hex[]): Promise<Hex[]> {
+  if (!isTronNetwork(network)) return datas;
+  const native = await publicClientFor(network)
+    .getBalance({address: vault})
+    .catch(() => 0n);
+  return native > 0n ? [encodeCall({abi: VAULT_RISK_ABI, functionName: 'wrapNative'}), ...datas] : datas;
+}
+
 /** One call, or a multicall of several. */
 const asOneCall = (datas: Hex[]): Hex =>
   datas.length === 1 ? datas[0] : encodeCall({abi: VAULT_MULTICALL_ABI, functionName: 'multicall', args: [datas]});
@@ -664,7 +722,7 @@ export async function relayVaultWrite(opts: {
    */
   upgradeVault?: boolean;
 }): Promise<RelayResult> {
-  const datas = [encodeCall({abi: opts.abi, functionName: opts.functionName, args: opts.args})];
+  const datas = await wrapNativeFirst(opts.network, opts.vault, [encodeCall({abi: opts.abi, functionName: opts.functionName, args: opts.args})]);
   return relayEncoded({
     account: opts.account,
     vault: opts.vault,
@@ -699,7 +757,7 @@ export async function relayVaultMulticall(opts: {
   /** See {relayVaultWrite}. */
   upgradeVault?: boolean;
 }): Promise<RelayResult> {
-  const datas = opts.calls.map(encodeCall);
+  const datas = await wrapNativeFirst(opts.network, opts.vault, opts.calls.map(encodeCall));
   return relayEncoded({
     account: opts.account,
     vault: opts.vault,

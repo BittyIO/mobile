@@ -1,4 +1,4 @@
-import {Linking} from 'react-native';
+import {Linking, NativeModules} from 'react-native';
 import {createNavigationContainerRef} from '@react-navigation/native';
 import type {RootStackParamList} from '@/App';
 
@@ -27,13 +27,20 @@ export const navigationRef = createNavigationContainerRef<RootStackParamList>();
  */
 /**
  * Sites that put a Cloudflare "verifying you are human" check in front of their pages, which never
- * passes inside a WebView: the page sat on the spinner for good. Safari passes it, so these open
- * there — a trip out of the app beats a page that never loads.
+ * passes inside a WebView: the page sat on the spinner for good. Safari passes it, so these open in
+ * an in-app Safari sheet (ios/Bitty/SafariView.swift), and only leave for Safari if that is missing.
  */
 const OPEN_OUTSIDE = /^https?:\/\/([a-z0-9-]+\.)*tronscan\.org(\/|$|[?#])/i;
 
 export function openLink(url: string, title?: string): void {
   const web = /^https?:\/\//i.test(url);
+  if (web && OPEN_OUTSIDE.test(url)) {
+    const safari = NativeModules.SafariView as {open?: (u: string) => Promise<boolean>} | undefined;
+    if (safari?.open) {
+      safari.open(url).catch(() => void Linking.openURL(url).catch(() => {}));
+      return;
+    }
+  }
   if (web && navigationRef.isReady() && !OPEN_OUTSIDE.test(url)) {
     navigationRef.navigate('Browser', {url, title});
     return;

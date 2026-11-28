@@ -3,8 +3,6 @@ import {ScrollView, StyleSheet} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@/App';
-import {useActiveAccount} from '@/core/account-mode';
-import {readGuard} from '@/account/guard';
 import {useT} from '@/i18n';
 import {useStyles, type Colors} from '@/theme';
 import {SettingsRow, SettingsGroup} from '@/components/SettingsRow';
@@ -29,9 +27,6 @@ import {useVaultVersionRow} from '@/components/useVaultVersionRow';
  * phrase. The writes live on the pages the rows open.
  */
 export function SecurityScreen() {
-  // The Tron smart wallet (BittyAccount) has payees, its Guard and its lock, and nothing a vault
-  // has besides: no allow list, no contract upgrade, no asset manager, ownership or new key here.
-  const smart = useActiveAccount(useNetwork((s) => s.network)).kind === 'account';
   const {t} = useT();
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const styles = useStyles(makeStyles);
@@ -71,29 +66,20 @@ export function SecurityScreen() {
   const riskValue = (f: keyof RiskValues) => (risk ? fmtRiskValue(f, risk[f], t) : undefined);
 
   const lockValue = lockLevel == null ? undefined : t(LOCK_TITLE[lockLevel]);
-  // The smart wallet's lock: locked (1) or not (0), read from the account.
-  const acctAddr = useActiveAccount(network).account;
-  const [smartLock, setSmartLock] = useState<0 | 1 | null>(null);
-  useFocusEffect(
-    useCallback(() => {
-      if (smart && acctAddr) readGuard(network, acctAddr).then((g) => setSmartLock(g.locked ? 1 : 0)).catch(() => {});
-    }, [smart, acctAddr, network]),
-  );
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} alwaysBounceVertical contentInsetAdjustmentBehavior="automatic" style={styles.container} contentContainerStyle={styles.body}>
       {/* What the vault may touch and pay, and the contract it runs. */}
       <SettingsGroup>
-        {smart ? null : <SettingsRow icon="allowlist" title={t('mobile.settings.allow_list')} onPress={() => nav.navigate('VaultAssets')} />}
+        <SettingsRow icon="allowlist" title={t('mobile.settings.allow_list')} onPress={() => nav.navigate('VaultAssets')} />
         <SettingsRow icon="whitelist" title={t('mobile.settings.whitelisted_addresses')} onPress={() => nav.navigate('VaultWhitelist')} />
         {/* Guard: the timelock, the two daily limits, and what is waiting out the timelock. */}
-        <SettingsRow icon="guard" title={t('mobile.vault.guard')} onPress={() => nav.navigate('PendingChanges')} last={smart} />
+        <SettingsRow icon="guard" title={t('mobile.vault.guard')} onPress={() => nav.navigate('PendingChanges')} />
         {/* The vault's version and its auto-upgrade switches, the vault's and each protocol's. */}
         {/* The vault's CONTRACT, said as such now that Settings also shows the app's own version. */}
-        {smart ? null : <SettingsRow icon="upgrade" title={t('mobile.settings.contract_upgrade')} value={version.value} onPress={() => nav.navigate('VaultUpgrade')} last />}
+        <SettingsRow icon="upgrade" title={t('mobile.settings.contract_upgrade')} value={version.value} onPress={() => nav.navigate('VaultUpgrade')} last />
       </SettingsGroup>
       {/* Who else may act for it, and handing it to another key. */}
-      {smart ? null : (
       <SettingsGroup>
         {/* No status here: who it is and what is pending live on the asset manager's own page. */}
         <SettingsRow icon="delegation" title={t('mobile.vault.delegation')} onPress={() => nav.navigate('VaultAssetManager')} />
@@ -110,10 +96,9 @@ export function SecurityScreen() {
           />
         )}
       </SettingsGroup>
-      )}
       {/* The last resorts: freezing the vault, and the phrase that restores the key. */}
       <SettingsGroup>
-        <SettingsRow icon={LOCK_ICON[(smart ? smartLock : lockLevel) ?? 0]} title={t('mobile.vault.vault_lock')} value={smart ? (smartLock == null ? undefined : t(LOCK_TITLE[smartLock])) : lockValue} onPress={() => nav.navigate('VaultLock')} />
+        <SettingsRow icon={LOCK_ICON[lockLevel ?? 0]} title={t('mobile.vault.vault_lock')} value={lockValue} onPress={() => nav.navigate('VaultLock')} />
         <SettingsRow
           icon="recovery"
           title={phraseCount > 1 ? t('mobile.phrases.title') : t('mobile.settings.recovery_phrase')}

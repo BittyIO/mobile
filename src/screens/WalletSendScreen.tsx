@@ -1,10 +1,11 @@
-import React, {useEffect, useLayoutEffect, useMemo, useState} from 'react';
+import React, {useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import {formatUnits, parseUnits, type Address} from 'viem';
 import type {RootStackParamList} from '@/App';
 import {isTronNetwork, NATIVE} from '@/core/chain';
+import {ASSETS} from '@/core/assets';
 import {displayAddress, parseAddress} from '@/core/address';
 import {networkLabel, useNetwork} from '@/core/network-store';
 import {useActiveAccount, useHiddenWallets} from '@/core/account-mode';
@@ -15,9 +16,10 @@ import {usePrices} from '@/vault/usePrices';
 import {formatNative} from '@/vault/direct';
 import {useWallet} from '@/wallet/store';
 import {recordSent} from '@/wallet/sent-log';
-import {energyOf, maxNativeSend, planWalletTransfer, sendWalletTransfer, type WalletAsset} from '@/wallet/send';
+import {maxNativeSend, planWalletTransfer, sendWalletTransfer, type WalletAsset} from '@/wallet/send';
 import type {OwnerTxPlan} from '@/vault/direct';
-import {useEnergyRental} from '@/components/EnergyRental';
+import {useUsdtGas} from '@/components/EnergyRental';
+import {useRefreshTick} from '@/components/useRefreshTick';
 import {BookIcon} from '@/components/BookIcon';
 import {ClearBtn} from '@/components/ClearBtn';
 import {AddressInput} from '@/components/AddressInput';
@@ -68,12 +70,14 @@ export function WalletSendScreen() {
         const raw = x.symbol === native.wrapped ? x.raw - b.native.raw : x.raw;
         return {symbol: x.symbol, address: x.address as Address, decimals: x.decimals, raw, label: x.symbol};
       })
-      .filter((x) => x.raw > BigInt(0));
+      // USDT stays on the list at 0: it is the one sent by default.
+      .filter((x) => x.raw > BigInt(0) || x.symbol === 'USDT');
     return [coin, ...tokens];
   }, [bal.balances, native]);
 
   const [toText, setToText] = useState(params?.to ? displayAddress(network, params.to) : '');
-  const [symbol, setSymbol] = useState<string>(params?.symbol ?? native.symbol);
+  // USDT by default, even with none held, where the chain has it; else the chain's coin.
+  const [symbol, setSymbol] = useState<string>(params?.symbol ?? (ASSETS[network].some((a) => a.symbol === 'USDT') ? 'USDT' : native.symbol));
   const [amount, setAmount] = useState('');
   // Tron: a note on the transaction (raw_data.data), which costs the chain's memo fee.
   const [memo, setMemo] = useState('');
@@ -90,7 +94,7 @@ export function WalletSendScreen() {
   const hidden = useHiddenWallets((s) => s.hidden);
   const book = useMemo(() => walletRows(vaults, hidden, 'shown').filter((r) => !from || r.address.toLowerCase() !== from.toLowerCase()), [vaults, hidden, from]);
   const [fee, setFee] = useState<OwnerTxPlan | null>(null);
-  const [feeState, setFeeState] = useState<'idle' | 'busy' | 'failed'>('idle');
+  const [feeState, setFeeState] = useState<'idle' | 'busy'>('idle');
   const [sending, setSending] = useState(false);
 
   const asset = held.find((h) => h.symbol === symbol) ?? held[0];
@@ -122,48 +126,73 @@ export function WalletSendScreen() {
 
 
   // The fee, re-asked whenever what would be sent changes; a little after the last keystroke.
+  //
+  // Priced even before the address and amount are right: a transfer to the wallet itself of what it
+  // can send stands in for whatever is missing, refused or too much, so the fee is on screen from the
+  // start. Only a fee priced on the real address and amount (`feeReal`) can be sent with.
+  const [feeReal, setFeeReal] = useState(false);
+  // Re-asked every few seconds too, while the page is open and nothing is being sent: the fee on the
+  // Confirm button stays current. A refresh keeps the fee on screen until the new one is in.
+  const tick = useRefreshTick(10_000, sending);
+  const feeKey = useRef('');
   useEffect(() => {
-    setFee(null);
-    if (!from || !to || !asset || !raw || raw <= BigInt(0)) {
+    const key = `${network}|${from}|${to}|${asset?.address}|${asset?.raw}|${raw}|${note}`;
+    const refresh = feeKey.current === key;
+    feeKey.current = key;
+    if (!refresh) {
+      setFee(null);
+      setFeeReal(false);
+    }
+    if (!from || !asset) {
       setFeeState('idle');
       return;
     }
-    setFeeState('busy');
+    const real = !!to && !!raw && raw > BigInt(0);
+    const standIn = {to: from, amount: raw && raw > BigInt(0) && raw <= asset.raw ? raw : asset.raw > BigInt(0) && asset.address !== 'native' ? asset.raw : BigInt(0)};
+    if (!refresh) setFeeState('busy');
     let live = true;
-    const id = setTimeout(() => {
-      planWalletTransfer({network, from, to, asset, amount: raw, memo: note})
-        .then((p) => live && (setFee(p), setFeeState('idle')))
-        .catch(() => live && setFeeState('failed'));
-    }, 450);
+    const id = setTimeout(async () => {
+      const plan = (o: {to: Address; amount: bigint}) => planWalletTransfer({network, from, to: o.to, asset, amount: o.amount, memo: note});
+      try {
+        if (real) {
+          const p = await plan({to: to!, amount: raw!}).catch(() => null);
+          if (p) {
+            if (live) (setFee(p), setFeeReal(true), setFeeState('idle'));
+            return;
+          }
+        }
+        const p = await plan({to: to ?? standIn.to, amount: standIn.amount}).catch(() => plan(standIn));
+        if (live) (setFee(p), setFeeState('idle'));
+      } catch {
+        // Nothing to say on the page: the fee line simply waits for the next change.
+        if (live) setFeeState('idle');
+      }
+    }, refresh ? 0 : 450);
     return () => {
       live = false;
       clearTimeout(id);
     };
-  }, [network, from, to, asset, raw, note]);
-
-  /**
-   * Rent the transfer's energy from TronSave instead of burning TRX for it (components/EnergyRental,
-   * at the confirm button's top left). Only for a token transfer, where the network offers it.
-   */
-  const rental = useEnergyRental({
-    network,
-    wallet: from,
-    energy: fee ? energyOf(fee) : null,
-    price: fee?.maxFeePerGas ?? null,
-    bandwidth: fee?.l1Fee ?? null,
-    worst: fee?.cost ?? null,
-    enabled: !!asset && asset.address !== 'native',
-  });
-  const renting = rental.renting;
-  // What the wallet must hold for the fee (the "not enough" check), and the fee shown.
-  const feeCost = rental.needSun;
-  const shownFee = rental.shownSun;
-  const rentReady = rental.ok;
+  }, [network, from, to, asset, raw, note, tick]);
 
   const nativeHeld = held[0]?.raw ?? BigInt(0);
-  const short = !!asset && !!raw && (raw > asset.raw || (feeCost != null && (asset.address === 'native' ? raw + feeCost > nativeHeld : feeCost > nativeHeld)));
-  const shortSymbol = asset && raw && raw > asset.raw ? asset.label : native.symbol;
-  const canSend = !!from && !!to && !!asset && !!raw && raw > BigInt(0) && !!fee && !short && rentReady && !sending;
+  /**
+   * Tron token transfers: rent the energy through Bitty instead of burning TRX for it (tron/usdt-gas,
+   * at the confirm button's top left; the server takes the cheaper of CatFee and TronSave), the fee
+   * paid in TRX, or in USDT for a USDT transfer from a wallet without the TRX. On by default where offered.
+   */
+  const gas = useUsdtGas({network, from, to, token: asset?.address, amount: raw, memo: note, burnSun: fee?.cost ?? null, trxHeld: nativeHeld, tick});
+  const renting = gas.on;
+  // What the wallet must hold in its coin for the fee (the "not enough" check), and the fee shown.
+  const feeCost = renting ? (gas.trxNeed ?? BigInt(0)) : (fee?.cost ?? null);
+  const shownFee = renting ? gas.trxFee : (fee?.cost ?? null);
+
+  // Paying in USDT: the transfer and its fee both come out of the USDT.
+  const usdtShort = renting && !!asset && !!raw && gas.usdtFee != null && raw + gas.usdtFee > asset.raw;
+  const short =
+    !!asset && !!raw && (raw > asset.raw || usdtShort || (feeCost != null && (asset.address === 'native' ? raw + feeCost > nativeHeld : feeCost > nativeHeld)));
+  const shortSymbol = asset && raw && (raw > asset.raw || usdtShort) ? asset.label : native.symbol;
+  const priced = renting ? !!gas.quote : !!fee && feeReal;
+  const canSend = !!from && !!to && !!asset && !!raw && raw > BigInt(0) && priced && !short && gas.ok && !sending;
 
   const setMax = async () => {
     if (!asset || !from) return;
@@ -178,7 +207,7 @@ export function WalletSendScreen() {
     const tx = showTx(`${t('vault.send')} ${fmtShort(Number(formatUnits(raw, asset.decimals)))} ${asset.label}`, network);
     try {
       const signer = await useWallet.getState().walletSigner();
-      const {hash} = await sendWalletTransfer({account: signer, network, from, to, asset, amount: raw, memo: note || undefined, ...(renting ? {plan: fee ?? undefined, rent: rental.quote!} : {})});
+      const {hash} = await sendWalletTransfer({account: signer, network, from, to, asset, amount: raw, memo: note || undefined, ...(renting && gas.quote && gas.feeIn ? {rented: {quote: gas.quote, feeIn: gas.feeIn}} : {})});
       recordSent({
         hash,
         network,
@@ -200,7 +229,12 @@ export function WalletSendScreen() {
     }
   };
 
-  const feeUsd = shownFee != null ? usdValue(Number(formatUnits(shownFee, native.decimals)), native.wrapped, prices) : null;
+  const feeUsd =
+    gas.usdtFee != null
+      ? Number(formatUnits(gas.usdtFee, 6))
+      : shownFee != null
+      ? usdValue(Number(formatUnits(shownFee, native.decimals)), native.wrapped, prices)
+      : null;
   const vault = account.vault;
 
   return (
@@ -273,14 +307,13 @@ export function WalletSendScreen() {
             </Text>
           </>
         ) : null}
-        {feeState === 'failed' ? <Text style={styles.error}>{t('mobile.account.fee_failed')}</Text> : null}
       </ScrollView>
 
       {/* The app's one signing control (Face ID, Confirm), in the footer as on the smart wallet's Send.
           The fee is at its top left/right: the rental and TRX, then the network fee in dollars; until
           it is priced (`pricing`) no line, as a wallet has no activation to quote. */}
       <View style={styles.footer}>
-        <ConfirmButton onPress={send} loading={sending} disabled={!canSend} pricing={!rental.toggle && feeUsd == null} rental={rental.toggle} networkFeeUsd={feeUsd ?? undefined} />
+        <ConfirmButton onPress={send} loading={sending} disabled={!canSend} pricing={!gas.toggle && feeUsd == null} rental={gas.toggle} networkFeeUsd={feeUsd ?? undefined} />
       </View>
 
       <Sheet visible={picking} title={t('mobile.account.asset')} onClose={() => setPicking(false)}>
